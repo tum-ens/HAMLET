@@ -1,0 +1,1 @@
+- Forecasting needs to be split up into a setup.py and the according forecast methods (either for each type separately e.g. PV or EV, or one file per forecast method)
