@@ -1,0 +1,29 @@
+name: lama
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+    - numpy
+    - matplotlib
+    - pandas
+    - pyomo
+    - feather-format
+    - ruamel.yaml
+    - sqlalchemy
+    - psycopg2
+    - scipy
+    - tqdm
+    - tensorflow
+    - pandapower
+    - xlsxwriter
+    - pvlib
+    - windpowerlib
+  # NOTE: Some of the packages above are not available for Python 3.11 yet.
+  # packages and functions to replace
+  # (based on: https://python.plainenglish.io/its-time-to-say-goodbye-to-these-obsolete-python-libraries-7c02aa77d84a)
+  # os.path -> pathlib
+  # pytz -> zoneinfo
+  # tomlib (check if useful)
