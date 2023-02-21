@@ -4,6 +4,7 @@ __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
 import time
+import datetime
 import shutil
 import os
 import string
@@ -124,8 +125,12 @@ class Agents:
                 'info': self.__info_hydrogen,
             },
         }
-        # Available types of industry TODO: make it from the input folder or the config file parameter
-        self.industry = ['tobacco', 'textile', 'food', 'chemical', 'paper', 'wood', 'metal', 'plastic', 'rubber']
+        # Available types of ctsp (obtained from the input data folder)
+        self.ctsp = self.__get_types(
+            path=os.path.join(self.input_path, 'agents', 'ctsp', 'inflexible_load'), idx=0, sep='_')
+        # Available types of industry (obtained from the input data folder)
+        self.industry = self.__get_types(
+            path=os.path.join(self.input_path, 'agents', 'industry', 'inflexible_load'), idx=0, sep='_')
 
     def create_agents_file_from_config(self, overwrite: bool = False):
         """Creates the Excel file from the config file
@@ -244,7 +249,7 @@ class Agents:
         return accounts
 
     def _get_accounts_info(self, df: pd.DataFrame, groups: list, param_names: dict) -> dict:
-        # TODO: This function can be made even more flexible by splitting it into a recursive function in case more sub IDs are added (but good enough for now)
+        # Note: This function can be made even more flexible by splitting it into a recursive function in case more sub IDs are added (but good enough for now)
 
         # Contains the names of the parameters that are used to identify the agents in descending order
         ids = ['general/agent_id', 'general/sub_id']
@@ -334,11 +339,12 @@ class Agents:
         plants_dict = OrderedDict()     # Contains all plant information
         plant_dict = OrderedDict()      # Contains single plant information
         plants_ids = []                 # Contains the plant IDs
-        start = 0   # TODO: Compute unix time from setup
-        timeseries = pd.DataFrame(index=range(1615230900, 1615230900 + 50 * 900, 900))  # Contains the time series data of each power plant (e.g. power output)
-        timeseries.index.name = 'timestamp'         # Name of the index (equal to name in input files)
-        meters = pd.DataFrame(index=['in', 'out'])  # Contains the meter values of each plant (if applicable)
-        socs = pd.DataFrame(index=['soc'])          # Contains the SOCs of each plant (if applicable)
+        start = int(self.setup['simulation']['sim']['start'].replace(tzinfo=datetime.timezone.utc).timestamp())
+        end = int(start + self.setup['simulation']['sim']['duration'] * 3600 * 24)
+        timeseries = pd.DataFrame(index=range(start, end, self.setup['simulation']['timestep']))  # Contains the time series data of each power plant (e.g. power output)
+        timeseries.index.name = 'timestamp'         # Name of the index (must be equal to name in input files)
+        meters = pd.DataFrame(index=['in', 'out'])  # Contains the meter values of each plant
+        socs = pd.DataFrame(index=['soc'])          # Contains the SOCs of each plant
         for plant, info in plants.items():
             # Check if plant information is actually available, otherwise skip this type of plant
             if info is None:
@@ -370,10 +376,10 @@ class Agents:
 
                 # Add time series to timeseries dataframe (if applicable)
                 try:
-                    # TODO: When the demand and the file do not match, scale the time series accordingly
                     timeseries = timeseries.join(self.__make_timeseries(
                         file_path=os.path.join(self.input_path, 'agents', agent_type, plant, plant_dict['file']),
-                        plant_id=plant_id, plant_dict=plant_dict))
+                        plant_id=plant_id, plant_dict=plant_dict,
+                        delta=int(self.setup['simulation']['timestep'])))
                 except KeyError:
                     pass
 
@@ -389,11 +395,6 @@ class Agents:
 
             # Reset plant dictionary to add next entry
             plant_dict = OrderedDict()
-
-        # Resample time series data to ensure all rows are filled
-        # TODO: This functionality needs to occur every single instance in the for-loop in self.__make_timeseries above
-        #  as the time series lengths can differ and the resampling needs to be done for each plant individually
-        timeseries = self.resample_timeseries(timeseries=timeseries, delta=int(self.setup['simulation']['timestep']))
 
         return plants_ids, plants_dict, meters, timeseries, socs
 
@@ -469,7 +470,7 @@ class Agents:
         """
         return pd.Series(vals, index=["in", "out"], name=plant_id)
 
-    def __make_timeseries(self, file_path: str, plant_id: str, plant_dict: dict) -> pd.Series:
+    def __make_timeseries(self, file_path: str, plant_id: str, plant_dict: dict, delta: int) -> pd.DataFrame:
         """Creates a time series for the given plant.
 
         Args:
@@ -505,6 +506,9 @@ class Agents:
         else:
             # If there are multiple columns, add the plant ID as a prefix to each column name
             timeseries.columns = [f'{plant_id}_{col}' for col in timeseries.columns]
+
+        # Resample time series data to ensure all rows are filled
+        timeseries = self.resample_timeseries(timeseries=timeseries, delta=delta)
 
         return timeseries
 
@@ -1231,8 +1235,13 @@ class Agents:
         resampled.index = resampled.index.astype(int) // 10 ** 9
 
         # Convert the data types back to the original ones
-        for col, dtype in timeseries.dtypes.items():
-            resampled[col] = resampled[col].astype(dtype)
+        if type(timeseries) == pd.DataFrame:
+            for col, dtype in timeseries.dtypes.items():
+                resampled[col] = resampled[col].astype(dtype)
+        elif type(timeseries) == pd.Series:
+            resampled = resampled.astype(timeseries.dtype)
+        else:
+            raise TypeError(f"Type {type(timeseries)} is not supported")
 
         return resampled
 
@@ -1351,6 +1360,13 @@ class Agents:
             return Agents._get_closest_sorted(search_list, val)
 
         return min(enumerate(search_list), key=lambda x: abs(x[1] - val))
+
+    @staticmethod
+    def __get_types(path: str, idx: int = 0, sep: str = '_') -> list:
+        """Returns a list of all types of a specific agent type"""
+
+        # Return the unique types from the files in the directory
+        return list(set([file.split(sep)[idx] for file in os.listdir(path)]))
 
 
 class Sfh(Agents):
@@ -2027,14 +2043,25 @@ class Sfh(Agents):
             if 'file' in df and not df['file'].isnull().all():
                 # Fill rows with values from sgen sheet
                 self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file'])
-            # If file column does not exist, pick random timeseries file
-            else:
-                # Pick random timeseries file (> num as num starts at 0)
+            # If file column does not exist, check if height columns exist and all rows are filled
+            elif 'height' in df and not df['height'].isnull().any():
+                # TODO: Include height in the wind power calculation (add to config_agents)
+                # Fill height from sgen sheet
+                # self.df[f"{key}/sizing/height_{num}"] = self.df.index.map(df['height'])
+                # Pick random specs file (> num as num starts at 0)
                 self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'specs'
-                # TODO: Change this to timeseries files once they are available or rethink approach (set to specs?)
                 self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                        device=f"{key}",
                                                                        input_path=os.path.join(self.input_path, key))
+            # If file column does not exist, pick random timeseries file
+            else:
+                # Pick random timeseries file (> num as num starts at 0)
+                self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'timeseries'
+                self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
+                                                                       device=f"{key}",
+                                                                       input_path=os.path.join(self.input_path, key))
+                # Assign standard height since they do not matter if no file is specified
+                # self.df[f"{key}/sizing/height_{num}"] = 0
 
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
@@ -3357,14 +3384,25 @@ class Mfh(Agents):
             if 'file' in df and not df['file'].isnull().all():
                 # Fill rows with values from sgen sheet
                 self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file'])
-            # If file column does not exist, pick random timeseries file
-            else:
-                # Pick random timeseries file (> num as num starts at 0)
+            # If file column does not exist, check if height columns exist and all rows are filled
+            elif 'height' in df and not df['height'].isnull().any():
+                # TODO: Include height in the wind power calculation (add to config_agents)
+                # Fill height from sgen sheet
+                # self.df[f"{key}/sizing/height_{num}"] = self.df.index.map(df['height'])
+                # Pick random specs file (> num as num starts at 0)
                 self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'specs'
-                # TODO: Change this to timeseries files once they are available or rethink approach (set to specs?)
                 self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                        device=f"{key}",
                                                                        input_path=os.path.join(self.input_path, key))
+            # If file column does not exist, pick random timeseries file
+            else:
+                # Pick random timeseries file (> num as num starts at 0)
+                self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'timeseries'
+                self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
+                                                                       device=f"{key}",
+                                                                       input_path=os.path.join(self.input_path, key))
+                # Assign standard height since they do not matter if no file is specified
+                # self.df[f"{key}/sizing/height_{num}"] = 0
 
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
@@ -4647,14 +4685,25 @@ class Ctsp(Agents):
             if 'file' in df and not df['file'].isnull().all():
                 # Fill rows with values from sgen sheet
                 self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file'])
-            # If file column does not exist, pick random timeseries file
-            else:
-                # Pick random timeseries file (> num as num starts at 0)
+            # If file column does not exist, check if height columns exist and all rows are filled
+            elif 'height' in df and not df['height'].isnull().any():
+                # TODO: Include height in the wind power calculation (add to config_agents)
+                # Fill height from sgen sheet
+                # self.df[f"{key}/sizing/height_{num}"] = self.df.index.map(df['height'])
+                # Pick random specs file (> num as num starts at 0)
                 self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'specs'
-                # TODO: Change this to timeseries files once they are available or rethink approach (set to specs?)
                 self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                        device=f"{key}",
                                                                        input_path=os.path.join(self.input_path, key))
+            # If file column does not exist, pick random timeseries file
+            else:
+                # Pick random timeseries file (> num as num starts at 0)
+                self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'timeseries'
+                self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
+                                                                       device=f"{key}",
+                                                                       input_path=os.path.join(self.input_path, key))
+                # Assign standard height since they do not matter if no file is specified
+                # self.df[f"{key}/sizing/height_{num}"] = 0
 
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
@@ -5731,14 +5780,25 @@ class Industry(Agents):
             if 'file' in df and not df['file'].isnull().all():
                 # Fill rows with values from sgen sheet
                 self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file'])
-            # If file column does not exist, pick random timeseries file
-            else:
-                # Pick random timeseries file (> num as num starts at 0)
+            # If file column does not exist, check if height columns exist and all rows are filled
+            elif 'height' in df and not df['height'].isnull().any():
+                # TODO: Include height in the wind power calculation (add to config_agents)
+                # Fill height from sgen sheet
+                # self.df[f"{key}/sizing/height_{num}"] = self.df.index.map(df['height'])
+                # Pick random specs file (> num as num starts at 0)
                 self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'specs'
-                # TODO: Change this to timeseries files once they are available or rethink approach (set to specs?)
                 self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                        device=f"{key}",
                                                                        input_path=os.path.join(self.input_path, key))
+            # If file column does not exist, pick random timeseries file
+            else:
+                # Pick random timeseries file (> num as num starts at 0)
+                self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'timeseries'
+                self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
+                                                                       device=f"{key}",
+                                                                       input_path=os.path.join(self.input_path, key))
+                # Assign standard height since they do not matter if no file is specified
+                # self.df[f"{key}/sizing/height_{num}"] = 0
 
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
@@ -6629,9 +6689,8 @@ class Producer(Agents):
         # Create the overall dataframe structure for the worksheet
         self.create_df_structure()
 
+        # Note: As the grid file does not include producer type agents this cannot be done yet
         return self.df
-
-        # TODO: As the grid file does not include producer type agents this cannot be done yet
 
         # Fill the general information in dataframe
         self.fill_general()
@@ -7203,9 +7262,8 @@ class Storage(Agents):
         # Create the overall dataframe structure for the worksheet
         self.create_df_structure()
 
+        # Note: As the grid file does not include storage type agents this cannot be done yet
         return self.df
-
-        # TODO: As the grid file does not include storage type agents this cannot be done yet
 
         # Fill the general information in dataframe
         self.fill_general()
