@@ -14,11 +14,8 @@ simulation:
                                           #   is not the case, the simulation will not run
 
   sim:                                    # settings that apply to full-speed simulations (sim)
-    start: 2021-03-24 00:00               # start of simulation in unix time
-                                          # format: YYYY-MM-DD HH:MM
-
-    timezone: europe/berlin               # timezone of simulation # TODO: replace with zoneinfo
-                                          # format: continent/city (see pytz for all options)
+    start: 2021-03-24T00:00:00+01:00      # start of simulation in unix time with timezone information
+                                          # format: %Y-%m-%dT%H:%M:%S%z (YYYY-MM-DDTHH:MM:SS+HH:MM)
 
     duration: 3                           # duration of the simulation
                                           # unit: days
