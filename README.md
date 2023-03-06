@@ -1,7 +1,7 @@
-lemlab
+HAMLET
 =======
 
-![lemlab](00 - docs/images/lemlab_logo.png)
+Hierarchical Agent-based Markets for Local Energy Trading
 
 An open-source tool for the agent-based development and testing of local energy market applications.
 
