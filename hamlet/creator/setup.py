@@ -9,7 +9,7 @@ import shutil
 import os
 from ruamel.yaml import YAML
 import numpy as np
-from lama.creator.agents.agents import Agents
+from hamlet.creator.agents.agents import Agents
 
 # TODO Plan: All functions that are necessary are briefly described so that they can be worked on one by one
 # 1. Identify the scenario structure

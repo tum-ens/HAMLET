@@ -6,7 +6,7 @@ simulation:
   type: sim                                 # type of simulation to be run
                                             # options:
                                             #   - sim: full-speed simulation (for research purposes)
-                                            #   - rts: real-time simulation (for HiL/real-life purposes)
+                                            #   - TODO: rts: real-time simulation (for HiL/real-life purposes)
 
   timestep: 900                           # length of minimum timestep
                                           # unit: seconds
@@ -15,7 +15,7 @@ simulation:
 
   sim:                                    # settings that apply to full-speed simulations (sim)
     start: 2021-03-24T00:00:00+01:00      # start of simulation in unix time with timezone information
-                                          # format: %Y-%m-%dT%H:%M:%S%z (YYYY-MM-DDTHH:MM:SS+HH:MM)
+                                          # format (ISO 8601): %Y-%m-%dT%H:%M:%S%z (YYYY-MM-DDTHH:MM:SS+HH:MM)
 
     duration: 3                           # duration of the simulation
                                           # unit: days

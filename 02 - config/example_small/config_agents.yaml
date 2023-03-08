@@ -2,13 +2,9 @@
 ############################################# agents configuration #####################################################
 ########################################################################################################################
 
-# TODO: add heat_storage -> ponder how this should best be done. What does it affect? How to store high heat?
 # TODO: add the new parameters for fcast to inflexible_load, pv, wind, hp and mpc
-
-# TODO: Implement the forecasting methodology for the retail prices as currently only the lem prices are forecasted -> this affects the config and the executor
-
-# TODO !!!!!!!!!!!!!!
-# TODO: Implement new style of heat demand, dhw, ev and hp to mfh and others
+# TODO: Implement the forecasting methodology from lemlab for the retail prices as currently only the lem prices are forecasted -> this affects the config and the executor
+# TODO: Implement chp
 
 ##########################################################################################
 ################################ single family home (SFH) ################################
@@ -16,7 +12,7 @@
 sfh:
   ################################ general ################################
   general:
-    number_of: 4                               # number of single family homes to simulate
+    number_of: 10                               # number of single family homes to simulate
      
     parameters:                                 # basic parameters of SFHs
       distribution: [0.5, 0.5]                  # relative distribution of household types
@@ -180,17 +176,21 @@ sfh:
                                                 # note: generally set to true
                                                 # note: for further information see section sfh/inflexible_load
 
-    # heat_comp: ["timeseries", "5r1c", "2r2c"]   # TODO: Check if this is of value and if it is, implement it for all agents
-    #  5r1c: https://github.com/architecture-building-systems/RC_BuildingSimulator
-    #  2r2c : https://buildingenergygeeks.org/a-simple-rc-model-python.html#case-study
-
     sizing:
-      # TODO: method: linked, random, 5r1c, 2r2c
-      distribution: [0.3, 0.4, 0,3]             # relative distribution of heat loads
+      distribution: [0.3, 0.4, 0.3]             # relative distribution of heat loads
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
                                                 # note: to obtain a uniform value this value needs to be [1]
+
+      file: ['linked', 'linked', 'pu']      # file to be used for heat demand
+                                                # options:
+                                                #   - linked:     linked to the respective building
+                                                #   - pu:         random pu timeseries file
+                                                #   - TODO: 5r1c: 5r1c model (https://github.com/architecture-building-systems/RC_BuildingSimulator)
+                                                #   - TODO: 2r2c: 2r2c model (https://buildingenergygeeks.org/a-simple-rc-model-python.html#case-study)
+                                                # note: if file is set to linked, the heat demand file is linked to
+                                                #   the respective inflexible electricity demand and number of occupants
 
       temperature: [35, 55, 55]                 # supply temperature of heating system
                                                 # unit: °C
@@ -243,15 +243,22 @@ sfh:
                                                 # note: for further information see section sfh/inflexible_load
 
     sizing:
-      distribution: [0.3, 0.4, 0,3]             # relative distribution of dhw loads
+      distribution: [0.3, 0.4, 0.3]             # relative distribution of dhw loads
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
                                                 # note: to obtain a uniform value this value needs to be [1]
 
-      demand: [600, 700, 800]                   # yearly demand per person
-                                                # unit: kWh/(a*person)
+      demand: [6e5, 7e5, 8e5]                   # yearly demand per person
+                                                # unit: Wh/(a*person)
                                                 # note: average value for Germany is 600-800 kWh/a/person
+
+      file: ['pu', 'pu', 'pu']                  # file to be used for dhw demand
+                                                # options:
+                                                #   - TODO: linked: linked to the respective building (not yet implemented)
+                                                #   - pu:     random pu timeseries file
+                                                # note: if file is set to linked, the dhw demand file is linked to
+                                                #   the respective inflexible electricity demand and number of occupants
 
       temperature: [55, 55, 55]                 # supply temperature of dhw
                                                 # unit: °C
@@ -317,26 +324,20 @@ sfh:
                                                 #                 output file (.csv)
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
-                                                        
-      orientation: [[0], [90, -90]]             # respective orientation of the PV system
+
+      orientation: [0, -20]                     # respective orientation of the PV system
                                                 # unit: º [-180, 180]
                                                 # orientation convention:
                                                 #   - south:   0º
                                                 #   - west:   90º
                                                 #   - east:  -90º
-                                                #   - north: -180/180º
-                                                # note: several orientations can be combined in a list element. The
-                                                #   installed power is then divided equally (e.g. for east-west orientation)
-                                                # note: if load_from is not set to "weather", this parameter is ignored
-                                                
-        
-      angle: [40, 20]                           # installation angle of the installed system
+                                                #   - north: 180º
+                                                # note: if file is not set to "specs", this parameter is ignored
+
+
+      angle: [40, 50]                           # installation angle of the installed system
                                                 # unit: º [0, 90]
-                                                # note: if load_from is not set to "weather", this parameter is ignored
-                                                
-      angle_deviation: [10, 5]                  # absolute random positive/negative deviation from angle in degrees
-                                                # unit: º [0, 90]
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
 
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
@@ -498,25 +499,18 @@ sfh:
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
+
+      power: [1, 1]                             # relative power
+                                                # unit: W/(Wh*a)*2000h-> based on first heat
+                                                # note: heat demand is divided by 2000 and multiplied by power value,
+                                                #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
         
       file: ["ground", "air"]                   # type of heat pump
                                                 # options:
                                                 #   - ground: ground-water heat pump
                                                 #   - air: air-water heat pump
                                                 #   - water: water-water heat pump
-                                                #   - "file name": give specific file name (e.g. "hp_NIBE-F2120-12_air.json")                                                
-        
-      storage: [2, 3]                           # relative storage capacity
-                                                # unit: h [0, inf)
-                                                # note: storage size is converted to kWh by multiplying with 
-                                                #   rated heating power which is assumed as the maximum heating power in 
-                                                #   inflexible_load file
-
-      efficiency: [0.98, 0.98]                  # storage charging and discharging efficiency
-                                                # unit: 1 [0, 1]
-
-      soc: [0.5, 0.5]                           # initial soc of heat pump storage
-                                                # unit: 1 [0, 1]
+                                                #   - "file name": give specific file name (e.g. "hp_NIBE-F2120-12_air.json")
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -646,37 +640,39 @@ sfh:
     quality: local                              # quality that the sold energy should be labelled with 
                                                 # on the local markets
 
-#  ################################ heat storage ####################################
-#  heat_storage:
-#    share: 0.8                                  # share of agents with batteries (if share_dependent_on applies)
-#                                                # unit: 1 [0, 1]
-#
-#    share_dependent_on: ["hp"]                  # does the share of batteries depend on the existence of other devices?
-#                                                # options: all devices listed in the agent category [e.g. pv, wind]
-#                                                # note: if list contains more than one value, an agent needs to have
-#                                                #       all listed devices
-#
-#    num: [1]                                    # number of inflexible loads
-#                                                # note: value is randomly chosen from list
-#
-#    has_submeter: true                          # existence of a separate meter
-#                                                # note: generally set to true
-#                                                # note: for further information see section sfh/inflexible_load
-#
-#    sizing:                                     # sizing of battery system
-#      distribution: [1]                         # distribution of sizing parameters shown below
-#                                                # note: number of elements must be identical to other values
-#                                                # note: if sum does not equal to 1, it is adjusted accordingly
-#
-#      capacity: [2]                             # relative capacity
-#                                                # unit: Wh/(kWh/a) --> based on first heat
-#
-#      efficiency: [0.95]                        # one way charging efficiency of the battery
-#
-#      soc: [0.1]                                # initial soc of the battery (0-1)
-#
-#    quality: local                              # quality that the sold energy should be labelled with
-#                                                # on the local markets
+  ################################ heat storage ####################################
+  heat_storage:
+    share: 0.8                                  # share of agents with heat storage (if share_dependent_on applies)
+                                                # unit: 1 [0, 1]
+
+    share_dependent_on: ["hp"]                  # does the share of storage depend on the existence of other devices?
+                                                # options: all devices listed in the agent category [e.g. pv, wind]
+                                                # note: if list contains more than one value, an agent needs to have
+                                                #   one of the listed devices
+
+    num: [1]                                    # number of devices
+                                                # note: value is randomly chosen from list
+
+    has_submeter: true                          # existence of a separate meter
+                                                # note: generally set to true
+                                                # note: for further information see section sfh/inflexible_load
+
+    sizing:                                     # sizing of battery system
+      distribution: [1]                         # distribution of sizing parameters shown below
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+
+      capacity: [2]                             # relative storage capacity
+                                                # unit: Wh/(Wh*a)*2000h-> based on first heat
+                                                # note: heat demand is divided by 2000 and multiplied by capacity value,
+                                                #   e.g. 20 MWh/a heat demand equals 20 kWh with capacity factor of 2
+
+      efficiency: [0.95]                        # charging and discharging efficiency
+
+      soc: [0.5]                                # initial soc
+
+    quality: local                              # quality that the sold energy should be labelled with
+                                                # on the local markets
 
   ################################ model predictive controller ####################################
   mpc:
@@ -736,7 +732,7 @@ mfh:
                                                 # unit: 1
                                                 # note: to obtain a uniform value this value needs to be [1]
 
-      apartments_independent: [true, false]    # treat building as one or separately
+      apartments_independent: [false, false]    # treat building as one or separately
                                                 # options:
                                                 #   - True: all apartments will be treated like SFHs with separate devices
                                                 #   - False: all apartments will be aggregated and treated as one unit
@@ -924,17 +920,21 @@ mfh:
                                                 # note: generally set to true
                                                 # note: for further information see section sfh/inflexible_load
 
-    # heat_comp: ["timeseries", "5r1c", "2r2c"]   # TODO: Check if this is of value and if it is, implement it for all agents
-    #  5r1c: https://github.com/architecture-building-systems/RC_BuildingSimulator
-    #  2r2c : https://buildingenergygeeks.org/a-simple-rc-model-python.html#case-study
-
     sizing:
-      # TODO: method: linked, random, 5r1c, 2r2c
-      distribution: [0.3, 0.4, 0,3]             # relative distribution of heat loads
+      distribution: [0.3, 0.4, 0.3]             # relative distribution of heat loads
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
                                                 # note: to obtain a uniform value this value needs to be [1]
+
+      file: ['pu', 'pu', 'pu']                  # file to be used for heat demand
+                                                # options:
+                                                #   - linked:     linked to the respective building
+                                                #   - pu:         random pu timeseries file
+                                                #   - TODO: 5r1c: 5r1c model (https://github.com/architecture-building-systems/RC_BuildingSimulator)
+                                                #   - TODO: 2r2c: 2r2c model (https://buildingenergygeeks.org/a-simple-rc-model-python.html#case-study)
+                                                # note: if file is set to linked, the heat demand file is linked to
+                                                #   the respective inflexible electricity demand and number of occupants
 
       temperature: [35, 55, 55]                 # supply temperature of heating system
                                                 # unit: °C
@@ -994,7 +994,7 @@ mfh:
                                                 # note: for further information see section sfh/inflexible_load
 
     sizing:
-      distribution: [0.3, 0.4, 0,3]             # relative distribution of dhw loads
+      distribution: [0.3, 0.4, 0.3]             # relative distribution of dhw loads
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
@@ -1003,6 +1003,13 @@ mfh:
       demand: [600, 700, 800]                   # yearly demand per person
                                                 # unit: kWh/(a*person)
                                                 # note: average value for Germany is 600-800 kWh/a/person
+
+      file: ['pu', 'pu', 'pu']                  # file to be used for dhw demand
+                                                # options:
+                                                #   - TODO: linked: linked to the respective building (not yet implemented)
+                                                #   - pu:     random pu timeseries file
+                                                # note: if file is set to linked, the dhw demand file is linked to
+                                                #   the respective inflexible electricity demand and number of occupants
 
       temperature: [55, 55, 55]                 # supply temperature of dhw
                                                 # unit: °C
@@ -1081,25 +1088,19 @@ mfh:
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
                                                         
-      orientation: [[0], [90, -90]]             # respective orientation of the PV system
+      orientation: [0, -20]                     # respective orientation of the PV system
                                                 # unit: º [-180, 180]
                                                 # orientation convention:
                                                 #   - south:   0º
                                                 #   - west:   90º
                                                 #   - east:  -90º
                                                 #   - north: 180º
-                                                # note: several orientations can be combined in a list element. The
-                                                #   installed power is then divided equally (e.g. for east-west orientation)
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
                                                 
         
-      angle: [40, 20]                           # installation angle of the installed system
+      angle: [40, 50]                           # installation angle of the installed system
                                                 # unit: º [0, 90]
-                                                # note: if load_from is not set to "weather", this parameter is ignored
-                                                
-      angle_deviation: [10, 5]                  # absolute random positive/negative deviation from angle in degrees
-                                                # unit: º [0, 90]
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
 
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
@@ -1282,25 +1283,18 @@ mfh:
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
-        
+
+      power: [1, 1]                             # relative power
+                                                # unit: W/(Wh*a)*2000h-> based on first heat
+                                                # note: heat demand is divided by 2000 and multiplied by power value,
+                                                #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
+
       file: ["ground", "air"]                   # type of heat pump
                                                 # options:
                                                 #   - ground: ground-water heat pump
                                                 #   - air: air-water heat pump
                                                 #   - water: water-water heat pump
-                                                #   - "file name": give specific file name (e.g. "hp_NIBE-F2120-12_air.json")                                                
-        
-      storage: [2, 3]                           # relative storage capacity
-                                                # unit: h [0, inf)
-                                                # note: storage size is converted to kWh by multiplying with 
-                                                #   rated heating power which is the maximum heating power in 
-                                                #   inflexible_load file
-
-      efficiency: [0.98, 0.98]                  # storage charging and discharging efficiency
-                                                # unit: 1 [0, 1]
-
-      soc: [0.5, 0.5]                           # initial soc of heat pump storage
-                                                # unit: 1 [0, 1]
+                                                #   - "file name": give specific file name (e.g. "hp_NIBE-F2120-12_air.json")
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -1443,6 +1437,44 @@ mfh:
       b2g: [false]                              # can the battery feed into the grid?
 
     quality: local                              # quality that the sold energy should be labelled with 
+                                                # on the local markets
+
+  ################################ heat storage ####################################
+  heat_storage:
+    share: 0.8                                  # share of agents with batteries (if share_dependent_on applies)
+                                                # unit: 1 [0, 1]
+                                                # note: agent equals entire MFH
+
+    share_aps: [0.8, 0.5]                       # share of apartments in MFH with device (if share_dependent_on applies)
+                                                # unit: 1 [0, 1]
+                                                # value is randomly chosen from list
+                                                # note: to increase probability of value, increase appearance in list
+
+    share_dependent_on: ["hp"]                  # does the share of storage depend on the existence of other devices?
+                                                # options: all devices listed in the agent category [e.g. pv, wind]
+                                                # note: if list contains more than one value, an agent needs to have
+                                                #       all listed devices
+
+    num: [1]                                    # number of inflexible loads
+                                                # note: value is randomly chosen from list
+
+    has_submeter: true                          # existence of a separate meter
+                                                # note: generally set to true
+                                                # note: for further information see section sfh/inflexible_load
+
+    sizing:                                     # sizing of battery system
+      distribution: [1]                         # distribution of sizing parameters shown below
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+
+      capacity: [2]                             # relative capacity
+                                                # unit: Wh/(kWh/a) --> based on first heat
+
+      efficiency: [0.95]                        # one way charging efficiency of the battery
+
+      soc: [0.1]                                # initial soc of the battery (0-1)
+
+    quality: local                              # quality that the sold energy should be labelled with
                                                 # on the local markets
 
   ################################ model predictive controller ####################################
@@ -1644,7 +1676,7 @@ ctsp:
       power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
                                                 # unit: 1 [0, 1]
 
-      file: ["timeseries", "timeseries"]  # file type to calculate the power output
+      file: ["timeseries", "timeseries"]        # file type to calculate the power output
                                                 # options:
                                                 #   - specs: power output is calculated based on a randomly chosen specification
                                                 #            file (.json) and the weather file
@@ -1653,25 +1685,19 @@ ctsp:
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
 
-      orientation: [[0], [90, -90]]             # respective orientation of the PV system
-                                                # unit: º
+      orientation: [0, -20]                     # respective orientation of the PV system
+                                                # unit: º [-180, 180]
                                                 # orientation convention:
                                                 #   - south:   0º
                                                 #   - west:   90º
                                                 #   - east:  -90º
                                                 #   - north: 180º
-                                                # note: several orientations can be combined in a list element. The
-                                                #   installed power is then divided equally (e.g. for east-west orientation)
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
 
 
-      angle: [40, 20]                           # installation angle of the installed system
-                                                # unit: º
-                                                # note: if load_from is not set to "weather", this parameter is ignored
-
-      angle_deviation: [10, 5]                  # absolute random positive/negative deviation from angle in degrees
-                                                # unit: 1
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+      angle: [40, 50]                           # installation angle of the installed system
+                                                # unit: º [0, 90]
+                                                # note: if file is not set to "specs", this parameter is ignored
 
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
@@ -2112,25 +2138,19 @@ industry:
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
 
-      orientation: [[0], [90, -90]]             # respective orientation of the PV system
-                                                # unit: º
+      orientation: [0, -20]                     # respective orientation of the PV system
+                                                # unit: º [-180, 180]
                                                 # orientation convention:
                                                 #   - south:   0º
                                                 #   - west:   90º
                                                 #   - east:  -90º
                                                 #   - north: 180º
-                                                # note: several orientations can be combined in a list element. The
-                                                #   installed power is then divided equally (e.g. for east-west orientation)
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
 
 
-      angle: [40, 20]                           # installation angle of the installed system
-                                                # unit: º
-                                                # note: if load_from is not set to "weather", this parameter is ignored
-
-      angle_deviation: [10, 5]                  # absolute random positive/negative deviation from angle in degrees
-                                                # unit: 1
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+      angle: [40, 50]                           # installation angle of the installed system
+                                                # unit: º [0, 90]
+                                                # note: if file is not set to "specs", this parameter is ignored
 
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
@@ -2465,25 +2485,20 @@ producer:
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
 
-        orientation: [[0], [20], [-20]]         # respective orientation of the PV system
-                                                # unit: º
+        orientation: [0, -20, 20]               # respective orientation of the PV system
+                                                # unit: º [-180, 180]
                                                 # orientation convention:
                                                 #   - south:   0º
                                                 #   - west:   90º
                                                 #   - east:  -90º
                                                 #   - north: 180º
-                                                # note: several orientations can be combined in a list element. The
-                                                #   installed power is then divided equally (e.g. for east-west orientation)
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
 
 
-        angle: [30, 20, 40]                     # installation angle of the installed system
-                                                # unit: º
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+        angle: [40, 50, 30]                     # installation angle of the installed system
+                                                # unit: º [0, 90]
+                                                # note: if file is not set to "specs", this parameter is ignored
 
-        angle_deviation: [5, 5, 5]              # absolute random positive/negative deviation from angle in degrees
-                                                # unit: 1
-                                                # note: if load_from is not set to "weather", this parameter is ignored
 
         controllable: [true , true, true]       # can the pv inverter be controlled? true or false
 
