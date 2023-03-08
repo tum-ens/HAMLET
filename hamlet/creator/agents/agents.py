@@ -9,6 +9,7 @@ import shutil
 import os
 import string
 import json
+import math
 from random import shuffle, choice, random, randint, choices
 import random
 from ruamel.yaml import YAML
@@ -23,15 +24,6 @@ import ast
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.options.mode.chained_assignment = None  # default='warn'
-
-
-def timeit(func):
-    def wrapper_function(*args, **kwargs):
-        start = time.time()
-        func(*args, **kwargs)
-        print(f"Duration: {time.time() - start} s")
-
-    return wrapper_function
 
 
 class Agents:
@@ -70,6 +62,11 @@ class Agents:
                 raise FileNotFoundError("Configuration requires either a yaml or an xlsx file to create agents.") \
                     from exc
 
+        # Information about the agents
+        self.agents = None      # information of all agents
+        self.id = None          # information of the current agent id
+        self.account = None     # information of the current account
+
         # Available types of agents
         self.types = {
             'sfh': Sfh,
@@ -88,6 +85,15 @@ class Agents:
             'flexible_load': {
                 'type': 'flexible_load',
                 'info': self.__info_flexible_load,
+            },
+            'heat': {
+                'type': 'heat',
+                'info': self.__info_heat,
+                'file_func': self.__make_timeseries_heat,
+            },
+            'dhw': {
+                'type': 'dhw',
+                'info': self.__info_dhw,
             },
             'pv': {
                 'type': 'pv',
@@ -124,6 +130,10 @@ class Agents:
                 'type': 'hydrogen',
                 'info': self.__info_hydrogen,
             },
+            'heat_storage': {
+                'type': 'heat_storage',
+                'info': self.__info_heat_storage,
+            },
         }
         # Available types of ctsp (obtained from the input data folder)
         self.ctsp = self.__get_types(
@@ -142,9 +152,13 @@ class Agents:
         # Create dataframes for each type of agent using their specific class
         for key, _ in self.config.items():
             if key in self.types:
-                dict_agents[key] = self.types[key](self.input_path, self.config[key]).create_df_from_config()
+                dict_agents[key] = self.types[key](input_path=self.input_path,
+                                                   config=self.config[key],
+                                                   config_path=self.config_path,
+                                                   scenario_path=self.scenario_path).create_df_from_config()
             else:
                 print(f"Not there yet at {key}")
+
 
         # Save each dataframe as worksheet in Excel
         if os.path.exists(f"{self.config_path}/agents.xlsx") and not overwrite:
@@ -185,7 +199,9 @@ class Agents:
         for key, _ in self.config.items():
             if key in self.types:
                 dict_agents[key] = self.types[key](config=self.config[key],
-                                                   input_path=self.input_path).\
+                                                   input_path=self.input_path,
+                                                   config_path=self.config_path,
+                                                   scenario_path=self.scenario_path).\
                     create_df_from_grid(grid=dict_grids, fill_from_config=fill_from_config).reset_index(drop=True)
             else:
                 print(f"Not there yet at {key}")
@@ -215,7 +231,6 @@ class Agents:
 
         # TODO: Check if there are non-unique IDs and replace them in worksheet and in the dataframe
         if id_check:
-            raise Warning('Not yet implemented...')
             agent_ids = list()
             for sheet in self.excel.sheet_names:
                 df = self.excel.parse(sheet, index_col=0)
@@ -224,7 +239,7 @@ class Agents:
             # non-unique items
             print([item for item, count in Counter(agent_ids).items() if count > 1])
             # Find solution for mfhs as they will always give more than one time same ID
-            exit()
+            raise NotImplementedError('Not yet implemented...')
 
         # Create agents from Excel file by looping over the sheets
         for sheet in self.excel.sheet_names:
@@ -232,10 +247,10 @@ class Agents:
             df = self.excel.parse(sheet, index_col=0)
 
             # Create agents dictionary from dataframe
-            agents = self.create_agents_dict_from_file(df=df)
+            self.agents = self.create_agents_dict_from_file(df=df)
 
             # Create agents folders and files from
-            self.create_agents_from_dict(agents=agents, agent_type=sheet)
+            self.create_agents_from_dict(agents=self.agents, agent_type=sheet)
 
     def create_agents_dict_from_file(self, df: pd.DataFrame) -> dict:
         """Creates dictionary from dataframe"""
@@ -267,7 +282,7 @@ class Agents:
             # Note: Several indices are found if there are multiple agents with the same ID, e.g. for mfh
             acc_idxs = df[df[ids[0]] == main_account].index
 
-            # Loop through all the indices of the account and add the information for each sub account
+            # Loop through all the indices of the account and add the information for each subaccount
             for acc_idx in acc_idxs:
 
                 # Create the account name from the main ID and, if applicable, the sub IDs by separating them with a '/'
@@ -285,9 +300,10 @@ class Agents:
 
                 # Add all parameters of the non-device categories for the account
                 for group in acc_categories:
-                    # Gets the value from the df, then uses squeeze to only obtain the value, then renames the columns
-                    #   to the names defined in param_names and lastly converts it all into a dict
-                    info = df.loc[acc_idx, df.columns.str.startswith(group)].squeeze().\
+                    # Gets the value from the df(match names that are not followed by underscore), then uses squeeze to
+                    #   only obtain the value, then renames the columns to the names defined in param_names and lastly
+                    #   converts it all into a dict
+                    info = df.loc[acc_idx, df.columns.str.match(f"{group}(?!_)")].squeeze().\
                         rename(param_names[group]).to_dict(into=OrderedDict)
                     accounts[account][group] = info
 
@@ -296,9 +312,10 @@ class Agents:
                 for device in acc_plants:
                     # print(group_params[device])
                     try:
-                        # Gets the value from the df, then uses squeeze to only obtain the value, then renames the
-                        #   columns to the names defined in param_names and lastly converts it all into a dict
-                        info = df.loc[acc_idx, df.columns.str.startswith(device)].squeeze().\
+                        # Gets the value from the df (match names that are not followed by underscore), then uses
+                        #   squeeze to only obtain the value, then renames the columns to the names defined in
+                        #   param_names and lastly converts it all into a dict
+                        info = df.loc[acc_idx, df.columns.str.match(f"{device}(?!_)")].squeeze().\
                             rename(param_names[device]).to_dict(into=OrderedDict)
                         acc_plants[device] = info
                     except KeyError:
@@ -314,6 +331,10 @@ class Agents:
         # Create every agent individually
         # Note: the agent ID can be subdivided using "/", e.g. when creating an mfh with multiple households
         for agent, account in agents.items():
+            # Store id and account information of the current agent
+            self.id = agent
+            self.account = account
+
             # Path of the folder in which all the agent's files are to be stored
             path = os.path.join(self.scenario_path, 'agents', agent_type, agent)
 
@@ -334,17 +355,21 @@ class Agents:
             self._create_agent(path, data)
 
     def _create_plants_for_agent(self, plants: dict, agent_type: str) -> Tuple:
+        """Creates the plants for the agent"""
 
-        # Loop through plants and check if agent has the plant
+        # Setup
         plants_dict = OrderedDict()     # Contains all plant information
         plant_dict = OrderedDict()      # Contains single plant information
         plants_ids = []                 # Contains the plant IDs
-        start = int(self.setup['simulation']['sim']['start'].replace(tzinfo=datetime.timezone.utc).timestamp())
-        end = int(start + self.setup['simulation']['sim']['duration'] * 3600 * 24)
+        start = self.setup['simulation']['sim']['start'].replace(tzinfo=datetime.timezone.utc)
+        end = start + datetime.timedelta(days=self.setup['simulation']['sim']['duration'])
+        start, end = int(start.timestamp()), int(end.timestamp())
         timeseries = pd.DataFrame(index=range(start, end, self.setup['simulation']['timestep']))  # Contains the time series data of each power plant (e.g. power output)
         timeseries.index.name = 'timestamp'         # Name of the index (must be equal to name in input files)
         meters = pd.DataFrame(index=['in', 'out'])  # Contains the meter values of each plant
         socs = pd.DataFrame(index=['soc'])          # Contains the SOCs of each plant
+
+        # Loop through plants and check if agent has the plant
         for plant, info in plants.items():
             # Check if plant information is actually available, otherwise skip this type of plant
             if info is None:
@@ -480,37 +505,87 @@ class Agents:
 
         Returns:
             pd.Series: A Pandas Series object representing the time series data for the plant.
+
         """
 
         # Load required file as series
-        timeseries = self._load_file(file_path)
+        file = self._load_file(file_path)
 
-        # Multiply with power if time series is per unit
+        # Multiply with power or demand if time series is per unit
         if "pu" in plant_dict["file"].split("_")[-1]:
-            timeseries.iloc[:, 0] *= plant_dict["power"]
+            try:
+                file.iloc[:, 0] *= plant_dict["power"]
+            except KeyError:
+                try:
+                    file.iloc[:, 0] *= plant_dict["demand"]
+                except KeyError:
+                    raise KeyError("Plant type neither has power nor demand information to multiply with the pu file.")
 
         # If file is a spec file, create time series accordingly
-        if type(timeseries) is dict:
+        if type(file) is dict:
             try:
                 # Use the plant-specific specs function to create a time series from the spec data
-                timeseries = self.plants['specs'](specs=timeseries, plant=plant_dict)
+                file = self.plants['specs'](specs=file, plant=plant_dict)
             except:
                 # If the specs function is not available for this plant type, raise a warning
                 raise Warning('Time series creation from spec file not available for this plant type.')
 
+        # Check if a special function is to be applied to the time series
+        # Note: they are stored in self.plants under the key 'file_func'
+        if self.plants[plant_dict['type']].get('file_func', None):
+            # If so, apply the function to the time series
+            file = self.plants[plant_dict['type']]['file_func'](file, plant_dict)
+
         # Name the series after the plant ID
-        if len(timeseries.columns) == 1:
+        if len(file.columns) == 1:
             # If there's only one column, set the name to "<plant_id>_<column name>"
-            timeseries = timeseries.squeeze()
-            timeseries.name = f'{plant_id}_{timeseries.name}'
+            file = file.squeeze()
+            file.name = f'{plant_id}_{file.name}'
         else:
             # If there are multiple columns, add the plant ID as a prefix to each column name
-            timeseries.columns = [f'{plant_id}_{col}' for col in timeseries.columns]
+            file.columns = [f'{plant_id}_{col}' for col in file.columns]
 
         # Resample time series data to ensure all rows are filled
-        timeseries = self.resample_timeseries(timeseries=timeseries, delta=delta)
+        file = self.resample_timeseries(timeseries=file, delta=delta)
 
-        return timeseries
+        return file
+
+    def __make_timeseries_heat(self, df: pd.DataFrame, plant_dict: dict) -> pd.DataFrame:
+
+        # Get the goal values that are to be searched for: efficiency, occupants, temperature
+        goal = [self.account['general']['efficiency'], self.account['general']['occupants'], plant_dict['temperature']]
+
+        # Check if there are multiple columns
+        if len(df.columns) == 1:
+            df['heat'] = df.iloc[:, 0]
+        else:
+            # Check columns one by one, starting with the first value
+            # Note: For each value, we calculate the distance between each column's numeric value for that position and the
+            #       corresponding goal value. We then filter the list of columns to only include those with the smallest
+            #       distance for that value. We repeat this process for each value, so that we end up with a list of columns
+            #       that have the smallest distance for each value.
+            closest_cols = df.columns
+            for i, goal_value in enumerate(goal):
+                # Calculate distance for each column
+                distances = [abs(int(col.split('_')[i + 1]) - goal_value) for col in closest_cols]
+                # Get column(s) with the smallest distance
+                closest_cols = [closest_cols[j] for j in range(len(closest_cols)) if distances[j] == min(distances)]
+
+            # First value is chosen as column and added to the file
+            df['heat'] = df[closest_cols[0]]
+
+        # Calculate the duration of the time series
+        # Note: We add the delta to the duration as the last index is not included in the duration
+        delta = df.index[1] - df.index[0]
+        duration = (df.index[-1] - df.index[0] + delta) / 3600 / 8760  # in years
+        
+        # Scale the heat to the demand and take into account the duration of the time series
+        df['heat'] *= plant_dict['demand'] * duration / sum(df['heat'])
+
+        # Drop all columns except the heat column
+        df = df['heat'].astype(int).to_frame()
+
+        return df
 
     @staticmethod
     def __make_soc(plant_id: str, soc: float = 0.8) -> pd.Series:
@@ -540,14 +615,14 @@ class Agents:
             None
         """
 
-        # Create main folder if does not exist
+        # Create main folder if it does not exist
         if not os.path.exists(path):
             os.makedirs(path)
         else:
             if delete:
                 shutil.rmtree(path)
                 os.mkdirs(path)
-        time.sleep(0.01)
+        time.sleep(0.0001)
 
     @staticmethod
     def __del_file_contents(path: str) -> None:
@@ -786,35 +861,42 @@ class Agents:
 
         # Get only files with the correct key if provided
         if key:
-            key_idx = key_idx if key_idx is not None else -1
-            input_files = [file for file in input_files if file.split(".")[0].split("_")[key_idx] == key]
+            # key_idx = key_idx if key_idx is not None else -1
+            # input_files = [file for file in input_files if file.split(".")[0].split("_")[key_idx] == key]
+            input_files = [file for file in input_files if key in file]
 
         return [random.choice(input_files) if owner else np.nan for owner in list_owner]
 
-    @classmethod
-    def _pick_files(cls, list_type: list, device: str, input_path: str = None, idx_type: int = None) -> list:
+    def _pick_files(self, list_type: list, device: str, input_path: str = None, idx_type: int = None) -> list:
         """
             Configures the load from part where it either picks a file at random or sets it to weather to subsequently
             calculate the values.
         """
         unique_files = {x for x in set(list_type) if x == x}
+        # print(unique_files)
         list_files = [np.nan] * len(list_type)
-        # TODO: This function needs to become more flexible, maybe include the agent types since the last elif is weird.
-        #  Probably just split up into several functions
+        # print(list_files)
+        # exit()
+        # TODO: This function needs to become more flexible. Instead of looking for the item key, it should simply take
+        #  the key and look where it is in the name. Otherwise it collects all files that have the same type. So input
+        #  should be either file_type or a key. The rest should be deleted.
         for item in unique_files:
             list_owner = np.multiply(np.array(list_type == item), 1).tolist()
             if item == "specs":
-                list_temp = cls._pick_files_at_random(list_owner=list_owner, input_path=input_path,
-                                                      file_type="json")
+                list_temp = self._pick_files_at_random(list_owner=list_owner, input_path=input_path,
+                                                       file_type="json")
             elif item == "timeseries":
-                list_temp = cls._pick_files_at_random(list_owner=list_owner, input_path=input_path,
-                                                      file_type="csv")
+                list_temp = self._pick_files_at_random(list_owner=list_owner, input_path=input_path,
+                                                       file_type="csv")
             elif item in ["ground", "water", "air"]:
-                list_temp = cls._pick_files_at_random(list_owner=list_owner, input_path=input_path,
-                                                      file_type="json", key=item, key_idx=idx_type)
-            elif item in ["retail", "office", "tobacco", "food", "storage"]:
-                list_temp = cls._pick_files_at_random(list_owner=list_owner, input_path=input_path,
-                                                      file_type="csv", key=item, key_idx=idx_type)
+                list_temp = self._pick_files_at_random(list_owner=list_owner, input_path=input_path,
+                                                       file_type="json", key=item, key_idx=idx_type)
+            elif item in self.industry or item in self.ctsp:
+                list_temp = self._pick_files_at_random(list_owner=list_owner, input_path=input_path,
+                                                       file_type="csv", key=item, key_idx=idx_type)
+            elif item == "pu" or "_" in item:
+                list_temp = self._pick_files_at_random(list_owner=list_owner, input_path=input_path,
+                                                       file_type="csv", key=item, key_idx=idx_type)
             elif os.path.exists(f"{input_path}/{item}"):
                 list_temp = [item if owner else np.nan for owner in list_owner]
             else:
@@ -907,7 +989,7 @@ class Agents:
         return lst
 
     @staticmethod
-    def _round_to_nth_digit(vals: list, n: int = 2) -> list:
+    def _round_to_nth_digit(vals: list, n: int = 2, method: str = 'round') -> list:
         """ Rounds to the nth digit. Differentiates between values greater and smaller one.
         Based on smallest value in list."""
 
@@ -917,10 +999,17 @@ class Agents:
         except ValueError:
             return vals
 
-        # Calculate length of smallest value
+        # Calculate length of the smallest value
         min_len = len(str(min_val).split(".")[0])
 
-        return round(vals, -min_len + n)
+        if method == "round":
+            return round(vals, -min_len + n)
+        elif method == "floor":
+            return np.floor(vals, -min_len + n)
+        elif method == "ceil":
+            return np.ceil(vals, -min_len + n)
+        else:
+            raise ValueError(f"Method '{method}' unknown.")
 
     @staticmethod
     def _create_path(keys, separator: str = "/"):
@@ -1070,6 +1159,28 @@ class Agents:
 
         return plant_dict
 
+    def __info_heat(self, info: dict, plant_dict: dict, idx: int) -> dict:
+
+        # Add specific plant information (all entries with an index value at the end)
+        entries = ["demand", "file", "temperature"]
+        plant_dict = self.__add_entries(info=info, plant_dict=plant_dict, idx=idx, entries=entries)
+
+        # Add forecast information
+        plant_dict["fcast"] = dict(list(info.items())[5:])
+
+        return plant_dict
+
+    def __info_dhw(self, info: dict, plant_dict: dict, idx: int) -> dict:
+
+        # Add specific plant information (all entries with an index value at the end)
+        entries = ["demand", "file", "temperature"]
+        plant_dict = self.__add_entries(info=info, plant_dict=plant_dict, idx=idx, entries=entries)
+
+        # Add forecast information
+        plant_dict["fcast"] = dict(list(info.items())[5:])
+
+        return plant_dict
+
     def __info_pv(self, info: dict, plant_dict: dict, idx: int) -> dict:
 
         # Add specific plant information (all entries with an index value at the end)
@@ -1115,11 +1226,11 @@ class Agents:
     def __info_hp(self, info: dict, plant_dict: dict, idx: int) -> dict:
 
         # Add specific plant information (all entries with an index value at the end)
-        entries = ["file", "storage_rel", "soc"]
+        entries = ["power", "file"]
         plant_dict = self.__add_entries(info=info, plant_dict=plant_dict, idx=idx, entries=entries)
 
-        # Add forecast information
-        plant_dict["fcast"] = dict(list(info.items())[6:])
+        # Add quality of energy
+        plant_dict["quality"] = info["quality"]
 
         return plant_dict
 
@@ -1160,6 +1271,17 @@ class Agents:
     def __info_hydrogen(self, info: dict, plant_dict: dict, idx: int) -> dict:
         # Add specific plant information (all entries with an index value at the end)
         entries = ["power", "capacity", "efficiency", "soc", "g2h2", "h22g"]
+        plant_dict = self.__add_entries(info=info, plant_dict=plant_dict, idx=idx, entries=entries)
+
+        # Add quality of energy
+        plant_dict["quality"] = info["quality"]
+
+        return plant_dict
+
+    def __info_heat_storage(self, info: dict, plant_dict: dict, idx: int) -> dict:
+
+        # Add specific plant information (all entries with an index value at the end)
+        entries = ["capacity", "efficiency", "soc"]
         plant_dict = self.__add_entries(info=info, plant_dict=plant_dict, idx=idx, entries=entries)
 
         # Add quality of energy
@@ -1369,14 +1491,18 @@ class Agents:
         return list(set([file.split(sep)[idx] for file in os.listdir(path)]))
 
 
+# TODO: Enable heat, dhw, hp and heat_storage from grid as well (Monday)
 class Sfh(Agents):
     """
         Sets up sfh agents. Inherits from Agents class.
 
-        Mainly used for excel file creation. Afterwards Sfh class creates the individual agents.
+        Mainly used for Excel file creation. Afterwards Sfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict = None):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+
+        # Call the init method of the parent class
+        super().__init__(config_path, input_path, scenario_path)
 
         # Define agent type
         self.type = 'sfh'
@@ -1417,6 +1543,10 @@ class Sfh(Agents):
         # Create the overall dataframe structure for the worksheet
         self.create_df_structure()
 
+        # If no agents are created, return the empty dataframe
+        if self.num == 0:
+            return self.df
+
         # Fill the general information in dataframe
         self.fill_general()
 
@@ -1425,6 +1555,12 @@ class Sfh(Agents):
 
         # Fill the flexible load information in dataframe
         self.fill_flexible_load()
+
+        # Fill the heat information in dataframe
+        self.fill_heat()
+
+        # Fill the dhw information in dataframe
+        self.fill_dhw()
 
         # Fill the pv information in dataframe
         self.fill_pv()
@@ -1443,6 +1579,9 @@ class Sfh(Agents):
 
         # Fill the battery information in dataframe
         self.fill_battery()
+
+        # Fill the heat storage information in dataframe
+        self.fill_heat_storage()
 
         # Fill the model predictive controller information in dataframe
         self.fill_mpc()
@@ -1479,6 +1618,10 @@ class Sfh(Agents):
         # Create the overall dataframe structure for the worksheet
         self.create_df_structure()
 
+        # if no agents are created, return the empty dataframe
+        if self.num == 0:
+            return self.df
+
         # Fill the general information in dataframe
         self.fill_general()
 
@@ -1488,6 +1631,12 @@ class Sfh(Agents):
         # Fill the flexible load information in dataframe (can only be added through config)
         if fill_from_config:
             self.fill_flexible_load()
+
+        # Fill the heat information in dataframe
+        self.fill_heat(**kwargs)
+
+        # Fill the dhw information in dataframe
+        self.fill_dhw(**kwargs)
 
         # Fill the pv information in dataframe
         self.fill_pv(**kwargs)
@@ -1506,6 +1655,9 @@ class Sfh(Agents):
 
         # Fill the battery information in dataframe
         self.fill_battery()
+
+        # Fill the heat storage information in dataframe
+        self.fill_heat_storage()
 
         # Fill the model predictive controller information in dataframe
         self.fill_mpc()
@@ -1552,19 +1704,18 @@ class Sfh(Agents):
             # Adjust the columns from "heat"
             elif key == "heat":
                 cols[0] = f"{key}/owner"
-                cols[3] = f"{key}/sizing/file"
+                cols[3] = f"{key}/sizing/demand"
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:5], num=max_num) + cols[5:]
+                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
             # Adjust the columns from "dhw"
             elif key == "dhw":
                 cols[0] = f"{key}/owner"
-                cols[3] = f"{key}/sizing/file"
+                del cols[3]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
             # Adjust the columns from "pv"
             elif key == "pv":
                 cols[0] = f"{key}/owner"
-                del cols[9]
                 del cols[5]
                 del cols[3]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
@@ -1588,7 +1739,7 @@ class Sfh(Agents):
                 cols[0] = f"{key}/owner"
                 del cols[3]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:7], num=max_num) + cols[7:]
+                cols = cols[:3] + self.repeat_columns(columns=cols[3:5], num=max_num) + cols[5:]
             # Adjust the columns from "ev"
             elif key == "ev":
                 cols[0] = f"{key}/owner"
@@ -1602,6 +1753,13 @@ class Sfh(Agents):
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:3] + self.repeat_columns(columns=cols[3:9], num=max_num) + cols[9:]
+            # Adjust the columns from "heat_storage"
+            elif key == "heat_storage":
+                cols[0] = f"{key}/owner"
+                del cols[4]
+                del cols[1]
+                max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
+                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
             # Adjust the columns from "mpc"
             elif key == "mpc":
                 pass
@@ -1707,7 +1865,7 @@ class Sfh(Agents):
         self.add_general_info_config(key=key)
 
         # sizing
-        max_num = max(self.config[f"{key}"]["num"])
+        max_num = max(config["num"])
         for num in range(max_num):
             # get a list of the agents that own the nth device
             list_owner = np.multiply(np.array(self.df[f"{key}/num"] - (1 + num) >= 0), 1)
@@ -1771,7 +1929,7 @@ class Sfh(Agents):
         """
         key = "flexible_load"
         config = self.config[f"{key}"]
-        max_num = max(self.config[f"{key}"]["num"])
+        max_num = max(config["num"])
 
         # general
         self.add_general_info_config(key=key)
@@ -1794,6 +1952,179 @@ class Sfh(Agents):
             # time offset
             self.df[f"{key}/sizing/time_offset_{num}"] = self._gen_list_from_idx_list(
                 idx_list=idx_list, distr=self.config[f"{key}"]["sizing"]["time_offset"])
+
+        # forecast
+        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+
+        return self.df
+
+    def fill_heat(self, **kwargs) -> pd.DataFrame:
+        """
+            Fills all heat columns
+        """
+
+        # Key in the config file
+        key = "heat"
+
+        # Get the config for the key
+        config = self.config[f"{key}"]
+
+        if self.method == 'config':
+            self.df = self._heat_config(key=key, config=config)
+        elif self.method == 'grid':
+            self.df = self._heat_grid(key=key, config=config, **kwargs)
+        else:
+            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
+                                      f"Aborting scenario creation...")
+
+        return self.df
+
+    def _heat_config(self, key: str, config: dict) -> pd.DataFrame:
+        """adds the heat from the config file"""
+
+        # general
+        self.add_general_info_config(key=key)
+
+        # sizing
+        max_num = max(config["num"])
+        for num in range(max_num):
+            # get a list of the agents that own the nth device
+            list_owner = np.multiply(np.array(self.df[f"{key}/num"] - (1 + num) >= 0), 1)
+
+            # sizing
+            idx_list = self._gen_idx_list_from_distr(n=sum(list_owner),
+                                                     distr=config["sizing"]["distribution"],
+                                                     owner_list=list_owner)
+
+            # add indexed info
+            self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
+                                   idx_list=idx_list, appendix=f"_{num}")
+
+            # postprocessing
+            # demand (calculate demand based on efficiency and area of the building)
+            self.df[f"{key}/sizing/demand_{num}"] = self.df[f"general/parameters/efficiency"] * \
+                                                    self.df[f"general/parameters/area"] * 1000
+            # print(self.df.loc[:, self.df.filter(like=key).columns].to_string())
+
+            # file
+            # replace all 'linked' with the file of the inflexible load
+            self.df.loc[self.df[f"{key}/sizing/file_{num}"] == 'linked', f"{key}/sizing/file_{num}"] = self.df.loc[self.df[f"{key}/sizing/file_{num}"] == 'linked', f"inflexible_load/sizing/file_0"]
+            # shorten the file name to the yearly demand and index
+            self.df[f"{key}/sizing/file_{num}"] = ["_".join(item.rsplit(".", 1)[0].split("_")[1:3]) if 'csv' in item else item for item in self.df[f"{key}/sizing/file_{num}"]]
+            self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
+                                                                   device=f"{key}",
+                                                                   input_path=os.path.join(self.input_path, key))
+
+        # forecast
+        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+
+        return self.df
+
+    def _heat_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
+        """adds the heat from the grid"""
+
+        # Get all the kwargs
+        from_config_if_empty = kwargs.get('from_config_if_empty', False)
+
+        # general
+        self.add_general_info_grid(key=key)
+
+        # sizing
+        max_num = max(config["sizing"]["num"])
+        for num in range(max_num):
+            # file
+            self.df[f"{key}/sizing/file_{num}"] = self._pick_files_from_distr(
+                list_owner=self.df[f"{key}/owner"], distr=config["sizing"]["distribution"],
+                vals=config["sizing"]["demand"], input_path=os.path.join(self.input_path, key),
+                variance=config["sizing"]["demand_deviation"],
+                divisor=1000)
+            # demand
+            self.df[f"{key}/sizing/demand_{num}"] = self._get_val_from_name(
+                name_list=self.df[f"{key}/sizing/file_{num}"], separator="_", val_idx=1, multiplier=1000)
+
+        # forecast
+        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+
+        return self.df
+
+    def fill_dhw(self, **kwargs) -> pd.DataFrame:
+        """
+            Fills all dhw columns
+        """
+
+        # Key in the config file
+        key = "dhw"
+
+        # Get the config for the key
+        config = self.config[f"{key}"]
+
+        if self.method == 'config':
+            self.df = self._dhw_config(key=key, config=config)
+        elif self.method == 'grid':
+            self.df = self._dhw_grid(key=key, config=config, **kwargs)
+        else:
+            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
+                                      f"Aborting scenario creation...")
+
+        return self.df
+
+    def _dhw_config(self, key: str, config: dict) -> pd.DataFrame:
+        """adds the dhw from the config file"""
+
+        # general
+        self.add_general_info_config(key=key)
+
+        # sizing
+        max_num = max(config["num"])
+        for num in range(max_num):
+            # get a list of the agents that own the nth device
+            list_owner = np.multiply(np.array(self.df[f"{key}/num"] - (1 + num) >= 0), 1)
+
+            # sizing
+            idx_list = self._gen_idx_list_from_distr(n=sum(list_owner),
+                                                     distr=config["sizing"]["distribution"],
+                                                     owner_list=list_owner)
+
+            # add indexed info
+            self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
+                                   idx_list=idx_list, appendix=f"_{num}")
+
+            # postprocessing
+            # demand (calculate demand based on number of occupants)
+            self.df[f"{key}/sizing/demand_{num}"] *= self.df[f"general/parameters/occupants"]
+            self.df[f"{key}/sizing/demand_{num}"] = (self.df[f"{key}/sizing/demand_{num}"]).astype('Int64')
+
+            # file
+            self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
+                                                                   device=f"{key}",
+                                                                   input_path=os.path.join(self.input_path, key))
+
+        # forecast
+        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+
+        return self.df
+
+    def _dhw_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
+        """adds the heat from the grid"""
+        raise NotImplementedError(f"Not implemented yet... ")
+        # Get all the kwargs
+        from_config_if_empty = kwargs.get('from_config_if_empty', False)
+
+        # general
+        self.add_general_info_grid(key=key)
+
+        # sizing
+        max_num = max(config["sizing"]["num"])
+        for num in range(max_num):
+            # file
+            self.df[f"{key}/sizing/file_{num}"] = self._pick_files_from_distr(
+                list_owner=self.df[f"{key}/owner"], distr=config["sizing"]["distribution"],
+                vals=config["sizing"]["demand"], input_path=os.path.join(self.input_path, key),
+                variance=config["sizing"]["demand_deviation"],
+                divisor=1000)
+            # demand
+            self.df[f"{key}/sizing/demand_{num}"] = self._get_val_from_name(
+                name_list=self.df[f"{key}/sizing/file_{num}"], separator="_", val_idx=1, multiplier=1000)
 
         # forecast
         self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
@@ -1853,11 +2184,6 @@ class Sfh(Agents):
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
-            # angle
-            self.df[f"{key}/sizing/angle_{num}"] = self._calc_deviation(idx_list=idx_list,
-                                                                        vals=self.df[f"{key}/sizing/angle_{num}"],
-                                                                        distr=config["sizing"]["angle_deviation"],
-                                                                        method="absolute")
 
         # forecast
         self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
@@ -2230,19 +2556,20 @@ class Sfh(Agents):
                                                      distr=config["sizing"]["distribution"],
                                                      owner_list=list_owner)
             # add indexed info
-            # TODO: Check that the heat file is obtained properly
             self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
                                    idx_list=idx_list, appendix=f"_{num}")
             # postprocessing
+            # power
+            self.df[f"{key}/sizing/power_{num}"] *= self.df["heat/sizing/demand_0"] / 2000
+            self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(vals=self.df[f"{key}/sizing/power_{num}"],
+                                                                            n=self.n_digits).astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
-            # TODO: storage (change from relative to absolute values by multiplying with maximum power)
-            # for idx, val in self.df[f"{key}/sizing/file_{num}"].iteritems():
-            #     if val != np.nan:
-            #         self.df[f"{key}/sizing/storage_{num}"][idx] = self.df[f"{key}/sizing/storage_{num}"][idx] * \
-            #                                                       self.df[f"{key}/sizing/power_{num}"][idx]
+
+        # quality
+        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 
@@ -2422,7 +2749,7 @@ class Sfh(Agents):
     def _battery_config(self, key: str, config: dict) -> pd.DataFrame:
 
         # general
-        self._add_general_info_bat(key=key)
+        self._add_general_info_dep(key=key)
 
         # sizing
         max_num = max(config["num"])
@@ -2454,6 +2781,101 @@ class Sfh(Agents):
 
     def _battery_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
 
+        # Get all the kwargs
+        from_config_if_empty = kwargs.get('from_config_if_empty', False)
+
+        # Check if file contains the plant type (count > 0), if not use the config file to generate it
+        if from_config_if_empty and self.sgen['sgen_type'].value_counts()[key] == 0:
+            self._battery_config(key=key, config=config)
+            return self.df
+
+        # Drop all rows that do not contain the plant type and set the index to the owner
+        df = self.sgen[self.sgen['plant_type'] == key].set_index('owner', drop=False)
+
+        # Check if there are any pv plants, if not set all owners to 0 and return
+        if len(df) == 0:
+            self.df[f"{key}/owner"] = 0
+            return self.df
+
+        # Check if there is more than one plant per agent
+        if df.index.duplicated().any():
+            raise NotImplementedError(f"More than one {key} per agent is not implemented yet. "
+                                      f"Combine the {key} into one. "
+                                      f"Aborting scenario creation...")
+
+        # general
+        self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
+        # note: always taken from config
+        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
+
+        # sizing (all parameters that can be indexed)
+        for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
+            # Match the power with the power specified in sgen sheet
+            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(df['power']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/efficiency_{num}"] = self.df.index.map(df['efficiency'])
+            self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
+            self.df[f"{key}/sizing/g2b_{num}"] = self.df.index.map(df['g2b'])
+            self.df[f"{key}/sizing/b2g_{num}"] = self.df.index.map(df['b2g'])
+
+        # quality
+        self.df[f"{key}/quality"] = config["quality"]
+
+        return self.df
+
+    def fill_heat_storage(self, **kwargs) -> pd.DataFrame:
+        """
+            Fills all heat storage columns
+        """
+
+        # Key in the config file
+        key = "heat_storage"
+
+        # Get the config for the key
+        config = self.config[f"{key}"]
+
+        if self.method == 'config':
+            self.df = self._heat_storage_config(key=key, config=config)
+        elif self.method == 'grid':
+            self.df = self._heat_storage_grid(key=key, config=config, **kwargs)
+        else:
+            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
+                                      f"Aborting scenario creation...")
+
+        return self.df
+
+    def _heat_storage_config(self, key: str, config: dict) -> pd.DataFrame:
+
+        # general
+        self._add_general_info_dep(key=key, method='exclusive')
+
+        # sizing
+        max_num = max(config["num"])
+        for num in range(max_num):
+            # get a list of the agents that own the nth device
+            list_owner = np.multiply(np.array(self.df[f"{key}/num"] - (1 + num) >= 0), 1)
+
+            # sizing
+            idx_list = self._gen_idx_list_from_distr(n=sum(list_owner),
+                                                     distr=config["sizing"]["distribution"],
+                                                     owner_list=list_owner)
+            # add indexed info
+            self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"], idx_list=idx_list,
+                                   appendix=f"_{num}")
+            # postprocessing
+            # capacity
+            self.df[f"{key}/sizing/capacity_{num}"] *= self.df["heat/sizing/demand_0"] / 2000
+            self.df[f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
+                vals=self.df[f"{key}/sizing/capacity_{num}"], n=self.n_digits).astype('Int64')
+
+        # quality
+        self.df[f"{key}/quality"] = config["quality"]
+
+        return self.df
+
+    def _heat_storage_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
+        raise NotImplementedError(f"Not implemented yet... ")
         # Get all the kwargs
         from_config_if_empty = kwargs.get('from_config_if_empty', False)
 
@@ -2545,13 +2967,19 @@ class Sfh(Agents):
         # Taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
-    def _add_general_info_bat(self, key: str, method: str = "inclusive"):
+    def _add_general_info_dep(self, key: str, method: str = "inclusive"):
         """special case battery as it also depends on other plants"""
 
         # get a list of all the agents that fulfill the dependency requirements
         # note: in both cases the agent needs to have an inflexible load as it is used for sizing
         plants = self.config[f"{key}"]["share_dependent_on"]
-        # inclusive: agents needs to have ALL of the listed plants to fulfill requirements
+
+        # Check if there are any plants otherwise just treat it as a normal plant
+        if len(plants) == 0:
+            self.add_general_info_config(key=key)
+            return
+
+        # inclusive: agents needs to have ALL the listed plants to fulfill requirements
         if method == "inclusive":
             list_num = [1] * self.num
             plants += ["inflexible_load"]
@@ -2562,6 +2990,8 @@ class Sfh(Agents):
             list_num = [0] * self.num
             for device in plants:
                 list_num = [list_num[idx] + self.df[f"{device}/owner"][idx] for idx, _ in enumerate(list_num)]
+
+            # Make sure that there is either zero or one and that owner has inflexible load
             list_num = [min(1, list_num[idx] * self.df[f"inflexible_load/owner"][idx]) for idx, _ in enumerate(list_num)]
         else:
             raise Warning(f"Method '{method}' unknown.")
@@ -2581,7 +3011,10 @@ class Mfh(Agents):
         Mainly used for excel file creation. Afterwards Mfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+
+        # Call the init method of the parent class
+        super().__init__(config_path, input_path, scenario_path)
 
         # Define agent type
         self.type = 'mfh'
@@ -2629,6 +3062,10 @@ class Mfh(Agents):
         # Create the overall dataframe structure for the worksheet
         self.create_df_structure()
 
+        # If no agents are created, return the empty dataframe
+        if self.num == 0:
+            return self.df
+
         # Fill the general information in dataframe
         self.fill_general()
 
@@ -2637,6 +3074,12 @@ class Mfh(Agents):
 
         # Fill the flexible load information in dataframe
         self.fill_flexible_load()
+
+        # Fill the heat information in dataframe
+        self.fill_heat()
+
+        # Fill the dhw information in dataframe
+        self.fill_dhw()
 
         # Fill the pv information in dataframe
         self.fill_pv()
@@ -2655,6 +3098,9 @@ class Mfh(Agents):
 
         # Fill the battery information in dataframe
         self.fill_battery()
+
+        # Fill the heat storage information in dataframe
+        self.fill_heat_storage()
 
         # Fill the model predictive controller information in dataframe
         self.fill_mpc()
@@ -2691,6 +3137,10 @@ class Mfh(Agents):
 
         # Create the overall dataframe structure for the worksheet
         self.create_df_structure()
+
+        # If no agents are created, return the empty dataframe
+        if self.num == 0:
+            return self.df
 
         # Fill the general information in dataframe
         self.fill_general()
@@ -2766,21 +3216,20 @@ class Mfh(Agents):
             # Adjust the columns from "heat"
             elif key == "heat":
                 cols[0] = f"{key}/owner"
-                cols[4] = f"{key}/sizing/file"
+                cols[4] = f"{key}/sizing/demand"
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:5], num=max_num) + cols[5:]
+                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
             # Adjust the columns from "dhw"
             elif key == "dhw":
                 cols[0] = f"{key}/owner"
-                cols[4] = f"{key}/sizing/file"
+                del cols[4]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
             # Adjust the columns from "pv"
             elif key == "pv":
                 cols[0] = f"{key}/owner"
-                del cols[10]
                 del cols[6]
                 del cols[4]
                 del cols[1]
@@ -2808,7 +3257,7 @@ class Mfh(Agents):
                 del cols[4]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:7], num=max_num) + cols[7:]
+                cols = cols[:3] + self.repeat_columns(columns=cols[3:5], num=max_num) + cols[5:]
             # Adjust the columns from "ev"
             elif key == "ev":
                 cols[0] = f"{key}/owner"
@@ -2824,6 +3273,14 @@ class Mfh(Agents):
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:3] + self.repeat_columns(columns=cols[3:9], num=max_num) + cols[9:]
+            # Adjust the columns from "heat_storage"
+            elif key == "heat_storage":
+                cols[0] = f"{key}/owner"
+                del cols[5]
+                del cols[2]
+                del cols[1]
+                max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
+                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
             # Adjust the columns from "mpc"
             elif key == "mpc":
                 pass
@@ -2995,7 +3452,7 @@ class Mfh(Agents):
         self._add_general_info_config(key=key)
 
         # loop through buildings
-        max_num = max(self.config[f"{key}"]["num"])
+        max_num = max(config["num"])
         for agent, aps in self.ids.items():
             # get relevant sub dataframe that either contains building or apartments
             df_sub = self._preprocess_df_sub(agent, aps, key, aps_independent=True)
@@ -3120,6 +3577,205 @@ class Mfh(Agents):
         # forecast
         self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
 
+    def fill_heat(self, **kwargs) -> pd.DataFrame:
+        """
+            Fills all heat columns
+        """
+
+        # Key in the config file
+        key = "heat"
+
+        # Get the config for the key
+        config = self.config[f"{key}"]
+
+        if self.method == 'config':
+            self.df = self._heat_config(key=key, config=config)
+        elif self.method == 'grid':
+            self.df = self._heat_grid(key=key, config=config, **kwargs)
+        else:
+            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
+                                      f"Aborting scenario creation...")
+
+        return self.df
+
+    def _heat_config(self, key: str, config: dict) -> pd.DataFrame:
+        """adds the heat from the config file"""
+
+        # general
+        self._add_general_info_config(key=key)
+
+        # loop through buildings
+        max_num = max(config["num"])
+        for agent, aps in self.ids.items():
+            # get relevant sub dataframe that either contains building or apartments
+            df_sub = self._preprocess_df_sub(agent, aps, key, aps_independent=True)
+            # if building does not have device, skip it
+            if df_sub is None:
+                continue
+
+            # loop through number of plants
+            for num in range(max_num):
+                # get a list of the agents that own the nth device
+                list_owner = np.multiply(np.array(df_sub[f"{key}/num"] - (1 + num) >= 0), 1)
+
+                # sizing
+                idx_list = self._gen_idx_list_from_distr(n=sum(list_owner),
+                                                         distr=config["sizing"]["distribution"],
+                                                         owner_list=list_owner)
+
+                # add indexed info
+                df_sub = self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
+                                                idx_list=idx_list, df=df_sub, appendix=f"_{num}")
+
+                # postprocessing
+                # demand (calculate demand based on efficiency and area of the building)
+                df_sub.loc[:, f"{key}/sizing/demand_{num}"] = df_sub[f"general/parameters/efficiency"] * \
+                                                              df_sub[f"general/parameters/area"] * 1000
+
+                # file
+                # replace all 'linked' with the file of the inflexible load
+                df_sub.loc[df_sub[f"{key}/sizing/file_{num}"] == 'linked', f"{key}/sizing/file_{num}"] = df_sub.loc[df_sub[f"{key}/sizing/file_{num}"] == 'linked', f"inflexible_load/sizing/file_0"]
+                # shorten the file name to the yearly demand and index
+                df_sub.loc[:, f"{key}/sizing/file_{num}"] = ["_".join(item.rsplit(".", 1)[0].split("_")[1:3]) if 'csv' in item else item for item in df_sub[f"{key}/sizing/file_{num}"]]
+                df_sub.loc[:, f"{key}/sizing/file_{num}"] = self._pick_files(
+                    list_type=df_sub[f"{key}/sizing/file_{num}"], device=f"{key}",
+                    input_path=os.path.join(self.input_path, key))
+
+                # calculate total demand of building
+                self._calc_total(key=key, vals=[f"sizing/demand_{num}"], agent_id=agent, df=df_sub)
+
+                # fill main df with sub df
+                self.df.loc[df_sub.index, :] = df_sub[:]
+
+        # forecast
+        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+
+        return self.df
+
+    def _heat_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
+        """adds the heat from the grid"""
+
+        # Get all the kwargs
+        from_config_if_empty = kwargs.get('from_config_if_empty', False)
+
+        # general
+        self.add_general_info_grid(key=key)
+
+        # sizing
+        max_num = max(config["sizing"]["num"])
+        for num in range(max_num):
+            # file
+            self.df[f"{key}/sizing/file_{num}"] = self._pick_files_from_distr(
+                list_owner=self.df[f"{key}/owner"], distr=config["sizing"]["distribution"],
+                vals=config["sizing"]["demand"], input_path=os.path.join(self.input_path, key),
+                variance=config["sizing"]["demand_deviation"],
+                divisor=1000)
+            # demand
+            self.df[f"{key}/sizing/demand_{num}"] = self._get_val_from_name(
+                name_list=self.df[f"{key}/sizing/file_{num}"], separator="_", val_idx=1, multiplier=1000)
+
+        # forecast
+        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+
+        return self.df
+
+    def fill_dhw(self, **kwargs) -> pd.DataFrame:
+        """
+            Fills all dhw columns
+        """
+
+        # Key in the config file
+        key = "dhw"
+
+        # Get the config for the key
+        config = self.config[f"{key}"]
+
+        if self.method == 'config':
+            self.df = self._dhw_config(key=key, config=config)
+        elif self.method == 'grid':
+            self.df = self._dhw_grid(key=key, config=config, **kwargs)
+        else:
+            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
+                                      f"Aborting scenario creation...")
+
+        return self.df
+
+    def _dhw_config(self, key: str, config: dict) -> pd.DataFrame:
+        """adds the dhw from the config file"""
+
+        # general
+        self._add_general_info_config(key=key)
+
+        # loop through buildings
+        max_num = max(config["num"])
+        for agent, aps in self.ids.items():
+            # get relevant sub dataframe that either contains building or apartments
+            df_sub = self._preprocess_df_sub(agent, aps, key, aps_independent=True)
+            # if building does not have device, skip it
+            if df_sub is None:
+                continue
+
+            # loop through number of plants
+            for num in range(max_num):
+                # get a list of the agents that own the nth device
+                list_owner = np.multiply(np.array(df_sub[f"{key}/num"] - (1 + num) >= 0), 1)
+
+                # sizing
+                idx_list = self._gen_idx_list_from_distr(n=sum(list_owner),
+                                                         distr=config["sizing"]["distribution"],
+                                                         owner_list=list_owner)
+
+                # add indexed info
+                df_sub = self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
+                                                idx_list=idx_list, df=df_sub, appendix=f"_{num}")
+
+                # postprocessing
+                # demand (calculate demand based on efficiency and area of the building)
+                df_sub.loc[:, f"{key}/sizing/demand_{num}"] *= df_sub[f"general/parameters/occupants"]
+
+                # file
+                df_sub.loc[:, f"{key}/sizing/file_{num}"] = self._pick_files(
+                    list_type=df_sub[f"{key}/sizing/file_{num}"], device=f"{key}",
+                    input_path=os.path.join(self.input_path, key))
+
+                # calculate total demand of building
+                self._calc_total(key=key, vals=[f"sizing/demand_{num}"], agent_id=agent, df=df_sub)
+
+                # fill main df with sub df
+                self.df.loc[df_sub.index, :] = df_sub[:]
+
+        # forecast
+        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+
+        return self.df
+
+    def _dhw_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
+        """adds the heat from the grid"""
+
+        # Get all the kwargs
+        from_config_if_empty = kwargs.get('from_config_if_empty', False)
+
+        # general
+        self.add_general_info_grid(key=key)
+
+        # sizing
+        max_num = max(config["sizing"]["num"])
+        for num in range(max_num):
+            # file
+            self.df[f"{key}/sizing/file_{num}"] = self._pick_files_from_distr(
+                list_owner=self.df[f"{key}/owner"], distr=config["sizing"]["distribution"],
+                vals=config["sizing"]["demand"], input_path=os.path.join(self.input_path, key),
+                variance=config["sizing"]["demand_deviation"],
+                divisor=1000)
+            # demand
+            self.df[f"{key}/sizing/demand_{num}"] = self._get_val_from_name(
+                name_list=self.df[f"{key}/sizing/file_{num}"], separator="_", val_idx=1, multiplier=1000)
+
+        # forecast
+        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+
+        return self.df
+
     def fill_pv(self, **kwargs):
         """
             Fills all pv columns
@@ -3178,10 +3834,6 @@ class Mfh(Agents):
                 df_sub.loc[:, f"{key}/sizing/file_{num}"] = self._pick_files(
                     list_type=df_sub[f"{key}/sizing/file_{num}"], device=f"{key}",
                     input_path=os.path.join(self.input_path, key))
-                # angle
-                df_sub.loc[:, f"{key}/sizing/angle_{num}"] = self._calc_deviation(
-                    idx_list=idx_list, vals=df_sub[f"{key}/sizing/angle_{num}"],
-                    distr=config["sizing"]["angle_deviation"], method="absolute")
 
             # copy results to main df
             self.df.loc[df_sub.index, :] = df_sub[:]
@@ -3594,6 +4246,14 @@ class Mfh(Agents):
                 df_sub = self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
                                                 idx_list=idx_list, df=df_sub, appendix=f"_{num}")
                 # postprocessing
+                # power
+                df_sub.loc[:, f"{key}/sizing/power_{num}"] *= df_sub["heat/sizing/demand_0"] / 2000
+                # TODO: Fix rounding issue. Somehow the only one that is not working
+                # df_sub[f"{key}/sizing/power_{num}"] = pd.to_numeric(
+                #     df_sub[f"{key}/sizing/power_{num}"], errors='coerce').fillna(
+                #     df_sub[f"{key}/sizing/power_{num}"])
+                # df_sub.loc[:, f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
+                #     vals=df_sub[f"{key}/sizing/power_{num}"], n=self.n_digits, method='ceil')#.astype('Int64')
                 # file
                 df_sub.loc[:, f"{key}/sizing/file_{num}"] = self._pick_files(
                     list_type=df_sub[f"{key}/sizing/file_{num}"], device=f"{key}",
@@ -3901,6 +4561,118 @@ class Mfh(Agents):
 
         return self.df
 
+    def fill_heat_storage(self, **kwargs) -> pd.DataFrame:
+        """
+            Fills all heat storage columns
+        """
+
+        # Key in the config file
+        key = "heat_storage"
+
+        # Get the config for the key
+        config = self.config[f"{key}"]
+
+        if self.method == 'config':
+            self.df = self._heat_storage_config(key=key, config=config)
+        elif self.method == 'grid':
+            self.df = self._heat_storage_grid(key=key, config=config, **kwargs)
+        else:
+            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
+                                      f"Aborting scenario creation...")
+
+        return self.df
+
+    def _heat_storage_config(self, key: str, config: dict) -> pd.DataFrame:
+
+        # general
+        self._add_general_info_config(key=key)
+
+        # sizing
+        max_num = max(config["num"])
+        for agent, aps in self.ids.items():
+            # get relevant sub dataframe that either contains building or apartments
+            df_sub = self._preprocess_df_sub(agent, aps, key)
+            # if building does not have device, skip it
+            if df_sub is None:
+                continue
+
+            # check which agents have the required plants to also have a battery
+            df_sub = self._sub_dev_dependent_on(key=key, df=df_sub, config=config)
+
+            for num in range(max_num):
+                # get a list of the agents that own the nth device
+                list_owner = np.multiply(np.array(df_sub[f"{key}/num"] - (1 + num) >= 0), 1)
+
+                # sizing
+                idx_list = self._gen_idx_list_from_distr(n=sum(list_owner),
+                                                         distr=config["sizing"]["distribution"],
+                                                         owner_list=list_owner)
+                # add indexed info
+                df_sub = self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
+                                                idx_list=idx_list, df=df_sub, appendix=f"_{num}")
+                # postprocessing
+                # capacity
+                df_sub.loc[:, f"{key}/sizing/capacity_{num}"] *= df_sub.loc[:, "heat/sizing/demand_0"] / 2000
+                df_sub[f"{key}/sizing/capacity_{num}"] = pd.to_numeric(
+                    df_sub[f"{key}/sizing/capacity_{num}"], errors='coerce').fillna(
+                    df_sub[f"{key}/sizing/capacity_{num}"])
+                df_sub.loc[:, f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
+                    vals=df_sub[f"{key}/sizing/capacity_{num}"], n=self.n_digits)
+
+            # copy results to main df
+            self.df.loc[df_sub.index, :] = df_sub[:]
+
+        # quality
+        self.df.loc[:, f"{key}/quality"] = str(config["quality"])
+
+        return self.df
+
+    def _heat_storage_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
+        raise NotImplementedError(f"Not implemented yet... ")
+        # Get all the kwargs
+        from_config_if_empty = kwargs.get('from_config_if_empty', False)
+
+        # Check if file contains the plant type (count > 0), if not use the config file to generate it
+        if from_config_if_empty and self.sgen['sgen_type'].value_counts()[key] == 0:
+            self._battery_config(key=key, config=config)
+            return self.df
+
+        # Drop all rows that do not contain the plant type and set the index to the owner
+        df = self.sgen[self.sgen['plant_type'] == key].set_index('owner', drop=False)
+
+        # Check if there are any pv plants, if not set all owners to 0 and return
+        if len(df) == 0:
+            self.df[f"{key}/owner"] = 0
+            self.df[f"{key}/num"] = 0
+            return self.df
+
+        # Check if there is more than one plant per agent
+        if df.index.duplicated().any():
+            raise NotImplementedError(f"More than one {key} per agent is not implemented yet. "
+                                      f"Combine the {key} into one. "
+                                      f"Aborting scenario creation...")
+
+        # general
+        self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have battery
+        # note: always taken from config
+        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
+
+        # sizing (all parameters that can be indexed)
+        for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
+            # Match the power with the power specified in sgen sheet
+            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(df['power']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/efficiency_{num}"] = self.df.index.map(df['efficiency'])
+            self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
+            self.df[f"{key}/sizing/g2b_{num}"] = self.df.index.map(df['g2b'])
+            self.df[f"{key}/sizing/b2g_{num}"] = self.df.index.map(df['b2g'])
+
+        # quality
+        self.df[f"{key}/quality"] = config["quality"]
+
+        return self.df
+
     def fill_mpc(self):
         """
             Fills all battery columns
@@ -4006,6 +4778,7 @@ class Mfh(Agents):
 
     def _sub_dev_dependent_on(self, key: str, df: pd.DataFrame, config: dict) -> pd.DataFrame:
         """Checks which agents are eligible and assigns a number of plants to each depending on share"""
+        # TODO: Not properly working (see battery and heat_storage) --> make similar to that of sfh
         # check if agent qualifies for battery and set index appropriately
         list_num = [1] * len(df)
         for device in config["share_dependent_on"]:
@@ -4031,7 +4804,10 @@ class Ctsp(Agents):
         Mainly used for excel file creation. Afterwards Sfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+
+        # Call the init method of the parent class
+        super().__init__(config_path, input_path, scenario_path)
 
         # Define agent type
         self.type = 'ctsp'
@@ -4203,7 +4979,6 @@ class Ctsp(Agents):
             # Adjust the columns from "pv"
             elif key == "pv":
                 cols[0] = f"{key}/owner"
-                del cols[8]
                 del cols[4]
                 max_num = max(self.config[key]["num"])
                 cols = cols[:3] + self.repeat_columns(columns=cols[3:8], num=max_num) + cols[8:]
@@ -4497,11 +5272,6 @@ class Ctsp(Agents):
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
-            # angle
-            self.df[f"{key}/sizing/angle_{num}"] = self._calc_deviation(idx_list=idx_list,
-                                                                        vals=self.df[f"{key}/sizing/angle_{num}"],
-                                                                        distr=config["sizing"]["angle_deviation"],
-                                                                        method="absolute")
 
         # forecast
         self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
@@ -5125,7 +5895,10 @@ class Industry(Agents):
         Mainly used for excel file creation. Afterwards Sfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+
+        # Call the init method of the parent class
+        super().__init__(config_path, input_path, scenario_path)
 
         # Define agent type
         self.type = 'industry'
@@ -5297,7 +6070,6 @@ class Industry(Agents):
             # Adjust the columns from "pv"
             elif key == "pv":
                 cols[0] = f"{key}/owner"
-                del cols[8]
                 del cols[4]
                 max_num = max(self.config[key]["num"])
                 cols = cols[:3] + self.repeat_columns(columns=cols[3:8], num=max_num) + cols[8:]
@@ -5592,11 +6364,6 @@ class Industry(Agents):
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
-            # angle
-            self.df[f"{key}/sizing/angle_{num}"] = self._calc_deviation(idx_list=idx_list,
-                                                                        vals=self.df[f"{key}/sizing/angle_{num}"],
-                                                                        distr=config["sizing"]["angle_deviation"],
-                                                                        method="absolute")
 
         # forecast
         self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
@@ -6359,11 +7126,6 @@ class Industry(Agents):
     #         self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
     #                                                                device=f"{key}",
     #                                                                input_path=os.path.join(self.input_path, key))
-    #         # angle
-    #         self.df[f"{key}/sizing/angle_{num}"] = self._calc_deviation(idx_list=idx_list,
-    #                                                                     vals=self.df[f"{key}/sizing/angle_{num}"],
-    #                                                                     distr=config["sizing"]["angle_deviation"],
-    #                                                                     method="absolute")
     #
     #     # forecast
     #     self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
@@ -6495,7 +7257,7 @@ class Industry(Agents):
     #     config = self.config[f"{key}"]
     #
     #     # general
-    #     self._add_general_info_bat(key=key)
+    #     self._add_general_info_dep(key=key)
     #
     #     # sizing
     #     max_num = max(config["num"])
@@ -6606,7 +7368,10 @@ class Producer(Agents):
         Mainly used for excel file creation. Afterwards Sfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+
+        # Call the init method of the parent class
+        super().__init__(config_path, input_path, scenario_path)
 
         # Define agent type
         self.type = 'producer'
@@ -6647,8 +7412,7 @@ class Producer(Agents):
             Function to create the dataframe that makes the Excel sheet
         """
 
-        # Get the number of agents and set the method
-        self.num = self.config["general"]["number_of"]
+        # Set the method
         self.method = 'config'
 
         # Create the overall dataframe structure for the worksheet
@@ -6749,8 +7513,7 @@ class Producer(Agents):
             # Adjust the columns from "pv"
             if key == "pv":
                 self.num += self.config[key]["general"]["number_of"]
-                del cols[17:]
-                del cols[11]
+                del cols[16:]
                 del cols[7]
                 del cols[5]
                 del cols[:3]
@@ -6958,10 +7721,6 @@ class Producer(Agents):
                 list_type=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/file_{num}"],
                 device=f"{key}",
                 input_path=os.path.join(self.input_path, key))
-            # angle
-            self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/angle_{num}"] = self._calc_deviation(
-                idx_list=idx_list, vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/angle_{num}"],
-                distr=config["sizing"]["angle_deviation"], method="absolute")
 
         # forecast
         self.df.loc[self.idx_start:self.idx_end] = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"],
@@ -7179,7 +7938,10 @@ class Storage(Agents):
         Mainly used for excel file creation. Afterwards Sfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+
+        # Call the init method of the parent class
+        super().__init__(config_path, input_path, scenario_path)
 
         # Define agent type
         self.type = 'storage'
@@ -7220,8 +7982,7 @@ class Storage(Agents):
             Function to create the dataframe that makes the Excel sheet
         """
 
-        # Get the number of agents and set the method
-        self.num = self.config["general"]["number_of"]
+        # Set the method
         self.method = 'config'
 
         # Create the overall dataframe structure for the worksheet
