@@ -20,6 +20,8 @@ from pprint import pprint
 from ruamel.yaml.compat import ordereddict
 from collections import OrderedDict, Counter
 from bisect import bisect_left
+from hamlet.creator.agents.calc_wind_output import calc_wind_output_from_spec
+from hamlet.creator.agents.calc_pv_output import calc_pv_output_from_spec
 import ast
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -525,7 +527,7 @@ class Agents:
         if type(file) is dict:
             try:
                 # Use the plant-specific specs function to create a time series from the spec data
-                file = self.plants['specs'](specs=file, plant=plant_dict)
+                file = self.plants[plant_dict['type']]['specs'](specs=file, plant=plant_dict)
             except:
                 # If the specs function is not available for this plant type, raise a warning
                 raise Warning('Time series creation from spec file not available for this plant type.')
@@ -1290,12 +1292,51 @@ class Agents:
         return plant_dict
 
     def __timeseries_from_specs_pv(self, specs: dict, plant: dict):
-        # TODO: @Jiahe
-        pass
+        """Creates a time series for pv power from config spec file using pv power model.
+
+        Args:
+            specs (dict): A dictionary of pv hardware config.
+            plant (dict): A dictionary of pv planet information.
+
+        Returns:
+            power: A Pandas Dataframe object representing the time series data for the pv plant.
+
+        """
+        # get location information from config
+        location = self.setup['simulation']['location']
+        location = (location['latitude'], location['longitude'], location['name'], location['altitude'],
+                    location['timezone'])
+
+        # get plant orientation
+        orientation = (plant['orientation'], plant['angle'])
+
+        # calculate power output
+        power = calc_pv_output_from_spec(config=specs, orientation=orientation, location=location,
+                                         weather_path=os.path.join(self.input_path, 'general', 'weather',
+                                                                   self.setup['simulation']['weather']))
+        return power
 
     def __timeseries_from_specs_wind(self, specs: dict, plant: dict):
-        # TODO: @Jiahe
-        pass
+        """Creates a time series for wind power from config spec file using wind power model.
+
+        Args:
+            specs (dict): A dictionary of wind hardware config.
+            plant (dict): A dictionary of wind planet information.
+
+        Returns:
+            power: A Pandas Dataframe object representing the time series data for the wind plant.
+
+        """
+        # calculate wind output power pu using model
+        power = calc_wind_output_from_spec(weather_path=os.path.join(self.input_path, 'general', 'weather',
+                                                                     self.setup['simulation']['weather']),
+                                           turbine=specs)
+
+        # calculate and round power
+        power *= plant['power']
+        power = power.round().astype(int)
+
+        return power
 
     def __timeseries_from_specs_hp(self, specs: dict, plant: dict):
         # TODO: @Zhengjie

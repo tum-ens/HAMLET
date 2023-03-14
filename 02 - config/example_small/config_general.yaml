@@ -3,6 +3,17 @@
 ########################################################################################################################
 
 simulation:
+  location:                     # Location where the simulation happens (latitude, longitude, name, altitude, timezone)
+    latitude: 48.137154
+
+    longitude: 11.576124
+
+    name: Munich
+
+    altitude: 520
+
+    timezone: Etc/GMT-1
+
   type: sim                                 # type of simulation to be run
                                             # options:
                                             #   - sim: full-speed simulation (for research purposes)
@@ -25,7 +36,7 @@ simulation:
                                             # note: when beginning an rts, these many steps will be simulated at an
                                             #   accelerated rate, before the rts commences, to ensure a smooth start up
 
-  weather: weather.ft                       # weather file to be used for entire region
+  weather: weather.csv                       # weather file to be used for entire region
                                             # file types: csv, ft
 
   paths:                                    # paths relevant for the simulation
