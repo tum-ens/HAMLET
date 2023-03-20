@@ -12,8 +12,6 @@ simulation:
 
     altitude: 520
 
-    timezone: Etc/GMT-1
-
   type: sim                                 # type of simulation to be run
                                             # options:
                                             #   - sim: full-speed simulation (for research purposes)

@@ -25,6 +25,7 @@ from pvlib.pvsystem import PVSystem
 from pvlib.location import Location
 from windpowerlib import ModelChain, WindTurbine
 import ast
+import pytz
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -1294,7 +1295,7 @@ class Agents:
         return plant_dict
 
     @staticmethod
-    def __create_pv_system_from_config(self, config: dict, orientation: tuple) -> PVSystem:
+    def __create_pv_system_from_config(config: dict, orientation: tuple) -> PVSystem:
         """create PV system from hardware config file.
 
         Args:
@@ -1332,7 +1333,7 @@ class Agents:
         return system
 
     @staticmethod
-    def __adjust_weather_data_for_pv(self, weather_path: str, location: tuple) -> pd.DataFrame:
+    def __adjust_weather_data_for_pv(weather_path: str, location: tuple) -> pd.DataFrame:
         """adjust weather data to the right format that pvlib needed.
 
         Args:
@@ -1344,7 +1345,7 @@ class Agents:
 
         """
         # get location data
-        latitude, longitude, name, altitude, timezone = location
+        latitude, longitude, name, altitude = location
 
         # get weather data from csv
         weather = pd.read_csv(weather_path)
@@ -1388,8 +1389,7 @@ class Agents:
         """
         # get location information from config
         location = self.setup['simulation']['location']
-        location = (location['latitude'], location['longitude'], location['name'], location['altitude'],
-                    location['timezone'])
+        location = (location['latitude'], location['longitude'], location['name'], location['altitude'])
 
         # get plant orientation
         orientation = (plant['orientation'], plant['angle'])
@@ -1398,17 +1398,16 @@ class Agents:
         weather_path = os.path.join(self.input_path, 'general', 'weather', self.setup['simulation']['weather'])
 
         # create PVSystem and adjust weather data
-        system = self.__create_pv_system_from_config(self, config=specs, orientation=orientation)
-        weather = self.__adjust_weather_data_for_pv(self, weather_path=weather_path, location=location)
+        system = self.__create_pv_system_from_config(config=specs, orientation=orientation)
+        weather = self.__adjust_weather_data_for_pv(weather_path=weather_path, location=location)
 
         # get location data and create corresponding pvlib Location object
-        latitude, longitude, name, altitude, timezone = location
+        latitude, longitude, name, altitude = location
         location = Location(
             latitude,
             longitude,
             name=name,
-            altitude=altitude,
-            tz=timezone,
+            altitude=altitude
         )
 
         # create calculation model for the given pv system and location
@@ -1439,7 +1438,7 @@ class Agents:
         return power
 
     @staticmethod
-    def __adjust_weather_data_for_wind(self, weather_path: str) -> pd.DataFrame:
+    def __adjust_weather_data_for_wind(weather_path: str) -> pd.DataFrame:
         """adjust weather data to the right format that windpowerlib needed.
 
         Args:
@@ -1487,7 +1486,7 @@ class Agents:
         weather_path = os.path.join(self.input_path, 'general', 'weather', self.setup['simulation']['weather'])
 
         # get weather data
-        weather = self.__adjust_weather_data_for_wind(self, weather_path=weather_path)
+        weather = self.__adjust_weather_data_for_wind(weather_path=weather_path)
 
         # get nominal power
         nominal_power = specs['nominal_power']
