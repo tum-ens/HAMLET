@@ -10,7 +10,6 @@ import os
 import string
 import json
 import math
-from random import shuffle, choice, random, randint, choices
 import random
 from ruamel.yaml import YAML
 from typing import Tuple, Union
@@ -20,7 +19,6 @@ from pprint import pprint
 from ruamel.yaml.compat import ordereddict
 from collections import OrderedDict, Counter
 from bisect import bisect_left
-import ast
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -150,12 +148,16 @@ class Agents:
         dict_agents = {}
 
         # Create dataframes for each type of agent using their specific class
-        for key, _ in self.config.items():
+        for key, config in self.config.items():
             if key in self.types:
-                dict_agents[key] = self.types[key](input_path=self.input_path,
-                                                   config=self.config[key],
-                                                   config_path=self.config_path,
-                                                   scenario_path=self.scenario_path).create_df_from_config()
+                # Create the agents of the specific type
+                agents = self.types[key](input_path=self.input_path,
+                                         config=config,
+                                         config_path=self.config_path,
+                                         scenario_path=self.scenario_path)
+
+                # Create the dataframe
+                dict_agents[key] = agents.create_df_from_config()
             else:
                 print(f"Not there yet at {key}")
 
@@ -720,7 +722,7 @@ class Agents:
 
         # Reduce the number of ones until n_1s is reached. A while-loop was used as it is the fastest method for n<1000
         while sum(list_dep) > n_ones:
-            idx = randint(0, len(list_dep) - 1)
+            idx = random.randint(0, len(list_dep) - 1)
             list_dep[idx] = 0
 
         return list_dep
@@ -946,7 +948,7 @@ class Agents:
 
         # Adjust list_distr if sum does not match num
         while sum(list_distr) != num:
-            idx = choices(range(len(distr)), distr)[0]
+            idx = random.choices(range(len(distr)), distr)[0]
             if sum(list_distr) > num and list_distr[idx] > 0:  # subtract one element by one
                 list_distr[idx] -= 1
             elif sum(list_distr) < num:  # add one element by one
@@ -1299,6 +1301,10 @@ class Agents:
 
     def __timeseries_from_specs_hp(self, specs: dict, plant: dict):
         # TODO: @Zhengjie
+        # input is the specs of the plant and the plant dict
+        print(specs)
+        print(plant)
+        # output is the timeseries of the plant. This should be a pandas dataframe with the index being the unix timestamp and the columns named "power" and "cop" (if applicable)
         pass
 
     @staticmethod
@@ -1491,7 +1497,6 @@ class Agents:
         return list(set([file.split(sep)[idx] for file in os.listdir(path)]))
 
 
-# TODO: Enable heat, dhw, hp and heat_storage from grid as well (Monday)
 class Sfh(Agents):
     """
         Sets up sfh agents. Inherits from Agents class.
@@ -1651,13 +1656,13 @@ class Sfh(Agents):
         self.fill_hp(**kwargs)
 
         # Fill the electric vehicle information in dataframe
-        self.fill_ev()
+        self.fill_ev(**kwargs)
 
         # Fill the battery information in dataframe
-        self.fill_battery()
+        self.fill_battery(**kwargs)
 
         # Fill the heat storage information in dataframe
-        self.fill_heat_storage()
+        self.fill_heat_storage(**kwargs)
 
         # Fill the model predictive controller information in dataframe
         self.fill_mpc()
@@ -1759,7 +1764,7 @@ class Sfh(Agents):
                 del cols[4]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:3] + self.repeat_columns(columns=cols[3:7], num=max_num) + cols[7:]
             # Adjust the columns from "mpc"
             elif key == "mpc":
                 pass
@@ -1907,7 +1912,7 @@ class Sfh(Agents):
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
-        for num in range(max(self.df[f"{key}/num"])): # currently only one device per agent is supported
+        for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
             # Get demand from load sheet
             self.df[f"{key}/sizing/demand_{num}"] = (df['demand'] * 1e6).astype('Int64')
             # Check if file column is empty and fill it with the closest file if so
@@ -2026,21 +2031,37 @@ class Sfh(Agents):
         # Get all the kwargs
         from_config_if_empty = kwargs.get('from_config_if_empty', False)
 
+        # Drop all rows that do not contain the load type and set the index to the owner
+        df = self.load[self.load['load_type'] == key].set_index('owner', drop=False)
+
+        # Check if file contains the plant type (load > 0), if not use the config file to generate it
+        if from_config_if_empty and df['load_type'].value_counts().get(key, 0) == 0:
+            self._inflexible_load_config(key=key, config=config)
+            return self.df
+
+        # Check if there are any ev plants, if not set all owners to 0 and return
+        if len(df) == 0:
+            self.df[f"{key}/owner"] = 0
+            return self.df
+
+        # Check if there is more than one plant per agent
+        if df.index.duplicated().any():
+            raise NotImplementedError(f"More than one {key} per agent is not implemented yet. "
+                                      f"Combine the {key} into one. "
+                                      f"Aborting scenario creation...")
+
         # general
-        self.add_general_info_grid(key=key)
+        self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        # note: always taken from config
+        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
-        max_num = max(config["sizing"]["num"])
-        for num in range(max_num):
-            # file
-            self.df[f"{key}/sizing/file_{num}"] = self._pick_files_from_distr(
-                list_owner=self.df[f"{key}/owner"], distr=config["sizing"]["distribution"],
-                vals=config["sizing"]["demand"], input_path=os.path.join(self.input_path, key),
-                variance=config["sizing"]["demand_deviation"],
-                divisor=1000)
-            # demand
-            self.df[f"{key}/sizing/demand_{num}"] = self._get_val_from_name(
-                name_list=self.df[f"{key}/sizing/file_{num}"], separator="_", val_idx=1, multiplier=1000)
+        for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
+            # Get demand from load sheet
+            self.df[f"{key}/sizing/demand_{num}"] = self.df.index.map(df['demand'] * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['heat_file'])
+            self.df[f"{key}/sizing/temperature_{num}"] = self.df.index.map(df['temperature'])
 
         # forecast
         self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
@@ -2105,26 +2126,42 @@ class Sfh(Agents):
         return self.df
 
     def _dhw_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
-        """adds the heat from the grid"""
-        raise NotImplementedError(f"Not implemented yet... ")
+        """adds the dhw from the grid"""
+
         # Get all the kwargs
         from_config_if_empty = kwargs.get('from_config_if_empty', False)
 
+        # Drop all rows that do not contain the load type and set the index to the owner
+        df = self.load[self.load['load_type'] == key].set_index('owner', drop=False)
+
+        # Check if file contains the plant type (load > 0), if not use the config file to generate it
+        if from_config_if_empty and df['load_type'].value_counts().get(key, 0) == 0:
+            self._inflexible_load_config(key=key, config=config)
+            return self.df
+
+        # Check if there are any ev plants, if not set all owners to 0 and return
+        if len(df) == 0:
+            self.df[f"{key}/owner"] = 0
+            return self.df
+
+        # Check if there is more than one plant per agent
+        if df.index.duplicated().any():
+            raise NotImplementedError(f"More than one {key} per agent is not implemented yet. "
+                                      f"Combine the {key} into one. "
+                                      f"Aborting scenario creation...")
+
         # general
-        self.add_general_info_grid(key=key)
+        self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        # note: always taken from config
+        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
-        max_num = max(config["sizing"]["num"])
-        for num in range(max_num):
-            # file
-            self.df[f"{key}/sizing/file_{num}"] = self._pick_files_from_distr(
-                list_owner=self.df[f"{key}/owner"], distr=config["sizing"]["distribution"],
-                vals=config["sizing"]["demand"], input_path=os.path.join(self.input_path, key),
-                variance=config["sizing"]["demand_deviation"],
-                divisor=1000)
-            # demand
-            self.df[f"{key}/sizing/demand_{num}"] = self._get_val_from_name(
-                name_list=self.df[f"{key}/sizing/file_{num}"], separator="_", val_idx=1, multiplier=1000)
+        for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
+            # Get demand from load sheet
+            self.df[f"{key}/sizing/demand_{num}"] = self.df.index.map(df['demand'] * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['heat_file'])
+            self.df[f"{key}/sizing/temperature_{num}"] = self.df.index.map(df['temperature'])
 
         # forecast
         self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
@@ -2605,16 +2642,19 @@ class Sfh(Agents):
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
-            # Add random specs file to all agents that have a plant (> num as num starts at 0)
-            self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'specs'
-            self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
-                                                                   device=f"{key}",
-                                                                   input_path=os.path.join(self.input_path, key))
+            # Add power of hp
+            self.df[f"{key}/sizing/power_{num}"] = self.df.index.map(df['power'] * 1e6).astype('Int64')
+            # Check if cop_file column exists
+            if 'file' in df and not df['cop_file'].isnull().all():
+                # Fill rows with values from sgen sheet
+                self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['cop_file'])
+            else:
+                # Add random specs file to all agents that have a plant (> num as num starts at 0)
+                self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'specs'
+                self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
+                                                                       device=f"{key}",
+                                                                       input_path=os.path.join(self.input_path, key))
 
-            # Add storage information
-            self.df[f"{key}/sizing/storage_{num}"] = self.df.index.map(df['storage'])
-            self.df[f"{key}/sizing/efficiency_{num}"] = self.df.index.map(df['efficiency'])
-            self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -2690,7 +2730,7 @@ class Sfh(Agents):
             self._ev_config(key=key, config=config)
             return self.df
 
-        # Check if there are any hp plants, if not set all owners to 0 and return
+        # Check if there are any ev plants, if not set all owners to 0 and return
         if len(df) == 0:
             self.df[f"{key}/owner"] = 0
             return self.df
@@ -2864,6 +2904,10 @@ class Sfh(Agents):
             self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"], idx_list=idx_list,
                                    appendix=f"_{num}")
             # postprocessing
+            # power
+            self.df[f"{key}/sizing/power_{num}"] *= self.df["heat/sizing/demand_0"] / 2000
+            self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
+                vals=self.df[f"{key}/sizing/power_{num}"], n=self.n_digits).astype('Int64')
             # capacity
             self.df[f"{key}/sizing/capacity_{num}"] *= self.df["heat/sizing/demand_0"] / 2000
             self.df[f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
@@ -2875,7 +2919,7 @@ class Sfh(Agents):
         return self.df
 
     def _heat_storage_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
-        raise NotImplementedError(f"Not implemented yet... ")
+
         # Get all the kwargs
         from_config_if_empty = kwargs.get('from_config_if_empty', False)
 
@@ -2911,8 +2955,6 @@ class Sfh(Agents):
             self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/efficiency_{num}"] = self.df.index.map(df['efficiency'])
             self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
-            self.df[f"{key}/sizing/g2b_{num}"] = self.df.index.map(df['g2b'])
-            self.df[f"{key}/sizing/b2g_{num}"] = self.df.index.map(df['b2g'])
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -3152,6 +3194,12 @@ class Mfh(Agents):
         if fill_from_config:
             self.fill_flexible_load()
 
+        # Fill the heat information in dataframe
+        self.fill_heat(**kwargs)
+
+        # Fill the dhw information in dataframe
+        self.fill_dhw(**kwargs)
+
         # Fill the pv information in dataframe
         self.fill_pv(**kwargs)
 
@@ -3169,6 +3217,9 @@ class Mfh(Agents):
 
         # Fill the battery information in dataframe
         self.fill_battery(**kwargs)
+
+        # Fill the heat storage information in dataframe
+        self.fill_heat_storage(**kwargs)
 
         # Fill the model predictive controller information in dataframe
         self.fill_mpc()
@@ -3280,7 +3331,7 @@ class Mfh(Agents):
                 del cols[2]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:3] + self.repeat_columns(columns=cols[3:7], num=max_num) + cols[7:]
             # Adjust the columns from "mpc"
             elif key == "mpc":
                 pass
@@ -3658,21 +3709,37 @@ class Mfh(Agents):
         # Get all the kwargs
         from_config_if_empty = kwargs.get('from_config_if_empty', False)
 
+        # Drop all rows that do not contain the load type and set the index to the owner
+        df = self.load[self.load['load_type'] == key].set_index('owner', drop=False)
+
+        # Check if file contains the plant type (load > 0), if not use the config file to generate it
+        if from_config_if_empty and df['load_type'].value_counts().get(key, 0) == 0:
+            self._inflexible_load_config(key=key, config=config)
+            return self.df
+
+        # Check if there are any ev plants, if not set all owners to 0 and return
+        if len(df) == 0:
+            self.df[f"{key}/owner"] = 0
+            return self.df
+
+        # Check if there is more than one plant per agent
+        if df.index.duplicated().any():
+            raise NotImplementedError(f"More than one {key} per agent is not implemented yet. "
+                                      f"Combine the {key} into one. "
+                                      f"Aborting scenario creation...")
+
         # general
-        self.add_general_info_grid(key=key)
+        self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        # note: always taken from config
+        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
-        max_num = max(config["sizing"]["num"])
-        for num in range(max_num):
-            # file
-            self.df[f"{key}/sizing/file_{num}"] = self._pick_files_from_distr(
-                list_owner=self.df[f"{key}/owner"], distr=config["sizing"]["distribution"],
-                vals=config["sizing"]["demand"], input_path=os.path.join(self.input_path, key),
-                variance=config["sizing"]["demand_deviation"],
-                divisor=1000)
-            # demand
-            self.df[f"{key}/sizing/demand_{num}"] = self._get_val_from_name(
-                name_list=self.df[f"{key}/sizing/file_{num}"], separator="_", val_idx=1, multiplier=1000)
+        for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
+            # Get demand from load sheet
+            self.df[f"{key}/sizing/demand_{num}"] = self.df.index.map(df['demand'] * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['heat_file'])
+            self.df[f"{key}/sizing/temperature_{num}"] = self.df.index.map(df['temperature'])
 
         # forecast
         self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
@@ -3755,21 +3822,37 @@ class Mfh(Agents):
         # Get all the kwargs
         from_config_if_empty = kwargs.get('from_config_if_empty', False)
 
+        # Drop all rows that do not contain the load type and set the index to the owner
+        df = self.load[self.load['load_type'] == key].set_index('owner', drop=False)
+
+        # Check if file contains the plant type (load > 0), if not use the config file to generate it
+        if from_config_if_empty and df['load_type'].value_counts().get(key, 0) == 0:
+            self._inflexible_load_config(key=key, config=config)
+            return self.df
+
+        # Check if there are any ev plants, if not set all owners to 0 and return
+        if len(df) == 0:
+            self.df[f"{key}/owner"] = 0
+            return self.df
+
+        # Check if there is more than one plant per agent
+        if df.index.duplicated().any():
+            raise NotImplementedError(f"More than one {key} per agent is not implemented yet. "
+                                      f"Combine the {key} into one. "
+                                      f"Aborting scenario creation...")
+
         # general
-        self.add_general_info_grid(key=key)
+        self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        # note: always taken from config
+        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
-        max_num = max(config["sizing"]["num"])
-        for num in range(max_num):
-            # file
-            self.df[f"{key}/sizing/file_{num}"] = self._pick_files_from_distr(
-                list_owner=self.df[f"{key}/owner"], distr=config["sizing"]["distribution"],
-                vals=config["sizing"]["demand"], input_path=os.path.join(self.input_path, key),
-                variance=config["sizing"]["demand_deviation"],
-                divisor=1000)
-            # demand
-            self.df[f"{key}/sizing/demand_{num}"] = self._get_val_from_name(
-                name_list=self.df[f"{key}/sizing/file_{num}"], separator="_", val_idx=1, multiplier=1000)
+        for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
+            # Get demand from load sheet
+            self.df[f"{key}/sizing/demand_{num}"] = self.df.index.map(df['demand'] * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['heat_file'])
+            self.df[f"{key}/sizing/temperature_{num}"] = self.df.index.map(df['temperature'])
 
         # forecast
         self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
@@ -4303,16 +4386,18 @@ class Mfh(Agents):
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
-            # Add random specs file to all agents that have a plant (> num as num starts at 0)
-            self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'specs'
-            self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
-                                                                   device=f"{key}",
-                                                                   input_path=os.path.join(self.input_path, key))
-
-            # Add storage information
-            self.df[f"{key}/sizing/storage_{num}"] = self.df.index.map(df['storage'])
-            self.df[f"{key}/sizing/efficiency_{num}"] = self.df.index.map(df['efficiency'])
-            self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
+            # Add power of hp
+            self.df[f"{key}/sizing/power_{num}"] = self.df.index.map(df['power'] * 1e6).astype('Int64')
+            # Check if cop_file column exists
+            if 'file' in df and not df['cop_file'].isnull().all():
+                # Fill rows with values from sgen sheet
+                self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['cop_file'])
+            else:
+                # Add random specs file to all agents that have a plant (> num as num starts at 0)
+                self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'specs'
+                self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
+                                                                       device=f"{key}",
+                                                                       input_path=os.path.join(self.input_path, key))
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -4406,7 +4491,7 @@ class Mfh(Agents):
             self._ev_config(key=key, config=config)
             return self.df
 
-        # Check if there are any hp plants, if not set all owners to 0 and return
+        # Check if there are any ev plants, if not set all owners to 0 and return
         if len(df) == 0:
             self.df[f"{key}/owner"] = 0
             self.df[f"{key}/num"] = 0
@@ -4611,6 +4696,13 @@ class Mfh(Agents):
                 df_sub = self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
                                                 idx_list=idx_list, df=df_sub, appendix=f"_{num}")
                 # postprocessing
+                # power
+                df_sub.loc[:, f"{key}/sizing/power_{num}"] *= df_sub.loc[:, "heat/sizing/demand_0"] / 2000
+                df_sub[f"{key}/sizing/power_{num}"] = pd.to_numeric(
+                    df_sub[f"{key}/sizing/power_{num}"], errors='coerce').fillna(
+                    df_sub[f"{key}/sizing/power_{num}"])
+                df_sub.loc[:, f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
+                    vals=df_sub[f"{key}/sizing/power_{num}"], n=self.n_digits)
                 # capacity
                 df_sub.loc[:, f"{key}/sizing/capacity_{num}"] *= df_sub.loc[:, "heat/sizing/demand_0"] / 2000
                 df_sub[f"{key}/sizing/capacity_{num}"] = pd.to_numeric(
@@ -4628,7 +4720,7 @@ class Mfh(Agents):
         return self.df
 
     def _heat_storage_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
-        raise NotImplementedError(f"Not implemented yet... ")
+
         # Get all the kwargs
         from_config_if_empty = kwargs.get('from_config_if_empty', False)
 
@@ -4643,7 +4735,6 @@ class Mfh(Agents):
         # Check if there are any pv plants, if not set all owners to 0 and return
         if len(df) == 0:
             self.df[f"{key}/owner"] = 0
-            self.df[f"{key}/num"] = 0
             return self.df
 
         # Check if there is more than one plant per agent
@@ -4654,7 +4745,7 @@ class Mfh(Agents):
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have battery
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
@@ -4665,8 +4756,6 @@ class Mfh(Agents):
             self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/efficiency_{num}"] = self.df.index.map(df['efficiency'])
             self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
-            self.df[f"{key}/sizing/g2b_{num}"] = self.df.index.map(df['g2b'])
-            self.df[f"{key}/sizing/b2g_{num}"] = self.df.index.map(df['b2g'])
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -8445,4 +8534,4 @@ class Storage(Agents):
 
 # Playground
 if __name__ == "__main__":
-    print('Working anymore ;) Call the example function to create a scenario instead.')
+    print('Not working anymore ;) Call the example function to create a scenario instead.')
