@@ -10,5 +10,5 @@ from markets import Markets
 
 class Lem(Markets):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config_path: str, input_path: str, scenario_path: str, config_root):
+        super().__init__(config_path, input_path, scenario_path, config_root)

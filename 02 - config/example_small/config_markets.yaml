@@ -2,319 +2,681 @@
 ######################################### markets configuration ###################################################
 ########################################################################################################################
 
-# TODO (optional): allow markets to be run as a time series instead of simulating all of the markets
-# TODO NOTE!!! Mechanism of interaction with other markets needs to only look at upwards markets (no sense to look down in the hierarchy and simply not included in the scope)
+lem_continuous:                               # type and name of the market "type_name" (must be unique)
+                                      # note: markets with the same suffix can trade among each other if specified
+  active: True                        # is the market active?
+                                      # options:
+                                      #   - True: market is active
+                                      #   - False: market is inactive (market is ignored in simulation)
 
-markets:
-  lem_01:                               # type and name of the market "type_name" (must be unique)
-                                        # note: markets with the same suffix can trade among each other if specified
-    active: True                        # is the market active?
+  clearing:
+    type: ex-ante                     # type of market clearing
+                                      # options:
+                                      #   - ex-ante: market clearing is done before the delivery period
+                                      #   - TODO ex-post: market clearing is done after the delivery period
+                                      #   - None: no market clearing is done
+
+    method: pda                       # method of market clearing
+                                      # options:
+                                      #   - pda: periodic double auction
+                                      #   - community: community clearing
+                                      # note: for further information about the method options see the documentation
+
+    pricing: uniform                  # pricing method of the market clearing
+                                      # options:
+                                      #   - uniform (ex-ante): all participants pay the same price
+                                      #   - discriminatory (ex-ante): each participant pays a different price
+                                      #   - standard (ex-post): see details in the ex-post folder
+                                      # note: for further information about the pricing options see the documentation
+
+    coupling: above                   # method of coupling market regions (are uncleared positions posted elsewhere?)
+                                      # options:
+                                      #   - None: unsettled bids are not offered at other markets, i.e. bids get feed-in tariff and offers pay retail wholesale price
+                                      #   - above: unsettled bids are offered at higher market levels (if possible)
+                                      #   - below: unsettled bids are offered at lower market levels (if possible)
+
+
+    timing:                             # timing of the market
+      start: 0                      # start of the market in unix time with timezone information
+                                        #   - unix time: market starts at the specified time
+                                        #       format (ISO 8601): %Y-%m-%dT%H:%M:%S%z (YYYY-MM-DDTHH:MM:SS+HH:MM)
+                                        #   - timedelta: specify the distance to the start of the simulation
+                                        #       unit: seconds
+
+
+      opening: 900                      # when does the first auction occur after the first delivery period
+                                        # unit: seconds
+
+      horizon: [0, 86400]               # horizon of the market clearings (at what time range is energy delivered?)
+                                        # unit: seconds
+                                        # note: first position is for the start of the horizon, second for the end
+                                        #   which will be excluded in the horizon (e.g. 0 <= x < 86400)
+                                        # note: if the horizon is longer than the duration of the market clearing
+                                        #   period, the market clearing period is repeated until the horizon is
+                                        #   covered and vice versa.
+
+      duration: 900                     # duration of one energy delivery period
+                                        # unit: seconds
+
+      frequency: 900                    # how often is ex-ante market clearing executed?
+                                        # unit: seconds
+
+      closing: 0                        # when does the last auction occur before the delivery period
+                                        # unit: seconds
+
+      settling: 'continuous'            # at which time steps is the market settled?
                                         # options:
-                                        #   - True: market is active
-                                        #   - False: market is inactive (market is ignored in simulation)
+                                        #   - continuous: market is settled at every first time step once horizon is passed
+                                        #   - period: market is settled for the entire period
 
-    clearing:
-      type: ex-ante                     # type of market clearing
+  pricing:                            # pricing of each retailer
+                                      # note: currently only one retailer is possible
+    retailer:                         # name of the retailer
+                                      # note: currently only one retailer possible
+      energy:                         # parameters for retail energy (if market is ex-ante)
+        method: fixed                 # how should retail prices be determined?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+
+        fixed:
+          'price': [0.10, 0.01]       # fixed energy settings (retailer market offers)
+
+          'quantity': [1e5, 1e5]      # units: price: ct/kWh | quantity: Wh
+                                      # note: first position is for selling, second for buying energy TODO: Make a function that takes these values and adds suffix '_sell'/'_buy' to each -> In the end there always needs to be a time-series file
+                                      # note: the quantities cancel each other out and are therefore net amounts
+
+        file:
+          file: retail_prices_1.csv     # file containing the energy prices and quantities for each time step
+
+        quality: 0                    # quality that the offered energy should be labelled with on the lem
+                                      # note: the value needs to match the index of one of the values under types/qualities
+
+      grid:                           # parameters for grid fees
+                                      # explanation: logic behind it is that the grid fees are always added to the
+                                      #   energy traded at that market level and if the energy is traded at a higher
+                                      #   market level, the grid fees are added to the energy price. This way the
+                                      #   different sources of energy can be considered in price (but not in terms of
+                                      #   quality). If the energy is procured from the retailer, the wholesale fee is
+                                      #   used instead of the local one.
+        method: fixed                 # how should balancing energy prices be set?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+                                      # balancing energy is the market participants deviation from the market
+                                      # result. the balancing price is the incentive for the agent to stick
+                                      # to the market result, or to assist the system in restoring its balance
+
+        fixed:                        # fixed grid fees settings
+          local: [0, 0.4]             # local grid fees (applies to this market)
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+          retail: [0, 0.8]            # retail grid fees (applies to energy purchased form/sold to retailer)
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+
+        file:                         # file grid fees settings
+          file: grid_1.csv            # file containing the grid fees for each time step
+                                      # note: columns need to match the names of the parameters in the 'fixed' section
+
+      levies:                         # parameters for levies
+        method: fixed                 # how should levies be set?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+                                      # note: levies are taxes that are added to the energy price
+
+        fixed:                        # fixed levies settings
+          price: [0, 0.18]            # price of the levies
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+        file:
+          file: levies_1.csv          # file containing the levies for each time step
+                                      # note: columns need to match the names of the parameters in the 'fixed' section
+
+      balancing:                      # parameters for balancing energy
+                                      # note: balancing energy is the market participants deviation from the market
+                                      #   result. The balancing price is the cost of either buying or selling energy
+                                      #   to the grid to restore the balance of the system and serves as an incentive
+                                      #   for the market participants to stick to the market result.
+                                      # note: balancing costs are not added to the energy but separate. This needs to
+                                      #   be considered when setting the balancing prices.
+        method: fixed                 # how should balancing energy prices be set?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+
+        fixed:                        # fixed balancing settings
+          price: [0.10, 0.10]         # balancing energy prices
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+          quantity: [1e6, 1e6]        # balancing energy quantities
+                                      # unit: Wh
+                                      # note: first position is for selling, second for buying energy
+                                      # note: the quantities cancel each other out and are therefore net amounts
+
+
+        file:                         # file balancing settings
+          file: balancing_1.csv       # file containing the balancing energy prices for each time step
+                                      # note: columns need to match the names of the parameters in the 'fixed' section
+
+  types:
+    qualities: {0: na,
+                1: local,
+                2: green_local
+               }
+
+    positions: {0: offer,
+                1: bid,
+               }
+
+    transactions: {0: energy,
+                   1: balancing,
+                   2: levy,
+                  }
+
+    meter: {0: plant submeter,
+            1: virtual plant submeter,
+            2: dividing meter,
+            3: virtual dividing meter,
+            4: grid meter,
+            5: virtual grid meter }
+
+lem_intraday:                               # type and name of the market "type_name" (must be unique)
+                                      # note: markets with the same suffix can trade among each other if specified
+  active: False                        # is the market active?
+                                      # options:
+                                      #   - True: market is active
+                                      #   - False: market is inactive (market is ignored in simulation)
+
+  clearing:
+    type: ex-ante                     # type of market clearing
+                                      # options:
+                                      #   - ex-ante: market clearing is done before the delivery period
+                                      #   - ex-post: market clearing is done after the delivery period
+                                      #   - None: no market clearing is done
+
+    method: pda                       # method of market clearing
+                                      # options:
+                                      #   - pda: periodic double auction
+                                      #   - community: community clearing
+                                      # note: for further information about the method options see the documentation
+
+    pricing: discriminatory           # pricing method of the market clearing
+                                      # options:
+                                      #   - uniform (ex-ante): all participants pay the same price
+                                      #   - discriminatory (ex-ante): each participant pays a different price
+                                      #   - standard (ex-post): see details in the ex-post folder
+                                      # note: for further information about the pricing options see the documentation
+
+    timing:                           # timing of the market
+      start: 2021-03-24T16:00:00+01:00  # start of the market in unix time with timezone information
                                         # options:
-                                        #   - ex-ante: market clearing is done before the delivery period
-                                        #   - ex-post: market clearing is done after the delivery period
-                                        #   - None: no market clearing is done
+                                        #   - unix time: market starts at the specified time
+                                        #       format (ISO 8601): %Y-%m-%dT%H:%M:%S%z (YYYY-MM-DDTHH:MM:SS+HH:MM)
+                                        #   - timedelta: specify the distance to the start of the simulation
+                                        #       unit: seconds
 
-      method: pda                       # method of market clearing
+
+      opening: 86400                    # when does the first auction occur after the first delivery period
+                                        # unit: seconds
+
+      horizon: [28800, 115200]          # seconds, how far into the future is the market cleared?
+                                        # length of the clearing period (day-ahead this would be 86400 as the market is cleared for the entire day)
+                                        # unit: seconds
+
+      duration: 900                     # duration of one energy delivery period
+                                        # unit: seconds
+
+      frequency: 900                    # how often is ex-ante market clearing executed?
+                                        # unit: seconds
+
+      closing: 300                      # when does the last auction occur before the delivery period
+                                        # unit: seconds
+
+      settling: 'continuous'            # at which time steps is the market settled?
                                         # options:
-                                        #   - pda: periodic double auction
-                                        #   - community: community clearing
-                                        # note: for further information about the method options see the documentation
+                                        #   - continuous: market is settled at every first time step once horizon is passed
+                                        #   - period: market is settled for the entire period
 
-      pricing: uniform                  # pricing method of the market clearing
+  pricing:                            # pricing of each retailer
+                                      # note: currently only one retailer is possible
+    retailer:                         # currently only one retailer possible
+      bids:
+        method: above                 # method of setting bids
+                                      # options:
+                                      #   - None: unsettled bids are not offered at other markets, i.e. bids get feed-in tariff and offers pay retail wholesale price
+                                      #   - above: unsettled bids are offered at higher market levels (if possible)
+                                      #   - below: unsettled bids are offered at lower market levels (if possible)
+
+      energy:                         # parameters for retail energy (if market is ex-ante)
+        method: fixed                 # how should retail prices be determined?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+
+        fixed:
+          'price': [0.10, 0.01]       # fixed energy settings (retailer market offers)
+
+          'quantity': [1e5, 1e5]      # units: price: ct/kWh | quantity: Wh
+                                      # note: first position is for selling, second for buying energy TODO: Make a function that takes these values and adds suffix '_sell'/'_buy' to each -> In the end there always needs to be a time-series file
+                                      # note: the quantities cancel each other out and are therefore net amounts
+
+        file:
+          file: retail_prices_1.csv     # file containing the energy prices and quantities for each time step
+
+        quality: 0                    # quality that the offered energy should be labelled with on the lem
+                                      # note: the value needs to match the index of one of the values under types/qualities
+
+      grid:                           # parameters for grid fees
+                                      # explanation: logic behind it is that the grid fees are always added to the
+                                      #   energy traded at that market level and if the energy is traded at a higher
+                                      #   market level, the grid fees are added to the energy price. This way the
+                                      #   different sources of energy can be considered in price (but not in terms of
+                                      #   quality). If the energy is procured from the retailer, the wholesale fee is
+                                      #   used instead of the local one.
+        method: fixed                 # how should balancing energy prices be set?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+                                      # balancing energy is the market participants deviation from the market
+                                      # result. the balancing price is the incentive for the agent to stick
+                                      # to the market result, or to assist the system in restoring its balance
+
+        fixed:                        # fixed grid fees settings
+          local: [0, 0.4]             # local grid fees (applies to this market)
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+          retail: [0, 0.8]            # retail grid fees (applies to energy purchased form/sold to retailer)
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+
+        file:                         # file grid fees settings
+          file: grid_1.csv            # file containing the grid fees for each time step
+                                      # note: columns need to match the names of the parameters in the 'fixed' section
+
+      levies:                         # parameters for levies
+        method: fixed                 # how should levies be set?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+                                      # note: levies are taxes that are added to the energy price
+
+        fixed:                        # fixed levies settings
+          price: [0, 0.18]            # price of the levies
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+        file:
+          file: levies_1.csv          # file containing the levies for each time step
+                                      # note: columns need to match the names of the parameters in the 'fixed' section
+
+      balancing:                      # parameters for balancing energy
+                                      # note: balancing energy is the market participants deviation from the market
+                                      #   result. The balancing price is the cost of either buying or selling energy
+                                      #   to the grid to restore the balance of the system and serves as an incentive
+                                      #   for the market participants to stick to the market result.
+                                      # note: balancing costs are not added to the energy but separate. This needs to
+                                      #   be considered when setting the balancing prices.
+        method: fixed                 # how should balancing energy prices be set?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+
+        fixed:                        # fixed balancing settings
+          price: [0.10, 0.10]         # balancing energy prices
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+          quantity: [1e6, 1e6]        # balancing energy quantities
+                                      # unit: Wh
+                                      # note: first position is for selling, second for buying energy
+                                      # note: the quantities cancel each other out and are therefore net amounts
+
+
+        file:                         # file balancing settings
+          file: balancing_1.csv       # file containing the balancing energy prices for each time step
+                                      # note: columns need to match the names of the parameters in the 'fixed' section
+
+  types:
+    qualities: {0: na,
+                1: local,
+                2: green_local
+               }
+
+    positions: {0: offer,
+                1: bid,
+               }
+
+    transactions: {0: energy,
+                   1: balancing,
+                   2: levy,
+                  }
+
+    meter: {0: plant submeter,
+            1: virtual plant submeter,
+            2: dividing meter,
+            3: virtual dividing meter,
+            4: grid meter,
+            5: virtual grid meter }
+
+lem_day-ahead:                               # type and name of the market "type_name" (must be unique)
+                                      # note: markets with the same suffix can trade among each other if specified
+  active: False                        # is the market active?
+                                      # options:
+                                      #   - True: market is active
+                                      #   - False: market is inactive (market is ignored in simulation)
+
+  clearing:
+    type: ex-ante                     # type of market clearing
+                                      # options:
+                                      #   - ex-ante: market clearing is done before the delivery period
+                                      #   - ex-post: market clearing is done after the delivery period
+                                      #   - None: no market clearing is done
+
+    method: pda                       # method of market clearing
+                                      # options:
+                                      #   - pda: periodic double auction
+                                      #   - community: community clearing
+                                      # note: for further information about the method options see the documentation
+
+    pricing: uniform                  # pricing method of the market clearing
+                                      # options:
+                                      #   - uniform (ex-ante): all participants pay the same price
+                                      #   - discriminatory (ex-ante): each participant pays a different price
+                                      #   - standard (ex-post): see details in the ex-post folder
+                                      # note: for further information about the pricing options see the documentation
+
+    timing:                           # timing of the market
+      start: 2021-03-24T12:00:00+01:00  # start of the market in unix time with timezone information
+                                        #   - unix time: market starts at the specified time
+                                        #       format (ISO 8601): %Y-%m-%dT%H:%M:%S%z (YYYY-MM-DDTHH:MM:SS+HH:MM)
+                                        #   - timedelta: specify the distance to the start of the simulation
+                                        #       unit: seconds
+
+
+      opening: 86400                    # when does the first auction occur after the first delivery period
+                                        # unit: seconds
+
+      horizon: [43200, 129600]          # seconds, how far into the future is the market cleared?
+                                        # length of the clearing period (day-ahead this would be 86400 as the market is cleared for the entire day)
+                                        # unit: seconds
+
+      duration: 3600                    # duration of one energy delivery period
+                                        # unit: seconds
+
+      frequency: 86400                  # how often is ex-ante market clearing executed?
+                                        # unit: seconds
+
+      closing: 43200                    # when does the last auction occur before the delivery period
+                                        # unit: seconds
+
+      settling: 'periodic'              # at which time steps is the market settled?
                                         # options:
-                                        #   - uniform (ex-ante): all participants pay the same price
-                                        #   - discriminatory (ex-ante): each participant pays a different price
-                                        #   - standard (ex-post): see details in the ex-post folder
-                                        # note: for further information about the pricing options see the documentation
-
-      # TODO: Challenge: How can I specify this way that day-ahead is cleared at 2 pm the previous day and clears entire day in hour intervals?
-      timing:                           # timing of the market
-      # TODO: Ponder if a start value is necessary. If so should it be an absolute value or relative to the simulation start?
-        start: 2021-03-24T00:00:00+01:00 # start of the market in unix time with timezone information
-                                        # format (ISO 8601): %Y-%m-%dT%H:%M:%S%z (YYYY-MM-DDTHH:MM:SS+HH:MM)
-        opening: 7200                     # TODO: implement parameter 'opening'
-                                          # when does the first auction occur after the delivery period
-                                          # unit: seconds
-
-        horizon: 86400                    # seconds, how far into the future is the market cleared?
-
-        duration: 900                     # TODO: implement parameter 'duration'
-                                          # length of the clearing period (day-ahead this would be 86400 as the market is cleared for the entire day)
-                                          # unit: seconds
-
-        interval: 900                     # TODO: implement parameter 'interval'
-                                          # length of one energy delivery period
-                                          # unit: seconds
-
-        frequency: 900                    # TODO: implement parameter 'frequency'
-                                          # how often is ex-ante market clearing executed?
-                                          # unit: seconds
-
-        closing: 600                      # TODO: implement parameter 'frequency'
-                                          # when does the last auction occur before the delivery period
-                                          # unit: seconds
-
-    pricing:                            # pricing of each retailer
-                                        # note: currently only one retailer is possible
-      retailer:                         # currently only one retailer possible
-        bids:
-          method: above                 # method of setting bids
-                                        # options:
-                                        #   - None: unsettled bids are not offered at other markets, i.e. bids get feed-in tariff and offers pay retail wholesale price
-                                        #   - above: unsettled bids are offered at higher market levels (if possible)
-                                        #   - below: unsettled bids are offered at lower market levels (if possible)
-
-        energy:                         # parameters for retail energy (if market is ex-ante)
-          method: fixed                 # how should retail prices be determined?
-                                        # options:
-                                        #   - fixed: prices as defined by 'fixed' parameter
-                                        #   - file: prices contained in file provided by 'file' parameter
-
-          fixed:
-            'price': [0.10, 0.01]       # fixed energy settings (retailer market offers)
-
-            'quantity': [1e5, 1e5]      # units: price: ct/kWh | quantity: Wh
-                                        # note: first position is for selling, second for buying energy TODO: Make a function that takes these values and adds suffix '_sell'/'_buy' to each -> In the end there always needs to be a time-series file
-                                        # note: the quantities cancel each other out and are therefore net amounts
-
-          file:
-            file: retail_prices_1.csv     # file containing the energy prices and quantities for each time step
-
-          quality: 0                    # quality that the offered energy should be labelled with on the lem
-                                        # note: the value needs to match the index of one of the values under types/qualities
-
-        grid:                           # parameters for grid fees
-                                        # explanation: logic behind it is that the grid fees are always added to the
-                                        #   energy traded at that market level and if the energy is traded at a higher
-                                        #   market level, the grid fees are added to the energy price. This way the
-                                        #   different sources of energy can be considered in price (but not in terms of
-                                        #   quality). If the energy is procured from the retailer, the wholesale fee is
-                                        #   used instead of the local one.
-          method: fixed                 # how should balancing energy prices be set?
-                                        # options:
-                                        #   - fixed: prices as defined by 'fixed' parameter
-                                        #   - file: prices contained in file provided by 'file' parameter
-                                        # balancing energy is the market participants deviation from the market
-                                        # result. the balancing price is the incentive for the agent to stick
-                                        # to the market result, or to assist the system in restoring its balance
-
-          fixed:                        # fixed grid fees settings
-            local: [0, 0.4]             # local grid fees (applies to this market)
-                                        # unit: ct/kWh
-                                        # note: first position is for selling, second for buying energy
-
-            retail: [0, 0.8]            # retail grid fees (applies to energy purchased form/sold to retailer)
-                                        # unit: ct/kWh
-                                        # note: first position is for selling, second for buying energy
-
-
-          file:                         # file grid fees settings
-            file: grid_1.csv            # file containing the grid fees for each time step
-                                        # note: columns need to match the names of the parameters in the 'fixed' section
-
-        levies:                         # parameters for levies
-          method: fixed                 # how should levies be set?
-                                        # options:
-                                        #   - fixed: prices as defined by 'fixed' parameter
-                                        #   - file: prices contained in file provided by 'file' parameter
-                                        # note: levies are taxes that are added to the energy price
-
-          fixed:                        # fixed levies settings
-            price: [0, 0.18]            # price of the levies
-                                        # unit: ct/kWh
-                                        # note: first position is for selling, second for buying energy
-
-          file:
-            file: levies_1.csv          # file containing the levies for each time step
-                                        # note: columns need to match the names of the parameters in the 'fixed' section
-
-        balancing:                      # parameters for balancing energy
-                                        # note: balancing energy is the market participants deviation from the market
-                                        #   result. The balancing price is the cost of either buying or selling energy
-                                        #   to the grid to restore the balance of the system and serves as an incentive
-                                        #   for the market participants to stick to the market result.
-                                        # note: balancing costs are not added to the energy but separate. This needs to
-                                        #   be considered when setting the balancing prices.
-          method: fixed                 # how should balancing energy prices be set?
-                                        # options:
-                                        #   - fixed: prices as defined by 'fixed' parameter
-                                        #   - file: prices contained in file provided by 'file' parameter
-
-          fixed:                        # fixed balancing settings
-            price: [0.10, 0.10]         # balancing energy prices
-                                        # unit: ct/kWh
-                                        # note: first position is for selling, second for buying energy
-
-            quantity: [1e6, 1e6]        # balancing energy quantities
-                                        # unit: Wh
-                                        # note: first position is for selling, second for buying energy
-                                        # note: the quantities cancel each other out and are therefore net amounts
-
-
-          file:                         # file balancing settings
-            file: balancing_1.csv       # file containing the balancing energy prices for each time step
-                                        # note: columns need to match the names of the parameters in the 'fixed' section
-
-    types:
-      qualities: {0: na,
-                  1: local,
-                  2: green_local
-                 }
-
-      positions: {0: offer,
-                  1: bid,
-                 }
-
-      transactions: {0: energy,
-                     1: balancing,
-                     2: levy,
-                    }
-
-      meter: {0: plant submeter,
-              1: virtual plant submeter,
-              2: dividing meter,
-              3: virtual dividing meter,
-              4: grid meter,
-              5: virtual grid meter }
-
-  lfm_01:                               # type and name of the market "type_name" (must be unique)
-    active: False                       # is the market active?
-                                        # options:
-                                        #   - True: market is active
-                                        #   - False: market is inactive (market is ignored in simulation)
-
-  lhm_01:                               # type and name of the market "type_name" (must be unique)
-    active: False                       # is the market active?
-                                        # options:
-                                        #   - True: market is active
-                                        #   - False: market is inactive (market is ignored in simulation)
-
-  lh2m_01:                              # type and name of the market "type_name" (must be unique)
-    active: False                       # is the market active?
-                                        # options:
-                                        #   - True: market is active
-                                        #   - False: market is inactive (market is ignored in simulation)
-
-# OLD
-
-lem:
-  ################# market settings #####################
-  types_clearing_ex_ante: {0: pda}
-  types_clearing_ex_post: {0: community}
-                                            # market types to be calculated
-                                            # settlement and prosumers observe the first
-                                            # listed result, other choices are merely
-                                            # calculated for comparison
-
-                                            # for currently implemented choices, see the
-                                            # documentation
-
-                                            # the ex_post_pricing ex-post solution is always
-                                            # calculated in parallel. if no ex-ante clearing
-                                            # type is listed, the ex_post_pricing will be
-                                            # used for settlement and no ex-ante trading
-                                            # is simulated
-
-  types_pricing_ex_ante: {0: uniform, 1: discriminatory}
-  types_pricing_ex_post: {0: standard}      # which clearing price variants to be calculated
-                                            # for each clearing type
-                                            # settlement and prosumers observe the first
-                                            # listed variation, other choices are merely
-                                            # calculated for comparison
-
-                                            # for currently implemented choices, see the
-                                            # documentation
-
-  # share_quality_logging_extended: true      # in ex-ante trading, market results can be labelled in
-                                            # simply (quality of cleared generation) or more
-                                            # extensively (quality of cleared generation, consumption
-                                            # as well as offered generation and consumption bids)
-                                            # for more information, see the documentation
-
-  ################# advanced market settings #####################
-
-  types_quality: {0: na, 1: local, 2: green_local}
-
-  types_position: {0: offer, 1: bid}
-
-  types_transaction: {0: market, 1: balancing, 2: levy_prices}
-
-  positions_delete: true                    # true -> submitted positions are deleted from the market
-                                            # positions table after being processed
-
-  positions_archive: true                   # true -> all submitted positions are archived before
-                                            # deletion
-
-  horizon_clearing: 86400                   # seconds, how far into the future is the market cleared?
-
-  # these two parameters are currently not implemented
-  interval_clearing: 900                    # seconds, length of one energy delivery period (ts_delivery)
-  frequency_clearing: 900                   # seconds, how often is ex-ante market clearing executed?
-
-  ################# settlement settings #####################
-
-  calculate_virtual_submeters: true         # sometimes users don't have submeters on all plants
-                                            # if this is the case, a virtual meter is generated and this remaining
-                                            # internal load/generation is assigned to the virtual meter
-
-  prices_settlement_in_advance: 0           # how many steps in advance are settlement prices
-                                            # posted to the platform; currently only 0 possible
-
-  types_meter: {0: plant submeter, 1: virtual plant submeter, 2: dividing meter, 3: virtual
-      dividing meter, 4: grid meter, 5: virtual grid meter}
-
-  # defining balancing energy pricing
-  bal_energy_pricing_mechanism: fixed       # how should balancing energy prices be set?
-                                            #      "fixed" - dual prices as defined below
-                                            #      "file" - prices are given as time series in input file below
-                                            # balancing energy is the market participants deviation from the market
-                                            # result. the balancing price is the incentive for the agent to stick
-                                            # to the market result, or to assist the system in restoring
-                                            # its balance
-
-  path_bal_prices: balancing_prices_1.csv
-
-  price_energy_balancing_positive: 0.10     # fixed balancing prices in c/kwh
-  price_energy_balancing_negative: 0.10
-
-  # defining electricity levy_prices
-
-  levy_pricing_mechanism: fixed             # how should levy prices be determined?
-                                            # levies are those fees added to the market price of electricity
-                                            # to account for grid fees, taxes, etc. often levied as a volumetric
-                                            # tariff.
-                                            #      "fixed" - dual prices as defined below
-                                            #      "file" - prices are given as time series in input file below
-
-  path_levy_prices: levy_prices_1.csv
-
-  price_energy_levies_negative: 0.18        # "fixed" levy price if desired
-  price_energy_levies_positive: 0
-
-########################################################################################################################
-########################################### retailer configuration #####################################################
-########################################################################################################################
-
-retailer:                                   # for the retailer's role in the market, please see the docs
-
-  "retail_pricing_mechanism": "fixed"       # how should retail prices be determined?
-                                            #      "fixed" - dual prices as defined below
-                                            #      "file" - prices are given as time series in input file below
-
-  "path_retail_prices": "retail_prices_1.csv"
-
-  "price_sell": 0.10                        # retailer market ceiling offer one step before delivery
-  "price_buy": 0.01                         # retailer market floor offer one step before delivery
-
-  "qty_energy_bid": 1000000                 # energy quantity of retailer bid in wh
-  "qty_energy_offer": 1000000               # energy quantity of retailer offer in wh
-
-  "quality": "na"                           # quality that the generated energy should be labelled with on the lem
-
-  "id_user": "retailer01"                   # retailer market id
+                                        #   - continuous: market is settled at every first time step once horizon is passed
+                                        #   - periodic: market is settled for the entire period
+
+  pricing:                            # pricing of each retailer
+                                      # note: currently only one retailer is possible
+    retailer:                         # currently only one retailer possible
+      bids:
+        method: above                 # method of setting bids
+                                      # options:
+                                      #   - None: unsettled bids are not offered at other markets, i.e. bids get feed-in tariff and offers pay retail wholesale price
+                                      #   - above: unsettled bids are offered at higher market levels (if possible)
+                                      #   - below: unsettled bids are offered at lower market levels (if possible)
+
+      energy:                         # parameters for retail energy (if market is ex-ante)
+        method: fixed                 # how should retail prices be determined?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+
+        fixed:
+          'price': [0.10, 0.01]       # fixed energy settings (retailer market offers)
+
+          'quantity': [1e5, 1e5]      # units: price: ct/kWh | quantity: Wh
+                                      # note: first position is for selling, second for buying energy TODO: Make a function that takes these values and adds suffix '_sell'/'_buy' to each -> In the end there always needs to be a time-series file
+                                      # note: the quantities cancel each other out and are therefore net amounts
+
+        file:
+          file: retail_prices_1.csv     # file containing the energy prices and quantities for each time step
+
+        quality: 0                    # quality that the offered energy should be labelled with on the lem
+                                      # note: the value needs to match the index of one of the values under types/qualities
+
+      grid:                           # parameters for grid fees
+                                      # explanation: logic behind it is that the grid fees are always added to the
+                                      #   energy traded at that market level and if the energy is traded at a higher
+                                      #   market level, the grid fees are added to the energy price. This way the
+                                      #   different sources of energy can be considered in price (but not in terms of
+                                      #   quality). If the energy is procured from the retailer, the wholesale fee is
+                                      #   used instead of the local one.
+        method: fixed                 # how should balancing energy prices be set?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+                                      # balancing energy is the market participants deviation from the market
+                                      # result. the balancing price is the incentive for the agent to stick
+                                      # to the market result, or to assist the system in restoring its balance
+
+        fixed:                        # fixed grid fees settings
+          local: [0, 0.4]             # local grid fees (applies to this market)
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+          retail: [0, 0.8]            # retail grid fees (applies to energy purchased form/sold to retailer)
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+
+        file:                         # file grid fees settings
+          file: grid_1.csv            # file containing the grid fees for each time step
+                                      # note: columns need to match the names of the parameters in the 'fixed' section
+
+      levies:                         # parameters for levies
+        method: fixed                 # how should levies be set?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+                                      # note: levies are taxes that are added to the energy price
+
+        fixed:                        # fixed levies settings
+          price: [0, 0.18]            # price of the levies
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+        file:
+          file: levies_1.csv          # file containing the levies for each time step
+                                      # note: columns need to match the names of the parameters in the 'fixed' section
+
+      balancing:                      # parameters for balancing energy
+                                      # note: balancing energy is the market participants deviation from the market
+                                      #   result. The balancing price is the cost of either buying or selling energy
+                                      #   to the grid to restore the balance of the system and serves as an incentive
+                                      #   for the market participants to stick to the market result.
+                                      # note: balancing costs are not added to the energy but separate. This needs to
+                                      #   be considered when setting the balancing prices.
+        method: fixed                 # how should balancing energy prices be set?
+                                      # options:
+                                      #   - fixed: prices as defined by 'fixed' parameter
+                                      #   - file: prices contained in file provided by 'file' parameter
+
+        fixed:                        # fixed balancing settings
+          price: [0.10, 0.10]         # balancing energy prices
+                                      # unit: ct/kWh
+                                      # note: first position is for selling, second for buying energy
+
+          quantity: [1e6, 1e6]        # balancing energy quantities
+                                      # unit: Wh
+                                      # note: first position is for selling, second for buying energy
+                                      # note: the quantities cancel each other out and are therefore net amounts
+
+
+        file:                         # file balancing settings
+          file: balancing_1.csv       # file containing the balancing energy prices for each time step
+                                      # note: columns need to match the names of the parameters in the 'fixed' section
+
+  types:
+    qualities: {0: na,
+                1: local,
+                2: green_local
+               }
+
+    positions: {0: offer,
+                1: bid,
+               }
+
+    transactions: {0: energy,
+                   1: balancing,
+                   2: levy,
+                  }
+
+    meter: {0: plant submeter,
+            1: virtual plant submeter,
+            2: dividing meter,
+            3: virtual dividing meter,
+            4: grid meter,
+            5: virtual grid meter }
+
+#lfm_01:                               # type and name of the market "type_name" (must be unique)
+#  active: False                       # is the market active?
+#                                      # options:
+#                                      #   - True: market is active
+#                                      #   - False: market is inactive (market is ignored in simulation)
+#
+#lhm_01:                               # type and name of the market "type_name" (must be unique)
+#  active: False                       # is the market active?
+#                                      # options:
+#                                      #   - True: market is active
+#                                      #   - False: market is inactive (market is ignored in simulation)
+#
+#lh2m_01:                              # type and name of the market "type_name" (must be unique)
+#  active: False                       # is the market active?
+#                                      # options:
+#                                      #   - True: market is active
+#                                      #   - False: market is inactive (market is ignored in simulation)
+
+## OLD
+#
+#lem:
+#  ################# market settings #####################
+#  types_clearing_ex_ante: {0: pda}
+#  types_clearing_ex_post: {0: community}
+#                                            # market types to be calculated
+#                                            # settlement and prosumers observe the first
+#                                            # listed result, other choices are merely
+#                                            # calculated for comparison
+#
+#                                            # for currently implemented choices, see the
+#                                            # documentation
+#
+#                                            # the ex_post_pricing ex-post solution is always
+#                                            # calculated in parallel. if no ex-ante clearing
+#                                            # type is listed, the ex_post_pricing will be
+#                                            # used for settlement and no ex-ante trading
+#                                            # is simulated
+#
+#  types_pricing_ex_ante: {0: uniform, 1: discriminatory}
+#  types_pricing_ex_post: {0: standard}      # which clearing price variants to be calculated
+#                                            # for each clearing type
+#                                            # settlement and prosumers observe the first
+#                                            # listed variation, other choices are merely
+#                                            # calculated for comparison
+#
+#                                            # for currently implemented choices, see the
+#                                            # documentation
+#
+#  # share_quality_logging_extended: true      # in ex-ante trading, market results can be labelled in
+#                                            # simply (quality of cleared generation) or more
+#                                            # extensively (quality of cleared generation, consumption
+#                                            # as well as offered generation and consumption bids)
+#                                            # for more information, see the documentation
+#
+#  ################# advanced market settings #####################
+#
+#  types_quality: {0: na, 1: local, 2: green_local}
+#
+#  types_position: {0: offer, 1: bid}
+#
+#  types_transaction: {0: market, 1: balancing, 2: levy_prices}
+#
+#  positions_delete: true                    # true -> submitted positions are deleted from the market
+#                                            # positions table after being processed
+#
+#  positions_archive: true                   # true -> all submitted positions are archived before
+#                                            # deletion
+#
+#  horizon_clearing: 86400                   # seconds, how far into the future is the market cleared?
+#
+#  # these two parameters are currently not implemented
+#  interval_clearing: 900                    # seconds, length of one energy delivery period (ts_delivery)
+#  frequency_clearing: 900                   # seconds, how often is ex-ante market clearing executed?
+#
+#  ################# settlement settings #####################
+#
+#  calculate_virtual_submeters: true         # sometimes users don't have submeters on all plants
+#                                            # if this is the case, a virtual meter is generated and this remaining
+#                                            # internal load/generation is assigned to the virtual meter
+#
+#  prices_settlement_in_advance: 0           # how many steps in advance are settlement prices
+#                                            # posted to the platform; currently only 0 possible
+#
+#  types_meter: {0: plant submeter, 1: virtual plant submeter, 2: dividing meter, 3: virtual
+#      dividing meter, 4: grid meter, 5: virtual grid meter}
+#
+#  # defining balancing energy pricing
+#  bal_energy_pricing_mechanism: fixed       # how should balancing energy prices be set?
+#                                            #      "fixed" - dual prices as defined below
+#                                            #      "file" - prices are given as time series in input file below
+#                                            # balancing energy is the market participants deviation from the market
+#                                            # result. the balancing price is the incentive for the agent to stick
+#                                            # to the market result, or to assist the system in restoring
+#                                            # its balance
+#
+#  path_bal_prices: balancing_prices_1.csv
+#
+#  price_energy_balancing_positive: 0.10     # fixed balancing prices in c/kwh
+#  price_energy_balancing_negative: 0.10
+#
+#  # defining electricity levy_prices
+#
+#  levy_pricing_mechanism: fixed             # how should levy prices be determined?
+#                                            # levies are those fees added to the market price of electricity
+#                                            # to account for grid fees, taxes, etc. often levied as a volumetric
+#                                            # tariff.
+#                                            #      "fixed" - dual prices as defined below
+#                                            #      "file" - prices are given as time series in input file below
+#
+#  path_levy_prices: levy_prices_1.csv
+#
+#  price_energy_levies_negative: 0.18        # "fixed" levy price if desired
+#  price_energy_levies_positive: 0
+#
+#########################################################################################################################
+############################################ retailer configuration #####################################################
+#########################################################################################################################
+#
+#retailer:                                   # for the retailer's role in the market, please see the docs
+#
+#  "retail_pricing_mechanism": "fixed"       # how should retail prices be determined?
+#                                            #      "fixed" - dual prices as defined below
+#                                            #      "file" - prices are given as time series in input file below
+#
+#  "path_retail_prices": "retail_prices_1.csv"
+#
+#  "price_sell": 0.10                        # retailer market ceiling offer one step before delivery
+#  "price_buy": 0.01                         # retailer market floor offer one step before delivery
+#
+#  "qty_energy_bid": 1000000                 # energy quantity of retailer bid in wh
+#  "qty_energy_offer": 1000000               # energy quantity of retailer offer in wh
+#
+#  "quality": "na"                           # quality that the generated energy should be labelled with on the lem
+#
+#  "id_user": "retailer01"                   # retailer market id
