@@ -12,7 +12,6 @@ import datetime
 import time
 import shutil
 from pprint import pprint
-
 # from lem import Lem
 # from lfm import Lfm
 # from lhm import Lhm
@@ -28,16 +27,10 @@ class Markets:
         self.input_path = input_path
         self.scenario_path = scenario_path
         self.region = self.config_path.rsplit('\\', 1)[1]
-        # print(f'config_path: {self.config_path}')
-        # print(f'config_root: {self.config_root}')
-        # print(f'input_path: {self.input_path}')
-        # print(f'scenario_path: {self.scenario_path}')
 
         # Load setup plus configuration and/or agent file
         self.setup = self._load_file(path=os.path.join(self.config_root, 'config_general.yaml'))
         self.config = self._load_file(path=os.path.join(self.config_path, 'config_markets.yaml'))
-        # print(f'setup: {self.setup}')
-        # print(f'config: {self.config}')
 
         # Available types of markets
         self.types = {
@@ -62,6 +55,9 @@ class Markets:
                 name = None
             if market_type in self.types:
                 if config['active']:
+                    # Create market dict
+                    dict_markets[key] = {}
+
                     # Create market
                     market = self.types[market_type](market=config, name=name,
                                                      config_path=self.config_path,
@@ -69,25 +65,36 @@ class Markets:
                                                      scenario_path=self.scenario_path,
                                                      config_root=self.config_root)
 
-                    # Create timetable
-                    dict_markets[key] = market.create_market_from_config()
+                    # Create market timetable
+                    dict_markets[key]['timetable'] = market.create_market_from_config()
 
                     # Create retailers
-                    market.create_retailers_from_config(timetable=dict_markets[key])
+                    dict_markets[key]['retailers'] = market.create_retailers_from_config(timetable=dict_markets[key]['timetable'])
+
+                    # Save original configuration
+                    dict_markets[key]['config'] = config
             else:
                 raise ValueError(f'Market type "{market_type}" not available')
 
-        print(dict_markets)
-
         # Concatenate all timetables and sort by timestamp and timestep
-        timetable = pd.concat([val for key, val in dict_markets.items()], axis=1)
+        timetable = pd.concat([val['timetable'] for _, val in dict_markets.items()], axis=1)
         timetable.sort_values(by=['timestamp', 'timestep'], inplace=True)
 
         # Save concatenated timetable
-        timetable.to_csv(os.path.join(self.scenario_path, 'markets', 'timetable.csv'), index=False)
+        self._save_file(path=os.path.join(self.scenario_path, 'markets', 'timetable.ft'), data=timetable, index=False)
 
-        # Save all singular timetables
-        for key, market in dict_markets.items():
+        # Concatenate all retailers and sort by timestamp and timestep (needs loop in loop)
+        retailers = pd.concat([val['retailers'] for _, val in dict_markets.items()], axis=1)
+        retailers.sort_values(by=['timestamp'], inplace=True)
+
+        # Save concatenated retailers
+        self._save_file(path=os.path.join(self.scenario_path, 'retailers', 'retailers.ft'), data=retailers, index=False)
+
+        # Save individual information
+        for name, market in dict_markets.items():
+            # Get market type from name
+            market_type = name.split('_', 1)[0]
+
             # Path of the folder in which all the market's files are to be stored
             path = os.path.join(self.scenario_path, 'markets', market_type, name)
 
@@ -95,10 +102,22 @@ class Markets:
             self.__create_folder(path, delete=False)
 
             # Save individual timetable
-            market.to_csv(os.path.join(path, 'timetable.csv'), index=False)
+            self._save_file(path=os.path.join(path, 'timetable.ft'), data=market['timetable'], index=False)
+
+            # Save individual configuration
+            self._save_file(path=os.path.join(path, 'config.json'), data=market['config'])
+
+            # Save individual retailer
+            # Path of the folder in which all the retailer's files are to be stored
+            path = os.path.join(self.scenario_path, 'retailers', market_type, name)
+
+            # Create folder for the retailer (if it does not exist)
+            self.__create_folder(path, delete=False)
+
+            # Save individual retailer
+            self._save_file(path=os.path.join(path, 'retailer.ft'), data=market['retailers'], index=False)
 
         return timetable, dict_markets
-
 
     @classmethod
     def _load_file(cls, path: str, index: int = 0):
@@ -139,6 +158,7 @@ class Markets:
             data.to_feather(path)
         else:
             raise ValueError(f'File type "{file_type}" not supported')
+
     @classmethod
     def __create_folder(cls, path: str, delete: bool = True) -> None:
         """Creates a folder at the given path
@@ -160,6 +180,7 @@ class Markets:
                 os.mkdirs(path)
         time.sleep(0.0001)
 
+
 class Lem(Markets):
 
     def __init__(self, market: dict, config_path: str, input_path: str, scenario_path: str, config_root,
@@ -167,11 +188,10 @@ class Lem(Markets):
         super().__init__(config_path, input_path, scenario_path, config_root)
 
         self.market = market
+        self.market_type = 'lem'
         self.name = name if name else f'{self.market["clearing"]["type"]}' \
                                       f'_{self.market["clearing"]["method"]}' \
                                       f'_{self.market["clearing"]["pricing"]}'
-
-        print(f'LEM: {self.name}')
 
         # Available types of clearing
         self.clearing_types = {
@@ -183,7 +203,6 @@ class Lem(Markets):
             #     'settling': self._create_settling_ex_post(),
             # },
         }
-
 
     def create_market_from_config(self):
 
@@ -309,8 +328,14 @@ class Lem(Markets):
 
         # Add market type and name
         timetable['region'] = self.region
-        timetable['market'] = 'lem'
+        timetable['market'] = self.market_type
         timetable['name'] = self.name
+
+        # Add remaining clearing information
+        timetable['type'] = clearing['type']
+        timetable['method'] = clearing['method']
+        timetable['pricing'] = clearing['pricing']
+        timetable['coupling'] = clearing['coupling']
 
         # Sort timetable by timestamp and timestep
         timetable.sort_values(by=['timestamp', 'timestep'], inplace=True)
@@ -321,21 +346,78 @@ class Lem(Markets):
 
         return timetable
 
-    def _create_retailers_from_config(self, timetable) -> pd.DataFrame:
+    def create_retailers_from_config(self, timetable) -> pd.DataFrame:
+
+        # Note: This is already prepared to create multiple retailers from the configuration file but currently only
+        # one is possible
 
         # Dictionary to store the retailers
         dict_retailers = {}
 
         # Create retailers
         for retailer, config in self.market['pricing'].items():
-            dict_retailers[retailer] = self._create_retailer(config=config, timetable=timetable)
+            dict_retailers[retailer] = self._create_retailer(name=retailer, config=config, timetable=timetable)
 
-    def _create_retailer(self, config: dict, timetable: pd.DataFrame) -> pd.DataFrame:
+        return dict_retailers[retailer]
+
+    def _create_retailer(self, name: str, config: dict, timetable: pd.DataFrame) -> pd.DataFrame:
         """Create retailer prices from configuration file"""
 
-        # Create price series
-        prices = pd.DataFrame(index=timetable.index)
-        print(prices)
+        # Create price series by copying the timetable
+        prices = timetable['timestamp'].copy()
+
+        # Get only unique timestamp values in the dataframe
+        prices = prices.drop_duplicates().to_frame()
+
+        # Add region, market and name of market
+        prices['region'] = self.region
+        prices['market'] = self.market_type
+        prices['name'] = self.name
+
+        # Add retailer name
+        prices['retailer'] = name
+
+        # Add columns of the retailer for each cost component (e.g. energy, grid, etc.)
+        for key, info in config.items():
+            prices = self._add_columns(df=prices, component=key, config=info)
 
         return prices
+
+    def _add_columns(self, df, component, config):
+        """Add columns for each cost component"""
+
+        # Add prices and quantities based on the method
+        if config['method'] == 'fixed':
+            df = self._create_fixed_cols(df=df, config=config['fixed'], prefix=component)
+        elif config['method'] == 'file':
+            df = self._create_file_cols(df=df, config=config['file'])
+        else:
+            raise ValueError(f'Pricing method "{config["method"]}" not available')
+
+        return df
+
+    @staticmethod
+    def _create_fixed_cols(df: pd.DataFrame, config: dict, prefix: str):
+        """Create fixed prices"""
+
+        # Add price information
+        for key, val in config.items():
+            if isinstance(val, list):
+                df[f'{prefix}_{key}_sell'] = val[0]
+                df[f'{prefix}_{key}_buy'] = val[1]
+            else:
+                df[f'{prefix}_{key}'] = val
+
+        return df
+
+    def _create_file_cols(self, df: pd.DataFrame, config: dict):
+        """Create prices from file"""
+
+        # Read file
+        file = pd.read_csv(os.path.join(self.input_path, 'retailers', self.market_type, config['file']))
+
+        # Add price information from file
+        df = df.join(file.set_index('timestamp'), on='timestamp', how='left')
+
+        return df
 
