@@ -20,7 +20,12 @@ from pprint import pprint
 from ruamel.yaml.compat import ordereddict
 from collections import OrderedDict, Counter
 from bisect import bisect_left
+import pvlib
+from pvlib.pvsystem import PVSystem
+from pvlib.location import Location
+from windpowerlib import ModelChain, WindTurbine
 import ast
+import pytz
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -525,7 +530,7 @@ class Agents:
         if type(file) is dict:
             try:
                 # Use the plant-specific specs function to create a time series from the spec data
-                file = self.plants['specs'](specs=file, plant=plant_dict)
+                file = self.plants[plant_dict['type']]['specs'](specs=file, plant=plant_dict)
             except:
                 # If the specs function is not available for this plant type, raise a warning
                 raise Warning('Time series creation from spec file not available for this plant type.')
@@ -1289,13 +1294,235 @@ class Agents:
 
         return plant_dict
 
-    def __timeseries_from_specs_pv(self, specs: dict, plant: dict):
-        # TODO: @Jiahe
-        pass
+    @staticmethod
+    def __create_pv_system_from_config(config: dict, orientation: tuple) -> PVSystem:
+        """create PV system from hardware config file.
 
-    def __timeseries_from_specs_wind(self, specs: dict, plant: dict):
-        # TODO: @Jiahe
-        pass
+        Args:
+            config: pv hardware configuration from json file (dic)
+            orientation: pv orientation (surface tilt, surface azimuth) (tuple)
+
+        Returns:
+            system: a PV system abject (PVSystem)
+
+        """
+        # The class supports basic system topologies consisting of:
+        # N total modules arranged in series (modules_per_string=N, strings_per_inverter=1).
+        # M total modules arranged in parallel (modules_per_string=1, strings_per_inverter=M).
+        # NxM total modules arranged in M strings of N modules each (modules_per_string=N, strings_per_inverter=M).
+
+        # get pv orientation
+        surface_tilt, surface_azimuth = orientation
+
+        # get hardware data
+        module = pd.Series(config['module'])
+        inverter = pd.Series(config['inverter'])
+
+        # set temperature model
+        temperature_model_parameters = pvlib.temperature.TEMPERATURE_MODEL_PARAMETERS['sapm']['open_rack_glass_glass']
+
+        # generate pv system
+        system = PVSystem(
+            surface_tilt=surface_tilt,
+            surface_azimuth=surface_azimuth,
+            module_parameters=module,
+            inverter_parameters=inverter,
+            temperature_model_parameters=temperature_model_parameters
+        )
+
+        return system
+
+    @staticmethod
+    def __adjust_weather_data_for_pv(weather_path: str, location: tuple) -> pd.DataFrame:
+        """adjust weather data to the right format that pvlib needed.
+
+        Args:
+            weather_path: path of the original weather data (string)
+            location: location of the weather data (latitude, longitude, name, altitude, timezone) (tuple)
+
+        Returns:
+            weather: adjusted weather data (dataframe)
+
+        """
+        # get location data
+        latitude, longitude, name, altitude = location
+
+        # get weather data from csv
+        weather = pd.read_csv(weather_path)
+        weather = weather[weather['ts_delivery_current'] == weather['ts_delivery_fcast']]  # remove forcasting data
+
+        # convert time data to datetime (use utc time overall in pvlib)
+        time = pd.DatetimeIndex(pd.to_datetime(weather['ts_delivery_current'], unit='s', utc=True))
+        weather.index = time
+        weather.index.name = 'utc_time'
+
+        # adjust temperature data
+        weather.rename(columns={'temp': 'temp_air'}, inplace=True)  # rename to pvlib format
+        weather['temp_air'] -= 273.15  # convert unit to celsius
+
+        # get solar position
+        # test data find in https://www.suncalc.org/#/48.1364,11.5786,15/2022.02.15/16:21/1/3
+        solpos = pvlib.solarposition.get_solarposition(
+            time=time,
+            latitude=latitude,
+            longitude=longitude,
+            altitude=altitude,
+            temperature=weather['temp_air'],
+            pressure=weather['pressure'],
+        )
+
+        # calculate dni with solar position
+        weather.loc[:, 'dni'] = (weather['ghi'] - weather['dhi']) / np.cos(solpos['zenith'])
+
+        return weather
+
+    def __timeseries_from_specs_pv(self, specs: dict, plant: dict) -> pd.DataFrame:
+        """Creates a time series for pv power from config spec file using pv power model.
+
+        Args:
+            specs (dict): A dictionary of pv hardware config.
+            plant (dict): A dictionary of pv planet information.
+
+        Returns:
+            power: A Pandas Dataframe object representing the time series data for the pv plant.
+
+        """
+        # get location information from config
+        location = self.setup['simulation']['location']
+        location = (location['latitude'], location['longitude'], location['name'], location['altitude'])
+
+        # get plant orientation
+        orientation = (plant['orientation'], plant['angle'])
+
+        # get weather path
+        weather_path = os.path.join(self.input_path, 'general', 'weather', self.setup['simulation']['location']['weather'])
+
+        # create PVSystem and adjust weather data
+        system = self.__create_pv_system_from_config(config=specs, orientation=orientation)
+        weather = self.__adjust_weather_data_for_pv(weather_path=weather_path, location=location)
+
+        # get location data and create corresponding pvlib Location object
+        latitude, longitude, name, altitude = location
+        location = Location(
+            latitude,
+            longitude,
+            name=name,
+            altitude=altitude
+        )
+
+        # create calculation model for the given pv system and location
+        mc = pvlib.modelchain.ModelChain(system, location)
+
+        # calculate model under given weather data and get output ac power from it
+        mc.run_model(weather)
+        power = mc.results.ac
+
+        # calculate nominal power
+        nominal_power = specs['module']['Impo']*specs['module']['Vmpo']
+
+        # set time index to origin timestamp
+        power.index = weather['ts_delivery_current']
+        power.index.name = 'timestamp'
+
+        # rename and round data column
+        power.rename('power', inplace=True)
+        power = power.to_frame()
+
+        # calculate and round power
+        power = power / nominal_power * plant['power']
+        power = power.round().astype(int)
+
+        # replace all negative values
+        power[power < 0] = 0
+
+        return power
+
+    @staticmethod
+    def __adjust_weather_data_for_wind(weather_path: str) -> pd.DataFrame:
+        """adjust weather data to the right format that windpowerlib needed.
+
+        Args:
+            weather_path: path of the original weather data (string)
+
+        Returns:
+            weather: adjusted weather data (dataframe)
+
+        """
+        # get weather data from csv
+        weather = pd.read_csv(weather_path)
+        weather = weather[weather['ts_delivery_current'] == weather['ts_delivery_fcast']]  # remove forcasting data
+
+        # convert time data to datetime
+        time = pd.DatetimeIndex(pd.to_datetime(weather['ts_delivery_current'], unit='s', utc=True))
+        weather.index = time.tz_convert("Europe/Berlin")
+        weather.index.name = None
+
+        # delete unnecessary columns and rename
+        weather.drop(['ts_delivery_fcast', 'cloud_cover', 'sunrise', 'sunset', 'ghi', 'dhi',
+                      'visibility', 'pop'], axis=1, inplace=True)
+        weather.rename(columns={'temp': 'temperature'}, inplace=True)
+
+        if 'roughness_length' not in weather.columns:
+            weather['roughness_length'] = 0.15
+
+        # generate height level hard-coded
+        weather.columns = pd.MultiIndex.from_tuples(tuple(zip(weather.columns, [2, 2, 2, 2, 2, 2, 2, 10, 10, 2])),
+                                                    names=('', 'height'))
+
+        return weather
+
+    def __timeseries_from_specs_wind(self, specs: dict, plant: dict) -> pd.DataFrame:
+        """Creates a time series for wind power from config spec file using wind power model.
+
+        Args:
+            specs (dict): A dictionary of wind hardware config.
+            plant (dict): A dictionary of wind planet information.
+
+        Returns:
+            power (dataframe): A Pandas Dataframe object representing the time series data for the wind plant.
+
+        """
+        # get weather path
+        weather_path = os.path.join(self.input_path, 'general', 'weather', self.setup['simulation']['location']['weather'])
+
+        # get weather data
+        weather = self.__adjust_weather_data_for_wind(weather_path=weather_path)
+
+        # get nominal power
+        nominal_power = specs['nominal_power']
+
+        # convert power curve to dataframe
+        specs['power_curve'] = pd.DataFrame(data={
+            "value": specs['power_curve'],
+            "wind_speed": specs['wind_speed']})
+
+        # convert power coefficient curve to dataframe
+        specs['power_coefficient_curve'] = pd.DataFrame(data={
+            "value": specs['power_coefficient_curve'],
+            "wind_speed": specs['wind_speed']})
+
+        # generate a WindTurbine object from data
+        turbine = WindTurbine(**specs)
+
+        # calculate turbine model
+        mc_turbine = ModelChain(turbine).run_model(weather)
+
+        # get output power
+        power = mc_turbine.power_output
+
+        # set time index to origin timestamp
+        power.index = weather['ts_delivery_current'].unstack(level=0).values
+        power.index.name = 'timestamp'
+
+        # rename data column
+        power.rename('power', inplace=True)
+        power = power.to_frame()
+
+        # calculate and round power
+        power = power / nominal_power * plant['power']
+        power = power.round().astype(int)
+
+        return power
 
     def __timeseries_from_specs_hp(self, specs: dict, plant: dict):
         # TODO: @Zhengjie
