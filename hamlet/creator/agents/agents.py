@@ -159,7 +159,7 @@ class Agents:
                 # Create the dataframe
                 dict_agents[key] = agents.create_df_from_config()
             else:
-                print(f"Not there yet at {key}")
+                raise KeyError(f"Agent type '{key}' is not available.")
 
 
         # Save each dataframe as worksheet in Excel
