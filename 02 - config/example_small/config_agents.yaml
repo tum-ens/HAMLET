@@ -3183,118 +3183,120 @@ storage:
 ########################################################################################################################
 ########################################### aggregators configuration ##################################################
 ########################################################################################################################
-aggregator:
-    
-  number_of: 2                                  # number of aggregators in market, if the number is smaller than the 
-                                                # number of specified aggregators, they are chosen by the order below
-    
-  specifications:                               # for every aggregator this section needs to contain the specifications 
-                                                # under the aggregators name, if they are not found, the number of aggregators
-                                                # will be reduced to the available specified ones
-              
-    ################################ aggreg0001 ####################################
-    aggreg0001:                                 # agent ID
+# TODO: Not available yet
 
-      active: true                              # if the aggregator is active, the aggregated prosumers ignore their
-                                                # household load and predict/control only their flexible plants
-                                                # the aggregator can only be active during ex-ante trading and is deactivated
-                                                # for ex-post trading
-                           
-      ################################ represented group settings ####################################                     
-      represented_group:
-                                                
-        agent_types: ["SFH", "MFH"]             # types of agents that are represented by the aggregator
-          
-        agent_devices: ["inflexible_load"]    
-                                                # devices that the agent must have to be represented by the aggregator
-                                                # options:
-                                                #   - inflexible_load: agents that have no devices (pure consumers)
-                                                #   - pv
-          
-        devices_inclusive: false                # do the agents need to have all the listed devices or only at least one 
-                                                # of them? (irrelevant if only one device is chosen)
-          
-        share: 0.5                              # share of the specified group that is represented by the aggregator
-
-        ################################ market agent settings ####################################
-      market_agent:
-        strategy: linear                        # aggregator market agent trading strategy
-                                                # choices are:
-                                                #   linear - see docs
-                                                #   zi - zero intelligence, random bid and offer prices
-                                                #                           in market price range
-
-        horizon: 32                             # market agent trading horizon,
-                                                #     possible range : 1 - (mpc_horizon - reopt_steps)
-
-        preference_quality: green_local         # some ex-ante markets can consider user preferences
-
-        premium_preference_quality: 10          # percentage premium the agent is willing to offer for preference satisfaction
-
-      ################################ forecast settings ####################################
-      fcast: 
-        type: sarma                             # aggregator load forecasting method
-                                                #     "perfect" - perfect knowledge of the future
-                                                #     "naive"   - today will be the same as yesterday
-                                                #     "naive_average" - today will be the same as
-                                                #       the last 2 days
-                                                #     "sarma"   - full sarma model of order below
-
-                                                
-        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672] 
-                                                # order of double seasonal arma model
-                                                # [s2_ar, 0, s2_ma, s2]
-                                                
-    ################################ aggreg0002 ####################################
-    aggreg0002:                                 # agent ID
-
-      active: true                              # if the aggregator is active, the aggregated prosumers ignore their
-                                                # household load and predict/control only their flexible plants
-                                                # the aggregator can only be active during ex-ante trading and is deactivated
-                                                # for ex-post trading
-                           
-      ################################ represented group settings ####################################                     
-      represented_group:
-                                                
-        agent_types: ["SFH"]                    # types of agents that are represented by the aggregator
-          
-        agent_devices: ["inflexible_load", "pv", "battery", "ev"]    
-                                                # devices that the agent must have to be represented by the aggregator
-                                                # options:
-                                                #   - inflexible_load: agents that have no devices (pure consumers)
-                                                #   - pv
-          
-        devices_inclusive: false                # do the agents need to have all the listed devices or only at least one 
-                                                # of them? (irrelevant if only one device is chosen)
-          
-        share: 1                                # share of the specified group that is represented by the aggregator
-
-      ################################ market agent settings ####################################
-      market_agent:
-        strategy: linear                        # aggregator market agent trading strategy
-                                                # choices are:
-                                                #   linear - see docs
-                                                #   zi - zero intelligence, random bid and offer prices
-                                                #                           in market price range
-
-        horizon: 32                             # market agent trading horizon,
-                                                #     possible range : 1 - (mpc_horizon - reopt_steps)
-
-        preference_quality: green_local         # some ex-ante markets can consider user preferences
-
-        premium_preference_quality: 10          # percentage premium the agent is willing to offer for preference satisfaction
-
-      ################################ forecast settings ####################################
-      fcast: 
-        type: sarma                             # aggregator load forecasting method
-                                                #     "perfect" - perfect knowledge of the future
-                                                #     "naive"   - today will be the same as yesterday
-                                                #     "naive_average" - today will be the same as
-                                                #       the last 2 days
-                                                #     "sarma"   - full sarma model of order below
-
-                                                
-        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672] 
-                                                # order of double seasonal arma model
-                                                # [s2_ar, 0, s2_ma, s2]
+#aggregator:
+#
+#  number_of: 2                                  # number of aggregators in market, if the number is smaller than the
+#                                                # number of specified aggregators, they are chosen by the order below
+#
+#  specifications:                               # for every aggregator this section needs to contain the specifications
+#                                                # under the aggregators name, if they are not found, the number of aggregators
+#                                                # will be reduced to the available specified ones
+#
+#    ################################ aggreg0001 ####################################
+#    aggreg0001:                                 # agent ID
+#
+#      active: true                              # if the aggregator is active, the aggregated prosumers ignore their
+#                                                # household load and predict/control only their flexible plants
+#                                                # the aggregator can only be active during ex-ante trading and is deactivated
+#                                                # for ex-post trading
+#
+#      ################################ represented group settings ####################################
+#      represented_group:
+#
+#        agent_types: ["SFH", "MFH"]             # types of agents that are represented by the aggregator
+#
+#        agent_devices: ["inflexible_load"]
+#                                                # devices that the agent must have to be represented by the aggregator
+#                                                # options:
+#                                                #   - inflexible_load: agents that have no devices (pure consumers)
+#                                                #   - pv
+#
+#        devices_inclusive: false                # do the agents need to have all the listed devices or only at least one
+#                                                # of them? (irrelevant if only one device is chosen)
+#
+#        share: 0.5                              # share of the specified group that is represented by the aggregator
+#
+#        ################################ market agent settings ####################################
+#      market_agent:
+#        strategy: linear                        # aggregator market agent trading strategy
+#                                                # choices are:
+#                                                #   linear - see docs
+#                                                #   zi - zero intelligence, random bid and offer prices
+#                                                #                           in market price range
+#
+#        horizon: 32                             # market agent trading horizon,
+#                                                #     possible range : 1 - (mpc_horizon - reopt_steps)
+#
+#        preference_quality: green_local         # some ex-ante markets can consider user preferences
+#
+#        premium_preference_quality: 10          # percentage premium the agent is willing to offer for preference satisfaction
+#
+#      ################################ forecast settings ####################################
+#      fcast:
+#        type: sarma                             # aggregator load forecasting method
+#                                                #     "perfect" - perfect knowledge of the future
+#                                                #     "naive"   - today will be the same as yesterday
+#                                                #     "naive_average" - today will be the same as
+#                                                #       the last 2 days
+#                                                #     "sarma"   - full sarma model of order below
+#
+#
+#        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+#                                                # order of double seasonal arma model
+#                                                # [s2_ar, 0, s2_ma, s2]
+#
+#    ################################ aggreg0002 ####################################
+#    aggreg0002:                                 # agent ID
+#
+#      active: true                              # if the aggregator is active, the aggregated prosumers ignore their
+#                                                # household load and predict/control only their flexible plants
+#                                                # the aggregator can only be active during ex-ante trading and is deactivated
+#                                                # for ex-post trading
+#
+#      ################################ represented group settings ####################################
+#      represented_group:
+#
+#        agent_types: ["SFH"]                    # types of agents that are represented by the aggregator
+#
+#        agent_devices: ["inflexible_load", "pv", "battery", "ev"]
+#                                                # devices that the agent must have to be represented by the aggregator
+#                                                # options:
+#                                                #   - inflexible_load: agents that have no devices (pure consumers)
+#                                                #   - pv
+#
+#        devices_inclusive: false                # do the agents need to have all the listed devices or only at least one
+#                                                # of them? (irrelevant if only one device is chosen)
+#
+#        share: 1                                # share of the specified group that is represented by the aggregator
+#
+#      ################################ market agent settings ####################################
+#      market_agent:
+#        strategy: linear                        # aggregator market agent trading strategy
+#                                                # choices are:
+#                                                #   linear - see docs
+#                                                #   zi - zero intelligence, random bid and offer prices
+#                                                #                           in market price range
+#
+#        horizon: 32                             # market agent trading horizon,
+#                                                #     possible range : 1 - (mpc_horizon - reopt_steps)
+#
+#        preference_quality: green_local         # some ex-ante markets can consider user preferences
+#
+#        premium_preference_quality: 10          # percentage premium the agent is willing to offer for preference satisfaction
+#
+#      ################################ forecast settings ####################################
+#      fcast:
+#        type: sarma                             # aggregator load forecasting method
+#                                                #     "perfect" - perfect knowledge of the future
+#                                                #     "naive"   - today will be the same as yesterday
+#                                                #     "naive_average" - today will be the same as
+#                                                #       the last 2 days
+#                                                #     "sarma"   - full sarma model of order below
+#
+#
+#        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+#                                                # order of double seasonal arma model
+#                                                # [s2_ar, 0, s2_ma, s2]
 
