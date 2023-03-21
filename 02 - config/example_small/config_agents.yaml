@@ -662,10 +662,13 @@ sfh:
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
 
+      power: [1]                                # relative power
+                                                # unit: W/(Wh*a)*2000h-> based on first heat
+                                                # note: heat demand is divided by 2000 and multiplied by power value,
+                                                #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
+
       capacity: [2]                             # relative storage capacity
                                                 # unit: Wh/(Wh*a)*2000h-> based on first heat
-                                                # note: heat demand is divided by 2000 and multiplied by capacity value,
-                                                #   e.g. 20 MWh/a heat demand equals 20 kWh with capacity factor of 2
 
       efficiency: [0.95]                        # charging and discharging efficiency
 
@@ -1467,8 +1470,13 @@ mfh:
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
 
+      power: [1]                                # relative power
+                                                # unit: W/(Wh*a)*2000h-> based on first heat
+                                                # note: heat demand is divided by 2000 and multiplied by power value,
+                                                #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
+
       capacity: [2]                             # relative capacity
-                                                # unit: Wh/(kWh/a) --> based on first heat
+                                                # unit: Wh/(Wh*a)*2000h-> based on first heat
 
       efficiency: [0.95]                        # one way charging efficiency of the battery
 

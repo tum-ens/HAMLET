@@ -1,5 +1,5 @@
 ########################################################################################################################
-################################################# markets configuration ################################################
+################################################### markets templates ##################################################
 ########################################################################################################################
 
 lem_continuous:                       # type and name of the market "type_name" (must be unique)
@@ -13,7 +13,7 @@ lem_continuous:                       # type and name of the market "type_name" 
     type: ex-ante                     # type of market clearing
                                       # options:
                                       #   - ex-ante: market clearing is done before the delivery period
-                                      #   - TODO ex-post: market clearing is done after the delivery period
+                                      #   - ex-post: market clearing is done after the delivery period
                                       #   - None: no market clearing is done (all energy is purchased from retailer)
 
     method: pda                       # method of market clearing
@@ -189,9 +189,9 @@ lem_continuous:                       # type and name of the market "type_name" 
             4: grid meter,
             5: virtual grid meter }
 
-lem_intraday:                               # type and name of the market "type_name" (must be unique)
+lem_intraday:                         # type and name of the market "type_name" (must be unique)
                                       # note: markets with the same suffix can trade among each other if specified
-  active: False                       # is the market active?
+  active: True                        # is the market active?
                                       # options:
                                       #   - True: market is active
                                       #   - False: market is inactive (market is ignored in simulation)
@@ -379,7 +379,7 @@ lem_intraday:                               # type and name of the market "type_
 
 lem_day-ahead:                        # type and name of the market "type_name" (must be unique)
                                       # note: markets with the same suffix can trade among each other if specified
-  active: False                        # is the market active?
+  active: True                        # is the market active?
                                       # options:
                                       #   - True: market is active
                                       #   - False: market is inactive (market is ignored in simulation)
@@ -563,3 +563,22 @@ lem_day-ahead:                        # type and name of the market "type_name" 
             3: virtual dividing meter,
             4: grid meter,
             5: virtual grid meter }
+
+lfm_01:                               # type and name of the market "type_name" (must be unique)
+  active: False                       # is the market active?
+                                      # options:
+                                      #   - True: market is active
+                                      #   - False: market is inactive (market is ignored in simulation)
+
+lhm_01:                               # type and name of the market "type_name" (must be unique)
+  active: False                       # is the market active?
+                                      # options:
+                                      #   - True: market is active
+                                      #   - False: market is inactive (market is ignored in simulation)
+
+lh2m_01:                              # type and name of the market "type_name" (must be unique)
+  active: False                       # is the market active?
+                                      # options:
+                                      #   - True: market is active
+                                      #   - False: market is inactive (market is ignored in simulation)
+

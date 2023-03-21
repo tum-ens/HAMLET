@@ -24,7 +24,7 @@ simulation:
   rts:                                    # settings that apply to real-time simulations (rts)
     start_steps: 6                        # steps to be calculated before starting the real-time simulation
                                             # note: when beginning an rts, these many steps will be simulated at an
-                                            #   accelerated rate, before the rts commences, to ensure a smooth start up
+                                            #   accelerated rate, before the rts commences, to ensure a smooth start-up
 
   location:                               # location of the simulation
     latitude: 48.137154                   # latitude

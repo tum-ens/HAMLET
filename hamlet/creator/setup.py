@@ -10,6 +10,7 @@ import os
 from ruamel.yaml import YAML
 import numpy as np
 from hamlet.creator.agents.agents import Agents
+from hamlet.creator.markets.markets import Markets
 
 # TODO Plan: All functions that are necessary are briefly described so that they can be worked on one by one
 # 1. Identify the scenario structure
@@ -74,10 +75,6 @@ class Scenario:
             None
         """
 
-        # TODO: Create the missing market files
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
-                                 func=self.__create_market_files)
-
         # Create the missing agent files
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
                                  func=self.__create_agent_files, method='config')
@@ -120,7 +117,11 @@ class Scenario:
         # Create the folders for the scenario
         self.__create_scenario_folders()
 
-        # Create the files for each region by looping through the structure
+        # Create the markets for each region by looping through the structure
+        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+                                 func=self.__create_markets)
+
+        # Create the agents for each region by looping through the structure
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
                                  func=self.__create_agents)
 
@@ -167,15 +168,7 @@ class Scenario:
         Returns:
             None
         """
-        pass
-
-    def __create_market_files(self, path_config: str, overwrite: bool = True) -> None:
-        """TODO: Creates the market files that are still missing
-
-        Returns:
-            None
-        """
-        # Should actually not be necessary for now since market files stem from the config file
+        # raise NotImplementedError('This function is not yet implemented')
         pass
 
     def __create_agents(self, path_config: str, overwrite: bool = True) -> None:
@@ -204,12 +197,21 @@ class Scenario:
         pass
 
     def __create_markets(self, path_config: str, overwrite: bool = True) -> None:
-        """TODO: Creates the market files of the scenario
+        """Creates the market files of the scenario
 
         Returns:
             None
         """
-        pass
+
+        # Create instance of Markets class
+        subpath = path_config.replace(self.root_config, '')     # get the subpath of the config file
+        markets = Markets(config_path=path_config,
+                          config_root=os.path.join(self.root_config, subpath.split('\\', 2)[1]),
+                          input_path=self.path_input,
+                          scenario_path=self.path_scenarios + subpath)
+
+        # Create the agent files from the config file
+        markets.create_markets_from_config()
 
     def __create_scenario_folders(self) -> None:
         """Creates the scenario folders in which the files are put for each region
@@ -267,21 +269,6 @@ class Scenario:
                 dict[subfolder] = {}
                 dict[subfolder] = cls.__add_subfolders_to_dict(dict[subfolder], f"{path}/{subfolder}", max_level, cur_level)
         return dict
-
-    # def process_dict(data, level, func):
-    #     # check if the current data is a dictionary
-    #     if isinstance(data, dict):
-    #         # if level is 0, run the function on all items in the dictionary
-    #         if level == 0:
-    #             for key, value in data.items():
-    #                 process_dict(value, level, func)
-    #         # if level is not 0, go deeper into the dictionary and run the function at the next level
-    #         else:
-    #             for key, value in data.items():
-    #                 process_dict(value, level - 1, func)
-    #     # if the data is not a dictionary, run the function on the data
-    #     else:
-    #         func(data)
 
     @classmethod
     def __loop_through_dict(cls, nested_dict: dict, path: str, func: callable, *args, **kwargs) -> None:
