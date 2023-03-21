@@ -316,7 +316,7 @@ sfh:
       power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
                                                 # unit: 1 [0, inf)
 
-      file: ["timeseries", "timeseries"]        # file type to calculate the power output
+      file: ["specs", "specs"]        # file type to calculate the power output
                                                 # options:
                                                 #   - specs: power output is calculated based on a randomly chosen specification
                                                 #            file (.json) and the weather file
@@ -367,7 +367,7 @@ sfh:
 
   ################################ small-scale wind ####################################
   wind:
-    share: 0                                    # share of prosumers with wind power plant
+    share: 0.5                                    # share of prosumers with wind power plant
                                                 # unit: 1 [0, 1]
       
     num: [1]                                    # number of inflexible loads
@@ -1082,7 +1082,7 @@ mfh:
       power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
                                                 # unit: 1 [0, inf)
 
-      file: ["timeseries", "timeseries"]        # file type to calculate the power output
+      file: ["timeseries", "specs"]        # file type to calculate the power output
                                                 # options:
                                                 #   - specs: power output is calculated based on a randomly chosen specification
                                                 #            file (.json) and the weather file
@@ -1132,7 +1132,7 @@ mfh:
 
   ################################ small-scale wind ####################################
   wind:
-    share: 0                                    # share of buildings with wind power plant
+    share: 0.5                                    # share of buildings with wind power plant
                                                 # unit: 1 [0, 1]
                                                 # note: share is applied to number of buildings, if building
                                                 #   has device and apartments are independent all apartments
@@ -2185,7 +2185,7 @@ industry:
 
   ################################ wind ####################################
   wind:
-    share: [0, 0]                               # share of agents with wind power plant per type
+    share: [0, 0.5]                               # share of agents with wind power plant per type
                                                 # unit: 1 [0, 1]
       
     num: [1, 1]                                 # number of devices
