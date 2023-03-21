@@ -1395,7 +1395,7 @@ class Agents:
         orientation = (plant['orientation'], plant['angle'])
 
         # get weather path
-        weather_path = os.path.join(self.input_path, 'general', 'weather', self.setup['simulation']['weather'])
+        weather_path = os.path.join(self.input_path, 'general', 'weather', self.setup['simulation']['location']['weather'])
 
         # create PVSystem and adjust weather data
         system = self.__create_pv_system_from_config(config=specs, orientation=orientation)
@@ -1483,7 +1483,7 @@ class Agents:
 
         """
         # get weather path
-        weather_path = os.path.join(self.input_path, 'general', 'weather', self.setup['simulation']['weather'])
+        weather_path = os.path.join(self.input_path, 'general', 'weather', self.setup['simulation']['location']['weather'])
 
         # get weather data
         weather = self.__adjust_weather_data_for_wind(weather_path=weather_path)

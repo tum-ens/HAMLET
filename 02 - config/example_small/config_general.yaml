@@ -3,14 +3,6 @@
 ########################################################################################################################
 
 simulation:
-  location:                     # Location where the simulation happens (latitude, longitude, name, altitude, timezone)
-    latitude: 48.137154
-
-    longitude: 11.576124
-
-    name: Munich
-
-    altitude: 520
 
   type: sim                                 # type of simulation to be run
                                             # options:
@@ -34,8 +26,21 @@ simulation:
                                             # note: when beginning an rts, these many steps will be simulated at an
                                             #   accelerated rate, before the rts commences, to ensure a smooth start up
 
-  weather: weather.csv                       # weather file to be used for entire region
-                                            # file types: csv, ft
+  location:                               # location of the simulation
+    latitude: 48.137154                   # latitude
+                                          # unit: degrees
+
+    longitude: 11.576124                  # longitude
+                                          # unit: degrees
+
+    name: Munich                          # name of the location
+                                          # note: used for naming the results
+
+    altitude: 520                         # altitude
+                                          # unit: meters
+
+    weather: weather.csv                  # weather file to be used for the location
+                                          # file types: csv, ft
 
   paths:                                    # paths relevant for the simulation
     input: ../03 - input_data                    # path that contains the input data
