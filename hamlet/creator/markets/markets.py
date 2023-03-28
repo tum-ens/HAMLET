@@ -40,7 +40,7 @@ class Markets:
             # 'lh2m': Lh2m,
         }
 
-    def create_markets_from_config(self):
+    def create_markets(self, file_type: str = 'ft'):
         """Create markets from configuration file and create the timetable for each market"""
 
         # Dictionary to store the market information
@@ -74,21 +74,23 @@ class Markets:
                     # Save original configuration
                     dict_markets[key]['config'] = config
             else:
-                raise ValueError(f'Market type "{market_type}" not available')
+                raise ValueError(f'Market type "{market_type}" not available. Available types are: {self.types.keys()}')
 
         # Concatenate all timetables and sort by timestamp and timestep
         timetable = pd.concat([val['timetable'] for _, val in dict_markets.items()], axis=1)
         timetable.sort_values(by=['timestamp', 'timestep'], inplace=True)
 
         # Save concatenated timetable
-        self._save_file(path=os.path.join(self.scenario_path, 'markets', 'timetable.ft'), data=timetable, index=False)
+        self._save_file(path=os.path.join(self.scenario_path, 'markets', f'timetable.{file_type}'),
+                        data=timetable, index=False)
 
         # Concatenate all retailers and sort by timestamp and timestep (needs loop in loop)
         retailers = pd.concat([val['retailers'] for _, val in dict_markets.items()], axis=1)
         retailers.sort_values(by=['timestamp'], inplace=True)
 
         # Save concatenated retailers
-        self._save_file(path=os.path.join(self.scenario_path, 'retailers', 'retailers.ft'), data=retailers, index=False)
+        self._save_file(path=os.path.join(self.scenario_path, 'retailers', f'retailers.{file_type}'),
+                        data=retailers, index=False)
 
         # Save individual information
         for name, market in dict_markets.items():
@@ -102,7 +104,7 @@ class Markets:
             self.__create_folder(path, delete=False)
 
             # Save individual timetable
-            self._save_file(path=os.path.join(path, 'timetable.ft'), data=market['timetable'], index=False)
+            self._save_file(path=os.path.join(path, f'timetable.{file_type}'), data=market['timetable'], index=False)
 
             # Save individual configuration
             self._save_file(path=os.path.join(path, 'config.json'), data=market['config'])
@@ -115,7 +117,7 @@ class Markets:
             self.__create_folder(path, delete=False)
 
             # Save individual retailer
-            self._save_file(path=os.path.join(path, 'retailer.ft'), data=market['retailers'], index=False)
+            self._save_file(path=os.path.join(path, f'retailer.{file_type}'), data=market['retailers'], index=False)
 
         return timetable, dict_markets
 

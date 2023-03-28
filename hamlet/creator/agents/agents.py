@@ -1,4 +1,5 @@
 __author__ = "TUM-Doepfert"
+__credits__ = "jiahechu"
 __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
@@ -23,9 +24,8 @@ import pvlib
 from pvlib.pvsystem import PVSystem
 from pvlib.location import Location
 from windpowerlib import ModelChain, WindTurbine
-import ast
-import pytz
 import warnings
+
 warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -54,7 +54,7 @@ class Agents:
 
         # Load setup plus configuration and/or agent file
         self.setup = self._load_file(path=os.path.join(self.config_root, 'config_general.yaml'))
-        self.grid = None    # grid file only required if agents are created from grid file
+        self.grid = None  # grid file only required if agents are created from grid file
         self.config = None
         self.excel = None
         try:
@@ -67,9 +67,9 @@ class Agents:
                     from exc
 
         # Information about the agents
-        self.agents = None      # information of all agents
-        self.id = None          # information of the current agent id
-        self.account = None     # information of the current account
+        self.agents = None  # information of all agents
+        self.id = None  # information of the current agent id
+        self.account = None  # information of the current account
 
         # Available types of agents
         self.types = {
@@ -167,7 +167,6 @@ class Agents:
             else:
                 raise KeyError(f"Agent type '{key}' is not available.")
 
-
         # Save each dataframe as worksheet in Excel
         if os.path.exists(f"{self.config_path}/agents.xlsx") and not overwrite:
             raise Warning("File already exists and overwrite is turned off.")
@@ -180,8 +179,9 @@ class Agents:
             except PermissionError:
                 raise PermissionError("The file 'agents.xlsx' needs to be closed before running this function.")
 
-    def create_agents_file_from_grid(self, fill_from_config: bool = False, overwrite: bool = False):
-        """Creates the Excel file from the grid file
+    def create_agents_file_from_grid(self, grid: str = 'electricity.xlsx', fill_from_config: bool = False,
+                                     overwrite: bool = False):
+        """Creates the Excel file from the electricity grid file
         """
 
         # Dictionaries to store the dataframes
@@ -189,7 +189,7 @@ class Agents:
         dict_agents = {}
 
         # Load grid file if not already loaded
-        self.grid = self._load_file(path=os.path.join(self.config_path, 'grid.xlsx')) if self.grid is None \
+        self.grid = self._load_file(path=os.path.join(self.config_path, grid)) if self.grid is None \
             else FileNotFoundError("Grid file not found.")
 
         # Load sheets from grid file
@@ -209,7 +209,7 @@ class Agents:
                 dict_agents[key] = self.types[key](config=self.config[key],
                                                    input_path=self.input_path,
                                                    config_path=self.config_path,
-                                                   scenario_path=self.scenario_path).\
+                                                   scenario_path=self.scenario_path). \
                     create_df_from_grid(grid=dict_grids, fill_from_config=fill_from_config).reset_index(drop=True)
             else:
                 print(f"Not there yet at {key}")
@@ -279,7 +279,7 @@ class Agents:
 
         # Get all main accounts sorted by the ID of the agent
         main_accounts = dict.fromkeys(df.loc[:, ids[0]])
-        accounts = dict()   # stores the information of all the accounts
+        accounts = dict()  # stores the information of all the accounts
 
         # Get all categories of the accounts, i.e. all that are not defined in self.plants
         acc_categories = [item for item in groups if item not in self.plants.keys()]
@@ -311,7 +311,7 @@ class Agents:
                     # Gets the value from the df(match names that are not followed by underscore), then uses squeeze to
                     #   only obtain the value, then renames the columns to the names defined in param_names and lastly
                     #   converts it all into a dict
-                    info = df.loc[acc_idx, df.columns.str.match(f"{group}(?!_)")].squeeze().\
+                    info = df.loc[acc_idx, df.columns.str.match(f"{group}(?!_)")].squeeze(). \
                         rename(param_names[group]).to_dict(into=OrderedDict)
                     accounts[account][group] = info
 
@@ -323,7 +323,7 @@ class Agents:
                         # Gets the value from the df (match names that are not followed by underscore), then uses
                         #   squeeze to only obtain the value, then renames the columns to the names defined in
                         #   param_names and lastly converts it all into a dict
-                        info = df.loc[acc_idx, df.columns.str.match(f"{device}(?!_)")].squeeze().\
+                        info = df.loc[acc_idx, df.columns.str.match(f"{device}(?!_)")].squeeze(). \
                             rename(param_names[device]).to_dict(into=OrderedDict)
                         acc_plants[device] = info
                     except KeyError:
@@ -348,7 +348,7 @@ class Agents:
 
             # Create folder for the agent
             self.__create_folder(path)
-            
+
             # Create all the data that is needed for the agent
             account["plants"], plants, meters, timeseries, socs = self._create_plants_for_agent(
                 plants=account["plants"], agent_type=agent_type)
@@ -357,25 +357,26 @@ class Agents:
             data = {
                 "account.json": account,
                 "plants.json": plants,
-                "meters.csv": meters,
-                "timeseries.csv": timeseries,
-                "socs.csv": socs}
+                "meters.ft": meters,
+                "timeseries.ft": timeseries,
+                "socs.ft": socs}
             self._create_agent(path, data)
 
     def _create_plants_for_agent(self, plants: dict, agent_type: str) -> Tuple:
         """Creates the plants for the agent"""
 
         # Setup
-        plants_dict = OrderedDict()     # Contains all plant information
-        plant_dict = OrderedDict()      # Contains single plant information
-        plants_ids = []                 # Contains the plant IDs
+        plants_dict = OrderedDict()  # Contains all plant information
+        plant_dict = OrderedDict()  # Contains single plant information
+        plants_ids = []  # Contains the plant IDs
         start = self.setup['simulation']['sim']['start'].replace(tzinfo=datetime.timezone.utc)
         end = start + datetime.timedelta(days=self.setup['simulation']['sim']['duration'])
         start, end = int(start.timestamp()), int(end.timestamp())
-        timeseries = pd.DataFrame(index=range(start, end, self.setup['simulation']['timestep']))  # Contains the time series data of each power plant (e.g. power output)
-        timeseries.index.name = 'timestamp'         # Name of the index (must be equal to name in input files)
+        timeseries = pd.DataFrame(index=range(start, end, self.setup['simulation'][
+            'timestep']))  # Contains the time series data of each power plant (e.g. power output)
+        timeseries.index.name = 'timestamp'  # Name of the index (must be equal to name in input files)
         meters = pd.DataFrame(index=['in', 'out'])  # Contains the meter values of each plant
-        socs = pd.DataFrame(index=['soc'])          # Contains the SOCs of each plant
+        socs = pd.DataFrame(index=['soc'])  # Contains the SOCs of each plant
 
         # Loop through plants and check if agent has the plant
         for plant, info in plants.items():
@@ -531,12 +532,14 @@ class Agents:
 
         # If file is a spec file, create time series accordingly
         if type(file) is dict:
-            try:
-                # Use the plant-specific specs function to create a time series from the spec data
-                file = self.plants[plant_dict['type']]['specs'](specs=file, plant=plant_dict)
-            except:
-                # If the specs function is not available for this plant type, raise a warning
-                raise Warning('Time series creation from spec file not available for this plant type.')
+            # try:
+            #     # Use the plant-specific specs function to create a time series from the spec data
+            #     file = self.plants[plant_dict['type']]['specs'](specs=file, plant=plant_dict)
+            # except KeyError
+            #     # If the specs function is not available for this plant type, raise a warning
+            #     raise KeyError(f'Time series creation from spec file not available for plant type {plant_dict["type"]}.')
+            # Use the plant-specific specs function to create a time series from the spec data
+            file = self.plants[plant_dict['type']]['specs'](specs=file, plant=plant_dict)
 
         # Check if a special function is to be applied to the time series
         # Note: they are stored in self.plants under the key 'file_func'
@@ -586,7 +589,7 @@ class Agents:
         # Note: We add the delta to the duration as the last index is not included in the duration
         delta = df.index[1] - df.index[0]
         duration = (df.index[-1] - df.index[0] + delta) / 3600 / 8760  # in years
-        
+
         # Scale the heat to the demand and take into account the duration of the time series
         df['heat'] *= plant_dict['demand'] * duration / sum(df['heat'])
 
@@ -1153,7 +1156,7 @@ class Agents:
         # Add forecast information
         # TODO: Forecast does not work yet if there is more than one (see EV for example)
         plant_dict["fcast"] = dict(list(info.items())[5:])
-        
+
         return plant_dict
 
     def __info_flexible_load(self, info: dict, plant_dict: dict, idx: int) -> dict:
@@ -1335,8 +1338,7 @@ class Agents:
 
         return system
 
-    @staticmethod
-    def __adjust_weather_data_for_pv(weather_path: str, location: tuple) -> pd.DataFrame:
+    def __adjust_weather_data_for_pv(self, weather_path: str, location: tuple) -> pd.DataFrame:
         """adjust weather data to the right format that pvlib needed.
 
         Args:
@@ -1351,7 +1353,7 @@ class Agents:
         latitude, longitude, name, altitude = location
 
         # get weather data from csv
-        weather = pd.read_csv(weather_path)
+        weather = self._load_file(weather_path)
         weather = weather[weather['ts_delivery_current'] == weather['ts_delivery_fcast']]  # remove forcasting data
 
         # convert time data to datetime (use utc time overall in pvlib)
@@ -1398,7 +1400,8 @@ class Agents:
         orientation = (plant['orientation'], plant['angle'])
 
         # get weather path
-        weather_path = os.path.join(self.input_path, 'general', 'weather', self.setup['simulation']['location']['weather'])
+        weather_path = os.path.join(self.input_path, 'general', 'weather',
+                                    self.setup['simulation']['location']['weather'])
 
         # create PVSystem and adjust weather data
         system = self.__create_pv_system_from_config(config=specs, orientation=orientation)
@@ -1421,7 +1424,7 @@ class Agents:
         power = mc.results.ac
 
         # calculate nominal power
-        nominal_power = specs['module']['Impo']*specs['module']['Vmpo']
+        nominal_power = specs['module']['Impo'] * specs['module']['Vmpo']
 
         # set time index to origin timestamp
         power.index = weather['ts_delivery_current']
@@ -1440,8 +1443,7 @@ class Agents:
 
         return power
 
-    @staticmethod
-    def __adjust_weather_data_for_wind(weather_path: str) -> pd.DataFrame:
+    def __adjust_weather_data_for_wind(self, weather_path: str) -> pd.DataFrame:
         """adjust weather data to the right format that windpowerlib needed.
 
         Args:
@@ -1452,12 +1454,12 @@ class Agents:
 
         """
         # get weather data from csv
-        weather = pd.read_csv(weather_path)
+        weather = self._load_file(weather_path)
         weather = weather[weather['ts_delivery_current'] == weather['ts_delivery_fcast']]  # remove forcasting data
 
         # convert time data to datetime
-        time = pd.DatetimeIndex(pd.to_datetime(weather['ts_delivery_current'], unit='s', utc=True))
-        weather.index = time.tz_convert("Europe/Berlin")
+        dtime = pd.DatetimeIndex(pd.to_datetime(weather['ts_delivery_current'], unit='s', utc=True))
+        weather.index = dtime.tz_convert("Europe/Berlin")
         weather.index.name = None
 
         # delete unnecessary columns and rename
@@ -1486,7 +1488,8 @@ class Agents:
 
         """
         # get weather path
-        weather_path = os.path.join(self.input_path, 'general', 'weather', self.setup['simulation']['location']['weather'])
+        weather_path = os.path.join(self.input_path, 'general', 'weather',
+                                    self.setup['simulation']['location']['weather'])
 
         # get weather data
         weather = self.__adjust_weather_data_for_wind(weather_path=weather_path)
@@ -1750,7 +1753,7 @@ class Sfh(Agents):
         self.grid = None
         self.bus = None  # bus sheet containing only the bus information of the agent type
         self.load = None  # load sheet containing only the load information of the agent type
-        self.agents = None # load sheet but limited to all agents, i.e. all inflexible_loads
+        self.agents = None  # load sheet but limited to all agents, i.e. all inflexible_loads
         self.sgen = None  # sgen sheet containing only the sgen information of the agent type
 
         # Creation method
@@ -1763,7 +1766,7 @@ class Sfh(Agents):
         self.df = None
 
         # Misc
-        self.n_digits = 2           # number of digits values get rounded to in respective value column
+        self.n_digits = 2  # number of digits values get rounded to in respective value column
 
     def create_df_from_config(self) -> pd.DataFrame:
         """Function to create the dataframe that makes the Excel sheet
@@ -2241,9 +2244,12 @@ class Sfh(Agents):
 
             # file
             # replace all 'linked' with the file of the inflexible load
-            self.df.loc[self.df[f"{key}/sizing/file_{num}"] == 'linked', f"{key}/sizing/file_{num}"] = self.df.loc[self.df[f"{key}/sizing/file_{num}"] == 'linked', f"inflexible_load/sizing/file_0"]
+            self.df.loc[self.df[f"{key}/sizing/file_{num}"] == 'linked', f"{key}/sizing/file_{num}"] = self.df.loc[
+                self.df[f"{key}/sizing/file_{num}"] == 'linked', f"inflexible_load/sizing/file_0"]
             # shorten the file name to the yearly demand and index
-            self.df[f"{key}/sizing/file_{num}"] = ["_".join(item.rsplit(".", 1)[0].split("_")[1:3]) if 'csv' in item else item for item in self.df[f"{key}/sizing/file_{num}"]]
+            self.df[f"{key}/sizing/file_{num}"] = [
+                "_".join(item.rsplit(".", 1)[0].split("_")[1:3]) if 'csv' in item else item for item in
+                self.df[f"{key}/sizing/file_{num}"]]
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
@@ -2280,7 +2286,8 @@ class Sfh(Agents):
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
+            'Int64')  # all agents that have plant type
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
@@ -2380,7 +2387,8 @@ class Sfh(Agents):
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
+            'Int64')  # all agents that have plant type
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
@@ -2864,7 +2872,8 @@ class Sfh(Agents):
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
+            'Int64')  # all agents that have plant type
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
@@ -2882,7 +2891,6 @@ class Sfh(Agents):
                 self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                        device=f"{key}",
                                                                        input_path=os.path.join(self.input_path, key))
-
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -2971,7 +2979,8 @@ class Sfh(Agents):
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
+            'Int64')  # all agents that have plant type
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
@@ -2980,7 +2989,8 @@ class Sfh(Agents):
             self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file_add'])
             self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/consumption_{num}"] = (self.df.index.map(df['consumption']) * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/charging_home_{num}"] = (self.df.index.map(df['charging_home']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/charging_home_{num}"] = (self.df.index.map(df['charging_home']) * 1e6).astype(
+                'Int64')
             self.df[f"{key}/sizing/charging_AC_{num}"] = (self.df.index.map(df['charging_ac']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/charging_DC_{num}"] = (self.df.index.map(df['charging_dc']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/charging_efficiency_{num}"] = self.df.index.map(df['efficiency'])
@@ -3262,7 +3272,8 @@ class Sfh(Agents):
                 list_num = [list_num[idx] + self.df[f"{device}/owner"][idx] for idx, _ in enumerate(list_num)]
 
             # Make sure that there is either zero or one and that owner has inflexible load
-            list_num = [min(1, list_num[idx] * self.df[f"inflexible_load/owner"][idx]) for idx, _ in enumerate(list_num)]
+            list_num = [min(1, list_num[idx] * self.df[f"inflexible_load/owner"][idx]) for idx, _ in
+                        enumerate(list_num)]
         else:
             raise Warning(f"Method '{method}' unknown.")
 
@@ -3318,7 +3329,7 @@ class Mfh(Agents):
         self.df = None
 
         # Misc
-        self.n_digits = 2           # number of digits values get rounded to in respective value column
+        self.n_digits = 2  # number of digits values get rounded to in respective value column
 
     def create_df_from_config(self) -> pd.DataFrame:
         """
@@ -3693,7 +3704,8 @@ class Mfh(Agents):
 
         # Sort by index ensuring that 'main' is always first for each building
         self.df['index'] = self.df.index
-        self.df = self.df.groupby(f"{key}/bus", sort=False).apply(self.sort_df, col=f"{key}/sub_id", sort_value=self.main_subid)
+        self.df = self.df.groupby(f"{key}/bus", sort=False).apply(self.sort_df, col=f"{key}/sub_id",
+                                                                  sort_value=self.main_subid)
         self.df.set_index(self.df['index'], inplace=True, drop=True)
         self.df.index.name = None
 
@@ -3783,14 +3795,15 @@ class Mfh(Agents):
         # general
         self.df[f"{key}/owner"] = (df['demand'] > 0)
         self.df[f"{key}/owner"] = self.df[f"{key}/owner"].fillna(0).astype(int)
-        self.df[f"{key}/num"] = self.df[f"{key}/owner"].fillna(0).astype(int)  # equals owner as only one inflexible load per agent
+        self.df[f"{key}/num"] = self.df[f"{key}/owner"].fillna(0).astype(
+            int)  # equals owner as only one inflexible load per agent
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
             # Get demand from load sheet
-            self.df[f"{key}/sizing/demand_{num}"] = np.floor(pd.to_numeric(df['demand'] * 1e6, errors='coerce')).\
+            self.df[f"{key}/sizing/demand_{num}"] = np.floor(pd.to_numeric(df['demand'] * 1e6, errors='coerce')). \
                 astype('Int64')  # the complex formula is needed to convert to integers
             # Check if file column is empty and fill it with the closest file if so
             if df['file'].isnull().all():
@@ -3913,9 +3926,12 @@ class Mfh(Agents):
 
                 # file
                 # replace all 'linked' with the file of the inflexible load
-                df_sub.loc[df_sub[f"{key}/sizing/file_{num}"] == 'linked', f"{key}/sizing/file_{num}"] = df_sub.loc[df_sub[f"{key}/sizing/file_{num}"] == 'linked', f"inflexible_load/sizing/file_0"]
+                df_sub.loc[df_sub[f"{key}/sizing/file_{num}"] == 'linked', f"{key}/sizing/file_{num}"] = df_sub.loc[
+                    df_sub[f"{key}/sizing/file_{num}"] == 'linked', f"inflexible_load/sizing/file_0"]
                 # shorten the file name to the yearly demand and index
-                df_sub.loc[:, f"{key}/sizing/file_{num}"] = ["_".join(item.rsplit(".", 1)[0].split("_")[1:3]) if 'csv' in item else item for item in df_sub[f"{key}/sizing/file_{num}"]]
+                df_sub.loc[:, f"{key}/sizing/file_{num}"] = [
+                    "_".join(item.rsplit(".", 1)[0].split("_")[1:3]) if 'csv' in item else item for item in
+                    df_sub[f"{key}/sizing/file_{num}"]]
                 df_sub.loc[:, f"{key}/sizing/file_{num}"] = self._pick_files(
                     list_type=df_sub[f"{key}/sizing/file_{num}"], device=f"{key}",
                     input_path=os.path.join(self.input_path, key))
@@ -3958,7 +3974,8 @@ class Mfh(Agents):
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
+            'Int64')  # all agents that have plant type
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
@@ -4071,7 +4088,8 @@ class Mfh(Agents):
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
+            'Int64')  # all agents that have plant type
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
@@ -4608,7 +4626,8 @@ class Mfh(Agents):
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
+            'Int64')  # all agents that have plant type
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
@@ -4733,7 +4752,8 @@ class Mfh(Agents):
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
+            'Int64')  # all agents that have plant type
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
@@ -4742,7 +4762,8 @@ class Mfh(Agents):
             self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file_add'])
             self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/consumption_{num}"] = (self.df.index.map(df['consumption']) * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/charging_home_{num}"] = (self.df.index.map(df['charging_home']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/charging_home_{num}"] = (self.df.index.map(df['charging_home']) * 1e6).astype(
+                'Int64')
             self.df[f"{key}/sizing/charging_AC_{num}"] = (self.df.index.map(df['charging_ac']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/charging_DC_{num}"] = (self.df.index.map(df['charging_dc']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/charging_efficiency_{num}"] = self.df.index.map(df['efficiency'])
@@ -5038,7 +5059,7 @@ class Mfh(Agents):
             self._gen_rand_bool_list(n=self.num, share_ones=self.config[f"{key}"]["share"])
         self.df.loc[:, f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
-    def _preprocess_df_sub(self, agent: str, aps: list, key:str, aps_independent: bool = None):
+    def _preprocess_df_sub(self, agent: str, aps: list, key: str, aps_independent: bool = None):
         """Does all the preprocessing and obtains the relevant df_sub"""
 
         # get the information about the building
@@ -5089,7 +5110,7 @@ class Mfh(Agents):
                                               & (self.df["general/sub_id"] != self.main_subid), f"{key}/{val}"])
             # insert total into building row
             self.df.loc[(self.df["general/agent_id"] == agent_id) & (self.df["general/sub_id"] == self.main_subid),
-                        f"{key}/{val}"] = total
+            f"{key}/{val}"] = total
 
         return self.df
 
@@ -5139,7 +5160,7 @@ class Ctsp(Agents):
         self.grid = None
         self.bus = None  # bus sheet containing only the bus information of the agent type
         self.load = None  # load sheet containing only the load information of the agent type
-        self.agents = None # load sheet but limited to all agents, i.e. all inflexible_loads
+        self.agents = None  # load sheet but limited to all agents, i.e. all inflexible_loads
         self.sgen = None  # sgen sheet containing only the sgen information of the agent type
 
         # Creation method
@@ -5152,10 +5173,10 @@ class Ctsp(Agents):
         self.df = None
 
         # Index list that is adhered to throughout the creation process to ensure correct order
-        self.idx_list = None        # gets created in create_general()
+        self.idx_list = None  # gets created in create_general()
 
         # Misc
-        self.n_digits = 3           # number of digits values get rounded to in respective value column
+        self.n_digits = 3  # number of digits values get rounded to in respective value column
 
     def create_df_from_config(self) -> pd.DataFrame:
         """
@@ -5483,7 +5504,7 @@ class Ctsp(Agents):
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
-        for num in range(max(self.df[f"{key}/num"])): # currently only one device per agent is supported
+        for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
             # Get demand from load sheet
             self.df[f"{key}/sizing/demand_{num}"] = (df['demand'] * 1e6).astype('Int64')
             # Check if file column is empty and fill it with the closest file if so
@@ -6005,7 +6026,8 @@ class Ctsp(Agents):
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
+            'Int64')  # all agents that have plant type
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
@@ -6014,7 +6036,8 @@ class Ctsp(Agents):
             self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file_add'])
             self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/consumption_{num}"] = (self.df.index.map(df['consumption']) * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/charging_home_{num}"] = (self.df.index.map(df['charging_home']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/charging_home_{num}"] = (self.df.index.map(df['charging_home']) * 1e6).astype(
+                'Int64')
             self.df[f"{key}/sizing/charging_AC_{num}"] = (self.df.index.map(df['charging_ac']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/charging_DC_{num}"] = (self.df.index.map(df['charging_dc']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/charging_efficiency_{num}"] = self.df.index.map(df['efficiency'])
@@ -6230,7 +6253,7 @@ class Industry(Agents):
         self.grid = None
         self.bus = None  # bus sheet containing only the bus information of the agent type
         self.load = None  # load sheet containing only the load information of the agent type
-        self.agents = None # load sheet but limited to all agents, i.e. all inflexible_loads
+        self.agents = None  # load sheet but limited to all agents, i.e. all inflexible_loads
         self.sgen = None  # sgen sheet containing only the sgen information of the agent type
 
         # Creation method
@@ -6243,10 +6266,10 @@ class Industry(Agents):
         self.df = None
 
         # Index list that is adhered to throughout the creation process to ensure correct order
-        self.idx_list = None        # gets created in create_general()
+        self.idx_list = None  # gets created in create_general()
 
         # Misc
-        self.n_digits = 4           # number of digits values get rounded to in respective value column
+        self.n_digits = 4  # number of digits values get rounded to in respective value column
 
     def create_df_from_config(self) -> pd.DataFrame:
         """
@@ -6574,10 +6597,11 @@ class Industry(Agents):
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
-        for num in range(max(self.df[f"{key}/num"])): # currently only one device per agent is supported
+        for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
             # Get demand from load sheet
-            self.df[f"{key}/sizing/demand_{num}"] = np.floor(pd.to_numeric(df['demand'] * 1e6, errors='coerce')).astype('Int64')
-                # (df['demand'] * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/demand_{num}"] = np.floor(pd.to_numeric(df['demand'] * 1e6, errors='coerce')).astype(
+                'Int64')
+            # (df['demand'] * 1e6).astype('Int64')
             # Check if file column is empty and fill it with the closest file if so
             if df['file'].isnull().all():
                 # file
@@ -7097,7 +7121,8 @@ class Industry(Agents):
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant type
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
+            'Int64')  # all agents that have plant type
         # note: always taken from config
         self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
@@ -7106,7 +7131,8 @@ class Industry(Agents):
             self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file_add'])
             self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/consumption_{num}"] = (self.df.index.map(df['consumption']) * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/charging_home_{num}"] = (self.df.index.map(df['charging_home']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/charging_home_{num}"] = (self.df.index.map(df['charging_home']) * 1e6).astype(
+                'Int64')
             self.df[f"{key}/sizing/charging_AC_{num}"] = (self.df.index.map(df['charging_ac']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/charging_DC_{num}"] = (self.df.index.map(df['charging_dc']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/charging_efficiency_{num}"] = self.df.index.map(df['efficiency'])
@@ -7703,7 +7729,7 @@ class Producer(Agents):
         self.grid = None
         self.bus = None  # bus sheet containing only the bus information of the agent type
         self.load = None  # load sheet containing only the load information of the agent type
-        self.agents = None # load sheet but limited to all agents, i.e. all inflexible_loads
+        self.agents = None  # load sheet but limited to all agents, i.e. all inflexible_loads
         self.sgen = None  # sgen sheet containing only the sgen information of the agent type
 
         # Creation method
@@ -7711,18 +7737,18 @@ class Producer(Agents):
 
         # Number of agents
         self.num = 0
-        self.num_agents = 0           # number of agents (changes depending on which "add_xxx()" function is called)
+        self.num_agents = 0  # number of agents (changes depending on which "add_xxx()" function is called)
 
         # Dataframe containing all information
         self.df = None
 
         # Index list that is adhered to throughout the creation process to ensure correct order
-        self.idx_list = None        # gets created in create_general()
-        self.idx_start = 0                # start index where to insert values (changes based on dataframe length)
+        self.idx_list = None  # gets created in create_general()
+        self.idx_start = 0  # start index where to insert values (changes based on dataframe length)
         self.idx_end = 0
 
         # Misc
-        self.n_digits = 3           # number of digits values get rounded to in respective value column
+        self.n_digits = 3  # number of digits values get rounded to in respective value column
 
     def create_df_from_config(self) -> pd.DataFrame:
         """
@@ -7805,8 +7831,8 @@ class Producer(Agents):
         """
         # Go through file and create the columns for the ctss worksheet
         columns = ordereddict()
-        before = True   # variable to insert entries before the plants
-        max_bat = 1     # variable to keep track of how many batteries need to be added
+        before = True  # variable to insert entries before the plants
+        max_bat = 1  # variable to keep track of how many batteries need to be added
         for key, _ in self.config.items():
             cols = self.make_list_from_nested_dict(self.config[key])
 
@@ -8000,7 +8026,8 @@ class Producer(Agents):
         self.df.loc[self.idx_start:self.idx_end, f"{key}/agent_id"] = self._gen_new_ids(n=self.num_agents)
 
         # forecast
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/fcast_retraining_frequency"] = config["fcast_retraining_frequency"]
+        self.df.loc[self.idx_start:self.idx_end, f"{key}/fcast_retraining_frequency"] = config[
+            "fcast_retraining_frequency"]
 
         # market participation
         self.df.loc[self.idx_start:self.idx_end, f"{key}/market_participant"] = self._gen_rand_bool_list(
@@ -8151,7 +8178,8 @@ class Producer(Agents):
             # power
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"] *= self.df[f"{device}/sizing/power_0"]
             # capacity
-            self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"] *= self.df[f"{device}/sizing/power_0"]
+            self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"] *= self.df[
+                f"{device}/sizing/power_0"]
 
         # quality
         self.df.loc[self.idx_start:self.idx_end, f"{key}/quality"] = config["quality"]
@@ -8273,7 +8301,7 @@ class Storage(Agents):
         self.grid = None
         self.bus = None  # bus sheet containing only the bus information of the agent type
         self.load = None  # load sheet containing only the load information of the agent type
-        self.agents = None # load sheet but limited to all agents, i.e. all inflexible_loads
+        self.agents = None  # load sheet but limited to all agents, i.e. all inflexible_loads
         self.sgen = None  # sgen sheet containing only the sgen information of the agent type
 
         # Creation method
@@ -8281,18 +8309,18 @@ class Storage(Agents):
 
         # Number of agents
         self.num = 0
-        self.num_agents = 0           # number of agents (changes depending on which "add_xxx()" function is called)
+        self.num_agents = 0  # number of agents (changes depending on which "add_xxx()" function is called)
 
         # Dataframe containing all information
         self.df = None
 
         # Index list that is adhered to throughout the creation process to ensure correct order
-        self.idx_list = None        # gets created in create_general()
-        self.idx_start = 0                # start index where to insert values (changes based on dataframe length)
+        self.idx_list = None  # gets created in create_general()
+        self.idx_start = 0  # start index where to insert values (changes based on dataframe length)
         self.idx_end = 0
 
         # Misc
-        self.n_digits = 3           # number of digits values get rounded to in respective value column
+        self.n_digits = 3  # number of digits values get rounded to in respective value column
 
     def create_df_from_config(self) -> pd.DataFrame:
         """
@@ -8372,7 +8400,7 @@ class Storage(Agents):
         """
         # Go through file and create the columns for the ctss worksheet
         columns = ordereddict()
-        before = True   # variable to insert entries before the plants
+        before = True  # variable to insert entries before the plants
         for key, _ in self.config.items():
             cols = self.make_list_from_nested_dict(self.config[key])
 
@@ -8550,7 +8578,8 @@ class Storage(Agents):
         self.df.loc[self.idx_start:self.idx_end, f"{key}/agent_id"] = self._gen_new_ids(n=self.num_agents)
 
         # forecast
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/fcast_retraining_frequency"] = config["fcast_retraining_frequency"]
+        self.df.loc[self.idx_start:self.idx_end, f"{key}/fcast_retraining_frequency"] = config[
+            "fcast_retraining_frequency"]
 
         # market participation
         self.df.loc[self.idx_start:self.idx_end, f"{key}/market_participant"] = self._gen_rand_bool_list(
