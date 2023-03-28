@@ -8,11 +8,17 @@ import time
 import shutil
 import os
 from ruamel.yaml import YAML
+import json
 import numpy as np
+import pandas as pd
+import difflib
+import pandapower as pp
+from pprint import pprint
 from hamlet.creator.agents.agents import Agents
 from hamlet.creator.markets.markets import Markets
+from hamlet.creator.grids.grids import Grids
 
-# TODO Plan: All functions that are necessary are briefly described so that they can be worked on one by one
+# Principal steps:
 # 1. Identify the scenario structure
 # 2. Create the necessary folders for the scenario
 # 3. Create the locality/region for each market -> either based on config or directly from files
@@ -50,6 +56,12 @@ class Scenario:
         self.scenario_structure = self.__get_structure(name=self.name, path=self.path_config)
         self.subfolders = self.__add_subfolders_to_dict(dict=dict(), path=self.path_input, max_level=1)
 
+
+        # Contains all elements of a type that will be combined later on
+        self.markets = {}
+        self.retailers = {}
+        self.grids = {}
+
     def load_config(self, path: str) -> dict:
         """Loads the config file from the given path
 
@@ -79,7 +91,7 @@ class Scenario:
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
                                  func=self.__create_agent_files, method='config')
 
-        # TODO: Create the missing grid files
+        # Create the missing grid files (not available yet)
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
                                  func=self.__create_grid_files)
 
@@ -115,7 +127,7 @@ class Scenario:
         """
 
         # Create the folders for the scenario
-        self.__create_scenario_folders()
+        self.__create_scenario_folders(delete=delete)
 
         # Create the markets for each region by looping through the structure
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
@@ -125,9 +137,33 @@ class Scenario:
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
                                  func=self.__create_agents)
 
+        # Copy the grid files from the input folder to the scenario folder
+        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+                                 func=self.__copy_grids)
+
         # Copy the files from the config folder to the scenario folder
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
                                  func=self.__copy_config_to_scenarios)
+
+        # Copy the files from the general config file to the scenario folder
+        self.__create_general_files()
+
+        # Combine the market and grid files
+        self.__combine_files()
+
+    def __combine_files(self) -> None:
+
+        # Combine all market/retailer files based on their name and/or type
+        self.__loop_through_dict(self.scenario_structure, path=self.path_scenarios,
+                                 func=self.__combine_market_files)
+
+        self.__create_combined_market_file()
+
+        # Combine all grid files based on their name and/or type
+        self.__loop_through_dict(self.scenario_structure, path=self.path_scenarios,
+                                 func=self.__combine_grid_files)
+
+        self.__create_combined_grid_file()
 
     def __get_structure(self, name: str, path: str, max_level: int = np.inf) -> dict:
         """
@@ -144,6 +180,12 @@ class Scenario:
     def __create_agent_files(self, path_config: str, method: str = 'config', fill_from_config: bool = False,
                              overwrite: bool = True) -> None:
         """Creates the agent files that are still missing
+
+        Args:
+            path_config: path to the config file
+            method: method to create the agent files, either 'config' or 'grid'
+            fill_from_config: if True, the missing plant types will be created from the config file
+            overwrite: if True, the agent files will be overwritten if they already exist
 
         Returns:
             None
@@ -162,14 +204,31 @@ class Scenario:
         elif method == 'grid':
             agents.create_agents_file_from_grid(fill_from_config=fill_from_config, overwrite=overwrite)
 
-    def __create_grid_files(self, path_config: str, overwrite: bool = True) -> None:
-        """TODO: Creates the grid files that are still missing
+    def __create_grid_files(self, path_config: str) -> None:
+        """Creates the grid files that are still missing
+
+        Args:
+            path_config: path to the config file
+
 
         Returns:
             None
-        """
-        # raise NotImplementedError('This function is not yet implemented')
-        pass
+
+        # Note: Currently not available yet as no method to artificially create grids exists yet
+            """
+
+        return
+
+        # Create instance of Grids class
+        subpath = path_config.replace(self.root_config, '')  # get the subpath of the config file to the root
+        grids = Grids(config_path=path_config,
+                      config_root=os.path.join(self.root_config, subpath.split('\\', 2)[1]),
+                      input_path=self.path_input,
+                      scenario_path=os.path.join(self.path_scenarios, subpath.split('\\', 1)[-1]))
+
+        # Create the agent files from the config file
+        # Note: This will only create the grid files that are not specified as file in the config file
+        grids.create_grid_files()
 
     def __create_agents(self, path_config: str, overwrite: bool = True) -> None:
         """Creates the agent files of the scenario
@@ -188,13 +247,22 @@ class Scenario:
         # Create the agent files from the config file
         agents.create_agents_from_file()
 
-    def __create_grids(self, path_config: str, overwrite: bool = True) -> None:
-        """TODO: Creates the grid files of the scenario
+    def __copy_grids(self, path_config: str, overwrite: bool = True) -> None:
+        """Copies the grid files of the scenario
 
         Returns:
             None
         """
-        pass
+
+        # Create instance of Grids class
+        subpath = path_config.replace(self.root_config, '')  # get the subpath of the config file to the root
+        grids = Grids(config_path=path_config,
+                      config_root=os.path.join(self.root_config, subpath.split('\\', 2)[1]),
+                      input_path=self.path_input,
+                      scenario_path=os.path.join(self.path_scenarios, subpath.split('\\', 1)[-1]))
+
+        # Copy the grid files from the input folder to the scenario folder
+        grids.copy_grid_files()
 
     def __create_markets(self, path_config: str, overwrite: bool = True) -> None:
         """Creates the market files of the scenario
@@ -211,9 +279,116 @@ class Scenario:
                           scenario_path=self.path_scenarios + subpath)
 
         # Create the agent files from the config file
-        markets.create_markets_from_config()
+        markets.create_markets()
 
-    def __create_scenario_folders(self) -> None:
+    def __create_general_files(self):
+        """Copies the files specified in the general config to the scenario folder"""
+
+        # Create the general file
+        general = {}
+
+        # 1. Structure of the simulation
+        general['structure'] = self.flatten_dict(self.scenario_structure)
+
+
+        # Save general as json file
+        self._save_file(os.path.join(self.path_scenarios, self.name, 'general', 'general.json'), general)
+
+        # Copy the weather file to the scenario folder
+        self.__create_folder(os.path.join(self.path_scenarios, self.name, 'general', 'weather'))
+        shutil.copy(os.path.join(self.path_input, 'general', 'weather', self.config['simulation']['location']['weather']),
+                    os.path.join(self.path_scenarios, self.name, 'general', 'weather', self.config['simulation']['location']['weather']))
+
+    def __combine_market_files(self, path: str) -> tuple[dict, dict]:
+
+        # Set the path to the markets and retailers folder
+        path_markets = os.path.join(path, 'markets')
+        path_retailers = os.path.join(path, 'retailers')
+
+        # Get the region's name
+        region = difflib.ndiff(self.path_scenarios.split('\\'), path.split('\\'))
+        region = '\\'.join(x.split()[-1] for x in region if x.startswith('+ '))
+
+        # Loop through the markets and retailers and find the files to add to self.markets and self.retailers
+        for root, dirs, files in os.walk(path_markets):
+            for file in files:
+                if 'timetable' in file:
+                    if file.endswith('.csv'):
+                        self.markets[region] = self._load_file(os.path.join(root, file), index=None)
+                    elif file.endswith('.ft'):
+                        df = self._load_file(os.path.join(root, file))
+                        self.markets[region] = df.set_index(df.columns[0])
+                    else:
+                        raise TypeError(f'File {file} is not a valid file type. Please use .csv or .ft files.')
+
+        for root, dirs, files in os.walk(path_retailers):
+            for file in files:
+                if 'retailer' in file:
+                    if file.endswith('.csv'):
+                        self.retailers[region] = self._load_file(os.path.join(root, file), index=None)
+                    elif file.endswith('.ft'):
+                        df = self._load_file(os.path.join(root, file))
+                        self.retailers[region] = df.set_index(df.columns[0])
+                    else:
+                        raise TypeError(f'File {file} is not a valid file type. Please use .csv or .ft files.')
+
+        return self.markets, self.retailers
+
+    def __create_combined_market_file(self, file_type: str = 'ft'):
+
+        # Take all the market files in self.markets and concat all to one big dataframe
+        markets = pd.concat(self.markets.values(), ignore_index=True)
+
+        # Sort markets by timestamp, market, name and timestep
+        markets = markets.sort_values(by=['timestamp', 'region', 'market', 'name', 'timestep'], ignore_index=True).\
+            set_index(markets.columns[0], drop=True)
+
+        # Save the file
+        self._save_file(os.path.join(self.path_scenarios, self.name, 'general', f'timetable.{file_type}'), markets)
+
+        # Take all the retailer files in self.retailers and combine to one file
+        retailers = pd.concat(self.retailers.values(), ignore_index=True)
+
+        # Sort retailers by timestamp
+        retailers = retailers.sort_values(by=['timestamp'], ignore_index=True).\
+            set_index(retailers.columns[0], drop=True)
+
+        # Save the file
+        self._save_file(os.path.join(self.path_scenarios, self.name, 'general', f'retailer.{file_type}'), retailers)
+
+    def __combine_grid_files(self, path: str):
+
+        # Set the path to the grids folder
+        path_grids = os.path.join(path, 'grids')
+
+        # Get the region's name
+        region = difflib.ndiff(self.path_scenarios.split('\\'), path.split('\\'))
+        region = '\\'.join(x.split()[-1] for x in region if x.startswith('+ '))
+
+        # Loop through the grids and find the files to add to self.grids
+        for root, dirs, files in os.walk(path_grids):
+            for file in files:
+                if file.endswith('.json'):
+                    self.grids[region] = pp.from_json(os.path.join(root, file))
+                elif file.endswith('.xlsx'):
+                    self.grids[region] = pp.from_excel(os.path.join(root, file))
+                else:
+                    raise TypeError(f'File {file} is not a valid file type. Please use .json or .xlsx files.')
+
+    def __create_combined_grid_file(self):
+
+        # Take the main grid and expand it with the grids of the regions
+        grid = self.grids[self.name]
+
+        # Loop through the grids and add them to the grid
+        for region, grid_region in self.grids.items():
+            if region != self.name:
+                grid = pp.merge_nets(grid, grid_region, validate=False)
+
+        # Save the grid
+        pp.to_json(grid, os.path.join(self.path_scenarios, self.name, 'general', 'grid.json'))
+
+    def __create_scenario_folders(self, delete: bool = True) -> None:
         """Creates the scenario folders in which the files are put for each region
 
         Returns:
@@ -222,7 +397,7 @@ class Scenario:
 
         # Create the folders for each region by looping through the structure
         self.__loop_through_dict(self.scenario_structure, path=self.path_scenarios,
-                                 func=self.__create_folders_from_dict, subfolders=self.subfolders)
+                                 func=self.__create_folders_from_dict, subfolders=self.subfolders, delete=delete)
 
     def __create_folders_from_dict(self, path: str, subfolders: dict, delete: bool = True) -> None:
         """Creates a folder at the given path
@@ -241,6 +416,20 @@ class Scenario:
 
         # Loop through the subfolders and create them
         self.__loop_through_dict(subfolders, path=path, func=self.__create_folder, delete=delete)
+
+    def __copy_config_to_scenarios(self, path_config: str, delete: bool = True) -> None:
+        """Copies the config file to the scenario folder
+
+        Returns:
+            None
+        """
+
+        # Get the path of the scenario folder to which it needs to be copied
+        path_scenario = path_config.replace(self.root_config, '')  # get the subpath of the config file to the root
+        path_scenario = os.path.join(self.path_scenarios, path_scenario.split('\\', 1)[-1], 'config')
+
+        # Copy (only) files from config to scenario folder
+        self.__copy_folder(src=path_config, dst=path_scenario, only_files=True, delete=delete)
 
     @classmethod
     def __add_subfolders_to_dict(cls, dict: dict, path: str, max_level: int = np.inf, cur_level: int = 0) -> dict:
@@ -295,7 +484,6 @@ class Scenario:
                 cls.__loop_through_dict(value, os.path.join(path, key), func, *args, **kwargs)
             else:
                 # If value is not a dictionary, call the function
-                print(f'func: {os.path.join(path, key)}')
                 func(os.path.join(path, key), *args, **kwargs)
 
     @staticmethod
@@ -353,16 +541,61 @@ class Scenario:
                     shutil.copytree(src, dst)
             time.sleep(0.01)
 
-    def __copy_config_to_scenarios(self, path_config: str, delete: bool = True) -> None:
-        """Copies the config file to the scenario folder
+    @classmethod
+    def _load_file(cls, path: str, index: int = 0):
+        file_type = path.rsplit('.', 1)[-1]
+        if file_type == 'yaml' or file_type == 'yml':
+            with open(path) as file:
+                file = YAML().load(file)
+        elif file_type == 'json':
+            with open(path) as file:
+                file = json.load(file)
+        elif file_type == 'csv':
+            file = pd.read_csv(path, index_col=index)
+        elif file_type == 'xlsx':
+            file = pd.ExcelFile(path)
+        elif file_type == 'ft':
+            file = pd.read_feather(path)
+        else:
+            raise ValueError(f'File type "{file_type}" not supported')
 
-        Returns:
-            None
+        return file
+
+    @classmethod
+    def _save_file(cls, path: str, data, index: bool = True) -> None:
+        file_type = path.rsplit('.', 1)[-1]
+
+        if file_type == 'yaml' or file_type == 'yml':
+            with open(path, 'w') as file:
+                YAML().dump(data, file)
+        elif file_type == 'json':
+            with open(path, 'w') as file:
+                json.dump(data, file, indent=4)
+        elif file_type == 'csv':
+            data.to_csv(path, index=index)
+        elif file_type == 'xlsx':
+            data.to_excel(path, index=index)
+        elif file_type == 'ft':
+            data.reset_index(inplace=True)
+            data.to_feather(path)
+        else:
+            raise ValueError(f'File type "{file_type}" not supported')
+
+    def flatten_dict(self, nested_dict, parent_key='', sep='\\'):
         """
+        Recursively flatten a nested dictionary and return a new dictionary
+        with the keys as strings indicating their full position in the original
+        dictionary.
+        """
+        items = []
+        for k, v in nested_dict.items():
+            new_key = parent_key + sep + k if parent_key else k
+            if isinstance(v, dict):
+                name = new_key.rsplit('\\', 1)[-1]
+                items.append((name, new_key))
+                items.extend(self.flatten_dict(v, new_key, sep=sep).items())
+            else:
+                name = new_key.rsplit('\\', 1)[-1]
+                items.append((name, new_key))
+        return dict(items)
 
-        # Get the path of the scenario folder to which it needs to be copied
-        path_scenario = path_config.replace(self.root_config, '')  # get the subpath of the config file to the root
-        path_scenario = os.path.join(self.path_scenarios, path_scenario.split('\\', 1)[-1], 'config')
-
-        # Copy (only) files from config to scenario folder
-        self.__copy_folder(src=path_config, dst=path_scenario, only_files=True, delete=delete)

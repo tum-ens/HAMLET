@@ -3,33 +3,44 @@
 ########################################################################################################################
 
 simulation:
+
   type: sim                                 # type of simulation to be run
                                             # options:
                                             #   - sim: full-speed simulation (for research purposes)
-                                            #   - rts: real-time simulation (for HiL/real-life purposes)
+                                            #   - TODO: rts: real-time simulation (for HiL/real-life purposes)
+
+  timestep: 900                           # length of minimum timestep
+                                          # unit: seconds
+                                          # note: all other timesteps need to be multiples of this timestep, if this
+                                          #   is not the case, the simulation will not run
 
   sim:                                    # settings that apply to full-speed simulations (sim)
-    start: 2021-03-24 00:00               # start of simulation
-                                          # format: YYYY-MM-DD HH:MM
-
-    timezone: europe/berlin               # timezone of simulation
-                                          # format: continent/city (see pytz for all options)
+    start: 2021-03-24T00:00:00+01:00      # start of simulation in unix time with timezone information
+                                          # format (ISO 8601): %Y-%m-%dT%H:%M:%S%z (YYYY-MM-DDTHH:MM:SS+HH:MM)
 
     duration: 3                           # duration of the simulation
                                           # unit: days
 
-    timestep: 900                         # length of minimum timestep
-                                          # unit: seconds
-                                          # note: all other timesteps need to be multiples of this timestep
-                                          # TODO: Check out if this can simply be handled by checking the market timesteps and use minimum time step
-
   rts:                                    # settings that apply to real-time simulations (rts)
     start_steps: 6                        # steps to be calculated before starting the real-time simulation
                                             # note: when beginning an rts, these many steps will be simulated at an
-                                            #   accelerated rate, before the rts commences, to ensure a smooth start up
+                                            #   accelerated rate, before the rts commences, to ensure a smooth start-up
 
-  weather: weather.ft                       # weather file to be used for entire region
-                                            # file types: csv, ft
+  location:                               # location of the simulation
+    latitude: 48.137154                   # latitude
+                                          # unit: degrees
+
+    longitude: 11.576124                  # longitude
+                                          # unit: degrees
+
+    name: Munich                          # name of the location
+                                          # note: used for naming the results
+
+    altitude: 520                         # altitude
+                                          # unit: meters
+
+    weather: weather.ft                   # weather file to be used for the location
+                                          # file types: csv, ft
 
   paths:                                    # paths relevant for the simulation
     input: ../03 - input_data                    # path that contains the input data
