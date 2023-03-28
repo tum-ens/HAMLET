@@ -3,14 +3,8 @@
 ########################################################################################################################
 
 # TODO: add the new parameters for fcast to inflexible_load, pv, wind, hp and mpc
-# TODO: Make ev charging scheme single choice again (should be more detailed in Excel file and not here)
-# TODO: Change order of sizing ev just like it is in industry
-# TODO: Give all file names a simple form so they don't have to be changed (e.g. power_file --> file)
-# TODO: Ensure that all absolute sizing has absolute deviation and relative sizing relative deviation
-# TODO: "Share dependent on" aus Excel rausnehmen
-# TODO: Change b2g and g2b to x2g and g2x to generalize the naming (also for v2g and g2v) UNDO!!!
-
-# TODO: Implement the forecasting methodology for the retail prices as currently only the lem prices are forecasted -> this affects the config and the executor
+# TODO: Implement the forecasting methodology from lemlab for the retail prices as currently only the lem prices are forecasted -> this affects the config and the executor
+# TODO: Implement chp
 
 ##########################################################################################
 ################################ single family home (SFH) ################################
@@ -18,60 +12,42 @@
 sfh:
   ################################ general ################################
   general:
-    number_of: 4                               # number of single family homes to simulate
+    number_of: 10                               # number of single family homes to simulate
      
     parameters:                                 # basic parameters of SFHs
       distribution: [0.5, 0.5]                  # relative distribution of household types
                                                 # unit: 1
                                                 # note: to obtain a uniform value this value needs to be [1]
+
+      occupants: [3, 4]                         # number of occupants
+                                                # unit: 1
         
-      area: [100, 130]                          # average living area per apartment
+      area: [100, 130]                          # average living area
                                                 # unit: m²
-                                                # options: (based on Federal Statistical Office of Germany Destatis)
-                                                #   - 40: small one-person household
-                                                #   - 70: standard one-person or small two-person household
-                                                #   - 100: standard two- and three-person household 
-                                                #   - 130: standard four-person household
-                                                # note: needs to correspond with the values in the heat demand files
-                                                # note: other area sizes can be used. If these are not specified in 
-                                                #   the input file, the corresponding values will be calculated linearly
-        
-      heat_efficiency: [40, 100]                # heating efficiency of building
+
+      floors: [2, 2]                            # number of floors
+                                                # unit: 1
+
+      height: [2.6, 2.6]                        # ceiling height
+                                                # unit: m
+
+      efficiency: [55, 150]                     # heating efficiency of building
                                                 # unit: kWh/(m²*a)
-                                                # options: (based on categorization by German Credit Institute for 
-                                                #   Reconstruction KfW and German Energy Agency dena)
-                                                #   - 0: ZEB (zero energy building) or passive house efficiency
+                                                # recommendations: (based on categorization by German Credit Institute
+                                                #   for Reconstruction KfW and German Energy Agency dena)
                                                 #   - 40: high efficiency for new or renovated buildings
                                                 #   - 70: standard efficiency for new or renovated buildings
                                                 #   - 100: high efficiency for existing non-renovated buildings
                                                 #   - 150: average efficiency for existing non-renovated buildings
                                                 #   - 200: low efficiency for existing non-renovated buildings
-                                                # note: needs to correspond with the values in the heat demand files
-                                                # note: the total heat demand will be calculated based on the total 
-                                                #   area of the MFH
-                                                
-      heat_temperature: [35, 55]                # supply temperature of heating system
-                                                # unit: °C
-                                                # options:
-                                                #   - 35: floor-heating systems
-                                                #   - 55: radiator-heating systems
-                                                # note: needs to correspond with the values in the heat demand files
-                                                # note: other temperatures are possible but new temperature parameters 
-                                                #   need to be added to all heat pump input files
-
-    fcast_retraining_frequency: 96              # user forecast models retrained every n steps
-                                                # unit: time steps 
-                                                # recommended range: >= 96
                                                 
     market_participant_share: 1                 # share of agents that participate in the local markets
                                                 # unit: 1
 
-  ################################ inflexible load (household) ####################################
+  ################################ inflexible load ####################################
   inflexible_load:
     share: 1                                    # share of prosumers with inflexible loads
                                                 # unit: 1 [0, 1]
-                                                # note: this always needs to be set to 1 as it also contains the heating demand
-                                                #       which is dependent on the inflexible load
       
     num: [1]                                    # number of inflexible loads
                                                 # unit: 1 [1, inf)
@@ -84,7 +60,9 @@ sfh:
                                                 #   "lem" should be set to true, as the settlement algorithm needs to
                                                 #   calculate the residual meter readings in order for settlement to commence
 
-    sizing:  
+    sizing:
+      # TODO: method: absolute, relative      -> absolute is Wh/a and relative is Wh/a/person -> json file decides what per person values are assigned
+
       distribution: [0.2, 0.6, 0.2]             # relative distribution of sizing parameters
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
@@ -183,6 +161,137 @@ sfh:
                                                 # order of double seasonal arma model 
                                                 # order: [s2_ar, 0, s2_ma, s2]
 
+  ################################ heat demand ####################################
+  heat:
+    share: 1                                    # share of prosumers with heat
+                                                # unit: 1 [0, 1]
+                                                # note: users that do not have plants to cover the demand will be
+                                                #   assigned a generic non-electric supply
+
+    num: [1]                                    # number of heat loads
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+
+    has_submeter: true                          # existence of a separate meter
+                                                # note: generally set to true
+                                                # note: for further information see section sfh/inflexible_load
+
+    sizing:
+      distribution: [0.3, 0.4, 0.3]             # relative distribution of heat loads
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+                                                # note: to obtain a uniform value this value needs to be [1]
+
+      file: ['linked', 'linked', 'pu']      # file to be used for heat demand
+                                                # options:
+                                                #   - linked:     linked to the respective building
+                                                #   - pu:         random pu timeseries file
+                                                #   - TODO: 5r1c: 5r1c model (https://github.com/architecture-building-systems/RC_BuildingSimulator)
+                                                #   - TODO: 2r2c: 2r2c model (https://buildingenergygeeks.org/a-simple-rc-model-python.html#case-study)
+                                                # note: if file is set to linked, the heat demand file is linked to
+                                                #   the respective inflexible electricity demand and number of occupants
+
+      temperature: [35, 55, 55]                 # supply temperature of heating system
+                                                # unit: °C
+                                                # recommendations:
+                                                #   - 35: floor-heating systems
+                                                #   - 55: radiator-heating systems
+
+    fcast:
+      method: naive_average                     # household load forecasting method
+                                                # options:
+                                                #   - perfect:       perfect knowledge of the future
+                                                #   - naive:         today will be the same as yesterday
+                                                #   - naive_average: today will be the same as the average the last n days
+                                                #                    defined in naive_average_days
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - nn:            neural network based on the included weather data
+
+      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
+
+      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
+                                                # note: length of timestep is defined in config_general.yaml
+
+      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      nn_training_days: 90                      # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                #       in weather file
+
+  ################################ dhw (drinking hot water) ####################################
+  dhw:
+    share: 1                                    # share of prosumers with dhw
+                                                # unit: 1 [0, 1]
+                                                # note: users that do not have plants to cover the demand will be
+                                                #   assigned a generic non-electric supply
+
+    num: [1]                                    # number of dhw loads
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+
+    has_submeter: true                          # existence of a separate meter
+                                                # note: generally set to true
+                                                # note: for further information see section sfh/inflexible_load
+
+    sizing:
+      distribution: [0.3, 0.4, 0.3]             # relative distribution of dhw loads
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+                                                # note: to obtain a uniform value this value needs to be [1]
+
+      demand: [6e5, 7e5, 8e5]                   # yearly demand per person
+                                                # unit: Wh/(a*person)
+                                                # note: average value for Germany is 600-800 kWh/a/person
+
+      file: ['pu', 'pu', 'pu']                  # file to be used for dhw demand
+                                                # options:
+                                                #   - TODO: linked: linked to the respective building (not yet implemented)
+                                                #   - pu:     random pu timeseries file
+                                                # note: if file is set to linked, the dhw demand file is linked to
+                                                #   the respective inflexible electricity demand and number of occupants
+
+      temperature: [55, 55, 55]                 # supply temperature of dhw
+                                                # unit: °C
+
+    fcast:
+      method: naive_average                     # household load forecasting method
+                                                # options:
+                                                #   - perfect:       perfect knowledge of the future
+                                                #   - naive:         today will be the same as yesterday
+                                                #   - naive_average: today will be the same as the average the last n days
+                                                #                    defined in naive_average_days
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - nn:            neural network based on the included weather data
+
+      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
+
+      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
+                                                # note: length of timestep is defined in config_general.yaml
+
+      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      nn_training_days: 90                      # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                #       in weather file
+
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
     share: 0.8                                  # share of agents with PV systems
@@ -207,7 +316,7 @@ sfh:
       power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
                                                 # unit: 1 [0, inf)
 
-      file: ["timeseries", "timeseries"]        # file type to calculate the power output
+      file: ["specs", "specs"]        # file type to calculate the power output
                                                 # options:
                                                 #   - specs: power output is calculated based on a randomly chosen specification
                                                 #            file (.json) and the weather file
@@ -215,26 +324,20 @@ sfh:
                                                 #                 output file (.csv)
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
-                                                        
-      orientation: [[0], [90, -90]]             # respective orientation of the PV system
+
+      orientation: [0, -20]                     # respective orientation of the PV system
                                                 # unit: º [-180, 180]
                                                 # orientation convention:
                                                 #   - south:   0º
                                                 #   - west:   90º
                                                 #   - east:  -90º
-                                                #   - north: -180/180º
-                                                # note: several orientations can be combined in a list element. The
-                                                #   installed power is then divided equally (e.g. for east-west orientation)
-                                                # note: if load_from is not set to "weather", this parameter is ignored
-                                                
-        
-      angle: [40, 20]                           # installation angle of the installed system
+                                                #   - north: 180º
+                                                # note: if file is not set to "specs", this parameter is ignored
+
+
+      angle: [40, 50]                           # installation angle of the installed system
                                                 # unit: º [0, 90]
-                                                # note: if load_from is not set to "weather", this parameter is ignored
-                                                
-      angle_deviation: [10, 5]                  # absolute random positive/negative deviation from angle in degrees
-                                                # unit: º [0, 90]
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
 
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
@@ -264,7 +367,7 @@ sfh:
 
   ################################ small-scale wind ####################################
   wind:
-    share: 0                                    # share of prosumers with wind power plant
+    share: 0.5                                    # share of prosumers with wind power plant
                                                 # unit: 1 [0, 1]
       
     num: [1]                                    # number of inflexible loads
@@ -396,48 +499,20 @@ sfh:
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
+
+      power: [1, 1]                             # relative power
+                                                # unit: W/(Wh*a)*2000h-> based on first heat
+                                                # note: heat demand is divided by 2000 and multiplied by power value,
+                                                #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
         
       file: ["ground", "air"]                   # type of heat pump
                                                 # options:
                                                 #   - ground: ground-water heat pump
                                                 #   - air: air-water heat pump
                                                 #   - water: water-water heat pump
-                                                #   - "file name": give specific file name (e.g. "hp_NIBE-F2120-12_air.json")                                                
-        
-      storage_rel: [2, 3]                       # relative storage capacity
-                                                # unit: h [0, inf)
-                                                # note: storage size is converted to kWh by multiplying with 
-                                                #   rated heating power which is assumed as the maximum heating power in 
-                                                #   inflexible_load file
+                                                #   - "file name": give specific file name (e.g. "hp_NIBE-F2120-12_air.json")
 
-      soc: [0.5, 0.5]                           # initial soc of heat pump storage
-                                                # unit: 1 [0, 1]
-      
-    fcast: 
-      method: nn                                # heating demand forecasting method
-                                                # options:
-                                                #   - perfect:       perfect knowledge of the future
-                                                #   - naive:         today will be the same as yesterday
-                                                #   - naive_average: today will be the same as the average the last n days
-                                                #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values 
-                                                #                    with the window width defined in smoothed_timesteps
-                                                #   - nn:            neural network based on the included weather data
-                                                
-      naive_average_days: 2                     # number of days
-                                                # unit: days
-                                                # applies to: naive_average
-        
-      smoothed_timesteps: 9                     # number of timesteps
-                                                # unit: time steps
-                                                # applies to: smoothed
-                                                # note: length of timestep is defined in config_general.yaml
-                                                
-      nn_training_days: 90                      # days that are used to train the neural network
-                                                # unit: days
-                                                # applies to: nn
-                                                # note: weather data for the n previous days needs to be available
-                                                #       in weather file
+    quality: local                              # quality that the generated energy should be labelled with on the local markets
 
   ################################ electric vehicles (EV) ####################################
   ev:
@@ -490,7 +565,7 @@ sfh:
       v2h: [false, false, false]                # vehicle-to-home possible
       
     charging_scheme:
-      method: ["full", "price_sensitive"]       # charging method for the EVs
+      method: "price_sensitive"                 # charging method for the EVs
                                                 # options:
                                                 #   - full:            charge at full power as soon as EV 
                                                 #                      is connected
@@ -500,7 +575,6 @@ sfh:
                                                 #                      state-of-charge while at home
                                                 #   - min_soc_time:    reach certain state-of-charge until
                                                 #                      given time each day
-                                                # note: value is randomly chosen from list
                                             
       price_sensitive_threshold: 0.05           # threshold price
                                                 # unit: €/kWh
@@ -566,6 +640,43 @@ sfh:
     quality: local                              # quality that the sold energy should be labelled with 
                                                 # on the local markets
 
+  ################################ heat storage ####################################
+  heat_storage:
+    share: 0.8                                  # share of agents with heat storage (if share_dependent_on applies)
+                                                # unit: 1 [0, 1]
+
+    share_dependent_on: ["hp"]                  # does the share of storage depend on the existence of other devices?
+                                                # options: all devices listed in the agent category [e.g. pv, wind]
+                                                # note: if list contains more than one value, an agent needs to have
+                                                #   one of the listed devices
+
+    num: [1]                                    # number of devices
+                                                # note: value is randomly chosen from list
+
+    has_submeter: true                          # existence of a separate meter
+                                                # note: generally set to true
+                                                # note: for further information see section sfh/inflexible_load
+
+    sizing:                                     # sizing of battery system
+      distribution: [1]                         # distribution of sizing parameters shown below
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+
+      power: [1]                                # relative power
+                                                # unit: W/(Wh*a)*2000h-> based on first heat
+                                                # note: heat demand is divided by 2000 and multiplied by power value,
+                                                #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
+
+      capacity: [2]                             # relative storage capacity
+                                                # unit: Wh/(Wh*a)*2000h-> based on first heat
+
+      efficiency: [0.95]                        # charging and discharging efficiency
+
+      soc: [0.5]                                # initial soc
+
+    quality: local                              # quality that the sold energy should be labelled with
+                                                # on the local markets
+
   ################################ model predictive controller ####################################
   mpc:
     price_fcast: naive                          # forecast model to be used for the lem market price
@@ -623,9 +734,7 @@ mfh:
       distribution: [0.5, 0.5]                  # relative distribution of household types
                                                 # unit: 1
                                                 # note: to obtain a uniform value this value needs to be [1]
-                                                
-      apartments: [2, 3]                        # number of apartments per building
-                                                
+
       apartments_independent: [false, false]    # treat building as one or separately
                                                 # options:
                                                 #   - True: all apartments will be treated like SFHs with separate devices
@@ -634,43 +743,30 @@ mfh:
                                                 #   - inflexible_load
                                                 #   - flexible_load
                                                 #   - ev
-        
-      area: [70, 100]                           # average living area per apartment in m2
+                                                
+      apartments: [6, 8]                        # number of apartments per building
+
+      occupants: [3, 4]                         # number of occupants per apartment
+                                                # unit: 1
+
+      area: [70, 100]                           # average living area
                                                 # unit: m²
-                                                # options: (based on Federal Statistical Office of Germany Destatis)
-                                                #   - 40: small one-person household
-                                                #   - 70: standard one-person or small two-person household
-                                                #   - 100: standard two- and three-person household 
-                                                #   - 130: standard four-person household
-                                                # note: needs to correspond with the values in the heat demand files
-                                                # note: other area sizes can be used. If these are not specified in 
-                                                #   the input file, the corresponding values will be calculated linearly
-        
-      heat_efficiency: [40, 100]                # heating efficiency of building
+
+      floors: [1, 1]                            # number of floors
+                                                # unit: 1
+
+      height: [2.6, 2.6]                        # ceiling height
+                                                # unit: m
+
+      efficiency: [55, 150]                     # heating efficiency of building
                                                 # unit: kWh/(m²*a)
-                                                # options: (based on categorization by German Credit Institute for 
-                                                #   Reconstruction KfW and German Energy Agency dena)
-                                                #   - 0: ZEB (zero energy building) or passive house efficiency
+                                                # recommendations: (based on categorization by German Credit Institute
+                                                #   for Reconstruction KfW and German Energy Agency dena)
                                                 #   - 40: high efficiency for new or renovated buildings
                                                 #   - 70: standard efficiency for new or renovated buildings
                                                 #   - 100: high efficiency for existing non-renovated buildings
                                                 #   - 150: average efficiency for existing non-renovated buildings
                                                 #   - 200: low efficiency for existing non-renovated buildings
-                                                # note: needs to correspond with the values in the heat demand files
-                                                # note: the total heat demand will be calculated based on the total 
-                                                #   area of the MFH
-                                                
-      heat_temperature: [35, 55]                # supply temperature of heating system
-                                                # unit: °C
-                                                # options:
-                                                #   - 35: floor-heating systems
-                                                #   - 55: radiator-heating systems
-                                                # note: needs to correspond with the values in the heat demand files
-                                                # note: other temperatures are possible but new temperature parameters 
-                                                #   need to be added to all heat pump input files
-
-    fcast_retraining_frequency: 96              # user forecast models retrained every n steps
-                                                # recommended range: >= 96
                                                 
     market_participant_share: 1                 # share of agents that participate in the local markets
                                                 # note: all apartments are set up to either take part or not, if this
@@ -805,6 +901,151 @@ mfh:
                                                 # order of double seasonal arma model 
                                                 # order: [s2_ar, 0, s2_ma, s2]
 
+  ################################ heat demand ####################################
+  heat:
+    share: 1                                    # share of prosumers with heat
+                                                # unit: 1 [0, 1]
+                                                # note: users that do not have plants to cover the demand will be
+                                                #   assigned a generic non-electric supply
+
+    share_aps: [1]                              # share of apartments in MFH with device
+                                                # unit: 1 [0, 1]
+                                                # note: value is randomly chosen from list
+                                                # note: to increase probability of value, increase appearance in list
+                                                # note: this always needs to be set to 1 as it also contains the heating demand
+                                                #       which is dependent on the inflexible load
+
+    num: [1]                                    # number of heat loads
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+
+    has_submeter: true                          # existence of a separate meter
+                                                # note: generally set to true
+                                                # note: for further information see section sfh/inflexible_load
+
+    sizing:
+      distribution: [0.3, 0.4, 0.3]             # relative distribution of heat loads
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+                                                # note: to obtain a uniform value this value needs to be [1]
+
+      file: ['pu', 'pu', 'pu']                  # file to be used for heat demand
+                                                # options:
+                                                #   - linked:     linked to the respective building
+                                                #   - pu:         random pu timeseries file
+                                                #   - TODO: 5r1c: 5r1c model (https://github.com/architecture-building-systems/RC_BuildingSimulator)
+                                                #   - TODO: 2r2c: 2r2c model (https://buildingenergygeeks.org/a-simple-rc-model-python.html#case-study)
+                                                # note: if file is set to linked, the heat demand file is linked to
+                                                #   the respective inflexible electricity demand and number of occupants
+
+      temperature: [35, 55, 55]                 # supply temperature of heating system
+                                                # unit: °C
+                                                # recommendations:
+                                                #   - 35: floor-heating systems
+                                                #   - 55: radiator-heating systems
+
+    fcast:
+      method: naive_average                     # household load forecasting method
+                                                # options:
+                                                #   - perfect:       perfect knowledge of the future
+                                                #   - naive:         today will be the same as yesterday
+                                                #   - naive_average: today will be the same as the average the last n days
+                                                #                    defined in naive_average_days
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - nn:            neural network based on the included weather data
+
+      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
+
+      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
+                                                # note: length of timestep is defined in config_general.yaml
+
+      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      nn_training_days: 90                      # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                #       in weather file
+
+  ################################ dhw (drinking hot water) ####################################
+  dhw:
+    share: 1                                    # share of prosumers with dhw
+                                                # unit: 1 [0, 1]
+                                                # note: users that do not have plants to cover the demand will be
+                                                #   assigned a generic non-electric supply
+
+    share_aps: [1]                              # share of apartments in MFH with device
+                                                # unit: 1 [0, 1]
+                                                # note: value is randomly chosen from list
+                                                # note: to increase probability of value, increase appearance in list
+                                                # note: this always needs to be set to 1 as it also contains the heating demand
+                                                #       which is dependent on the inflexible load
+
+    num: [1]                                    # number of dhw loads
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+
+    has_submeter: true                          # existence of a separate meter
+                                                # note: generally set to true
+                                                # note: for further information see section sfh/inflexible_load
+
+    sizing:
+      distribution: [0.3, 0.4, 0.3]             # relative distribution of dhw loads
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+                                                # note: to obtain a uniform value this value needs to be [1]
+
+      demand: [600, 700, 800]                   # yearly demand per person
+                                                # unit: kWh/(a*person)
+                                                # note: average value for Germany is 600-800 kWh/a/person
+
+      file: ['pu', 'pu', 'pu']                  # file to be used for dhw demand
+                                                # options:
+                                                #   - TODO: linked: linked to the respective building (not yet implemented)
+                                                #   - pu:     random pu timeseries file
+                                                # note: if file is set to linked, the dhw demand file is linked to
+                                                #   the respective inflexible electricity demand and number of occupants
+
+      temperature: [55, 55, 55]                 # supply temperature of dhw
+                                                # unit: °C
+
+    fcast:
+      method: naive_average                     # household load forecasting method
+                                                # options:
+                                                #   - perfect:       perfect knowledge of the future
+                                                #   - naive:         today will be the same as yesterday
+                                                #   - naive_average: today will be the same as the average the last n days
+                                                #                    defined in naive_average_days
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - nn:            neural network based on the included weather data
+
+      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
+
+      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
+                                                # note: length of timestep is defined in config_general.yaml
+
+      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      nn_training_days: 90                      # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                #       in weather file
+
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
     share: 0.8                                  # share of agents with PV systems
@@ -841,7 +1082,7 @@ mfh:
       power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
                                                 # unit: 1 [0, inf)
 
-      file: ["timeseries", "timeseries"]        # file type to calculate the power output
+      file: ["timeseries", "specs"]        # file type to calculate the power output
                                                 # options:
                                                 #   - specs: power output is calculated based on a randomly chosen specification
                                                 #            file (.json) and the weather file
@@ -850,25 +1091,19 @@ mfh:
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
                                                         
-      orientation: [[0], [90, -90]]             # respective orientation of the PV system
+      orientation: [0, -20]                     # respective orientation of the PV system
                                                 # unit: º [-180, 180]
                                                 # orientation convention:
                                                 #   - south:   0º
                                                 #   - west:   90º
                                                 #   - east:  -90º
                                                 #   - north: 180º
-                                                # note: several orientations can be combined in a list element. The
-                                                #   installed power is then divided equally (e.g. for east-west orientation)
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
                                                 
         
-      angle: [40, 20]                           # installation angle of the installed system
+      angle: [40, 50]                           # installation angle of the installed system
                                                 # unit: º [0, 90]
-                                                # note: if load_from is not set to "weather", this parameter is ignored
-                                                
-      angle_deviation: [10, 5]                  # absolute random positive/negative deviation from angle in degrees
-                                                # unit: º [0, 90]
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
 
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
@@ -897,7 +1132,7 @@ mfh:
 
   ################################ small-scale wind ####################################
   wind:
-    share: 0                                    # share of buildings with wind power plant
+    share: 0.5                                    # share of buildings with wind power plant
                                                 # unit: 1 [0, 1]
                                                 # note: share is applied to number of buildings, if building
                                                 #   has device and apartments are independent all apartments
@@ -1051,45 +1286,20 @@ mfh:
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
-        
+
+      power: [1, 1]                             # relative power
+                                                # unit: W/(Wh*a)*2000h-> based on first heat
+                                                # note: heat demand is divided by 2000 and multiplied by power value,
+                                                #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
+
       file: ["ground", "air"]                   # type of heat pump
                                                 # options:
                                                 #   - ground: ground-water heat pump
                                                 #   - air: air-water heat pump
                                                 #   - water: water-water heat pump
-                                                #   - "file name": give specific file name (e.g. "hp_NIBE-F2120-12_air.json")                                                
-        
-      storage_rel: [2, 3]                       # relative storage capacity
-                                                # unit: h
-                                                # note: storage size is converted to kWh by multiplying with 
-                                                #   rated heating power which is the maximum heating power in 
-                                                #   inflexible_load file
+                                                #   - "file name": give specific file name (e.g. "hp_NIBE-F2120-12_air.json")
 
-      soc: [0.5, 0.5]                           # initial soc of heat pump storage
-                                                # unit: 1 [0, 1]
-      
-    fcast: 
-      method: nn                                # heating demand forecasting method
-                                                # options:
-                                                #   - perfect:       perfect knowledge of the future
-                                                #   - naive:         today will be the same as yesterday
-                                                #   - naive_average: today will be the same as the average the last n days
-                                                #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values 
-                                                #                    with the window width defined in smoothed_timesteps
-                                                #   - nn:            neural network based on the included weather data
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
-        
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
-                                                # note: applies to method: smoothed
-                                                # note: length of timestep is defined in config_general.yaml
-                                                
-      nn_training_days: 90                      # days before start of simulation that are used to train the 
-                                                #   neural network 
-                                                # note: weather data for the n previous days need to be available 
-                                                #   in weather file
+    quality: local                              # quality that the generated energy should be labelled with on the local markets
 
   ################################ electric vehicles (EV) ####################################
   ev:
@@ -1149,7 +1359,7 @@ mfh:
       v2h: [false, false, false]                # vehicle-to-home possible
       
     charging_scheme:
-      method: ["min_soc", "price_sensitive"]    # charging method for the EVs
+      method: "min_soc"                         # charging method for the EVs
                                                 # options:
                                                 #   - full:            charge at full power as soon as EV 
                                                 #                      is connected
@@ -1230,6 +1440,49 @@ mfh:
       b2g: [false]                              # can the battery feed into the grid?
 
     quality: local                              # quality that the sold energy should be labelled with 
+                                                # on the local markets
+
+  ################################ heat storage ####################################
+  heat_storage:
+    share: 0.8                                  # share of agents with batteries (if share_dependent_on applies)
+                                                # unit: 1 [0, 1]
+                                                # note: agent equals entire MFH
+
+    share_aps: [0.8, 0.5]                       # share of apartments in MFH with device (if share_dependent_on applies)
+                                                # unit: 1 [0, 1]
+                                                # value is randomly chosen from list
+                                                # note: to increase probability of value, increase appearance in list
+
+    share_dependent_on: ["hp"]                  # does the share of storage depend on the existence of other devices?
+                                                # options: all devices listed in the agent category [e.g. pv, wind]
+                                                # note: if list contains more than one value, an agent needs to have
+                                                #       all listed devices
+
+    num: [1]                                    # number of inflexible loads
+                                                # note: value is randomly chosen from list
+
+    has_submeter: true                          # existence of a separate meter
+                                                # note: generally set to true
+                                                # note: for further information see section sfh/inflexible_load
+
+    sizing:                                     # sizing of battery system
+      distribution: [1]                         # distribution of sizing parameters shown below
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+
+      power: [1]                                # relative power
+                                                # unit: W/(Wh*a)*2000h-> based on first heat
+                                                # note: heat demand is divided by 2000 and multiplied by power value,
+                                                #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
+
+      capacity: [2]                             # relative capacity
+                                                # unit: Wh/(Wh*a)*2000h-> based on first heat
+
+      efficiency: [0.95]                        # one way charging efficiency of the battery
+
+      soc: [0.1]                                # initial soc of the battery (0-1)
+
+    quality: local                              # quality that the sold energy should be labelled with
                                                 # on the local markets
 
   ################################ model predictive controller ####################################
@@ -1431,7 +1684,7 @@ ctsp:
       power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
                                                 # unit: 1 [0, 1]
 
-      file: ["timeseries", "timeseries"]  # file type to calculate the power output
+      file: ["timeseries", "timeseries"]        # file type to calculate the power output
                                                 # options:
                                                 #   - specs: power output is calculated based on a randomly chosen specification
                                                 #            file (.json) and the weather file
@@ -1440,25 +1693,19 @@ ctsp:
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
 
-      orientation: [[0], [90, -90]]             # respective orientation of the PV system
-                                                # unit: º
+      orientation: [0, -20]                     # respective orientation of the PV system
+                                                # unit: º [-180, 180]
                                                 # orientation convention:
                                                 #   - south:   0º
                                                 #   - west:   90º
                                                 #   - east:  -90º
                                                 #   - north: 180º
-                                                # note: several orientations can be combined in a list element. The
-                                                #   installed power is then divided equally (e.g. for east-west orientation)
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
 
 
-      angle: [40, 20]                           # installation angle of the installed system
-                                                # unit: º
-                                                # note: if load_from is not set to "weather", this parameter is ignored
-
-      angle_deviation: [10, 5]                  # absolute random positive/negative deviation from angle in degrees
-                                                # unit: 1
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+      angle: [40, 50]                           # installation angle of the installed system
+                                                # unit: º [0, 90]
+                                                # note: if file is not set to "specs", this parameter is ignored
 
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
@@ -1899,25 +2146,19 @@ industry:
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
 
-      orientation: [[0], [90, -90]]             # respective orientation of the PV system
-                                                # unit: º
+      orientation: [0, -20]                     # respective orientation of the PV system
+                                                # unit: º [-180, 180]
                                                 # orientation convention:
                                                 #   - south:   0º
                                                 #   - west:   90º
                                                 #   - east:  -90º
                                                 #   - north: 180º
-                                                # note: several orientations can be combined in a list element. The
-                                                #   installed power is then divided equally (e.g. for east-west orientation)
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
 
 
-      angle: [40, 20]                           # installation angle of the installed system
-                                                # unit: º
-                                                # note: if load_from is not set to "weather", this parameter is ignored
-
-      angle_deviation: [10, 5]                  # absolute random positive/negative deviation from angle in degrees
-                                                # unit: 1
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+      angle: [40, 50]                           # installation angle of the installed system
+                                                # unit: º [0, 90]
+                                                # note: if file is not set to "specs", this parameter is ignored
 
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
@@ -1944,7 +2185,7 @@ industry:
 
   ################################ wind ####################################
   wind:
-    share: [0, 0]                               # share of agents with wind power plant per type
+    share: [0, 0.5]                               # share of agents with wind power plant per type
                                                 # unit: 1 [0, 1]
       
     num: [1, 1]                                 # number of devices
@@ -2252,25 +2493,20 @@ producer:
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
 
-        orientation: [[0], [20], [-20]]         # respective orientation of the PV system
-                                                # unit: º
+        orientation: [0, -20, 20]               # respective orientation of the PV system
+                                                # unit: º [-180, 180]
                                                 # orientation convention:
                                                 #   - south:   0º
                                                 #   - west:   90º
                                                 #   - east:  -90º
                                                 #   - north: 180º
-                                                # note: several orientations can be combined in a list element. The
-                                                #   installed power is then divided equally (e.g. for east-west orientation)
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+                                                # note: if file is not set to "specs", this parameter is ignored
 
 
-        angle: [30, 20, 40]                     # installation angle of the installed system
-                                                # unit: º
-                                                # note: if load_from is not set to "weather", this parameter is ignored
+        angle: [40, 50, 30]                     # installation angle of the installed system
+                                                # unit: º [0, 90]
+                                                # note: if file is not set to "specs", this parameter is ignored
 
-        angle_deviation: [5, 5, 5]              # absolute random positive/negative deviation from angle in degrees
-                                                # unit: 1
-                                                # note: if load_from is not set to "weather", this parameter is ignored
 
         controllable: [true , true, true]       # can the pv inverter be controlled? true or false
 
@@ -2947,118 +3183,120 @@ storage:
 ########################################################################################################################
 ########################################### aggregators configuration ##################################################
 ########################################################################################################################
-aggregator:
-    
-  number_of: 2                                  # number of aggregators in market, if the number is smaller than the 
-                                                # number of specified aggregators, they are chosen by the order below
-    
-  specifications:                               # for every aggregator this section needs to contain the specifications 
-                                                # under the aggregators name, if they are not found, the number of aggregators
-                                                # will be reduced to the available specified ones
-              
-    ################################ aggreg0001 ####################################
-    aggreg0001:                                 # agent ID
+# TODO: Not available yet
 
-      active: true                              # if the aggregator is active, the aggregated prosumers ignore their
-                                                # household load and predict/control only their flexible plants
-                                                # the aggregator can only be active during ex-ante trading and is deactivated
-                                                # for ex-post trading
-                           
-      ################################ represented group settings ####################################                     
-      represented_group:
-                                                
-        agent_types: ["SFH", "MFH"]             # types of agents that are represented by the aggregator
-          
-        agent_devices: ["inflexible_load"]    
-                                                # devices that the agent must have to be represented by the aggregator
-                                                # options:
-                                                #   - inflexible_load: agents that have no devices (pure consumers)
-                                                #   - pv
-          
-        devices_inclusive: false                # do the agents need to have all the listed devices or only at least one 
-                                                # of them? (irrelevant if only one device is chosen)
-          
-        share: 0.5                              # share of the specified group that is represented by the aggregator
-
-        ################################ market agent settings ####################################
-      market_agent:
-        strategy: linear                        # aggregator market agent trading strategy
-                                                # choices are:
-                                                #   linear - see docs
-                                                #   zi - zero intelligence, random bid and offer prices
-                                                #                           in market price range
-
-        horizon: 32                             # market agent trading horizon,
-                                                #     possible range : 1 - (mpc_horizon - reopt_steps)
-
-        preference_quality: green_local         # some ex-ante markets can consider user preferences
-
-        premium_preference_quality: 10          # percentage premium the agent is willing to offer for preference satisfaction
-
-      ################################ forecast settings ####################################
-      fcast: 
-        type: sarma                             # aggregator load forecasting method
-                                                #     "perfect" - perfect knowledge of the future
-                                                #     "naive"   - today will be the same as yesterday
-                                                #     "naive_average" - today will be the same as
-                                                #       the last 2 days
-                                                #     "sarma"   - full sarma model of order below
-
-                                                
-        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672] 
-                                                # order of double seasonal arma model
-                                                # [s2_ar, 0, s2_ma, s2]
-                                                
-    ################################ aggreg0002 ####################################
-    aggreg0002:                                 # agent ID
-
-      active: true                              # if the aggregator is active, the aggregated prosumers ignore their
-                                                # household load and predict/control only their flexible plants
-                                                # the aggregator can only be active during ex-ante trading and is deactivated
-                                                # for ex-post trading
-                           
-      ################################ represented group settings ####################################                     
-      represented_group:
-                                                
-        agent_types: ["SFH"]                    # types of agents that are represented by the aggregator
-          
-        agent_devices: ["inflexible_load", "pv", "battery", "ev"]    
-                                                # devices that the agent must have to be represented by the aggregator
-                                                # options:
-                                                #   - inflexible_load: agents that have no devices (pure consumers)
-                                                #   - pv
-          
-        devices_inclusive: false                # do the agents need to have all the listed devices or only at least one 
-                                                # of them? (irrelevant if only one device is chosen)
-          
-        share: 1                                # share of the specified group that is represented by the aggregator
-
-      ################################ market agent settings ####################################
-      market_agent:
-        strategy: linear                        # aggregator market agent trading strategy
-                                                # choices are:
-                                                #   linear - see docs
-                                                #   zi - zero intelligence, random bid and offer prices
-                                                #                           in market price range
-
-        horizon: 32                             # market agent trading horizon,
-                                                #     possible range : 1 - (mpc_horizon - reopt_steps)
-
-        preference_quality: green_local         # some ex-ante markets can consider user preferences
-
-        premium_preference_quality: 10          # percentage premium the agent is willing to offer for preference satisfaction
-
-      ################################ forecast settings ####################################
-      fcast: 
-        type: sarma                             # aggregator load forecasting method
-                                                #     "perfect" - perfect knowledge of the future
-                                                #     "naive"   - today will be the same as yesterday
-                                                #     "naive_average" - today will be the same as
-                                                #       the last 2 days
-                                                #     "sarma"   - full sarma model of order below
-
-                                                
-        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672] 
-                                                # order of double seasonal arma model
-                                                # [s2_ar, 0, s2_ma, s2]
+#aggregator:
+#
+#  number_of: 2                                  # number of aggregators in market, if the number is smaller than the
+#                                                # number of specified aggregators, they are chosen by the order below
+#
+#  specifications:                               # for every aggregator this section needs to contain the specifications
+#                                                # under the aggregators name, if they are not found, the number of aggregators
+#                                                # will be reduced to the available specified ones
+#
+#    ################################ aggreg0001 ####################################
+#    aggreg0001:                                 # agent ID
+#
+#      active: true                              # if the aggregator is active, the aggregated prosumers ignore their
+#                                                # household load and predict/control only their flexible plants
+#                                                # the aggregator can only be active during ex-ante trading and is deactivated
+#                                                # for ex-post trading
+#
+#      ################################ represented group settings ####################################
+#      represented_group:
+#
+#        agent_types: ["SFH", "MFH"]             # types of agents that are represented by the aggregator
+#
+#        agent_devices: ["inflexible_load"]
+#                                                # devices that the agent must have to be represented by the aggregator
+#                                                # options:
+#                                                #   - inflexible_load: agents that have no devices (pure consumers)
+#                                                #   - pv
+#
+#        devices_inclusive: false                # do the agents need to have all the listed devices or only at least one
+#                                                # of them? (irrelevant if only one device is chosen)
+#
+#        share: 0.5                              # share of the specified group that is represented by the aggregator
+#
+#        ################################ market agent settings ####################################
+#      market_agent:
+#        strategy: linear                        # aggregator market agent trading strategy
+#                                                # choices are:
+#                                                #   linear - see docs
+#                                                #   zi - zero intelligence, random bid and offer prices
+#                                                #                           in market price range
+#
+#        horizon: 32                             # market agent trading horizon,
+#                                                #     possible range : 1 - (mpc_horizon - reopt_steps)
+#
+#        preference_quality: green_local         # some ex-ante markets can consider user preferences
+#
+#        premium_preference_quality: 10          # percentage premium the agent is willing to offer for preference satisfaction
+#
+#      ################################ forecast settings ####################################
+#      fcast:
+#        type: sarma                             # aggregator load forecasting method
+#                                                #     "perfect" - perfect knowledge of the future
+#                                                #     "naive"   - today will be the same as yesterday
+#                                                #     "naive_average" - today will be the same as
+#                                                #       the last 2 days
+#                                                #     "sarma"   - full sarma model of order below
+#
+#
+#        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+#                                                # order of double seasonal arma model
+#                                                # [s2_ar, 0, s2_ma, s2]
+#
+#    ################################ aggreg0002 ####################################
+#    aggreg0002:                                 # agent ID
+#
+#      active: true                              # if the aggregator is active, the aggregated prosumers ignore their
+#                                                # household load and predict/control only their flexible plants
+#                                                # the aggregator can only be active during ex-ante trading and is deactivated
+#                                                # for ex-post trading
+#
+#      ################################ represented group settings ####################################
+#      represented_group:
+#
+#        agent_types: ["SFH"]                    # types of agents that are represented by the aggregator
+#
+#        agent_devices: ["inflexible_load", "pv", "battery", "ev"]
+#                                                # devices that the agent must have to be represented by the aggregator
+#                                                # options:
+#                                                #   - inflexible_load: agents that have no devices (pure consumers)
+#                                                #   - pv
+#
+#        devices_inclusive: false                # do the agents need to have all the listed devices or only at least one
+#                                                # of them? (irrelevant if only one device is chosen)
+#
+#        share: 1                                # share of the specified group that is represented by the aggregator
+#
+#      ################################ market agent settings ####################################
+#      market_agent:
+#        strategy: linear                        # aggregator market agent trading strategy
+#                                                # choices are:
+#                                                #   linear - see docs
+#                                                #   zi - zero intelligence, random bid and offer prices
+#                                                #                           in market price range
+#
+#        horizon: 32                             # market agent trading horizon,
+#                                                #     possible range : 1 - (mpc_horizon - reopt_steps)
+#
+#        preference_quality: green_local         # some ex-ante markets can consider user preferences
+#
+#        premium_preference_quality: 10          # percentage premium the agent is willing to offer for preference satisfaction
+#
+#      ################################ forecast settings ####################################
+#      fcast:
+#        type: sarma                             # aggregator load forecasting method
+#                                                #     "perfect" - perfect knowledge of the future
+#                                                #     "naive"   - today will be the same as yesterday
+#                                                #     "naive_average" - today will be the same as
+#                                                #       the last 2 days
+#                                                #     "sarma"   - full sarma model of order below
+#
+#
+#        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+#                                                # order of double seasonal arma model
+#                                                # [s2_ar, 0, s2_ma, s2]
 
