@@ -160,7 +160,8 @@ class Agents:
                 agents = self.types[key](input_path=self.input_path,
                                          config=config,
                                          config_path=self.config_path,
-                                         scenario_path=self.scenario_path)
+                                         scenario_path=self.scenario_path,
+                                         config_root=self.config_root,)
 
                 # Create the dataframe
                 dict_agents[key] = agents.create_df_from_config()
@@ -209,7 +210,8 @@ class Agents:
                 dict_agents[key] = self.types[key](config=self.config[key],
                                                    input_path=self.input_path,
                                                    config_path=self.config_path,
-                                                   scenario_path=self.scenario_path). \
+                                                   scenario_path=self.scenario_path,
+                                                   config_root=self.config_root). \
                     create_df_from_grid(grid=dict_grids, fill_from_config=fill_from_config).reset_index(drop=True)
             else:
                 print(f"Not there yet at {key}")
@@ -1735,10 +1737,10 @@ class Sfh(Agents):
         Mainly used for Excel file creation. Afterwards Sfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str, config_root: str):
 
         # Call the init method of the parent class
-        super().__init__(config_path, input_path, scenario_path)
+        super().__init__(config_path, input_path, scenario_path, config_root)
 
         # Define agent type
         self.type = 'sfh'
@@ -3292,10 +3294,10 @@ class Mfh(Agents):
         Mainly used for excel file creation. Afterwards Mfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str, config_root: str):
 
         # Call the init method of the parent class
-        super().__init__(config_path, input_path, scenario_path)
+        super().__init__(config_path, input_path, scenario_path, config_root)
 
         # Define agent type
         self.type = 'mfh'
@@ -5142,10 +5144,10 @@ class Ctsp(Agents):
         Mainly used for excel file creation. Afterwards Sfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str, config_root: str):
 
         # Call the init method of the parent class
-        super().__init__(config_path, input_path, scenario_path)
+        super().__init__(config_path, input_path, scenario_path, config_root)
 
         # Define agent type
         self.type = 'ctsp'
@@ -6235,10 +6237,10 @@ class Industry(Agents):
         Mainly used for excel file creation. Afterwards Sfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str, config_root: str):
 
         # Call the init method of the parent class
-        super().__init__(config_path, input_path, scenario_path)
+        super().__init__(config_path, input_path, scenario_path, config_root)
 
         # Define agent type
         self.type = 'industry'
@@ -7711,10 +7713,10 @@ class Producer(Agents):
         Mainly used for excel file creation. Afterwards Sfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str, config_root: str):
 
         # Call the init method of the parent class
-        super().__init__(config_path, input_path, scenario_path)
+        super().__init__(config_path, input_path, scenario_path, config_root)
 
         # Define agent type
         self.type = 'producer'
@@ -8283,10 +8285,10 @@ class Storage(Agents):
         Mainly used for excel file creation. Afterwards Sfh class creates the individual agents.
     """
 
-    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str):
+    def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str, config_root: str):
 
         # Call the init method of the parent class
-        super().__init__(config_path, input_path, scenario_path)
+        super().__init__(config_path, input_path, scenario_path, config_root)
 
         # Define agent type
         self.type = 'storage'
