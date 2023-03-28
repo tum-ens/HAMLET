@@ -334,7 +334,7 @@ class Scenario:
 
         return self.markets, self.retailers
 
-    def __create_combined_market_file(self):
+    def __create_combined_market_file(self, file_type: str = 'ft'):
 
         # Take all the market files in self.markets and concat all to one big dataframe
         markets = pd.concat(self.markets.values(), ignore_index=True)
@@ -344,7 +344,7 @@ class Scenario:
             set_index(markets.columns[0], drop=True)
 
         # Save the file
-        self._save_file(os.path.join(self.path_scenarios, self.name, 'general', 'timetable.csv'), markets)
+        self._save_file(os.path.join(self.path_scenarios, self.name, 'general', f'timetable.{file_type}'), markets)
 
         # Take all the retailer files in self.retailers and combine to one file
         retailers = pd.concat(self.retailers.values(), ignore_index=True)
@@ -354,7 +354,7 @@ class Scenario:
             set_index(retailers.columns[0], drop=True)
 
         # Save the file
-        self._save_file(os.path.join(self.path_scenarios, self.name, 'general', 'retailer.csv'), retailers)
+        self._save_file(os.path.join(self.path_scenarios, self.name, 'general', f'retailer.{file_type}'), retailers)
 
     def __combine_grid_files(self, path: str):
 
