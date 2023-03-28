@@ -82,8 +82,8 @@ lem_continuous:                       # type and name of the market "type_name" 
                                       #   - file: prices contained in file provided by 'file' parameter
 
         fixed:
-          'price': [0.10, 0.01]       # fixed energy settings (retailer market offers)
-                                      # note: first position is for selling, second for buying energy
+          'price': [0.01, 0.10]       # fixed energy settings (retailer market offers from the agents' view)
+                                      # note: first position is for selling to, second for buying energy from retailer
 
           'quantity': [1e5, 1e5]      # units: price: ct/kWh | quantity: Wh
                                       # note: first position is for selling, second for buying energy

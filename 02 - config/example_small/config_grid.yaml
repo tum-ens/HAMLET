@@ -3,16 +3,21 @@
 ########################################################################################################################
 
 grids:
-  electricity_01:
+  electricity:
+    active: True
+
+    method: file                        # grid creation method
+                                        # options:
+                                        #   - file: create grid from 'grid.xlsx'
+                                        # TODO: Create automatic grid generator, e.g. based on Kerber grids
+
+    file:
+      file: electricity.xlsx            # file that contains the grid information
+                                        # file types: xlsx
+                                        # note: needs to be in the same folder as this file
+
+  heat:
     active: False
 
-    creation: file                        # grid creation method
-                                          # options:
-                                          #   - file: create grid from 'grid.xlsx'
-                                          # TODO: Create automatic grid generator, e.g. based on Kerber grids
-
-  heat_01:
-    active: False
-
-  hydrogen_01:
+  hydrogen:
     active: False
