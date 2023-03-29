@@ -39,7 +39,7 @@ simulation:
     altitude: 520                         # altitude
                                           # unit: meters
 
-    weather: weather.csv                  # weather file to be used for the location
+    weather: weather.ft                   # weather file to be used for the location
                                           # file types: csv, ft
 
   paths:                                    # paths relevant for the simulation
