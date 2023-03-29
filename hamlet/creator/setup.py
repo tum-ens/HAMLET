@@ -10,7 +10,6 @@ import os
 from ruamel.yaml import YAML
 import json
 import numpy as np
-import threading
 from tqdm import tqdm
 import pandas as pd
 import difflib
@@ -58,7 +57,6 @@ class Scenario:
         self.scenario_structure = self.__get_structure(name=self.name, path=self.path_config)
         self.subfolders = self.__add_subfolders_to_dict(dict=dict(), path=self.path_input, max_level=1)
 
-
         # Contains all elements of a type that will be combined later on
         self.markets = {}
         self.retailers = {}
@@ -88,6 +86,8 @@ class Scenario:
         Returns:
             None
         """
+
+        self.tqdm_total = 2
 
         print('> Creating files from configs for new scenario')
         with tqdm(total=2) as progress_bar:
