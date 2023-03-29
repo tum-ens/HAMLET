@@ -89,28 +89,22 @@ class Scenario:
             None
         """
 
-        print('> Creating new scenario from configs')
-        with tqdm(total=4) as progress_bar:
+        print('> Creating files from configs for new scenario')
+        with tqdm(total=2) as progress_bar:
             # Create the missing agent files
             progress_bar.set_description('Creating the missing agent files')
-            progress_bar.update(1)
             self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
                                      func=self.__create_agent_files, method='config')
+            progress_bar.update(1)
 
             # TODO: Create the missing grid files
             progress_bar.set_description('Creating the missing grid files')
-            progress_bar.update(1)
             self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
                                      func=self.__create_grid_files)
-
-            # Create the scenario from the generated files
-            progress_bar.set_description('Creating the scenario from the generated files')
-            progress_bar.update(1)
-            self.new_scenario_from_files(delete=delete)
-
             progress_bar.update(1)
 
-        print('> Successfully created new scenario from configs')
+        print('> Successfully created files from config, now create new scenario from files')
+        self.new_scenario_from_files(delete=delete)
 
     def new_scenario_from_grids(self, fill_from_config: bool = False, delete: bool = True) -> None:
         """Creates a new scenario from the grid files
@@ -122,68 +116,70 @@ class Scenario:
         Returns:
             None
         """
-
         print('> Creating new scenario from grids')
-        with tqdm(total=3) as progress_bar:
+        with tqdm(total=2) as progress_bar:
             # Create the missing agent files
             progress_bar.set_description('Creating the missing agent files')
-            progress_bar.update(1)
             self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
                                      func=self.__create_agent_files, method='grid')
+            progress_bar.update(1)
 
             # Create the scenario from the generated files
             progress_bar.set_description('Creating the scenario from the generated files')
-            progress_bar.update(1)
             self.new_scenario_from_files(delete=delete)
-
             progress_bar.update(1)
 
         print('> Successfully created new scenario from grids')
 
     def new_scenario_from_files(self, delete: bool = True) -> None:
         """Creates a new scenario from the files
-
         Args:
             delete: if True, the folder will be deleted if it already exists
-
         Returns:
             None
         """
         print('> Creating new scenario from files')
-        with tqdm(total=5) as progress_bar:
+        with tqdm(total=7) as progress_bar:
             # Create the folders for the scenario
             progress_bar.set_description('Creating the folders for the scenario')
+            self.__create_scenario_folders(delete=delete)
             progress_bar.update(1)
-            self.__create_scenario_folders()
 
-        # Create the folders for the scenario
-        self.__create_scenario_folders(delete=delete)
+            # Create the markets for each region by looping through the structure
+            progress_bar.set_description('Creating the markets for each region')
+            self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+                                     func=self.__create_markets)
+            progress_bar.update(1)
 
             # Create the agents for each region by looping through the structure
             progress_bar.set_description('Creating the agents for each region')
-            progress_bar.update(1)
             self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
                                      func=self.__create_agents)
+            progress_bar.update(1)
+
+            # Copy the grid files from the input folder to the scenario folder
+            progress_bar.set_description('Copying the grid files from the input folder to the scenario folder')
+            self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+                                     func=self.__copy_grids)
+            progress_bar.update(1)
 
             # Copy the files from the config folder to the scenario folder
-            progress_bar.set_description('Creating the folder structure')
-            progress_bar.update(1)
+            progress_bar.set_description('Copying the files from the config folder to the scenario folder')
             self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
                                      func=self.__copy_config_to_scenarios)
+            progress_bar.update(1)
 
-        # Copy the grid files from the input folder to the scenario folder
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
-                                 func=self.__copy_grids)
+            # Copy the files from the general config file to the scenario folder
+            progress_bar.set_description('Copying the files from the general config file to the scenario folder')
+            self.__create_general_files()
+            progress_bar.update(1)
 
-        # Copy the files from the config folder to the scenario folder
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
-                                 func=self.__copy_config_to_scenarios)
+            # Combine the market and grid files
+            progress_bar.set_description('Combining the market and grid files')
+            self.__combine_files()
+            progress_bar.update(1)
 
-        # Copy the files from the general config file to the scenario folder
-        self.__create_general_files()
-
-        # Combine the market and grid files
-        self.__combine_files()
+        print('> Successfully created new scenario from files')
 
     def __combine_files(self) -> None:
 
