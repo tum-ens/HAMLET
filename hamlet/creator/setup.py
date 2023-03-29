@@ -9,6 +9,8 @@ import shutil
 import os
 from ruamel.yaml import YAML
 import numpy as np
+import threading
+from tqdm import tqdm
 from hamlet.creator.agents.agents import Agents
 from hamlet.creator.markets.markets import Markets
 
@@ -75,16 +77,28 @@ class Scenario:
             None
         """
 
-        # Create the missing agent files
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
-                                 func=self.__create_agent_files, method='config')
+        print('> Creating new scenario from configs')
+        with tqdm(total=4) as progress_bar:
+            # Create the missing agent files
+            progress_bar.set_description('Creating the missing agent files')
+            progress_bar.update(1)
+            self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+                                     func=self.__create_agent_files, method='config')
 
-        # TODO: Create the missing grid files
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
-                                 func=self.__create_grid_files)
+            # TODO: Create the missing grid files
+            progress_bar.set_description('Creating the missing grid files')
+            progress_bar.update(1)
+            self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+                                     func=self.__create_grid_files)
 
-        # Create the scenario from the generated files
-        self.new_scenario_from_files(delete=delete)
+            # Create the scenario from the generated files
+            progress_bar.set_description('Creating the scenario from the generated files')
+            progress_bar.update(1)
+            self.new_scenario_from_files(delete=delete)
+
+            progress_bar.update(1)
+
+        print('> Successfully created new scenario from configs')
 
     def new_scenario_from_grids(self, fill_from_config: bool = False, delete: bool = True) -> None:
         """Creates a new scenario from the grid files
@@ -97,12 +111,22 @@ class Scenario:
             None
         """
 
-        # Create the missing agent files
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
-                                 func=self.__create_agent_files, method='grid')
+        print('> Creating new scenario from grids')
+        with tqdm(total=3) as progress_bar:
+            # Create the missing agent files
+            progress_bar.set_description('Creating the missing agent files')
+            progress_bar.update(1)
+            self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+                                     func=self.__create_agent_files, method='grid')
 
-        # Create the scenario from the generated files
-        self.new_scenario_from_files(delete=delete)
+            # Create the scenario from the generated files
+            progress_bar.set_description('Creating the scenario from the generated files')
+            progress_bar.update(1)
+            self.new_scenario_from_files(delete=delete)
+
+            progress_bar.update(1)
+
+        print('> Successfully created new scenario from grids')
 
     def new_scenario_from_files(self, delete: bool = True) -> None:
         """Creates a new scenario from the files
@@ -113,21 +137,34 @@ class Scenario:
         Returns:
             None
         """
+        print('> Creating new scenario from files')
+        with tqdm(total=5) as progress_bar:
+            # Create the folders for the scenario
+            progress_bar.set_description('Creating the folders for the scenario')
+            progress_bar.update(1)
+            self.__create_scenario_folders()
 
-        # Create the folders for the scenario
-        self.__create_scenario_folders()
+            # Create the markets for each region by looping through the structure
+            progress_bar.set_description('Creating the markets for each region')
+            progress_bar.update(1)
+            self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+                                     func=self.__create_markets)
 
-        # Create the markets for each region by looping through the structure
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
-                                 func=self.__create_markets)
+            # Create the agents for each region by looping through the structure
+            progress_bar.set_description('Creating the agents for each region')
+            progress_bar.update(1)
+            self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+                                     func=self.__create_agents)
 
-        # Create the agents for each region by looping through the structure
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
-                                 func=self.__create_agents)
+            # Copy the files from the config folder to the scenario folder
+            progress_bar.set_description('Creating the folder structure')
+            progress_bar.update(1)
+            self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+                                     func=self.__copy_config_to_scenarios)
 
-        # Copy the files from the config folder to the scenario folder
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
-                                 func=self.__copy_config_to_scenarios)
+            progress_bar.update(1)
+
+        print('> Successfully created new scenario from grids')
 
     def __get_structure(self, name: str, path: str, max_level: int = np.inf) -> dict:
         """
@@ -169,6 +206,7 @@ class Scenario:
             None
         """
         # raise NotImplementedError('This function is not yet implemented')
+        time.sleep(5)
         pass
 
     def __create_agents(self, path_config: str, overwrite: bool = True) -> None:
@@ -297,6 +335,7 @@ class Scenario:
                 # If value is not a dictionary, call the function
                 print(f'func: {os.path.join(path, key)}')
                 func(os.path.join(path, key), *args, **kwargs)
+
 
     @staticmethod
     def __create_folder(path: str, delete: bool = True) -> None:

@@ -1457,7 +1457,7 @@ class Agents:
 
         # convert time data to datetime
         time = pd.DatetimeIndex(pd.to_datetime(weather['ts_delivery_current'], unit='s', utc=True))
-        weather.index = time.tz_convert("Europe/Berlin")
+        weather.index = time
         weather.index.name = None
 
         # delete unnecessary columns and rename
