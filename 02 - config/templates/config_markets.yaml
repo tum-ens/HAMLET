@@ -257,12 +257,6 @@ lem_intraday:                         # type and name of the market "type_name" 
   pricing:                            # pricing of each retailer
                                       # note: currently only one retailer is possible
     retailer:                         # currently only one retailer possible
-      bids:
-        method: above                 # method of setting bids
-                                      # options:
-                                      #   - None: unsettled bids are not offered at other markets, i.e. bids get feed-in tariff and offers pay retail wholesale price
-                                      #   - above: unsettled bids are offered at higher market levels (if possible)
-                                      #   - below: unsettled bids are offered at lower market levels (if possible)
 
       energy:                         # parameters for retail energy (if market is ex-ante)
         method: fixed                 # how should retail prices be determined?
@@ -444,13 +438,6 @@ lem_day-ahead:                        # type and name of the market "type_name" 
   pricing:                            # pricing of each retailer
                                       # note: currently only one retailer is possible
     retailer:                         # currently only one retailer possible
-      bids:
-        method: above                 # method of setting bids
-                                      # options:
-                                      #   - None: unsettled bids are not offered at other markets, i.e. bids get feed-in tariff and offers pay retail wholesale price
-                                      #   - above: unsettled bids are offered at higher market levels (if possible)
-                                      #   - below: unsettled bids are offered at lower market levels (if possible)
-
       energy:                         # parameters for retail energy (if market is ex-ante)
         method: fixed                 # how should retail prices be determined?
                                       # options:
