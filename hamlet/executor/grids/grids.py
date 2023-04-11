@@ -19,3 +19,11 @@ import pandapower as pp
 
 # TODO: Considerations
 # - None so far
+
+
+class Grids:
+
+    def __init__(self):
+
+        # Grids
+        self.grid = None

@@ -19,3 +19,11 @@ from datetime import datetime
 # TODO: Considerations
 # - Use polars instead of pandas to increase performance
 # - Use parallel computing for market clearings
+
+
+class Markets:
+
+    def __init__(self):
+
+        # Market
+        self.market = None
