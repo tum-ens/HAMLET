@@ -179,10 +179,9 @@ class Agents:
             raise Warning("File already exists and overwrite is turned off.")
         else:
             try:
-                writer = pd.ExcelWriter(f"{self.config_path}/agents.xlsx", engine="xlsxwriter")
-                for key, df in dict_agents.items():
-                    df.to_excel(writer, sheet_name=key)
-                writer.save()
+                with pd.ExcelWriter(f"{self.config_path}/agents.xlsx", engine="xlsxwriter") as writer:
+                    for key, df in dict_agents.items():
+                        df.to_excel(writer, sheet_name=key)
             except PermissionError:
                 raise PermissionError("The file 'agents.xlsx' needs to be closed before running this function.")
 
@@ -1011,6 +1010,10 @@ class Agents:
     def _round_to_nth_digit(vals: list, n: int = 2, method: str = 'round') -> list:
         """ Rounds to the nth digit. Differentiates between values greater and smaller one.
         Based on smallest value in list."""
+
+        # Change to float as np.round does not work with int
+        if isinstance(vals, pd.Series):
+            vals = vals.astype(float)
 
         # Find smallest value if it exists
         try:

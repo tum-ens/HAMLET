@@ -149,13 +149,14 @@ class Lem(Markets):
                 # End: Add actions
 
                 # Add to timetable of opening
-                tt_opening = tt_opening.append(tt_frequency, ignore_index=True)
+                tt_opening = pd.concat([tt_opening, tt_frequency], ignore_index=True)
+
 
                 # Add time until the next frequency time step
                 time_frequency += pd.Timedelta(timing['frequency'], unit='seconds')
 
             # Append to main timetable
-            timetable = timetable.append(tt_opening, ignore_index=True)
+            timetable = pd.concat([timetable, tt_opening], ignore_index=True)
 
             # Add time until the next opening of market
             time_opening += pd.Timedelta(timing['opening'], unit='seconds')
