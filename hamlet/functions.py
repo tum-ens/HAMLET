@@ -5,6 +5,7 @@ import json
 import pandas as pd
 import polars as pl
 from ruamel.yaml import YAML
+from typing import Callable
 
 # Contains all functions that are shared among the classes and used universally
 
@@ -65,7 +66,8 @@ def copy_folder(src: str, dst: str, only_files: bool = False, delete: bool = Tru
         time.sleep(0.01)
 
 
-def load_file(path: str, index: int = 0, df: str = 'pandas') -> object:
+def load_file(path: str, index: int = 0, df: str = 'pandas', parse_dates: bool | list | None = None,
+              method: str = 'lazy') -> object:
     file_type = path.rsplit('.', 1)[-1]
     if file_type == 'yaml' or file_type == 'yml':
         with open(path) as file:
@@ -75,9 +77,12 @@ def load_file(path: str, index: int = 0, df: str = 'pandas') -> object:
             file = json.load(file)
     elif file_type == 'csv':
         if df == 'pandas':
-            file = pd.read_csv(path, index_col=index)
+            file = pd.read_csv(path, index_col=index, parse_dates=parse_dates)
         elif df == 'polars':
-            file = pl.read_csv(path)
+            if method == 'lazy':
+                file = pl.scan_csv(path, try_parse_dates=parse_dates)
+            elif method == 'eager':
+                file = pl.read_csv(path, try_parse_dates=parse_dates)
         else:
             raise ValueError(f'Dataframe type "{df}" not supported')
     elif file_type == 'xlsx':
@@ -91,7 +96,12 @@ def load_file(path: str, index: int = 0, df: str = 'pandas') -> object:
         if df == 'pandas':
             file = pd.read_feather(path)
         elif df == 'polars':
-            file = pl.read_ipc(path)
+            if method == 'lazy':
+                file = pl.scan_ipc(path)
+            elif method == 'eager':
+                # Workaround for polars bug
+                with pl.StringCache():
+                    file = pl.read_ipc(path, memory_map=False)
         else:
             raise ValueError(f'Dataframe type "{df}" not supported')
     else:
@@ -101,6 +111,7 @@ def load_file(path: str, index: int = 0, df: str = 'pandas') -> object:
 
 
 def save_file(path: str, data, index: bool = True, df: str = 'pandas') -> None:
+
     file_type = path.rsplit('.', 1)[-1]
 
     if file_type == 'yaml' or file_type == 'yml':
@@ -131,3 +142,60 @@ def save_file(path: str, data, index: bool = True, df: str = 'pandas') -> None:
             data.write_ipc(path, compression='lz4')
     else:
         raise ValueError(f'File type "{file_type}" not supported')
+
+
+def loop_folder(src: str, struct: dict, folder: str, func: Callable, **kwargs) -> dict:
+    """Loads the agent data from all the scenario files and saves them in the same structure"""
+
+    # Create an empty dictionary to store the data
+    data = {}
+
+    # Load the data from the scenario files
+    for name, key in struct.items():
+
+        # Add the agent data to the data structure
+        data[name] = func(path=os.path.join(src, key, folder), **kwargs)
+
+    return data
+
+
+def add_nested_data(path: str, df: str = 'pandas', parse_dates: bool | list | None = None, method: str = 'lazy') \
+        -> dict:
+    """loops through the path and adds the agent files to the data structure
+
+    Args:
+        path: path to the agents' folder
+        df: dataframe type
+        parse_dates: list of columns to parse as dates
+        method: method to load the data (polars only)
+
+    Returns:
+        None
+
+    """
+    # Create an empty dictionary to store the files
+    data = {}
+
+    # Loop through each item in the specified path
+    for item in os.listdir(path):
+        # Get the full path of the current item
+        item_path = os.path.join(path, item)
+
+        # If the current item is a file
+        if os.path.isfile(item_path):
+            # Extract the file name without the extension
+            file_name = os.path.splitext(item)[0]
+
+            # Load the file using the given function and add it to the dictionary
+            # Note: dataframes are loaded as polars and lazily to save memory
+            data[file_name] = load_file(item_path, df=df, method=method, parse_dates=parse_dates)
+
+        # If the current item is a directory
+        elif os.path.isdir(item_path):
+            # Use the directory name as the key for a new nested dictionary
+            folder_name = item
+
+            # Recursively call the function to add files and folders to the nested dictionary
+            data[folder_name] = add_nested_data(item_path)
+
+    return data

@@ -25,7 +25,7 @@ from hamlet.creator.grids.grids import Grids
 # 3. Create the locality/region for each market -> either based on config or directly from files
 
 
-class Scenario:
+class Creator:
     """Class to create a scenario from the config files
 
     """

@@ -1,7 +1,7 @@
-__author__ = "TUM-Doepfert"
+__author__ = "MarkusDoepfert"
 __credits__ = ""
 __license__ = ""
-__maintainer__ = "TUM-Doepfert"
+__maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 import os
@@ -11,13 +11,23 @@ import pandas as pd
 from ruamel.yaml import YAML
 from pprint import pprint
 import json
-from .. import functions as f
+import polars as pl
+from hamlet import functions as f
+from numba import njit, jit
+import pandapower as pp
+from typing import Callable
+from hamlet.executor.agents.agents import Agents
+from hamlet.executor.markets.markets import Markets
+from hamlet.executor.grids.grids import Grids
+pl.StringCache()
 
-# TODO: Consideration for the development of the executor
-# Use Callables to create a sequence for all agents in executor: https://realpython.com/python-ellipsis/?__s=dwe8kijzzlj1n7oskl9x
-# Possible packages for multiprocessing: multiprocessing, joblib
-# Decrease file size wherever possible (e.g. use numpy arrays instead of pandas dataframes, define data types, shorten file lengths, etc.)
-# Load all files into the RAM and not read/save as in lemlab to increase performance
+# TODO: Considerations
+# - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator and should be continued for consistency
+# - Possible packages for multiprocessing: multiprocessing, joblib, threading (can actually be useful when using not just pure python)
+# - Decrease file size wherever possible (define data types, shorten file lengths, etc.) -> this needs to occur in the scenario creation
+# - Load all files into the RAM and not read/save as in lemlab to increase performance
+# - Use polars instead of pandas to increase performance --> finding: polars is faster as long as lazy evaluation is used. Otherwise pandas 2.0 can keep up well (depending on use case)
+# - Always check if numba can help improve performance
 
 
 class Executor:
@@ -26,7 +36,8 @@ class Executor:
 
         # Paths
         self.name = name if name else os.path.basename(path_scenario)  # Name of the scenario
-        self.path_scenario = path_scenario  # Path to the scenario folder
+        self.path_scenario = os.path.abspath(path_scenario)  # Path to the scenario folder
+        self.root_scenario = os.path.dirname(self.path_scenario)  # Path to the root folder of the scenario
         self.path_results = None  # Path to the results folder
 
         # Scenario general information and configuration
@@ -39,8 +50,14 @@ class Executor:
         # Scenario type (sim or in the future also rts)
         self.type = None
 
-        # Scenario structure (load from general.json 'structure')
-        self.structure = None
+        # Scenario structure
+        self.structure = {}
+
+        # Agents data (contains all information of each agent in a structured dict)
+        self.agents = {}
+
+        # Grids data (contains all grids)
+        self.grids = {}
 
         # Database connections (currently contains 'admin' and 'user')
         self.db_connections = {}
@@ -59,40 +76,116 @@ class Executor:
 
         self.__prepare_scenario()
 
-        self.__create_db_connection()
+        # TODO: Put back in:
 
-        self.__setup_markets()
-
+        # self.__setup_db_connection()
+        #
+        # self.__setup_markets()
+        #
         self.__setup_grids()
 
         self.__setup_agents()
 
+    def compare_pandas_polars(self, engine: str, runs: int = 100000) -> float:
+        # TODO: To be removed. This is just for testing purposes
+
+        # POLARS
+
+        # create a Polars DataFrame from the pandas DataFrame
+        df = self.timetable
+        print(df.estimated_size()/1e6)
+
+        df_p = df.to_pandas()
+        print(df_p.info())
+
+        start = time.time()
+
+        if engine == 'polars':
+
+            # group by the 'timestamp' column and get the unique keys
+            for _ in range(runs):
+                pltt = df.groupby('timestamp')
+
+            for row in pltt:
+                # with pl.Config() as cfg:
+                #     cfg.set_tbl_cols(30)
+                print(row)
+                break
+
+        elif engine == 'pandas':
+
+            # PANDAS
+
+            for _ in range(runs):
+                pdtt = df_p.groupby('timestamp')
+
+            for row in pdtt:
+                print(row[1].head(10).to_string())
+                break
+
+        return time.time() - start
+
     def execute(self):
         """Executes the scenario"""
 
-        # TODO: Iterate over timetable and execute tasks
-        # From here on there would be a for-loop iterating over the timetable
+        # TODO: There is one more loop to do. For now it just goes over the timetable but we actually defined the
+        #  timestep size in the config file. This either needs to be taken out or also be considered in the loop
 
-        self.__execute_agents()
+        # TODO: set up the parallelization here
 
-        self.__execute_markets()
+        # Loop through the timetable and execute the tasks for each market for each timestamp
+        # Iterate over timetable by timestamp
+        for timestamp in self.timetable.partition_by('timestamp'):
+            # Iterate over timestamp by region
+            for region in timestamp.partition_by('region'):
+                # Iterate over region by market
+                for market in region.partition_by('market'):
+                    # Iterate over market by name:
+                    for name in market.partition_by('name'):
 
-        self.__execute_grids()
+                        # Execute the agents for this market
+                        self.__execute_agents(tasklist=name)
+
+                        # Execute the market
+                        self.__execute_markets(tasklist=name)
+
+            # Calculate the grids for the current timestamp (calculated together as they are connected)
+            self.__execute_grids()
+
+    def __execute_agents(self, tasklist: pl.DataFrame):
+        """Executes all general tasks for all agents
+
+        TODO: Think about how to make this step parallel (maybe even pass the agents to the agents class and from there
+              start the parallelization)
+        """
+
+        # TODO: Get the data of the agents that are part of the tasklist
+        data = self.agents
+
+        # Pass info to agents class and execute its tasks
+        Agents(data, tasklist).execute()
+
+    def __execute_markets(self, tasklist: pl.DataFrame):
+
+        # Pass info to markets class and execute its tasks
+        Markets(tasklist).execute()
+
+    def __execute_grids(self, tasklist: pl.DataFrame):
+
+        # Pass info to grids class and execute its tasks
+        Grids(tasklist).execute()
 
     def pause(self):
         """Pauses the simulation"""
-
         raise NotImplementedError("Pause functionality not implemented yet")
 
     def resume(self):
         """Resumes the simulation"""
-
         raise NotImplementedError("Resume functionality not implemented yet")
 
     def save_results(self):
         """Saves the (current) results of the simulation"""
-
-        pass
+        ...
 
     def stop(self):
         """Cleans up the scenario after execution"""
@@ -109,14 +202,18 @@ class Executor:
         self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'config_general.yaml'))
 
         # Load timetable
-        self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'))
+        self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),
+                                     df='polars', method='eager')
+
+        # Load scenario structure
+        self.structure = self.general['structure']
 
         # Copy the scenario folder to the results folder
         # Note: For the execution the files in the results folder are used and not the ones in the scenario folder
         self.path_results = os.path.join(self.config['simulation']['paths']['results'], self.name)
-        f.copy_folder(self.path_scenario, self.path_results)
+        # TODO: Put back in: f.copy_folder(self.path_scenario, self.path_results)
 
-    def __create_db_connection(self):
+    def __setup_db_connection(self):
         """Creates a database connector object"""
 
         # Setup database connections
@@ -135,7 +232,7 @@ class Executor:
         # Select the database connection
         db = self.db_connections['admin']
 
-        # TODO: Discuss if separate registries or everything handed in bulk
+        # TODO: Discuss if separate registries or everything handed over in bulk
 
         # Register markets in database
         db.register_markets()  # TODO: @Jiahe: Implement this function
@@ -144,127 +241,29 @@ class Executor:
         db.register_retailers()  # TODO: @Jiahe: Implement this function
 
     def __setup_grids(self):
-        """Sets up the grids
+        """Sets up the grids, i.e. loads the grid data from the general scenario folder"""
 
-        Note: For now this should not need to do anything but is kept for consistency"""
-        pass
+        # Load all combined grid files
+        # Note: Currently this is only one file as only electricity is available. In the future this will be more and
+        # required the function that was commented out
+        self.grids['electricity'] = pp.from_json(os.path.join(self.path_scenario, 'general', 'grid.json'))
+        # self.grids = self.__add_nested_data(path=os.path.join(self.path_scenario, 'general', 'grids'))
 
     def __setup_agents(self):
         """Sets up the agents"""
 
         # Select the database connection
-        db = self.db_connections['user']
+        # db = self.db_connections['user'] # TODO: Put back in once function is implemented
 
         # TODO: Discuss if separate registries or everything handed in bulk
 
-        # Register agents in database (this means registering the user and the meters)
-        db.register_agents()  # TODO: @Jiahe: Implement this function
-
         # TODO: See which other files need to be created
+        # Load all agent files by looping through the scenario files
+        self.agents = f.loop_folder(src=self.root_scenario, struct=self.structure, folder='agents',
+                                    func=f.add_nested_data, df='polars', method='lazy', parse_dates=[0])
 
-    def __execute_agents(self):
-        pass
-
-    def __execute_markets(self):
-        pass
-
-    def __execute_grids(self):
-        pass
+        # Register agents in database (this means registering the user and the meters)
+        # db.register_agents(self.agents)  # TODO: @Jiahe: Implement this function
 
     def __close_db_connection(self):
-        pass
-
-    @staticmethod
-    def __create_folder(path: str, delete: bool = True) -> None:
-        """Creates a folder at the given path
-
-        Args:
-            path: path to the folder
-            delete: if True, the folder will be deleted if it already exists
-
-        Returns:
-            None
-        """
-
-        # Create main folder if does not exist
-        if not os.path.exists(path):
-            os.makedirs(path)
-        else:
-            if delete:
-                shutil.rmtree(path)
-                os.makedirs(path)
-        time.sleep(0.01)
-
-    @staticmethod
-    def __copy_folder(src: str, dst: str, only_files: bool = False, delete: bool = True) -> None:
-        """Copies a folder to another location
-
-        Args:
-            src: path to the copy
-            dst: path to the folder
-            delete: if True, the folder will be deleted if it already exists
-
-        Returns:
-            None
-        """
-
-        # Check if only files should be copied
-        if only_files:
-            # Create the destination folder if it does not exist
-            os.makedirs(dst, exist_ok=True)
-            # Get a list of all files in the source folder
-            files = [f for f in os.listdir(src) if os.path.isfile(os.path.join(src, f))]
-            # Iterate through the list of files and copy them to the destination folder
-            for file in files:
-                src_file = os.path.join(src, file)
-                dst_file = os.path.join(dst, file)
-                shutil.copy(src_file, dst_file)
-        else:
-            # Check if the folder exists
-            if not os.path.exists(dst):
-                shutil.copytree(src, dst)
-            else:
-                if delete:
-                    shutil.rmtree(dst)
-                    shutil.copytree(src, dst)
-            time.sleep(0.01)
-
-    @staticmethod
-    def _load_file(path: str, index: int = 0):
-        file_type = path.rsplit('.', 1)[-1]
-        if file_type == 'yaml' or file_type == 'yml':
-            with open(path) as file:
-                file = YAML().load(file)
-        elif file_type == 'json':
-            with open(path) as file:
-                file = json.load(file)
-        elif file_type == 'csv':
-            file = pd.read_csv(path, index_col=index)
-        elif file_type == 'xlsx':
-            file = pd.ExcelFile(path)
-        elif file_type == 'ft':
-            file = pd.read_feather(path)
-        else:
-            raise ValueError(f'File type "{file_type}" not supported')
-
-        return file
-
-    @staticmethod
-    def _save_file(path: str, data, index: bool = True) -> None:
-        file_type = path.rsplit('.', 1)[-1]
-
-        if file_type == 'yaml' or file_type == 'yml':
-            with open(path, 'w') as file:
-                YAML().dump(data, file)
-        elif file_type == 'json':
-            with open(path, 'w') as file:
-                json.dump(data, file, indent=4)
-        elif file_type == 'csv':
-            data.to_csv(path, index=index)
-        elif file_type == 'xlsx':
-            data.to_excel(path, index=index)
-        elif file_type == 'ft':
-            data.reset_index(inplace=True)
-            data.to_feather(path)
-        else:
-            raise ValueError(f'File type "{file_type}" not supported')
+        ...

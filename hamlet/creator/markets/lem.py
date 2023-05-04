@@ -176,8 +176,21 @@ class Lem(Markets):
         timetable.sort_values(by=['timestamp', 'timestep'], inplace=True)
 
         # Change timestamps and timesteps to seconds
-        timetable['timestamp'] = timetable['timestamp'].apply(lambda x: int(x.timestamp()))
-        timetable['timestep'] = timetable['timestep'].apply(lambda x: int(x.timestamp()))
+        # timetable['timestamp'] = timetable['timestamp'].apply(lambda x: int(x.timestamp()))
+        # timetable['timestep'] = timetable['timestep'].apply(lambda x: int(x.timestamp()))
+        # Note: This was deprecated as working with datetime64[ns] is more convenient in both pandas and polars
+
+        # Change dtypes for all columns
+        timetable = timetable.astype({
+            'region': 'category',
+            'market': 'category',
+            'name': 'category',
+            'action': 'category',
+            'type': 'category',
+            'method': 'category',
+            'pricing': 'category',
+            'coupling': 'category',
+        })
 
         return timetable
 
