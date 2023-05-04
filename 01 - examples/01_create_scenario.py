@@ -1,11 +1,8 @@
-from hamlet import Scenario
-from time import time
+from hamlet import Creator
 
-start = time()
 path = "../02 - config/example_small"     # relative or absolute path to the config folder
 
-scenario = Scenario(path=path)
-scenario.new_scenario_from_configs()
-# scenario.new_scenario_from_grids()
-# scenario.new_scenario_from_files()
-print(f'Elapsed time: {time() - start:.2f} seconds')
+simulation = Creator(path=path)
+# simulation.new_scenario_from_configs()
+# simulation.new_scenario_from_grids()
+simulation.new_scenario_from_files()
