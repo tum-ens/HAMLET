@@ -48,14 +48,14 @@ class Scenario:
 
         # Load the config and set paths
         self.path_config = os.path.abspath(path)
-        self.root_config = self.path_config.rsplit('\\', 1)[0]
+        self.root_config = self.path_config.rsplit(os.sep, 1)[0]
         self.config = self.load_config(path=os.path.join(self.path_config, 'config_general.yaml'))
         self.path_input = os.path.abspath(self.config['simulation']['paths']['input'])
         self.path_scenarios = os.path.abspath(self.config['simulation']['paths']['scenarios'])
         self.path_results = os.path.abspath(self.config['simulation']['paths']['results'])
 
         # Set the name of the scenario and create the scenario and folder structure
-        self.name = name if name is not None else self.path_config.split('\\')[-1]
+        self.name = name if name is not None else self.path_config.split(os.sep)[-1]
         self.scenario_structure = self.__get_structure(name=self.name, path=self.path_config)
         self.subfolders = self.__add_subfolders_to_dict(dict=dict(), path=self.path_input, max_level=1)
 
@@ -108,12 +108,12 @@ class Scenario:
 
         # Create the missing agent files
         self.progress_bar.set_description_str(self.progress_bar_description[self.__create_agent_files.__name__])
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__create_agent_files, update_pbar=True, method='config')
 
         # TODO: Create the missing grid files
         self.progress_bar.set_description_str(self.progress_bar_description[self.__create_grid_files.__name__])
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__create_grid_files, update_pbar=True)
 
         self.new_scenario_from_files(delete=delete)
@@ -133,7 +133,7 @@ class Scenario:
 
         # Create the missing agent files
         self.progress_bar.set_description_str(self.progress_bar_description[self.__create_agent_files.__name__])
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__create_agent_files, update_pbar=True, method='grid')
 
         # Create the scenario from the generated files
@@ -157,22 +157,22 @@ class Scenario:
 
         # Create the markets for each region by looping through the structure
         self.progress_bar.set_description_str(self.progress_bar_description[self.__create_markets.__name__])
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__create_markets, update_pbar=True)
 
         # Create the agents for each region by looping through the structure
         self.progress_bar.set_description_str(self.progress_bar_description[self.__create_agents.__name__])
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__create_agents, update_pbar=True)
 
         # Copy the grid files from the input folder to the scenario folder
         self.progress_bar.set_description_str(self.progress_bar_description[self.__copy_grids.__name__])
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__copy_grids, update_pbar=True)
 
         # Copy the files from the config folder to the scenario folder
         self.progress_bar.set_description_str(self.progress_bar_description[self.__copy_config_to_scenarios.__name__])
-        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit('\\', 1)[0],
+        self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__copy_config_to_scenarios, update_pbar=True)
 
         # Copy the files from the general config file to the scenario folder
@@ -230,9 +230,9 @@ class Scenario:
         # Create instance of Agents class
         subpath = path_config.replace(self.root_config, '')  # get the subpath of the config file to the root
         agents = Agents(config_path=path_config,
-                        config_root=os.path.join(self.root_config, subpath.split('\\', 2)[1]),
+                        config_root=os.path.join(self.root_config, subpath.split(os.sep, 2)[1]),
                         input_path=self.path_input,
-                        scenario_path=os.path.join(self.path_scenarios, subpath.split('\\', 1)[-1]))
+                        scenario_path=os.path.join(self.path_scenarios, subpath.split(os.sep, 1)[-1]))
 
         # Create the agent files from the config file
         if method == 'config':
@@ -258,9 +258,9 @@ class Scenario:
         # Create instance of Grids class
         subpath = path_config.replace(self.root_config, '')  # get the subpath of the config file to the root
         grids = Grids(config_path=path_config,
-                      config_root=os.path.join(self.root_config, subpath.split('\\', 2)[1]),
+                      config_root=os.path.join(self.root_config, subpath.split(os.sep, 2)[1]),
                       input_path=self.path_input,
-                      scenario_path=os.path.join(self.path_scenarios, subpath.split('\\', 1)[-1]))
+                      scenario_path=os.path.join(self.path_scenarios, subpath.split(os.sep, 1)[-1]))
 
         # Create the agent files from the config file
         # Note: This will only create the grid files that are not specified as file in the config file
@@ -276,7 +276,7 @@ class Scenario:
         # Create instance of Agents class
         subpath = path_config.replace(self.root_config, '')     # get the subpath of the config file
         agents = Agents(config_path=path_config,
-                        config_root=os.path.join(self.root_config, subpath.split('\\', 2)[1]),
+                        config_root=os.path.join(self.root_config, subpath.split(os.sep, 2)[1]),
                         input_path=self.path_input,
                         scenario_path=self.path_scenarios + subpath)
 
@@ -293,9 +293,9 @@ class Scenario:
         # Create instance of Grids class
         subpath = path_config.replace(self.root_config, '')  # get the subpath of the config file to the root
         grids = Grids(config_path=path_config,
-                      config_root=os.path.join(self.root_config, subpath.split('\\', 2)[1]),
+                      config_root=os.path.join(self.root_config, subpath.split(os.sep, 2)[1]),
                       input_path=self.path_input,
-                      scenario_path=os.path.join(self.path_scenarios, subpath.split('\\', 1)[-1]))
+                      scenario_path=os.path.join(self.path_scenarios, subpath.split(os.sep, 1)[-1]))
 
         # Copy the grid files from the input folder to the scenario folder
         grids.copy_grid_files()
@@ -310,7 +310,7 @@ class Scenario:
         # Create instance of Markets class
         subpath = path_config.replace(self.root_config, '')     # get the subpath of the config file
         markets = Markets(config_path=path_config,
-                          config_root=os.path.join(self.root_config, subpath.split('\\', 2)[1]),
+                          config_root=os.path.join(self.root_config, subpath.split(os.sep, 2)[1]),
                           input_path=self.path_input,
                           scenario_path=self.path_scenarios + subpath)
 
@@ -342,8 +342,8 @@ class Scenario:
         path_retailers = os.path.join(path, 'retailers')
 
         # Get the region's name
-        region = difflib.ndiff(self.path_scenarios.split('\\'), path.split('\\'))
-        region = '\\'.join(x.split()[-1] for x in region if x.startswith('+ '))
+        region = difflib.ndiff(self.path_scenarios.split(os.sep), path.split(os.sep))
+        region = os.sep.join(x.split()[-1] for x in region if x.startswith('+ '))
 
         # Loop through the markets and retailers and find the files to add to self.markets and self.retailers
         for root, dirs, files in os.walk(path_markets):
@@ -398,8 +398,8 @@ class Scenario:
         path_grids = os.path.join(path, 'grids')
 
         # Get the region's name
-        region = difflib.ndiff(self.path_scenarios.split('\\'), path.split('\\'))
-        region = '\\'.join(x.split()[-1] for x in region if x.startswith('+ '))
+        region = difflib.ndiff(self.path_scenarios.split(os.sep), path.split(os.sep))
+        region = os.sep.join(x.split()[-1] for x in region if x.startswith('+ '))
 
         # Loop through the grids and find the files to add to self.grids
         for root, dirs, files in os.walk(path_grids):
@@ -462,7 +462,7 @@ class Scenario:
 
         # Get the path of the scenario folder to which it needs to be copied
         path_scenario = path_config.replace(self.root_config, '')  # get the subpath of the config file to the root
-        path_scenario = os.path.join(self.path_scenarios, path_scenario.split('\\', 1)[-1], 'config')
+        path_scenario = os.path.join(self.path_scenarios, path_scenario.split(os.sep, 1)[-1], 'config')
 
         # Copy (only) files from config to scenario folder
         self.__copy_folder(src=path_config, dst=path_scenario, only_files=True, delete=delete)
@@ -644,7 +644,7 @@ class Scenario:
         else:
             raise ValueError(f'File type "{file_type}" not supported')
 
-    def flatten_dict(self, nested_dict, parent_key='', sep='\\'):
+    def flatten_dict(self, nested_dict, parent_key='', sep=os.sep):
         """
         Recursively flatten a nested dictionary and return a new dictionary
         with the keys as strings indicating their full position in the original
@@ -654,11 +654,11 @@ class Scenario:
         for k, v in nested_dict.items():
             new_key = parent_key + sep + k if parent_key else k
             if isinstance(v, dict):
-                name = new_key.rsplit('\\', 1)[-1]
+                name = new_key.rsplit(os.sep, 1)[-1]
                 items.append((name, new_key))
                 items.extend(self.flatten_dict(v, new_key, sep=sep).items())
             else:
-                name = new_key.rsplit('\\', 1)[-1]
+                name = new_key.rsplit(os.sep, 1)[-1]
                 items.append((name, new_key))
         return dict(items)
 
