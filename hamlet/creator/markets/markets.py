@@ -33,6 +33,9 @@ class Markets:
 
         # Available types of markets
         from hamlet.creator.markets.lem import Lem
+        # from hamlet.creator.markets.lfm import Lfm  # currently not implemented
+        # from hamlet.creator.markets.lhm import Lhm  # currently not implemented
+        # from hamlet.creator.markets.lh2m import Lh2m  # currently not implemented
         self.types = {
             'lem': Lem,
             # 'lfm': Lfm,
