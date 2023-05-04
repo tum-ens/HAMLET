@@ -25,7 +25,7 @@ class Markets:
         self.config_root = config_root if config_root is not None else config_path
         self.input_path = input_path
         self.scenario_path = scenario_path
-        self.region = self.config_path.rsplit('\\', 1)[1]
+        self.region = self.config_path.rsplit(os.sep, 1)[1]
 
         # Load setup plus configuration and/or agent file
         self.setup = self._load_file(path=os.path.join(self.config_root, 'config_general.yaml'))
