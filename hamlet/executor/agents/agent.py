@@ -16,19 +16,28 @@ import logging
 import traceback
 from datetime import datetime
 
-
-# TODO: Considerations
-# - Use polars instead of pandas to increase performance
-# - Use linopy instead of pyomo
-
 # Plan
 # - Create a class for each agent type
 # - Focus on non-mfh at first
 
 
-class Agents:
+class Agent:
+    """Class for handling the agents in the execution of the scenario
 
-    def __init__(self, data: dict, timetable: pl.DataFrame):
+    Attributes
+    ----------
+    types : dict
+    Types of agents
+    agent : pl.DataFrame
+    Instance of the agent class
+
+    Methods
+    -------
+    execute()
+    Executes the agent
+    """
+
+    def __init__(self, data: dict, timetable: pl.DataFrame, agent_type: str):
 
         # Types of agents (add your own if others are created here)
         from hamlet.executor.agents.sfh import Sfh
@@ -47,10 +56,10 @@ class Agents:
         }
 
         # Instance of the agent class
-        self.agent = self.types['type'](data, timetable)
+        self.agent = self.types[agent_type](data, timetable)
 
     def execute(self):
         """Executes the agent"""
 
         # Execute the agent's tasks
-        self.agent.execute()
+        results = self.agent.execute()

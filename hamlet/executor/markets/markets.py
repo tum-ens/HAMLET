@@ -41,6 +41,9 @@ class Markets:
         market_type = timetable[0, 'market']  # extract market type by selecting the first row's market value
         self.market = self.types[market_type](timetable)
 
+        instance = Lem(name='example').f
+        instance2 = Lem(name='example2')
+
     def execute(self):
         """Executes the market"""
 

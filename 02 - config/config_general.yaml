@@ -22,14 +22,14 @@ simulation:
                                             #   accelerated rate, before the rts commences, to ensure a smooth start-up
 
   location:                               # location of the simulation
+    name: Munich                          # name of the location
+                                          # note: used for naming the results
+
     latitude: 48.137154                   # latitude
                                           # unit: degrees
 
     longitude: 11.576124                  # longitude
                                           # unit: degrees
-
-    name: Munich                          # name of the location
-                                          # note: used for naming the results
 
     altitude: 520                         # altitude
                                           # unit: meters
@@ -47,28 +47,16 @@ simulation:
     results: ../05 - results                     # path that contains the scenario results
                                             # note: relative to the lemlab repository
 
-  solver: gurobi                            # solver for the simulation
+  modeling:                                 # modeling settings
+    language: pyomo                         # modeling language to be used
+                                            # options:
+                                            #   - jump: recommended
+                                            #   - pyomo
+                                            #   - linopy
+
+    solver: gurobi                          # solver for the simulation
                                             # options (preferably MIQP capable):
                                             #   - gurobi: recommended
                                             #   - cplex
                                             #   - glpk: possible with limitations; see documentation for more info
-                                            # note: needs to be pyomo compatible
 
-########################################################################################################################
-############################################### database configuration #################################################
-########################################################################################################################
-
-database:                                   # database connection information
-  admin: {user: admin_lem,
-          pw: admin,
-          host: 127.0.0.1,
-          port: '5432',
-          db: postgres,
-         }
-
-  user: {user: market_participant,
-         pw: user,
-         host: 127.0.0.1,
-         port: '5432',
-         db: postgres,
-        }
