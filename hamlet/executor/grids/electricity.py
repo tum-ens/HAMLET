@@ -23,24 +23,42 @@ import pandapower as pp
 
 class Electricity:
 
-    def __init__(self, grid: pp.pandapowerNet):
+    def __init__(self, grid: pp.pandapowerNet, trades: pl.DataFrame = None, method: str = 'dc'):
+
+        # Grid (topology)
         self.grid = grid
+
+        # Calculation method
+        self.method = method
+
+        # Trades
+        self.trades = trades
 
     def execute(self):
         """Executes the grid"""
 
-        # Obtain the energy trades
-        trades = self.get_trades()
+        # Obtain the energy trades if they were not provided
+        if self.trades is None:
+            self.trades = self.get_trades()
 
         # Calculate the power flows
-        powerflow = self.calculate_powerflow(trades)
+        powerflow = self.calculate_powerflow()
 
         return powerflow
 
     def get_trades(self):
-        """Obtains the energy trades"""
+        """Obtains the energy trades (converts them from the original shape to suit the necessary format)"""
         ...
 
-    def calculate_powerflow(self, trades):
+    def calculate_powerflow(self):
         """Calculates the power flows"""
-        ...
+
+        match self.method:
+            case 'ac':
+                return self.grid.runpp()
+            case 'dc':
+                return self.grid.rundc()
+            case 'acopf':
+                return self.grid.runopp()
+            case 'dcopf':
+                return self.grid.rundcopf()

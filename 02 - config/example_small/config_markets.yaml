@@ -167,7 +167,7 @@ lem_continuous:                       # type and name of the market "type_name" 
           file: balancing_1.csv       # file containing the balancing energy prices for each time step
                                       # note: columns need to match the names of the parameters in the 'fixed' section
 
-  types:
+  types:                              # TODO: Probably can be taken out as defined in the market and agent config
     qualities: {0: na,
                 1: local,
                 2: green_local
@@ -182,7 +182,7 @@ lem_continuous:                       # type and name of the market "type_name" 
                    2: levy,
                   }
 
-    meter: {0: plant submeter,
+    meter: {0: plant submeter,         # TODO: Ponder how to handle meter types (how about just assigning them by name, i.e. pv, dhw, etc.?)
             1: virtual plant submeter,
             2: dividing meter,
             3: virtual dividing meter,

@@ -23,7 +23,7 @@ import pandapower as pp
 
 class Grids:
 
-    def __init__(self):
+    def __init__(self, grid: pp.pandapowerNet, grid_type: str):
 
         # Types of grids (add your own if others are created here)
         from hamlet.creator.grids.electricity import Electricity
@@ -36,7 +36,7 @@ class Grids:
         }
 
         # Instance of the grid class
-        self.grid = None
+        self.grid = self.types[grid_type](grid)
 
     def execute(self, data: dict, timetable: pl.DataFrame):
         """Executes the grid"""

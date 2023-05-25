@@ -7,6 +7,8 @@ __email__ = "markus.doepfert@tum.de"
 import os
 import shutil
 import time
+import warnings
+import multiprocessing as mp
 import pandas as pd
 from ruamel.yaml import YAML
 from pprint import pprint
@@ -15,8 +17,10 @@ import polars as pl
 from hamlet import functions as f
 from numba import njit, jit
 import pandapower as pp
+import concurrent.futures
 from typing import Callable
-from hamlet.executor.agents.agents import Agents
+from datetime import datetime
+from hamlet.executor.agents.agent import Agent
 from hamlet.executor.markets.markets import Markets
 from hamlet.executor.grids.grids import Grids
 pl.StringCache()
@@ -32,7 +36,7 @@ pl.StringCache()
 
 class Executor:
 
-    def __init__(self, path_scenario, name: str = None, delete_results: bool = True):
+    def __init__(self, path_scenario, name: str = None, num_workers: int = None, overwrite_sim: bool = True):
 
         # Paths
         self.name = name if name else os.path.basename(path_scenario)  # Name of the scenario
@@ -48,19 +52,28 @@ class Executor:
         self.timetable = None
 
         # Scenario type (sim or in the future also rts)
-        self.type = None
+        self.type = None  # set in self.__prepare_scenario()
+
+        # Database containing all information
+        self.data = {}  # TODO: Will be structured according to structure and contain agent, market and grid tables and data
 
         # Scenario structure
-        self.structure = {}
+        self.structure = {}  # TODO: this will need to contain more information than just the path. Also: above and below markets to know where to look for the data
 
         # Agents data (contains all information of each agent in a structured dict)
-        self.agents = {}
+        self.agents = {}  # TODO: To be deleted once self.data is set up
 
         # Grids data (contains all grids)
-        self.grids = {}
+        self.grids = {}  # TODO: To be deleted once self.data is set up
 
-        # Database connections (currently contains 'admin' and 'user')
-        self.db_connections = {}
+        # Number of workers for parallelization
+        self.num_workers = num_workers
+
+        # Thread pool for parallelization
+        self.pool = None
+
+        # Overwrites the results folder if it already exists
+        self.overwrite = overwrite_sim
 
     def run(self):
         """Runs the simulation"""
@@ -78,13 +91,13 @@ class Executor:
 
         # TODO: Put back in:
 
-        # self.__setup_db_connection()
+        # self.__setup_database()
         #
         # self.__setup_markets()
         #
-        self.__setup_grids()
-
-        self.__setup_agents()
+        # self.__setup_grids()
+        #
+        # self.__setup_agents()
 
     def compare_pandas_polars(self, engine: str, runs: int = 100000) -> float:
         # TODO: To be removed. This is just for testing purposes
@@ -126,54 +139,138 @@ class Executor:
         return time.time() - start
 
     def execute(self):
-        """Executes the scenario"""
+        """Executes the scenario
 
-        # TODO: There is one more loop to do. For now it just goes over the timetable but we actually defined the
-        #  timestep size in the config file. This either needs to be taken out or also be considered in the loop
+        # TODO: Add progress bar @Jiahe
+        """
 
-        # TODO: set up the parallelization here
+        # Get number of logical processors (for parallelization)
+        if not self.num_workers:
+            self.num_workers = os.cpu_count() - 1  # logical processors (threads) - 1
+        # num_workers = mp.cpu_count() - 1  # physical processors - 1
+        # Apparently this calculates the number of usable CPUs: len(os.sched_getaffinity(0)) (see os manual)
+
+        # Setup up the thread pool for parallelization
+        if self.num_workers > 1:
+            self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=self.num_workers)  # TODO: Benchmark with ProcessPoolExecutor
 
         # Loop through the timetable and execute the tasks for each market for each timestamp
+        # Note: The design assumes that there is nothing to be gained for the simulation to run in between market
+        #   timestamps. Therefore, the simulation is only executed for the market timestamps
         # Iterate over timetable by timestamp
         for timestamp in self.timetable.partition_by('timestamp'):
+            # Wait for the timestamp to be reached if the simulation is to be carried out in real-time
+            if self.type == 'rts':
+                self.wait_for_ts(timestamp.iloc[0, 0])
             # Iterate over timestamp by region
             for region in timestamp.partition_by('region'):
                 # Iterate over region by market
                 for market in region.partition_by('market'):
                     # Iterate over market by name:
                     for name in market.partition_by('name'):
+                        if self.pool:
+                            # Execute the agents for this market
+                            self.__execute_agents_parallel(tasklist=name)
 
-                        # Execute the agents for this market
-                        self.__execute_agents(tasklist=name)
+                            # Execute the market
+                            self.__execute_market_parallel(tasklist=name)
+                        else:
+                            # Execute the agents for this market
+                            self.__execute_agents(tasklist=name)
 
-                        # Execute the market
-                        self.__execute_markets(tasklist=name)
+                            # Execute the market
+                            self.__execute_market(tasklist=name)  # tasklist needs to
 
             # Calculate the grids for the current timestamp (calculated together as they are connected)
             self.__execute_grids()
 
-    def __execute_agents(self, tasklist: pl.DataFrame):
-        """Executes all general tasks for all agents
+        # Cleanup the thread pool
+        if self.pool:
+            self.pool.shutdown()
 
-        TODO: Think about how to make this step parallel (maybe even pass the agents to the agents class and from there
-              start the parallelization)
+    def __execute_agents_parallel(self, tasklist: pl.DataFrame):
+        """Executes all agent tasks for all agents in parallel"""
+
+        # Create the database object
+        db = Database()
+
+        # Get the data of the agents that are part of the tasklist
+        agents = db.get_agent_data(region=tasklist['region'].iloc[0])
+
+        # Define the function to be executed in parallel
+        def tasks(data, timetable, agent_type):
+            # Create an instance of the Agents class and execute its tasks
+            Agent(data, timetable, agent_type).execute()
+
+        # Create a list to store the agents
+        agents_list = []
+
+        # Iterate over the tasklist and populate the agents_list
+        for agent_type, agent in agents.items():
+            for agent_id, agent_data in agent.items():
+                agents_list.append({agent_id: {'agent_type': agent_type,
+                                               'data': agent_data}})
+
+        # Submit the agents for parallel execution
+        results = [self.pool.submit(tasks, agent['data'], tasklist, agent['agent_type']) for agent in agents_list]
+
+        # Wait for all agents to complete
+        concurrent.futures.wait(results)
+
+        # Post the agent data back to the database
+        db.post_agent_data(results)
+
+    def __execute_market_parallel(self, tasklist: pl.DataFrame):
+        """Executes the market tasks in parallel"""
+
+        # Define the function to be executed in parallel
+        def tasks(market):
+            # Create an instance of the Markets class and execute its tasks
+            Markets(market).execute()
+
+        # Create a list to store the markets
+        markets_list = []
+
+        # Iterate over the tasklist and populate the markets_list
+        for market in tasklist:
+            markets_list.append(market)
+
+        # Submit the markets for parallel execution
+        futures = [self.pool.submit(tasks, market) for market in markets_list]
+
+        # Wait for all markets to complete
+        concurrent.futures.wait(futures)
+
+    def __execute_agents(self, tasklist: pl.DataFrame):
+        """Executes all agent tasks for all agents sequentially
         """
 
-        # TODO: Get the data of the agents that are part of the tasklist
-        data = self.agents
+        # Create the database object
+        db = Database()
 
-        # Pass info to agents class and execute its tasks
-        Agents(data, tasklist).execute()
+        # Get the data of the agents that are part of the tasklist
+        agents = db.get_agent_data(region=tasklist['region'].iloc[0])
 
-    def __execute_markets(self, tasklist: pl.DataFrame):
+        results = []
+
+        # Iterate over the agents and execute them sequentially
+        for agent_type, agent in agents.items():
+            for agent_id, data in agent.items():
+                # Create an instance of the Agents class and execute its tasks
+                results.append(Agent(data, tasklist, agent_type).execute())
+
+        # Post the agent data back to the database
+        db.post_agent_data(results)
+
+    def __execute_market(self, tasklist: pl.DataFrame):
 
         # Pass info to markets class and execute its tasks
         Markets(tasklist).execute()
 
-    def __execute_grids(self, tasklist: pl.DataFrame):
+    def __execute_grids(self):
 
         # Pass info to grids class and execute its tasks
-        Grids(tasklist).execute()
+        Grids().execute()
 
     def pause(self):
         """Pauses the simulation"""
@@ -192,14 +289,15 @@ class Executor:
 
         self.save_results()
 
-        self.__close_db_connection()
-
     def __prepare_scenario(self):
         """Prepares the scenario"""
 
         # Load general information and configuration
         self.general = f.load_file(os.path.join(self.path_scenario, 'general', 'general.json'))
         self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'config_general.yaml'))
+
+        # Set the simulation type
+        self.type = self.config['simulation']['type']
 
         # Load timetable
         self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),
@@ -208,13 +306,21 @@ class Executor:
         # Load scenario structure
         self.structure = self.general['structure']
 
+        # Set the results path
+        self.path_results = os.path.join(self.config['simulation']['paths']['results'], self.name)
+        # Check if the results folder exists and stop simulation if overwrite is set to False
+        if os.path.exists(self.path_results) and self.overwrite is False:
+            raise FileExistsError(f"Results folder already exists. "
+                                  f"Set overwrite to True to overwrite the results folder.")
         # Copy the scenario folder to the results folder
         # Note: For the execution the files in the results folder are used and not the ones in the scenario folder
-        self.path_results = os.path.join(self.config['simulation']['paths']['results'], self.name)
-        # TODO: Put back in: f.copy_folder(self.path_scenario, self.path_results)
+        f.copy_folder(self.path_scenario, self.path_results)
 
-    def __setup_db_connection(self):
-        """Creates a database connector object"""
+    def __setup_database(self):
+        """Creates a database connector object
+
+        # TODO: @Jiahe
+        """
 
         # Setup database connections
         # TODO: Iterate over the database connections defined in the scenario config and create a database connection
@@ -224,15 +330,11 @@ class Executor:
         #     self.db_connections[name] = DBConnection(info["host"], info["port"], info["user"], info["pw"], info["db"])
 
     def __setup_markets(self):
-        """Sets up the markets"""
+        """Sets up the markets
 
-        # Set the market type
-        self.type = self.config['simulation']['type']
+        # TODO: @Jiahe"""
 
-        # Select the database connection
-        db = self.db_connections['admin']
-
-        # TODO: Discuss if separate registries or everything handed over in bulk
+        db = Database()
 
         # Register markets in database
         db.register_markets()  # TODO: @Jiahe: Implement this function
@@ -241,7 +343,9 @@ class Executor:
         db.register_retailers()  # TODO: @Jiahe: Implement this function
 
     def __setup_grids(self):
-        """Sets up the grids, i.e. loads the grid data from the general scenario folder"""
+        """Sets up the grids, i.e. loads the grid data from the general scenario folder
+
+        # TODO: @Jiahe"""
 
         # Load all combined grid files
         # Note: Currently this is only one file as only electricity is available. In the future this will be more and
@@ -250,7 +354,9 @@ class Executor:
         # self.grids = self.__add_nested_data(path=os.path.join(self.path_scenario, 'general', 'grids'))
 
     def __setup_agents(self):
-        """Sets up the agents"""
+        """Sets up the agents
+
+        # TODO: @Jiahe"""
 
         # Select the database connection
         # db = self.db_connections['user'] # TODO: Put back in once function is implemented
@@ -265,5 +371,33 @@ class Executor:
         # Register agents in database (this means registering the user and the meters)
         # db.register_agents(self.agents)  # TODO: @Jiahe: Implement this function
 
-    def __close_db_connection(self):
-        ...
+    @staticmethod
+    def wait_for_ts(timestamp):
+        """Waits until the target timestamp is reached"""
+
+        # Get current datetime
+        current_datetime = datetime.now()
+
+        # Calculate time difference
+        time_difference = (timestamp - current_datetime).total_seconds()
+
+        # Wait until the target time is reached
+        if time_difference > 0:
+            time.sleep(time_difference)
+        elif time_difference < 0:
+            warnings.warn(f"Target time is in the past: {timestamp} vs. {current_datetime}")
+
+        return
+
+    def get_agent_data(self, region: str) -> dict:
+        """Gets the data of all agents that are in the given region
+
+        # TODO: @Jiahe
+        """
+
+        # Get the agent data
+        agent_data = self.agents[self.agents['region'] == region]
+
+        # Returns a dict that contains the agents by agent type
+
+        return agent_data
