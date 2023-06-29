@@ -27,8 +27,6 @@ class Database:
 
         self.__register_all_regions(structure)
 
-        a = 1
-
     def get_agent_data(self, region):
         """Get all agents data for the given region."""
         return self.regions[region].agents
