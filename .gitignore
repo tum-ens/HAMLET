@@ -132,3 +132,6 @@ scripts_case_study_1/
 
 **/__pycache__/
 scripts
+
+# for macbook
+**/.DS_Store

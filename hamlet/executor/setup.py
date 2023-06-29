@@ -23,6 +23,7 @@ from datetime import datetime
 from hamlet.executor.agents.agent import Agent
 from hamlet.executor.markets.markets import Markets
 from hamlet.executor.grids.grids import Grids
+from hamlet.executor.utilities.database.database import Database
 pl.StringCache()
 
 # TODO: Considerations
@@ -55,16 +56,10 @@ class Executor:
         self.type = None  # set in self.__prepare_scenario()
 
         # Database containing all information
-        self.data = {}  # TODO: Will be structured according to structure and contain agent, market and grid tables and data
+        self.database = Database(self.path_scenario)  # TODO: Will be structured according to structure and contain agent, market and grid tables and data
 
         # Scenario structure
         self.structure = {}  # TODO: this will need to contain more information than just the path. Also: above and below markets to know where to look for the data
-
-        # Agents data (contains all information of each agent in a structured dict)
-        self.agents = {}  # TODO: To be deleted once self.data is set up
-
-        # Grids data (contains all grids)
-        self.grids = {}  # TODO: To be deleted once self.data is set up
 
         # Number of workers for parallelization
         self.num_workers = num_workers
@@ -91,13 +86,7 @@ class Executor:
 
         # TODO: Put back in:
 
-        # self.__setup_database()
-        #
-        # self.__setup_markets()
-        #
-        # self.__setup_grids()
-        #
-        # self.__setup_agents()
+        self.__setup_database()
 
     def compare_pandas_polars(self, engine: str, runs: int = 100000) -> float:
         # TODO: To be removed. This is just for testing purposes
@@ -191,11 +180,8 @@ class Executor:
     def __execute_agents_parallel(self, tasklist: pl.DataFrame):
         """Executes all agent tasks for all agents in parallel"""
 
-        # Create the database object
-        db = Database()
-
         # Get the data of the agents that are part of the tasklist
-        agents = db.get_agent_data(region=tasklist['region'].iloc[0])
+        agents = self.database.get_agent_data(region=tasklist['region'].iloc[0])
 
         # Define the function to be executed in parallel
         def tasks(data, timetable, agent_type):
@@ -218,7 +204,7 @@ class Executor:
         concurrent.futures.wait(results)
 
         # Post the agent data back to the database
-        db.post_agent_data(results)
+        self.database.post_agent_data(results)
 
     def __execute_market_parallel(self, tasklist: pl.DataFrame):
         """Executes the market tasks in parallel"""
@@ -245,11 +231,8 @@ class Executor:
         """Executes all agent tasks for all agents sequentially
         """
 
-        # Create the database object
-        db = Database()
-
         # Get the data of the agents that are part of the tasklist
-        agents = db.get_agent_data(region=tasklist['region'].iloc[0])
+        agents = self.database.get_agent_data(region=tasklist['region'].iloc[0])
 
         results = []
 
@@ -260,7 +243,7 @@ class Executor:
                 results.append(Agent(data, tasklist, agent_type).execute())
 
         # Post the agent data back to the database
-        db.post_agent_data(results)
+        # self.database.post_agent_data(results)
 
     def __execute_market(self, tasklist: pl.DataFrame):
 
@@ -317,59 +300,9 @@ class Executor:
         f.copy_folder(self.path_scenario, self.path_results)
 
     def __setup_database(self):
-        """Creates a database connector object
+        """Creates a database connector object"""
 
-        # TODO: @Jiahe
-        """
-
-        # Setup database connections
-        # TODO: Iterate over the database connections defined in the scenario config and create a database connection
-
-        # Pseudocode:
-        # for name, info in self.scenario_config["database"].items():
-        #     self.db_connections[name] = DBConnection(info["host"], info["port"], info["user"], info["pw"], info["db"])
-
-    def __setup_markets(self):
-        """Sets up the markets
-
-        # TODO: @Jiahe"""
-
-        db = Database()
-
-        # Register markets in database
-        db.register_markets()  # TODO: @Jiahe: Implement this function
-
-        # Register retailers in database
-        db.register_retailers()  # TODO: @Jiahe: Implement this function
-
-    def __setup_grids(self):
-        """Sets up the grids, i.e. loads the grid data from the general scenario folder
-
-        # TODO: @Jiahe"""
-
-        # Load all combined grid files
-        # Note: Currently this is only one file as only electricity is available. In the future this will be more and
-        # required the function that was commented out
-        self.grids['electricity'] = pp.from_json(os.path.join(self.path_scenario, 'general', 'grid.json'))
-        # self.grids = self.__add_nested_data(path=os.path.join(self.path_scenario, 'general', 'grids'))
-
-    def __setup_agents(self):
-        """Sets up the agents
-
-        # TODO: @Jiahe"""
-
-        # Select the database connection
-        # db = self.db_connections['user'] # TODO: Put back in once function is implemented
-
-        # TODO: Discuss if separate registries or everything handed in bulk
-
-        # TODO: See which other files need to be created
-        # Load all agent files by looping through the scenario files
-        self.agents = f.loop_folder(src=self.root_scenario, struct=self.structure, folder='agents',
-                                    func=f.add_nested_data, df='polars', method='lazy', parse_dates=[0])
-
-        # Register agents in database (this means registering the user and the meters)
-        # db.register_agents(self.agents)  # TODO: @Jiahe: Implement this function
+        self.database.setup_database(self.structure)
 
     @staticmethod
     def wait_for_ts(timestamp):
@@ -388,16 +321,3 @@ class Executor:
             warnings.warn(f"Target time is in the past: {timestamp} vs. {current_datetime}")
 
         return
-
-    def get_agent_data(self, region: str) -> dict:
-        """Gets the data of all agents that are in the given region
-
-        # TODO: @Jiahe
-        """
-
-        # Get the agent data
-        agent_data = self.agents[self.agents['region'] == region]
-
-        # Returns a dict that contains the agents by agent type
-
-        return agent_data

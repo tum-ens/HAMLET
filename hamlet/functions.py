@@ -7,6 +7,7 @@ import polars as pl
 from ruamel.yaml import YAML
 from typing import Callable
 
+
 # Contains all functions that are shared among the classes and used universally
 
 
@@ -111,7 +112,6 @@ def load_file(path: str, index: int = 0, df: str = 'pandas', parse_dates: bool |
 
 
 def save_file(path: str, data, index: bool = True, df: str = 'pandas') -> None:
-
     file_type = path.rsplit('.', 1)[-1]
 
     if file_type == 'yaml' or file_type == 'yml':
@@ -152,7 +152,6 @@ def loop_folder(src: str, struct: dict, folder: str, func: Callable, **kwargs) -
 
     # Load the data from the scenario files
     for name, key in struct.items():
-
         # Add the agent data to the data structure
         data[name] = func(path=os.path.join(src, key, folder), **kwargs)
 
@@ -199,3 +198,13 @@ def add_nested_data(path: str, df: str = 'pandas', parse_dates: bool | list | No
             data[folder_name] = add_nested_data(item_path)
 
     return data
+
+
+def get_all_subdirectories(path_directory):
+    """Get names of all subdirectories."""
+    subdirectories = [name for name in os.listdir(path_directory) if os.path.isdir(os.path.join(path_directory,
+                                                                                                name))]
+    if len(subdirectories) > 0:
+        return subdirectories  # Return the name of the first subdirectory
+    else:
+        return None  # No subdirectories found
