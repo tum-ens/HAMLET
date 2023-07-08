@@ -81,27 +81,58 @@ sfh:
                                                 #   deviation:    [5e5, 1e6, 5e5]       --> [ 500, 1000,  500] kWh/a
                                                 #   --> 2000<= 20% <=3000, 3000<= 60% <=5000, 5000<= 20% <=6000   
 
-    fcast: 
+    fcast:
       method: naive_average                     # household load forecasting method
                                                 # options:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values 
+                                                #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
                                                 # unit: days
-        
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
-      
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
-                                                # order of double seasonal arma model 
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
                                                 # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
   ################################ flexible load ####################################
   flexible_load:
@@ -140,27 +171,58 @@ sfh:
                                                 # unit: h
                                                 # note: defines the maximum amount of time a load can be shifted to the future
 
-    fcast: 
-      method: naive_average                     # load forecasting method
+    fcast:
+      method: naive_average                     # household load forecasting method
                                                 # options:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values 
+                                                #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
                                                 # unit: days
-        
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
-      
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672] 
-                                                # order of double seasonal arma model 
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
                                                 # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
   ################################ heat demand ####################################
   heat:
@@ -209,24 +271,48 @@ sfh:
                                                 #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
-                                                #   - nn:            neural network based on the included weather data
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
 
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
                                                 # unit: days
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
 
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
                                                 # order of double seasonal arma model
                                                 # order: [s2_ar, 0, s2_ma, s2]
 
-      nn_training_days: 90                      # days that are used to train the neural network
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
                                                 # unit: days
                                                 # applies to: nn
                                                 # note: weather data for the n previous days needs to be available
-                                                #       in weather file
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
   ################################ dhw (drinking hot water) ####################################
   dhw:
@@ -274,24 +360,48 @@ sfh:
                                                 #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
-                                                #   - nn:            neural network based on the included weather data
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
 
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
                                                 # unit: days
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
 
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
                                                 # order of double seasonal arma model
                                                 # order: [s2_ar, 0, s2_ma, s2]
 
-      nn_training_days: 90                      # days that are used to train the neural network
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
                                                 # unit: days
                                                 # applies to: nn
                                                 # note: weather data for the n previous days needs to be available
-                                                #       in weather file
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
@@ -345,24 +455,58 @@ sfh:
     fcast:                                      # forecast settings for PV plants
       method: smoothed                          # pv production forecasting method
                                                 # options for timeseries files:
-                                                #   - perfect:  perfect knowledge of the future
+                                                #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed: prediction value is a moving mean of the future values 
-                                                #               with the window width defined in smoothed_timesteps
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
                                                 # options for specs files:
                                                 #   - weather:  forecast based on weather file
                                                 # note: the methods need to be aligned with the values in sizing/power_file
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
                                                 # unit: days
-                                                # note: applies to method: naive_average
-                                                
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
-                                                # note: applies to method: smoothed
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -403,27 +547,61 @@ sfh:
 
       controllable: [true, true]                # can the wind inverter be controlled? true or false
 
-    fcast:                                      # forecast settings for wind plants
-      method: weather                           # wind production forecasting method
+    fcast:                                      # forecast settings for PV plants
+      method: smoothed                          # pv production forecasting method
                                                 # options for timeseries files:
-                                                #   - perfect:  perfect knowledge of the future
+                                                #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed: prediction value is a moving mean of the future values 
-                                                #               with the window width defined in smoothed_timesteps
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
                                                 # options for specs files:
                                                 #   - weather:  forecast based on weather file
                                                 # note: the methods need to be aligned with the values in sizing/power_file
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
                                                 # unit: days
-                                                # note: applies to method: naive_average
-                                                
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
-                                                # note: applies to method: smoothed
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
   
@@ -461,24 +639,59 @@ sfh:
 
       controllable: [false, false]              # can the generator be controlled? (can power be decreased?)
       
-    fcast: 
-      method: smoothed                          # fixed generation forecasting method
-                                                # options:
+    fcast:                                      # forecast settings for PV plants
+      method: smoothed                          # pv production forecasting method
+                                                # options for timeseries files:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values 
+                                                #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
+                                                # note: the methods need to be aligned with the values in sizing/power_file
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
                                                 # unit: days
-                                                # note: applies to method: naive_average
-        
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
-                                                # note: applies to method: smoothed
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -598,6 +811,10 @@ sfh:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - ev_close: perfect knowledge of the current
                                                 #               availability cycle once the vehicle arrives
+                                                #   - random_forest_classifier
+
+      random_forest_classifier:
+        features: ['time']                      # used features in weather file to fit the model
 
     quality: local                              # quality that generated energy (V2G) should be labelled with on the local markets
 
@@ -844,27 +1061,58 @@ mfh:
                                                 #   deviation:    [5e5, 1e6, 5e5]       --> [ 500, 1000,  500] kWh/a
                                                 #   --> 2000<= 20% <=3000, 3000<= 60% <=5000, 5000<= 20% <=6000
 
-    fcast: 
+    fcast:
       method: naive_average                     # household load forecasting method
                                                 # options:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values 
+                                                #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
                                                 # unit: days
-        
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
-      
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
                                                 # order of double seasonal arma model
                                                 # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
   ################################ flexible load ####################################
   flexible_load:
@@ -910,27 +1158,58 @@ mfh:
                                                 # unit: h
                                                 # note: defines the maximum amount of time a load can be shifted to the future
 
-    fcast: 
-      method: naive_average                     # load forecasting method
+    fcast:
+      method: naive_average                     # household load forecasting method
                                                 # options:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values 
+                                                #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
                                                 # unit: days
-        
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
-      
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672] 
-                                                # order of double seasonal arma model 
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
                                                 # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
   ################################ heat demand ####################################
   heat:
@@ -986,24 +1265,48 @@ mfh:
                                                 #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
-                                                #   - nn:            neural network based on the included weather data
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
 
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
                                                 # unit: days
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
 
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
                                                 # order of double seasonal arma model
                                                 # order: [s2_ar, 0, s2_ma, s2]
 
-      nn_training_days: 90                      # days that are used to train the neural network
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
                                                 # unit: days
                                                 # applies to: nn
                                                 # note: weather data for the n previous days needs to be available
-                                                #       in weather file
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
   ################################ dhw (drinking hot water) ####################################
   dhw:
@@ -1058,24 +1361,48 @@ mfh:
                                                 #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
-                                                #   - nn:            neural network based on the included weather data
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
 
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
                                                 # unit: days
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
 
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
                                                 # order of double seasonal arma model
                                                 # order: [s2_ar, 0, s2_ma, s2]
 
-      nn_training_days: 90                      # days that are used to train the neural network
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
                                                 # unit: days
                                                 # applies to: nn
                                                 # note: weather data for the n previous days needs to be available
-                                                #       in weather file
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
@@ -1141,23 +1468,58 @@ mfh:
     fcast:                                      # forecast settings for PV plants
       method: smoothed                          # pv production forecasting method
                                                 # options for timeseries files:
-                                                #   - perfect:  perfect knowledge of the future
+                                                #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed: prediction value is a moving mean of the future values 
-                                                #               with the window width defined in smoothed_timesteps
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
                                                 # options for specs files:
                                                 #   - weather:  forecast based on weather file
                                                 # note: the methods need to be aligned with the values in sizing/power_file
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-                                                # unit: days
-                                                # note: applies to method: naive_average
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
                                                 # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -1208,24 +1570,61 @@ mfh:
 
       controllable: [true, true]                # can the wind inverter be controlled? true or false
 
-    fcast:                                      # forecast settings for wind plants
-      method: weather                           # wind production forecasting method
+    fcast:                                      # forecast settings for PV plants
+      method: smoothed                          # pv production forecasting method
                                                 # options for timeseries files:
-                                                #   - perfect:  perfect knowledge of the future
+                                                #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed: prediction value is a moving mean of the future values 
-                                                #               with the window width defined in smoothed_timesteps
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
                                                 # options for specs files:
                                                 #   - weather:  forecast based on weather file
                                                 # note: the methods need to be aligned with the values in sizing/power_file
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
-                                                
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -1274,22 +1673,58 @@ mfh:
 
       controllable: [false, false]              # can the generator be controlled? (can power be decreased?)
       
-    fcast: 
-      method: smoothed                          # fixed generation forecasting method
+    fcast:
+      method: naive_average                     # household load forecasting method
                                                 # options:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values 
+                                                #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
-        
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
-                                                # note: applies to method: smoothed
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -1420,6 +1855,10 @@ mfh:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - ev_close: perfect knowledge of the current
                                                 #               availability cycle once the vehicle arrives
+                                                #   - random_forest_classifier
+
+      random_forest_classifier:
+        features: ['time']                      # used features in weather file to fit the model
 
     quality: local                              # quality that generated energy (V2G) should be labelled with on the local markets
 
@@ -1630,7 +2069,7 @@ ctsp:
                                                 # unit: 1 [0, 1]
 
     fcast:
-      method: naive_average                     # load forecasting method
+      method: naive_average                     # household load forecasting method
                                                 # options:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
@@ -1639,13 +2078,48 @@ ctsp:
                                                 #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
 
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
 
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672] # order of double seasonal arma model [s2_ar, 0, s2_ma, s2]
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
   ################################ flexible load ####################################
   flexible_load:
@@ -1677,24 +2151,59 @@ ctsp:
       time_offset: [6, 12]                      # temporal offset of each point in time in h
                                                 # note: defines the maximum amount of time a load can be shifted to the future
 
-    fcast: 
-      method: naive_average                     # load forecasting method
+    fcast:
+      method: naive_average                     # household load forecasting method
                                                 # options:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values 
+                                                #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-        
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
-      
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672] # order of double seasonal arma model [s2_ar, 0, s2_ma, s2]
-                                                
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
+
   ################################ photovoltaics (PV) ####################################
   pv:
     share: [0.5, 0.5]                           # share of agents with PV systems per type
@@ -1743,21 +2252,58 @@ ctsp:
     fcast:                                      # forecast settings for PV plants
       method: smoothed                          # pv production forecasting method
                                                 # options for timeseries files:
-                                                #   - perfect:  perfect knowledge of the future
+                                                #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed: prediction value is a moving mean of the future values
-                                                #               with the window width defined in smoothed_timesteps
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
                                                 # options for specs files:
                                                 #   - weather:  forecast based on weather file
                                                 # note: the methods need to be aligned with the values in sizing/power_file
 
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -1790,24 +2336,61 @@ ctsp:
 
       controllable: [true, true]                # can the wind inverter be controlled? true or false
 
-    fcast:                                      # forecast settings for wind plants
-      method: weather                           # wind production forecasting method
+    fcast:                                      # forecast settings for PV plants
+      method: smoothed                          # pv production forecasting method
                                                 # options for timeseries files:
-                                                #   - perfect:  perfect knowledge of the future
+                                                #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed: prediction value is a moving mean of the future values
-                                                #               with the window width defined in smoothed_timesteps
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
                                                 # options for specs files:
                                                 #   - weather:  forecast based on weather file
                                                 # note: the methods need to be aligned with the values in sizing/power_file
 
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -1837,22 +2420,59 @@ ctsp:
 
       controllable: [true, true]                # can the generator be controlled? (can power be decreased?)
 
-    fcast:
-      method: smoothed                          # fixed generation forecasting method
-                                                # options:
+    fcast:                                      # forecast settings for PV plants
+      method: smoothed                          # pv production forecasting method
+                                                # options for timeseries files:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
                                                 #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
+                                                # note: the methods need to be aligned with the values in sizing/power_file
 
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
-                                                # note: applies to method: smoothed
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -1935,6 +2555,10 @@ ctsp:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - ev_close: perfect knowledge of the current
                                                 #               availability cycle once the vehicle arrives
+                                                #   - random_forest_classifier
+
+      random_forest_classifier:
+        features: ['time']                      # used features in weather file to fit the model
 
     quality: local                              # quality that generated energy (V2G) should be labelled with on the local markets
 
@@ -2088,23 +2712,58 @@ industry:
       demand_deviation: [0.1, 0.2]              # relative deviation of the respective demand value
                                                 # unit: 1 [0, 1]
 
-    fcast: 
-      method: naive_average                     # load forecasting method
+    fcast:
+      method: naive_average                     # household load forecasting method
                                                 # options:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values 
+                                                #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-        
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
-      
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672] # order of double seasonal arma model [s2_ar, 0, s2_ma, s2]
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
   ################################ flexible load ####################################
   flexible_load:
@@ -2133,23 +2792,58 @@ industry:
       time_offset: [6, 12]                      # temporal offset of each point in time in h
                                                 # note: defines the maximum amount of time a load can be shifted to the future
 
-    fcast: 
-      method: naive_average                     # load forecasting method
+    fcast:
+      method: naive_average                     # household load forecasting method
                                                 # options:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values 
+                                                #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
                                                 #   - sarma:         full sarma model with the order defined in sarma_order
-                                                
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-        
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
+
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
+
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
-      
-      sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672] # order of double seasonal arma model [s2_ar, 0, s2_ma, s2]
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
@@ -2196,21 +2890,58 @@ industry:
     fcast:                                      # forecast settings for PV plants
       method: smoothed                          # pv production forecasting method
                                                 # options for timeseries files:
-                                                #   - perfect:  perfect knowledge of the future
+                                                #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed: prediction value is a moving mean of the future values
-                                                #               with the window width defined in smoothed_timesteps
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
                                                 # options for specs files:
                                                 #   - weather:  forecast based on weather file
                                                 # note: the methods need to be aligned with the values in sizing/power_file
 
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -2244,24 +2975,61 @@ industry:
 
       controllable: [true, true]                # can the wind inverter be controlled? true or false
 
-    fcast:                                      # forecast settings for wind plants
-      method: weather                           # wind production forecasting method
+    fcast:                                      # forecast settings for PV plants
+      method: smoothed                          # pv production forecasting method
                                                 # options for timeseries files:
-                                                #   - perfect:  perfect knowledge of the future
+                                                #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
                                                 #   - naive_average: today will be the same as the average the last n days
                                                 #                    defined in naive_average_days
-                                                #   - smoothed: prediction value is a moving mean of the future values
-                                                #               with the window width defined in smoothed_timesteps
+                                                #   - smoothed:      prediction value is a moving mean of the future values
+                                                #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
                                                 # options for specs files:
                                                 #   - weather:  forecast based on weather file
                                                 # note: the methods need to be aligned with the values in sizing/power_file
 
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -2293,7 +3061,7 @@ industry:
       controllable: [true, true]                # can the generator be controlled? (can power be decreased?)
 
     fcast:
-      method: smoothed                          # fixed generation forecasting method
+      method: naive_average                     # household load forecasting method
                                                 # options:
                                                 #   - perfect:       perfect knowledge of the future
                                                 #   - naive:         today will be the same as yesterday
@@ -2301,13 +3069,49 @@ industry:
                                                 #                    defined in naive_average_days
                                                 #   - smoothed:      prediction value is a moving mean of the future values
                                                 #                    with the window width defined in smoothed_timesteps
+                                                #   - sarma:         full sarma model with the order defined in sarma_order
+                                                #   - random_forest_regressor:
+                                                #                    default random forest regressor
+                                                #   - cnn
+                                                #   - rnn
+                                                #   - ARIMA
 
-      naive_average_days: 2                     # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
+      naive_average:
+        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                # unit: days
 
-      smoothed_timesteps: 9                     # defines the number of timesteps to be used when methods is set to smoothed
-                                                # note: applies to method: smoothed
+      smoothed:
+        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                # unit: time steps
                                                 # note: length of timestep is defined in config_general.yaml
+
+      sarma:
+        sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                # order of double seasonal arma model
+                                                # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        nn_training_days: 90                    # days that are used to train the neural network
+                                                # unit: days
+                                                # applies to: nn
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      random_forest_regressor:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+
+      ARIMA:
+        order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -2390,6 +3194,10 @@ industry:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - ev_close: perfect knowledge of the current
                                                 #               availability cycle once the vehicle arrives
+                                                #   - random_forest_classifier
+
+      random_forest_classifier:
+        features: ['time']                      # used features in weather file to fit the model
 
     quality: local                              # quality that generated energy (V2G) should be labelled with on the local markets
 
@@ -2541,24 +3349,61 @@ producer:
 
         controllable: [true , true, true]       # can the pv inverter be controlled? true or false
 
-      fcast:                                    # forecast settings for PV plants
-        method: smoothed                        # pv production forecasting method
-                                                # options for timeseries files:
-                                                #   - perfect:  perfect knowledge of the future
-                                                #   - naive:         today will be the same as yesterday
-                                                #   - naive_average: today will be the same as the average the last n days
-                                                #                    defined in naive_average_days
-                                                #   - smoothed: prediction value is a moving mean of the future values
-                                                #               with the window width defined in smoothed_timesteps
-                                                # options for specs files:
-                                                #   - weather:  forecast based on weather file
-                                                # note: the methods need to be aligned with the values in sizing/power_file
+      fcast:                                      # forecast settings for PV plants
+        method: smoothed                          # pv production forecasting method
+                                                  # options for timeseries files:
+                                                  #   - perfect:       perfect knowledge of the future
+                                                  #   - naive:         today will be the same as yesterday
+                                                  #   - naive_average: today will be the same as the average the last n days
+                                                  #                    defined in naive_average_days
+                                                  #   - smoothed:      prediction value is a moving mean of the future values
+                                                  #                    with the window width defined in smoothed_timesteps
+                                                  #   - sarma:         full sarma model with the order defined in sarma_order
+                                                  #   - random_forest_regressor:
+                                                  #                    default random forest regressor
+                                                  #   - cnn
+                                                  #   - rnn
+                                                  #   - ARIMA
+                                                  # options for specs files:
+                                                  #   - weather:  forecast based on weather file
+                                                  # note: the methods need to be aligned with the values in sizing/power_file
 
-        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
+        naive_average:
+          naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                  # unit: days
 
-        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
-                                                # note: length of timestep is defined in config_general.yaml
+        smoothed:
+          smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                  # unit: time steps
+                                                  # note: length of timestep is defined in config_general.yaml
+
+        sarma:
+          sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                  # order of double seasonal arma model
+                                                  # order: [s2_ar, 0, s2_ma, s2]
+
+        cnn:
+          features: ['temp', 'time']              # used features in weather file to fit the model
+          nn_training_days: 90                    # days that are used to train the neural network
+                                                  # unit: days
+                                                  # applies to: nn
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
+
+        rnn:
+          features: ['temp', 'time']              # used features in weather file to fit the model
+          nn_training_days: 90                    # days that are used to train the neural network
+                                                  # unit: days
+                                                  # applies to: nn
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
+
+        random_forest_regressor:
+          features: ['temp', 'time']              # used features in weather file to fit the model
+
+        ARIMA:
+          order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                  # differences, and MA parameters to use
 
       quality: green_local                      # quality that the generated energy should be labelled with on the local markets
       
@@ -2680,24 +3525,61 @@ producer:
 
         controllable: [true, true]              # can the wind inverter be controlled? true or false
 
-      fcast:                                    # forecast settings for wind plants
-        method: weather                         # wind production forecasting method
-                                                # options for timeseries files:
-                                                #   - perfect:  perfect knowledge of the future
-                                                #   - naive:         today will be the same as yesterday
-                                                #   - naive_average: today will be the same as the average the last n days
-                                                #                    defined in naive_average_days
-                                                #   - smoothed: prediction value is a moving mean of the future values
-                                                #               with the window width defined in smoothed_timesteps
-                                                # options for specs files:
-                                                #   - weather:  forecast based on weather file
-                                                # note: the methods need to be aligned with the values in sizing/power_file
+      fcast:                                      # forecast settings for PV plants
+        method: smoothed                          # pv production forecasting method
+                                                  # options for timeseries files:
+                                                  #   - perfect:       perfect knowledge of the future
+                                                  #   - naive:         today will be the same as yesterday
+                                                  #   - naive_average: today will be the same as the average the last n days
+                                                  #                    defined in naive_average_days
+                                                  #   - smoothed:      prediction value is a moving mean of the future values
+                                                  #                    with the window width defined in smoothed_timesteps
+                                                  #   - sarma:         full sarma model with the order defined in sarma_order
+                                                  #   - random_forest_regressor:
+                                                  #                    default random forest regressor
+                                                  #   - cnn
+                                                  #   - rnn
+                                                  #   - ARIMA
+                                                  # options for specs files:
+                                                  #   - weather:  forecast based on weather file
+                                                  # note: the methods need to be aligned with the values in sizing/power_file
 
-        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
+        naive_average:
+          naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                  # unit: days
 
-        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
-                                                # note: length of timestep is defined in config_general.yaml
+        smoothed:
+          smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                  # unit: time steps
+                                                  # note: length of timestep is defined in config_general.yaml
+
+        sarma:
+          sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                  # order of double seasonal arma model
+                                                  # order: [s2_ar, 0, s2_ma, s2]
+
+        cnn:
+          features: ['temp', 'time']              # used features in weather file to fit the model
+          nn_training_days: 90                    # days that are used to train the neural network
+                                                  # unit: days
+                                                  # applies to: nn
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
+
+        rnn:
+          features: ['temp', 'time']              # used features in weather file to fit the model
+          nn_training_days: 90                    # days that are used to train the neural network
+                                                  # unit: days
+                                                  # applies to: nn
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
+
+        random_forest_regressor:
+          features: ['temp', 'time']              # used features in weather file to fit the model
+
+        ARIMA:
+          order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                  # differences, and MA parameters to use
 
       quality: green_local                      # quality that the generated energy should be labelled with on the local markets
       
@@ -2816,24 +3698,60 @@ producer:
         controllable: [true, true]              # can the generator be controlled? (can power be decreased?)
 
       fcast:
-        method: smoothed                        # fixed generation forecasting method
-                                                # options:
-                                                #   - perfect:       perfect knowledge of the future
-                                                #   - naive:         today will be the same as yesterday
-                                                #   - naive_average: today will be the same as the average the last n days
-                                                #                    defined in naive_average_days
-                                                #   - smoothed:      prediction value is a moving mean of the future values
-                                                #                    with the window width defined in smoothed_timesteps
+        method: naive_average                     # household load forecasting method
+                                                  # options:
+                                                  #   - perfect:       perfect knowledge of the future
+                                                  #   - naive:         today will be the same as yesterday
+                                                  #   - naive_average: today will be the same as the average the last n days
+                                                  #                    defined in naive_average_days
+                                                  #   - smoothed:      prediction value is a moving mean of the future values
+                                                  #                    with the window width defined in smoothed_timesteps
+                                                  #   - sarma:         full sarma model with the order defined in sarma_order
+                                                  #   - random_forest_regressor:
+                                                  #                    default random forest regressor
+                                                  #   - cnn
+                                                  #   - rnn
+                                                  #   - ARIMA
 
-        naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
-                                                # note: applies to method: naive_average
+        naive_average:
+          naive_average_days: 2                   # defines the number of days to be used when method is set to naive_average
+                                                  # unit: days
 
-        smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
-                                                # note: applies to method: smoothed
-                                                # note: length of timestep is defined in config_general.yaml
+        smoothed:
+          smoothed_timesteps: 9                   # defines the number of timesteps to be used when methods is set to smoothed
+                                                  # unit: time steps
+                                                  # note: length of timestep is defined in config_general.yaml
+
+        sarma:
+          sarma_order: [2, 0, 2, 2, 0, 0, 96, 2, 0, 0, 672]
+                                                  # order of double seasonal arma model
+                                                  # order: [s2_ar, 0, s2_ma, s2]
+
+        cnn:
+          features: ['temp', 'time']              # used features in weather file to fit the model
+          nn_training_days: 90                    # days that are used to train the neural network
+                                                  # unit: days
+                                                  # applies to: nn
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
+
+        rnn:
+          features: ['temp', 'time']              # used features in weather file to fit the model
+          nn_training_days: 90                    # days that are used to train the neural network
+                                                  # unit: days
+                                                  # applies to: nn
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
+
+        random_forest_regressor:
+          features: ['temp', 'time']              # used features in weather file to fit the model
+
+        ARIMA:
+          order: [1, 0, 0]                        # The (p,d,q) order of the model for the number of AR parameters,
+                                                  # differences, and MA parameters to use
 
       quality: local                            # quality that the generated energy should be labelled with on the local markets
-      
+
     ################################ battery ####################################
     battery:
       num: [1, 0]                               # number of fixed generators
