@@ -19,6 +19,15 @@ class RegionDB:
 
         self.__register_all_markets()
 
+    def get_agent_data(self, agent_id):
+        return self.agents[agent_id]
+
+    def edit_agent_data(self, agent_id, table_name, new_df):
+        self.agents[agent_id].setattr(table_name, new_df)
+
+    def get_meters(self, agent_id):
+        return self.agents[agent_id].meters
+
     def __register_all_agents(self):
         """Register all agents for this region."""
         agents_types = f.get_all_subdirectories(os.path.join(self.path_region, 'agents'))

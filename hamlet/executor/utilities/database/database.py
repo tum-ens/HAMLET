@@ -18,7 +18,7 @@ class Database:
 
         self.general = {}  # dict
 
-        self.regions = {}
+        self.__regions = {}
 
     def setup_database(self, structure):
         """Main setup function"""
@@ -27,9 +27,20 @@ class Database:
 
         self.__register_all_regions(structure)
 
-    def get_agent_data(self, region):
+    # agent database
+    def get_agent_data(self, region, agent_id=None):
         """Get all agents data for the given region."""
-        return self.regions[region].agents
+        if agent_id is None:
+            return self.__regions[region].agents
+        else:
+            return self.__regions[region].get_agent_data(agent_id)
+
+    def edit_agent_data(self, region, agent_id, table_name, new_df):
+        self.__regions[region].edit_agent_data(agent_id, table_name, new_df)
+
+    # meter database
+    def get_meters(self, region, agent_id):
+        return self.__regions[region].get_meters(agent_id)
 
     def __setup_general(self):
         """Setup general dictionary."""
@@ -39,5 +50,5 @@ class Database:
     def __register_all_regions(self, structure):
         """Register all regions."""
         for region in structure.keys():
-            self.regions[region] = RegionDB(os.path.join(os.path.dirname(self.path_scenario), structure[region]))
-            self.regions[region].register_region()
+            self.__regions[region] = RegionDB(os.path.join(os.path.dirname(self.path_scenario), structure[region]))
+            self.__regions[region].register_region()
