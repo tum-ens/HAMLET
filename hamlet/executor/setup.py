@@ -15,7 +15,7 @@ from pprint import pprint
 import json
 import polars as pl
 from hamlet import functions as f
-from numba import njit, jit
+# from numba import njit, jit
 import pandapower as pp
 import concurrent.futures
 from typing import Callable
@@ -87,45 +87,6 @@ class Executor:
         # TODO: Put back in:
 
         self.__setup_database()
-
-    def compare_pandas_polars(self, engine: str, runs: int = 100000) -> float:
-        # TODO: To be removed. This is just for testing purposes
-
-        # POLARS
-
-        # create a Polars DataFrame from the pandas DataFrame
-        df = self.timetable
-        print(df.estimated_size()/1e6)
-
-        df_p = df.to_pandas()
-        print(df_p.info())
-
-        start = time.time()
-
-        if engine == 'polars':
-
-            # group by the 'timestamp' column and get the unique keys
-            for _ in range(runs):
-                pltt = df.groupby('timestamp')
-
-            for row in pltt:
-                # with pl.Config() as cfg:
-                #     cfg.set_tbl_cols(30)
-                print(row)
-                break
-
-        elif engine == 'pandas':
-
-            # PANDAS
-
-            for _ in range(runs):
-                pdtt = df_p.groupby('timestamp')
-
-            for row in pdtt:
-                print(row[1].head(10).to_string())
-                break
-
-        return time.time() - start
 
     def execute(self):
         """Executes the scenario
@@ -277,7 +238,7 @@ class Executor:
 
         # Load general information and configuration
         self.general = f.load_file(os.path.join(self.path_scenario, 'general', 'general.json'))
-        self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'config_general.yaml'))
+        self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'config_setup.yaml'))
 
         # Set the simulation type
         self.type = self.config['simulation']['type']

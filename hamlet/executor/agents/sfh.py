@@ -34,11 +34,11 @@ class Sfh:
         # Market data
         self.market = None
 
-        # Available controllers  TODO: This might be moved to the agent class
-        self.controllers = {'rtc': self._controller_rtc,
-                            'rtc_max_pv': self._controller_rtc_max_pv,
-                            'mpc': self._controller_mpc,
-                            'mpc_rtc': self._controller_mpc_rtc, }
+        # Available controllers (see agent config)  # TODO: Move to agent class (import controller class to obtain functions)
+        self.rtc = {'rtc': self._controller_rtc,
+                    'rtc_max_pv': self._controller_rtc_max_pv,}
+        self.mpc = {'mpc': self._controller_mpc,
+                    'mpc_rtc': self._controller_mpc_rtc,}
 
     def execute(self):
         """Executes the agent"""
@@ -80,6 +80,7 @@ class Sfh:
 
     def set_controller(self):
         """Sets the controller for the agent"""
+        # TODO: This needs to be adjusted to new format
 
         hems = self.data['account']['hems']
 

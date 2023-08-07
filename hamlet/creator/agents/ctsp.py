@@ -66,6 +66,10 @@ class Ctsp(Agents):
         # Create the overall dataframe structure for the worksheet
         self.create_df_structure()
 
+        # Check if there are any agents to create
+        if self.num == 0:
+            return self.df
+
         # Fill the general information in dataframe
         self.fill_general()
 
@@ -90,14 +94,8 @@ class Ctsp(Agents):
         # Fill the battery information in dataframe
         self.fill_battery()
 
-        # Fill the model predictive controller information in dataframe
-        self.fill_mpc()
-
-        # Fill the market agent information in dataframe
-        self.fill_market_agent()
-
-        # Fill the metering information in dataframe
-        self.fill_meter()
+        # Fill the energy management system information in dataframe
+        self.fill_ems()
 
         return self.df
 
@@ -125,6 +123,10 @@ class Ctsp(Agents):
         # Create the overall dataframe structure for the worksheet
         self.create_df_structure()
 
+        # Check if there are any agents to create
+        if self.num == 0:
+            return self.df
+
         # Fill the general information in dataframe
         self.fill_general()
 
@@ -151,13 +153,7 @@ class Ctsp(Agents):
         self.fill_battery(**kwargs)
 
         # Fill the model predictive controller information in dataframe
-        self.fill_mpc()
-
-        # Fill the market agent information in dataframe
-        self.fill_market_agent()
-
-        # Fill the metering information in dataframe
-        self.fill_meter()
+        self.fill_ems()
 
         return self.df
 
@@ -181,46 +177,46 @@ class Ctsp(Agents):
             # Adjust the columns from "inflexible_load"
             elif key == "inflexible_load":
                 cols[0] = f"{key}/owner"
-                cols[4] = f"{key}/sizing/file"
+                cols[3] = f"{key}/sizing/file"
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:5], num=max_num) + cols[5:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:4], num=max_num) + cols[4:]
             # Adjust the columns from "flexible_load"
             elif key == "flexible_load":
                 cols[0] = f"{key}/owner"
-                cols[4] = f"{key}/sizing/file"
+                cols[3] = f"{key}/sizing/file"
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "pv"
             elif key == "pv":
                 cols[0] = f"{key}/owner"
-                del cols[4]
+                del cols[3]
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:8], num=max_num) + cols[8:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:7], num=max_num) + cols[7:]
             # Adjust the columns from "wind"
             elif key == "wind":
                 cols[0] = f"{key}/owner"
-                del cols[4]
+                del cols[3]
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "fixed_gen"
             elif key == "fixed_gen":
                 cols[0] = f"{key}/owner"
-                del cols[4]
+                del cols[3]
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "ev"
             elif key == "ev":
                 cols[0] = f"{key}/owner"
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:13], num=max_num) + cols[13:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:11], num=max_num) + cols[11:]
             # Adjust the columns from "battery"
             elif key == "battery":
                 cols[0] = f"{key}/owner"
                 del cols[1]
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:-1], num=max_num) + [cols[-1]]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:-1], num=max_num) + [cols[-1]]
             # All columns that do not need to be adjusted
-            elif key in ["mpc", "market_agent", "meter"]:
+            elif key in ["ems"]:
                 pass
             else:
                 raise NotImplementedError(
@@ -271,9 +267,6 @@ class Ctsp(Agents):
                                                                  method="relative")
         self.df[f"{key}/parameters/area"] = self._round_to_nth_digit(
             vals=self.df[f"{key}/parameters/area"], n=self.n_digits)
-
-        # forecast
-        self.df[f"{key}/fcast_retraining_frequency"] = config["fcast_retraining_frequency"]
 
         # market participation
         self.df[f"{key}/market_participant"] = self._gen_rand_bool_list(n=self.num,
@@ -331,7 +324,7 @@ class Ctsp(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -348,6 +341,7 @@ class Ctsp(Agents):
                                                                          method="relative")
             self.df[f"{key}/sizing/demand_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/demand_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/demand_{num}"] = self.df[f"{key}/sizing/demand_{num}"].astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df["general/parameters/type"],
                                                                    device=key,
@@ -355,7 +349,7 @@ class Ctsp(Agents):
                                                                    idx_type=0)
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         return self.df
 
@@ -376,8 +370,6 @@ class Ctsp(Agents):
         # general
         self.df[f"{key}/owner"] = (df['demand'] > 0).astype(int)
         self.df[f"{key}/num"] = self.df[f"{key}/owner"]  # equals owner as only one inflexible load per agent
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
@@ -394,11 +386,11 @@ class Ctsp(Agents):
                 self.df[f"{key}/sizing/file_{num}"] = df['file']
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         return self.df
 
-    def fill_flexible_load(self):
+    def fill_flexible_load(self) -> pd.DataFrame:
         """
             Fills all flexible_load columns
         """
@@ -409,7 +401,7 @@ class Ctsp(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -426,6 +418,7 @@ class Ctsp(Agents):
                                                                          method="relative")
             self.df[f"{key}/sizing/demand_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/demand_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/demand_{num}"] = self.df[f"{key}/sizing/demand_{num}"].astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df["general/parameters/type"],
                                                                    device=key,
@@ -433,7 +426,9 @@ class Ctsp(Agents):
                                                                    idx_type=0)
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
+
+        return self.df
 
     def fill_pv(self, **kwargs) -> pd.DataFrame:
         """
@@ -465,7 +460,7 @@ class Ctsp(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -482,13 +477,18 @@ class Ctsp(Agents):
                                                                         method="relative")
             self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(vals=self.df[f"{key}/sizing/power_{num}"],
                                                                             n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
+            # orientation
+            self.df[f"{key}/sizing/orientation_{num}"] = self.df[f"{key}/sizing/orientation_{num}"].astype('Int16')
+            # angle
+            self.df[f"{key}/sizing/angle_{num}"] = self.df[f"{key}/sizing/angle_{num}"].astype('Int16')
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -523,8 +523,6 @@ class Ctsp(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one pv per agent is supported
@@ -562,8 +560,8 @@ class Ctsp(Agents):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-            # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -599,7 +597,7 @@ class Ctsp(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -616,13 +614,14 @@ class Ctsp(Agents):
                                                                         method="relative")
             self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(vals=self.df[f"{key}/sizing/power_{num}"],
                                                                             n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -657,8 +656,6 @@ class Ctsp(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
@@ -692,8 +689,8 @@ class Ctsp(Agents):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-            # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -730,7 +727,7 @@ class Ctsp(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -747,13 +744,14 @@ class Ctsp(Agents):
                                                                         method="relative")
             self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(vals=self.df[f"{key}/sizing/power_{num}"],
                                                                             n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -787,8 +785,6 @@ class Ctsp(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
@@ -810,8 +806,8 @@ class Ctsp(Agents):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-            # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -848,7 +844,7 @@ class Ctsp(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -861,6 +857,14 @@ class Ctsp(Agents):
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
+            # capacity
+            self.df[f"{key}/sizing/capacity_{num}"] = self.df[f"{key}/sizing/capacity_{num}"].astype('Int64')
+            # charging_home
+            self.df[f"{key}/sizing/charging_home_{num}"] = self.df[f"{key}/sizing/charging_home_{num}"].astype('Int32')
+            # charging_AC
+            self.df[f"{key}/sizing/charging_AC_{num}"] = self.df[f"{key}/sizing/charging_AC_{num}"].astype('Int32')
+            # charging_DC
+            self.df[f"{key}/sizing/charging_DC_{num}"] = self.df[f"{key}/sizing/charging_DC_{num}"].astype('Int32')
 
             # things only necessary to add once
             if num == 0:
@@ -869,7 +873,7 @@ class Ctsp(Agents):
                                        idx_list=idx_list)
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -904,18 +908,15 @@ class Ctsp(Agents):
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
             'Int64')  # all agents that have plant type
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
             self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file_add'])
             self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/consumption_{num}"] = (self.df.index.map(df['consumption']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/charging_home_{num}"] = (self.df.index.map(df['charging_home']) * 1e6).astype(
-                'Int64')
-            self.df[f"{key}/sizing/charging_AC_{num}"] = (self.df.index.map(df['charging_ac']) * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/charging_DC_{num}"] = (self.df.index.map(df['charging_dc']) * 1e6).astype('Int64')
+                'Int32')
+            self.df[f"{key}/sizing/charging_AC_{num}"] = (self.df.index.map(df['charging_ac']) * 1e6).astype('Int32')
+            self.df[f"{key}/sizing/charging_DC_{num}"] = (self.df.index.map(df['charging_dc']) * 1e6).astype('Int32')
             self.df[f"{key}/sizing/charging_efficiency_{num}"] = self.df.index.map(df['efficiency'])
             self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
             self.df[f"{key}/sizing/v2g_{num}"] = self.df.index.map(df['v2g'])
@@ -956,7 +957,7 @@ class Ctsp(Agents):
         self._add_general_info_bat(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -969,10 +970,12 @@ class Ctsp(Agents):
             self.df[f"{key}/sizing/power_{num}"] *= self.df["inflexible_load/sizing/demand_0"] / 1e3
             self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/power_{num}"], n=2)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # capacity
             self.df[f"{key}/sizing/capacity_{num}"] *= self.df["inflexible_load/sizing/demand_0"] / 1e3
             self.df[f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/capacity_{num}"], n=2)
+            self.df[f"{key}/sizing/capacity_{num}"] = self.df[f"{key}/sizing/capacity_{num}"].astype('Int64')
 
         # quality
         self.df[f"{key}/quality"] = str(config["quality"])
@@ -1006,8 +1009,6 @@ class Ctsp(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
@@ -1024,35 +1025,15 @@ class Ctsp(Agents):
 
         return self.df
 
-    def fill_mpc(self):
+    def fill_ems(self):
         """
             Fills all battery columns
         """
-        key = "mpc"
+        key = "ems"
         config = self.config[f"{key}"]
 
         # general
-        self._add_info_simple(keys=[key], config=config)
-
-    def fill_market_agent(self):
-        """
-            Fills all battery columns
-        """
-        key = "market_agent"
-        config = self.config[f"{key}"]
-
-        # general
-        self._add_info_random(keys=[key], config=config)
-
-    def fill_meter(self):
-        """
-            Fills all battery columns
-        """
-        key = "meter"
-        config = self.config[f"{key}"]
-
-        # general
-        self._add_info_simple(keys=[key], config=config)
+        self.df = self._add_info_simple(keys=[key], config=config, df=self.df)
 
     def _get_idx_list(self, key: str, num: int) -> list:
         """creates the index list for the given run"""
@@ -1069,13 +1050,15 @@ class Ctsp(Agents):
     def _add_general_info(self, key: str) -> None:
 
         # fields that exist for all plants
-        self.df[f"{key}/owner"] = self._gen_list_from_idx_list(idx_list=self.idx_list,
-                                                               distr=self.config[f"{key}"]["share"])
-        self.df[f"{key}/owner"] = self._gen_idx_bool_list(weight_list=self.df[f"{key}/owner"])
+        if sum(self.config[f"{key}"]["share"]) > 0:
+            self.df[f"{key}/owner"] = self._gen_list_from_idx_list(idx_list=self.idx_list,
+                                                                   distr=self.config[f"{key}"]["share"])
+            self.df[f"{key}/owner"] = self._gen_idx_bool_list(weight_list=self.df[f"{key}/owner"])
+        else:
+            self.df[f"{key}/owner"] = 0
         self.df[f"{key}/num"] = self._gen_list_from_idx_list(idx_list=self.idx_list,
                                                              distr=self.config[f"{key}"]["num"])
         self.df[f"{key}/num"] *= self.df[f"{key}/owner"]
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
     def _add_general_info_bat(self, key: str):
 
@@ -1101,4 +1084,3 @@ class Ctsp(Agents):
 
             self.df[f"{key}/owner"] = list_owner
             self.df[f"{key}/num"] = list_num
-            self.df[f"{key}/has_submeter"] = str(self.config[f"{key}"]["has_submeter"])

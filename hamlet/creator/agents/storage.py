@@ -119,13 +119,7 @@ class Storage(Agents):
         self.add_hydrogen()
 
         # Fill the model predictive controller information in dataframe
-        self.fill_mpc()
-
-        # Fill the market agent information in dataframe
-        self.fill_market_agent()
-
-        # Fill the metering information in dataframe
-        self.fill_meter()
+        self.fill_ems()
 
         return self.df
 
@@ -159,36 +153,36 @@ class Storage(Agents):
             # Adjust the columns from "battery"
             if key == "battery":
                 self.num += self.config[key]["general"]["number_of"]
-                del cols[15:]
-                del cols[9]
-                del cols[7]
+                # Get all columns that match the key
+                cols = [col for col in cols if key in col]
                 del cols[5]
-                del cols[:3]
+                del cols[3]
+                del cols[1]
                 cols.insert(0, f"{key}/owner")
                 max_num = max(self.config[key][key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:9], num=max_num) + cols[9:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:8], num=max_num) + cols[8:]
             # Adjust the columns from "psh"
             elif key == "psh":
                 self.num += self.config[key]["general"]["number_of"]
-                del cols[15:]
-                del cols[9]
-                del cols[7]
+                # Get all columns that match the key
+                cols = [col for col in cols if key in col]
                 del cols[5]
-                del cols[:3]
+                del cols[3]
+                del cols[1]
                 cols.insert(0, f"{key}/owner")
                 max_num = max(self.config[key][key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:9], num=max_num) + cols[9:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:8], num=max_num) + cols[8:]
             # Adjust the columns from "hydrogen"
             elif key == "hydrogen":
                 self.num += self.config[key]["general"]["number_of"]
-                del cols[15:]
-                del cols[9]
-                del cols[7]
+                # Get all columns that match the key
+                cols = [col for col in cols if key in col]
                 del cols[5]
-                del cols[:3]
+                del cols[3]
+                del cols[1]
                 cols.insert(0, f"{key}/owner")
                 max_num = max(self.config[key][key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:9], num=max_num) + cols[9:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:8], num=max_num) + cols[8:]
             else:
                 raise NotImplementedError(
                     f"The configuration file contains a key word ('{key}') that has not been configured in "
@@ -198,12 +192,12 @@ class Storage(Agents):
 
         # Define and insert all columns that come before the plants
         aftcols = self.make_list_from_nested_dict(self.config[key])
-        aftkeys = ["mpc", "market_agent", "meter"]
+        aftkeys = ["ems"]
         for aftkey in aftkeys:
             # Get all columns that match the key
             cols = [col for col in aftcols if aftkey == col.split("/", 1)[0]]
             # All columns that do not need to be adjusted
-            if aftkey in ["mpc", "market_agent", "meter"]:
+            if aftkey in ["ems"]:
                 pass
             else:
                 raise NotImplementedError(
@@ -237,6 +231,9 @@ class Storage(Agents):
         self.num_agents = self.config[f"{key}"]["general"]["number_of"]
         self.idx_start = len(self.df)
 
+        if self.num_agents == 0:
+            return
+
         # general
         self.fill_general(device=key)
 
@@ -244,13 +241,7 @@ class Storage(Agents):
         self.fill_battery(device=key)
 
         # mpc
-        self.fill_mpc(device=key)
-
-        # market_agent
-        self.fill_market_agent(device=key)
-
-        # meter
-        self.fill_meter(device=key)
+        self.fill_ems(device=key)
 
     def add_psh(self):
         """
@@ -259,6 +250,9 @@ class Storage(Agents):
         key = "psh"
         self.num_agents = self.config[f"{key}"]["general"]["number_of"]
 
+        if self.num_agents == 0:
+            return
+
         # general
         self.fill_general(device=key)
 
@@ -266,13 +260,7 @@ class Storage(Agents):
         self.fill_psh(device=key)
 
         # mpc
-        self.fill_mpc(device=key)
-
-        # market_agent
-        self.fill_market_agent(device=key)
-
-        # meter
-        self.fill_meter(device=key)
+        self.fill_ems(device=key)
 
     def add_hydrogen(self):
         """
@@ -281,6 +269,9 @@ class Storage(Agents):
         key = "hydrogen"
         self.num_agents = self.config[f"{key}"]["general"]["number_of"]
 
+        if self.num_agents == 0:
+            return
+
         # general
         self.fill_general(device=key)
 
@@ -288,13 +279,7 @@ class Storage(Agents):
         self.fill_hydrogen(device=key)
 
         # mpc
-        self.fill_mpc(device=key)
-
-        # market_agent
-        self.fill_market_agent(device=key)
-
-        # meter
-        self.fill_meter(device=key)
+        self.fill_ems(device=key)
 
     def fill_general(self, device: str):
         """
@@ -312,10 +297,6 @@ class Storage(Agents):
         # general
         self.df.loc[self.idx_start:self.idx_end, f"{key}/agent_id"] = self._gen_new_ids(n=self.num_agents)
 
-        # forecast
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/fcast_retraining_frequency"] = config[
-            "fcast_retraining_frequency"]
-
         # market participation
         self.df.loc[self.idx_start:self.idx_end, f"{key}/market_participant"] = self._gen_rand_bool_list(
             n=self.num_agents, share_ones=config["market_participant_share"])
@@ -331,7 +312,7 @@ class Storage(Agents):
         self._add_general_info(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -347,12 +328,14 @@ class Storage(Agents):
                 distr=config["sizing"]["power_deviation"], method="absolute")
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
                 vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # capacity
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"] = self._calc_deviation(
                 idx_list=idx_list, vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"],
                 distr=config["sizing"]["capacity_deviation"], method="absolute")
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
                 vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/capacity_{num}"] = self.df[f"{key}/sizing/capacity_{num}"].astype('Int64')
 
         # quality
         self.df.loc[self.idx_start:self.idx_end, f"{key}/quality"] = config["quality"]
@@ -368,7 +351,7 @@ class Storage(Agents):
         self._add_general_info(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -384,12 +367,14 @@ class Storage(Agents):
                 distr=config["sizing"]["power_deviation"], method="absolute")
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
                 vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # capacity
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"] = self._calc_deviation(
                 idx_list=idx_list, vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"],
                 distr=config["sizing"]["capacity_deviation"], method="absolute")
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
                 vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/capacity_{num}"] = self.df[f"{key}/sizing/capacity_{num}"].astype('Int64')
 
         # quality
         self.df.loc[self.idx_start:self.idx_end, f"{key}/quality"] = config["quality"]
@@ -406,7 +391,7 @@ class Storage(Agents):
         self._add_general_info(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -422,21 +407,23 @@ class Storage(Agents):
                 distr=config["sizing"]["power_deviation"], method="absolute")
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
                 vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # capacity
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"] = self._calc_deviation(
                 idx_list=idx_list, vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"],
                 distr=config["sizing"]["capacity_deviation"], method="absolute")
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
                 vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/capacity_{num}"] = self.df[f"{key}/sizing/capacity_{num}"].astype('Int64')
 
         # quality
         self.df.loc[self.idx_start:self.idx_end, f"{key}/quality"] = config["quality"]
 
-    def fill_mpc(self, device: str):
+    def fill_ems(self, device: str):
         """
             Fills all battery columns
         """
-        key = "mpc"
+        key = "ems"
         config = self.config[f"{device}"][f"{key}"]
 
         # general
@@ -485,7 +472,6 @@ class Storage(Agents):
         self.df.loc[self.idx_start:self.idx_end, f"{key}/num"] = self._gen_dep_num_list(
             owner_list=self.df.loc[self.idx_start:self.idx_end, f"{key}/owner"], distr=config["num"])
         self.df.loc[self.idx_start:self.idx_end, f"{key}/num"] *= self.df[f"{key}/owner"]
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/has_submeter"] = config["has_submeter"]
 
     def _add_general_info_dependent(self, key: str, config: dict) -> None:
 
@@ -495,7 +481,6 @@ class Storage(Agents):
             owner_list=self.df.loc[self.idx_start:self.idx_end, f"{key}/owner"], distr=config["num"])
         self.df.loc[self.idx_start:self.idx_end, f"{key}/owner"] = \
             (self.df.loc[self.idx_start:self.idx_end, f"{key}/num"] > 0) * 1
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/has_submeter"] = config["has_submeter"]
 
     def _add_general_info_bat(self, key: str):
 
@@ -521,4 +506,3 @@ class Storage(Agents):
 
             self.df.loc[self.idx_start:self.idx_end, f"{key}/owner"] = list_owner
             self.df.loc[self.idx_start:self.idx_end, f"{key}/num"] = list_num
-            self.df.loc[self.idx_start:self.idx_end, f"{key}/has_submeter"] = str(self.config[f"{key}"]["has_submeter"])
