@@ -66,6 +66,10 @@ class Industry(Agents):
         # Create the overall dataframe structure for the worksheet
         self.create_df_structure()
 
+        # Check if there are any agents to create
+        if self.num == 0:
+            return self.df
+
         # Fill the general information in dataframe
         self.fill_general()
 
@@ -91,13 +95,7 @@ class Industry(Agents):
         self.fill_battery()
 
         # Fill the model predictive controller information in dataframe
-        self.fill_mpc()
-
-        # Fill the market agent information in dataframe
-        self.fill_market_agent()
-
-        # Fill the metering information in dataframe
-        self.fill_meter()
+        self.fill_ems()
 
         return self.df
 
@@ -125,6 +123,10 @@ class Industry(Agents):
         # Create the overall dataframe structure for the worksheet
         self.create_df_structure()
 
+        # Check if there are any agents to create
+        if self.num == 0:
+            return self.df
+
         # Fill the general information in dataframe
         self.fill_general()
 
@@ -151,13 +153,7 @@ class Industry(Agents):
         self.fill_battery(**kwargs)
 
         # Fill the model predictive controller information in dataframe
-        self.fill_mpc()
-
-        # Fill the market agent information in dataframe
-        self.fill_market_agent()
-
-        # Fill the metering information in dataframe
-        self.fill_meter()
+        self.fill_ems()
 
         return self.df
 
@@ -181,46 +177,46 @@ class Industry(Agents):
             # Adjust the columns from "inflexible_load"
             elif key == "inflexible_load":
                 cols[0] = f"{key}/owner"
-                cols[4] = f"{key}/sizing/file"
+                cols[3] = f"{key}/sizing/file"
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:5], num=max_num) + cols[5:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:4], num=max_num) + cols[4:]
             # Adjust the columns from "flexible_load"
             elif key == "flexible_load":
                 cols[0] = f"{key}/owner"
-                cols[4] = f"{key}/sizing/file"
+                cols[3] = f"{key}/sizing/file"
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "pv"
             elif key == "pv":
                 cols[0] = f"{key}/owner"
-                del cols[4]
+                del cols[3]
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:8], num=max_num) + cols[8:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:7], num=max_num) + cols[7:]
             # Adjust the columns from "wind"
             elif key == "wind":
                 cols[0] = f"{key}/owner"
-                del cols[4]
+                del cols[3]
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "fixed_gen"
             elif key == "fixed_gen":
                 cols[0] = f"{key}/owner"
-                del cols[4]
+                del cols[3]
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "ev"
             elif key == "ev":
                 cols[0] = f"{key}/owner"
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:13], num=max_num) + cols[13:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:11], num=max_num) + cols[11:]
             # Adjust the columns from "battery"
             elif key == "battery":
                 cols[0] = f"{key}/owner"
                 del cols[1]
                 max_num = max(self.config[key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:-1], num=max_num) + [cols[-1]]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:-1], num=max_num) + [cols[-1]]
             # All columns that do not need to be adjusted
-            elif key in ["mpc", "market_agent", "meter"]:
+            elif key in ["ems"]:
                 pass
             else:
                 raise NotImplementedError(
@@ -271,9 +267,6 @@ class Industry(Agents):
                                                                  method="relative")
         self.df[f"{key}/parameters/area"] = self._round_to_nth_digit(
             vals=self.df[f"{key}/parameters/area"], n=self.n_digits)
-
-        # forecast
-        self.df[f"{key}/fcast_retraining_frequency"] = config["fcast_retraining_frequency"]
 
         # market participation
         self.df[f"{key}/market_participant"] = self._gen_rand_bool_list(n=self.num,
@@ -331,7 +324,7 @@ class Industry(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -348,6 +341,7 @@ class Industry(Agents):
                                                                          method="relative")
             self.df[f"{key}/sizing/demand_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/demand_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/demand_{num}"] = self.df[f"{key}/sizing/demand_{num}"].astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df["general/parameters/type"],
                                                                    device=key,
@@ -355,7 +349,7 @@ class Industry(Agents):
                                                                    idx_type=0)
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         return self.df
 
@@ -376,8 +370,6 @@ class Industry(Agents):
         # general
         self.df[f"{key}/owner"] = (df['demand'] > 0).astype(int)
         self.df[f"{key}/num"] = self.df[f"{key}/owner"]  # equals owner as only one inflexible load per agent
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
@@ -396,7 +388,7 @@ class Industry(Agents):
                 self.df[f"{key}/sizing/file_{num}"] = df['file']
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         return self.df
 
@@ -411,7 +403,7 @@ class Industry(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -428,6 +420,7 @@ class Industry(Agents):
                                                                          method="relative")
             self.df[f"{key}/sizing/demand_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/demand_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/demand_{num}"] = self.df[f"{key}/sizing/demand_{num}"].astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df["general/parameters/type"],
                                                                    device=key,
@@ -435,7 +428,7 @@ class Industry(Agents):
                                                                    idx_type=0)
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
     def fill_pv(self, **kwargs) -> pd.DataFrame:
         """
@@ -467,7 +460,7 @@ class Industry(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -484,13 +477,18 @@ class Industry(Agents):
                                                                         method="relative")
             self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(vals=self.df[f"{key}/sizing/power_{num}"],
                                                                             n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
+            # orientation
+            self.df[f"{key}/sizing/orientation_{num}"] = self.df[f"{key}/sizing/orientation_{num}"].astype('Int16')
+            # angle
+            self.df[f"{key}/sizing/angle_{num}"] = self.df[f"{key}/sizing/angle_{num}"].astype('Int16')
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -525,8 +523,6 @@ class Industry(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one pv per agent is supported
@@ -564,8 +560,8 @@ class Industry(Agents):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-            # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -601,7 +597,7 @@ class Industry(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -618,13 +614,14 @@ class Industry(Agents):
                                                                         method="relative")
             self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(vals=self.df[f"{key}/sizing/power_{num}"],
                                                                             n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -659,8 +656,6 @@ class Industry(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
@@ -694,8 +689,8 @@ class Industry(Agents):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-            # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -732,7 +727,7 @@ class Industry(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -749,13 +744,14 @@ class Industry(Agents):
                                                                         method="relative")
             self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(vals=self.df[f"{key}/sizing/power_{num}"],
                                                                             n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -789,8 +785,6 @@ class Industry(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
@@ -812,8 +806,8 @@ class Industry(Agents):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-            # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -850,7 +844,7 @@ class Industry(Agents):
         self._add_general_info(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -863,6 +857,14 @@ class Industry(Agents):
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
+            # capacity
+            self.df[f"{key}/sizing/capacity_{num}"] = self.df[f"{key}/sizing/capacity_{num}"].astype('Int64')
+            # charging home
+            self.df[f"{key}/sizing/charging_home_{num}"] = self.df[f"{key}/sizing/charging_home_{num}"].astype('Int32')
+            # charging AC
+            self.df[f"{key}/sizing/charging_AC_{num}"] = self.df[f"{key}/sizing/charging_AC_{num}"].astype('Int32')
+            # charging DC
+            self.df[f"{key}/sizing/charging_DC_{num}"] = self.df[f"{key}/sizing/charging_DC_{num}"].astype('Int32')
 
             # things only necessary to add once
             if num == 0:
@@ -871,7 +873,7 @@ class Industry(Agents):
                                        idx_list=idx_list)
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -906,8 +908,6 @@ class Industry(Agents):
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
             'Int64')  # all agents that have plant type
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
@@ -958,7 +958,7 @@ class Industry(Agents):
         self._add_general_info_bat(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num)
@@ -971,10 +971,12 @@ class Industry(Agents):
             self.df[f"{key}/sizing/power_{num}"] *= self.df["inflexible_load/sizing/demand_0"] / 1e3
             self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/power_{num}"], n=2)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # capacity
             self.df[f"{key}/sizing/capacity_{num}"] *= self.df["inflexible_load/sizing/demand_0"] / 1e3
             self.df[f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/capacity_{num}"], n=2)
+            self.df[f"{key}/sizing/capacity_{num}"] = self.df[f"{key}/sizing/capacity_{num}"].astype('Int64')
 
         # quality
         self.df[f"{key}/quality"] = str(config["quality"])
@@ -1008,8 +1010,8 @@ class Industry(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
+        
+        
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
@@ -1026,416 +1028,15 @@ class Industry(Agents):
 
         return self.df
 
-    # def create_df_structure(self):
-    #     """
-    #         Function to create the dataframe structure with the respective columns
-    #     """
-    #     # Go through file and create the columns for the ctss worksheet
-    #     columns = ordereddict()
-    #     for key, _ in self.config.items():
-    #         cols = self.make_list_from_nested_dict(self.config[key], add_string=key)
-    #         # Adjust the columns from "general"
-    #         if key == "general":
-    #             cols[0] = f"{key}/agent_id"
-    #             cols[-1] = f"{key}/market_participant"
-    #             del cols[4]
-    #             del cols[1]
-    #             cols.insert(1, f"{key}/name")
-    #             cols.insert(2, f"{key}/comment")
-    #             cols.insert(3, f"{key}/bus")
-    #         # Adjust the columns from "inflexible_load"
-    #         elif key == "inflexible_load":
-    #             cols[0] = f"{key}/owner"
-    #             cols[4] = f"{key}/sizing/file"
-    #             max_num = max(self.config[key]["num"])
-    #             cols = cols[:3] + self.repeat_columns(columns=cols[3:5], num=max_num) + cols[5:]
-    #         # Adjust the columns from "flexible_load"
-    #         elif key == "flexible_load":
-    #             cols[0] = f"{key}/owner"
-    #             cols[4] = f"{key}/sizing/file"
-    #             max_num = max(self.config[key]["num"])
-    #             cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
-    #         # Adjust the columns from "pv"
-    #         elif key == "pv":
-    #             cols[0] = f"{key}/owner"
-    #             del cols[8]
-    #             del cols[4]
-    #             max_num = max(self.config[key]["num"])
-    #             cols = cols[:3] + self.repeat_columns(columns=cols[3:8], num=max_num) + cols[8:]
-    #         # Adjust the columns from "wind"
-    #         elif key == "wind":
-    #             cols[0] = f"{key}/owner"
-    #             del cols[4]
-    #             max_num = max(self.config[key]["num"])
-    #             cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
-    #         # Adjust the columns from "fixed_gen"
-    #         elif key == "fixed_gen":
-    #             cols[0] = f"{key}/owner"
-    #             del cols[4]
-    #             max_num = max(self.config[key]["num"])
-    #             cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
-    #         # Adjust the columns from "ev"
-    #         elif key == "ev":
-    #             cols[0] = f"{key}/owner"
-    #             max_num = max(self.config[key]["num"])
-    #             cols = cols[:3] + self.repeat_columns(columns=cols[3:13], num=max_num) + cols[13:]
-    #         # Adjust the columns from "battery"
-    #         elif key == "battery":
-    #             cols[0] = f"{key}/owner"
-    #             del cols[1]
-    #             max_num = max(self.config[key]["num"])
-    #             cols = cols[:3] + self.repeat_columns(columns=cols[3:-1], num=max_num) + [cols[-1]]
-    #         # Adjust the columns from "mpc"
-    #         elif key == "mpc":
-    #             pass
-    #         # Adjust the columns from "market_agent"
-    #         elif key == "market_agent":
-    #             pass
-    #         # Adjust the columns from "meter"
-    #         elif key == "meter":
-    #             pass
-    #         else:
-    #             raise NotImplementedError(
-    #                 f"The configuration file contains a key word ('{key}') that has not been configured in "
-    #                 "the Sfhs class yet. Aborting scenario creation...")
-    #         columns[key] = cols
-    #
-    #     # Combine all separate lists into one for the dataframe
-    #     cols_df = []
-    #     for idx, cols in columns.items():
-    #         cols_df += cols
-    #
-    #     # Create dataframe with responding columns
-    #     self.df = pd.DataFrame(index=range(self.config["general"]["number_of"]), columns=cols_df)
-    #
-    #     return self.df
-    #
-    # def fill_general(self):
-    #     """
-    #         Fills all general columns
-    #     """
-    #     key = "general"
-    #     config = self.config[f"{key}"]
-    #
-    #     # general
-    #     self.df[f"{key}/agent_id"] = self._gen_new_ids(n=self.num)
-    #     self.idx_list = self._gen_idx_list_from_distr(n=self.num, distr=config["parameters"]["distribution"])
-    #
-    #     # parameters
-    #     # add indexed info
-    #     self._add_info_indexed(keys=[key, "parameters"], config=config["parameters"], idx_list=self.idx_list)
-    #     # postprocessing
-    #     # area
-    #     self.df[f"{key}/parameters/area"] = self._calc_deviation(idx_list=self.idx_list,
-    #                                                              vals=self.df[f"{key}/parameters/area"],
-    #                                                              distr=config["parameters"]["area_deviation"],
-    #                                                              method="relative")
-    #     self.df[f"{key}/parameters/area"] = self._round_to_nth_digit(
-    #         vals=self.df[f"{key}/parameters/area"], n=self.n_digits)
-    #
-    #     # forecast
-    #     self.df[f"{key}/fcast_retraining_frequency"] = config["fcast_retraining_frequency"]
-    #
-    #     # market participation
-    #     self.df[f"{key}/market_participant"] = self._gen_rand_bool_list(n=self.num,
-    #                                                                     share_ones=config["market_participant_share"])
-    #
-    #
-    #     print(self.df.loc[:, self.df.filter(like=key).columns].to_string())
-    #     exit()
-    #
-    #     return self.df
-    #
-    # def fill_inflexible_load(self):
-    #     """
-    #         Fills all inflexible_load columns
-    #     """
-    #     key = "inflexible_load"
-    #     config = self.config[f"{key}"]
-    #
-    #     # general
-    #     self._add_general_info(key=key)
-    #
-    #     # sizing
-    #     max_num = max(config["num"])
-    #     for num in range(max_num):
-    #         # index list indicating ownership of device
-    #         idx_list = self._get_idx_list(key=key, num=num)
-    #
-    #         # add indexed info
-    #         self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
-    #                                idx_list=idx_list, appendix=f"_{num}")
-    #         # postprocessing
-    #         # power
-    #         self.df[f"{key}/sizing/demand_{num}"] *= self.df["general/parameters/area"]
-    #         self.df[f"{key}/sizing/demand_{num}"] = self._calc_deviation(idx_list=idx_list,
-    #                                                                      vals=self.df[f"{key}/sizing/demand_{num}"],
-    #                                                                      distr=config["sizing"]["demand_deviation"],
-    #                                                                      method="relative")
-    #         self.df[f"{key}/sizing/demand_{num}"] = self._round_to_nth_digit(
-    #             vals=self.df[f"{key}/sizing/demand_{num}"], n=self.n_digits)
-    #         # file
-    #         self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df["general/parameters/type"],
-    #                                                                device=key,
-    #                                                                input_path=os.path.join(self.input_path, key),
-    #                                                                idx_type=0)
-    #
-    #     # forecast
-    #     self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
-    #
-    # def fill_flexible_load(self):
-    #     """
-    #         Fills all flexible_load columns
-    #     """
-    #     key = "flexible_load"
-    #     config = self.config[f"{key}"]
-    #
-    #     # general
-    #     self._add_general_info(key=key)
-    #
-    #     # sizing
-    #     max_num = max(config["num"])
-    #     for num in range(max_num):
-    #         # index list indicating ownership of device
-    #         idx_list = self._get_idx_list(key=key, num=num)
-    #
-    #         # add indexed info
-    #         self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
-    #                                idx_list=idx_list, appendix=f"_{num}")
-    #         # postprocessing
-    #         # power
-    #         self.df[f"{key}/sizing/demand_{num}"] *= self.df["general/parameters/area"]
-    #         self.df[f"{key}/sizing/demand_{num}"] = self._calc_deviation(idx_list=idx_list,
-    #                                                                      vals=self.df[f"{key}/sizing/demand_{num}"],
-    #                                                                      distr=config["sizing"]["demand_deviation"],
-    #                                                                      method="relative")
-    #         self.df[f"{key}/sizing/demand_{num}"] = self._round_to_nth_digit(
-    #             vals=self.df[f"{key}/sizing/demand_{num}"], n=self.n_digits)
-    #         # file
-    #         self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df["general/parameters/type"],
-    #                                                                device=key,
-    #                                                                input_path=os.path.join(self.input_path, key),
-    #                                                                idx_type=0)
-    #
-    #     # forecast
-    #     self._add_info_simple(keys=[key, "fcast"], config=self.config[key]["fcast"])
-    #
-    # def fill_pv(self):
-    #     """
-    #         Fills all pv columns
-    #     """
-    #     key = "pv"
-    #     config = self.config[f"{key}"]
-    #
-    #     # general
-    #     self._add_general_info(key=key)
-    #
-    #     # sizing
-    #     max_num = max(config["num"])
-    #     for num in range(max_num):
-    #         # index list indicating ownership of device
-    #         idx_list = self._get_idx_list(key=key, num=num)
-    #
-    #         # add indexed info
-    #         self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
-    #                                idx_list=idx_list, appendix=f"_{num}")
-    #         # postprocessing
-    #         # power
-    #         self.df[f"{key}/sizing/power_{num}"] *= self.df["inflexible_load/sizing/demand_0"]
-    #         self.df[f"{key}/sizing/power_{num}"] = self._calc_deviation(idx_list=idx_list,
-    #                                                                     vals=self.df[f"{key}/sizing/power_{num}"],
-    #                                                                     distr=config["sizing"]["power_deviation"],
-    #                                                                     method="relative")
-    #         self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(vals=self.df[f"{key}/sizing/power_{num}"],
-    #                                                                         n=self.n_digits)
-    #         # file
-    #         self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
-    #                                                                device=f"{key}",
-    #                                                                input_path=os.path.join(self.input_path, key))
-    #
-    #     # forecast
-    #     self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
-    #
-    #     # quality
-    #     self.df[f"{key}/quality"] = config["quality"]
-    #
-    # def fill_wind(self):
-    #     """
-    #         Fills all wind columns
-    #     """
-    #     key = "wind"
-    #     config = self.config[f"{key}"]
-    #
-    #     # general
-    #     self._add_general_info(key=key)
-    #
-    #     # sizing
-    #     max_num = max(config["num"])
-    #     for num in range(max_num):
-    #         # index list indicating ownership of device
-    #         idx_list = self._get_idx_list(key=key, num=num)
-    #
-    #         # add indexed info
-    #         self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
-    #                                idx_list=idx_list, appendix=f"_{num}")
-    #         # postprocessing
-    #         # power
-    #         self.df[f"{key}/sizing/power_{num}"] *= self.df["inflexible_load/sizing/demand_0"]
-    #         self.df[f"{key}/sizing/power_{num}"] = self._calc_deviation(idx_list=idx_list,
-    #                                                                     vals=self.df[f"{key}/sizing/power_{num}"],
-    #                                                                     distr=config["sizing"]["power_deviation"],
-    #                                                                     method="relative")
-    #         self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(vals=self.df[f"{key}/sizing/power_{num}"],
-    #                                                                         n=self.n_digits)
-    #         # file
-    #         self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
-    #                                                                device=f"{key}",
-    #                                                                input_path=os.path.join(self.input_path, key))
-    #
-    #     # forecast
-    #     self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
-    #
-    #     # quality
-    #     self.df[f"{key}/quality"] = config["quality"]
-    #
-    # def fill_fixed_gen(self):
-    #     """
-    #         Fills all fixed_gen columns
-    #     """
-    #
-    #     key = "fixed_gen"
-    #     config = self.config[f"{key}"]
-    #
-    #     # general
-    #     self._add_general_info(key=key)
-    #
-    #     # sizing
-    #     max_num = max(config["num"])
-    #     for num in range(max_num):
-    #         # index list indicating ownership of device
-    #         idx_list = self._get_idx_list(key=key, num=num)
-    #
-    #         # add indexed info
-    #         self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
-    #                                idx_list=idx_list, appendix=f"_{num}")
-    #         # postprocessing
-    #         # power
-    #         self.df[f"{key}/sizing/power_{num}"] *= self.df["inflexible_load/sizing/demand_0"]
-    #         self.df[f"{key}/sizing/power_{num}"] = self._calc_deviation(idx_list=idx_list,
-    #                                                                     vals=self.df[f"{key}/sizing/power_{num}"],
-    #                                                                     distr=config["sizing"]["power_deviation"],
-    #                                                                     method="relative")
-    #         self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(vals=self.df[f"{key}/sizing/power_{num}"],
-    #                                                                         n=self.n_digits)
-    #         # file
-    #         self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
-    #                                                                device=f"{key}",
-    #                                                                input_path=os.path.join(self.input_path, key))
-    #
-    #     # forecast
-    #     self._add_info_simple(keys=[key, "fcast"], config=self.config[key]["fcast"])
-    #
-    #     # quality
-    #     self.df[f"{key}/quality"] = self.config[f"{key}"]["quality"]
-    #
-    # def fill_ev(self):
-    #     """
-    #         Fills all ev columns
-    #     """
-    #     key = "ev"
-    #     config = self.config[f"{key}"]
-    #
-    #     # general
-    #     self._add_general_info(key=key)
-    #
-    #     # sizing
-    #     max_num = max(config["num"])
-    #     for num in range(max_num):
-    #         # index list indicating ownership of device
-    #         idx_list = self._get_idx_list(key=key, num=num)
-    #
-    #         # sizing
-    #         self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"],
-    #                                idx_list=idx_list, appendix=f"_{num}")
-    #         # postprocessing
-    #         # file
-    #         self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
-    #                                                                device=f"{key}",
-    #                                                                input_path=os.path.join(self.input_path, key))
-    #
-    #         # things only necessary to add once
-    #         if num == 0:
-    #             # charging scheme
-    #             self._add_info_indexed(keys=[key, "charging_scheme"], config=config["charging_scheme"],
-    #                                    idx_list=idx_list)
-    #
-    #     # forecast
-    #     self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
-    #
-    #     # quality
-    #     self.df[f"{key}/quality"] = config["quality"]
-    #
-    # def fill_battery(self):
-    #     """
-    #         Fills all battery columns
-    #     """
-    #     key = "battery"
-    #     config = self.config[f"{key}"]
-    #
-    #     # general
-    #     self._add_general_info_dep(key=key)
-    #
-    #     # sizing
-    #     max_num = max(config["num"])
-    #     for num in range(max_num):
-    #         # index list indicating ownership of device
-    #         idx_list = self._get_idx_list(key=key, num=num)
-    #
-    #         # add indexed info
-    #         self._add_info_indexed(keys=[key, "sizing"], config=config["sizing"], idx_list=idx_list,
-    #                                appendix=f"_{num}")
-    #         # postprocessing
-    #         # power
-    #         self.df[f"{key}/sizing/power_{num}"] *= self.df["inflexible_load/sizing/demand_0"] / 1000
-    #         self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
-    #             vals=self.df[f"{key}/sizing/power_{num}"], n=self.n_digits)
-    #         # capacity
-    #         self.df[f"{key}/sizing/capacity_{num}"] *= self.df["inflexible_load/sizing/demand_0"] / 1000
-    #         self.df[f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
-    #             vals=self.df[f"{key}/sizing/capacity_{num}"], n=self.n_digits)
-    #
-    #     # quality
-    #     self.df[f"{key}/quality"] = str(config["quality"])
-
-    def fill_mpc(self):
+    def fill_ems(self):
         """
             Fills all battery columns
         """
-        key = "mpc"
+        key = "ems"
         config = self.config[f"{key}"]
 
         # general
-        self._add_info_simple(keys=[key], config=config)
-
-    def fill_market_agent(self):
-        """
-            Fills all market agent columns
-        """
-        key = "market_agent"
-        config = self.config[f"{key}"]
-
-        # general
-        self._add_info_random(keys=[key], config=config)
-
-    def fill_meter(self):
-        """
-            Fills all battery columns
-        """
-        key = "meter"
-        config = self.config[f"{key}"]
-
-        # general
-        self._add_info_simple(keys=[key], config=config)
+        self.df = self._add_info_simple(keys=[key], config=config, df=self.df)
 
     def _get_idx_list(self, key: str, num: int) -> list:
         """creates the index list for the given run"""
@@ -1458,7 +1059,6 @@ class Industry(Agents):
         self.df[f"{key}/num"] = self._gen_list_from_idx_list(idx_list=self.idx_list,
                                                              distr=self.config[f"{key}"]["num"])
         self.df[f"{key}/num"] *= self.df[f"{key}/owner"]
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
     def _add_general_info_bat(self, key: str):
 
@@ -1484,4 +1084,3 @@ class Industry(Agents):
 
             self.df[f"{key}/owner"] = list_owner
             self.df[f"{key}/num"] = list_num
-            self.df[f"{key}/has_submeter"] = str(self.config[f"{key}"]["has_submeter"])

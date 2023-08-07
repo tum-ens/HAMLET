@@ -64,10 +64,10 @@ class Lem(Markets):
         # Get start and end time of the market simulation
         # start is either a timestamp or a timedelta
         start = timing['start'] if type(timing['start']) == timestamp.TimeStamp \
-            else self.setup['simulation']['sim']['start'] + pd.Timedelta(timing['start'], unit='seconds')
+            else self.setup['time']['start'] + pd.Timedelta(timing['start'], unit='seconds')
         start = start.replace(tzinfo=datetime.timezone.utc)  # needed to obtain correct time zone
         # end is the end of the simulation
-        end = self.setup['simulation']['sim']['start'] + pd.Timedelta(self.setup['simulation']['sim']['duration'], unit='days')
+        end = self.setup['time']['start'] + pd.Timedelta(self.setup['time']['duration'], unit='days')
         end = end.replace(tzinfo=datetime.timezone.utc)  # needed to obtain correct time zone
 
         # Create timetable template and main template
