@@ -860,17 +860,17 @@ sfh:
   ems:
     controller:                                 # controller parameters
       rtc:                                      # real time controller parameters (acts only at last possible timestep)
-        method: rule-based                      # options:
+        method: linopy                          # options:
                                                 #   - None:       no rtc is used to correct behavior in last timestep
                                                 #   - rule-based: production is maxed out, EVs charge immediately
                                                 #                 at max power, HP and CHP run cyclically
                                                 #                 to fill storage
-                                                #   - optimized:  optimization problem is solved to decide operation
+                                                #   - linopy:     linopy optimization problem is solved
 
       mpc:                                      # model predictive controller parameters (acts into the future)
-        method: mpc                             # options:
+        method: linopy                          # options:
                                                 #   - None:       no mpc is used to forecast and plan operation
-                                                #   - optimized:  optimization problem is solved to forecast and
+                                                #   - linopy:     linopy optimization problem is solved to forecast and
                                                 #                 plan operation
 
         horizon: 86_400                         # control horizon
@@ -1874,17 +1874,17 @@ mfh:
   ems:
     controller:                                 # controller parameters
       rtc:                                      # real time controller parameters (acts only at last possible timestep)
-        method: rule-based                      # options:
+        method: linopy                          # options:
                                                 #   - None:       no rtc is used to correct behavior in last timestep
                                                 #   - rule-based: production is maxed out, EVs charge immediately
                                                 #                 at max power, HP and CHP run cyclically
                                                 #                 to fill storage
-                                                #   - optimized:  optimization problem is solved to decide operation
+                                                #   - linopy:     linopy optimization problem is solved
 
       mpc:                                      # model predictive controller parameters (acts into the future)
-        method: mpc                             # options:
+        method: linopy                          # options:
                                                 #   - None:       no mpc is used to forecast and plan operation
-                                                #   - optimized:  optimization problem is solved to forecast and
+                                                #   - linopy:     linopy optimization problem is solved to forecast and
                                                 #                 plan operation
 
         horizon: 86_400                         # control horizon
@@ -2498,17 +2498,17 @@ ctsp:
   ems:
     controller:                                 # controller parameters
       rtc:                                      # real time controller parameters (acts only at last possible timestep)
-        method: rule-based                      # options:
+        method: linopy                          # options:
                                                 #   - None:       no rtc is used to correct behavior in last timestep
                                                 #   - rule-based: production is maxed out, EVs charge immediately
                                                 #                 at max power, HP and CHP run cyclically
                                                 #                 to fill storage
-                                                #   - optimized:  optimization problem is solved to decide operation
+                                                #   - linopy:     linopy optimization problem is solved
 
       mpc:                                      # model predictive controller parameters (acts into the future)
-        method: mpc                             # options:
+        method: linopy                          # options:
                                                 #   - None:       no mpc is used to forecast and plan operation
-                                                #   - optimized:  optimization problem is solved to forecast and
+                                                #   - linopy:     linopy optimization problem is solved to forecast and
                                                 #                 plan operation
 
         horizon: 86_400                         # control horizon
@@ -3129,17 +3129,17 @@ industry:
   ems:
     controller:                                 # controller parameters
       rtc:                                      # real time controller parameters (acts only at last possible timestep)
-        method: rule-based                      # options:
+        method: linopy                          # options:
                                                 #   - None:       no rtc is used to correct behavior in last timestep
                                                 #   - rule-based: production is maxed out, EVs charge immediately
                                                 #                 at max power, HP and CHP run cyclically
                                                 #                 to fill storage
-                                                #   - optimized:  optimization problem is solved to decide operation
+                                                #   - linopy:     linopy optimization problem is solved
 
       mpc:                                      # model predictive controller parameters (acts into the future)
-        method: mpc                             # options:
+        method: linopy                          # options:
                                                 #   - None:       no mpc is used to forecast and plan operation
-                                                #   - optimized:  optimization problem is solved to forecast and
+                                                #   - linopy:     linopy optimization problem is solved to forecast and
                                                 #                 plan operation
 
         horizon: 86_400                         # control horizon
@@ -3330,17 +3330,17 @@ producer:
     ems:
       controller:                                 # controller parameters
         rtc:                                      # real time controller parameters (acts only at last possible timestep)
-          method: rule-based                      # options:
+          method: linopy                          # options:
                                                   #   - None:       no rtc is used to correct behavior in last timestep
                                                   #   - rule-based: production is maxed out, EVs charge immediately
                                                   #                 at max power, HP and CHP run cyclically
                                                   #                 to fill storage
-                                                  #   - optimized:  optimization problem is solved to decide operation
+                                                  #   - linopy:     linopy optimization problem is solved
 
         mpc:                                      # model predictive controller parameters (acts into the future)
-          method: mpc                             # options:
+          method: linopy                          # options:
                                                   #   - None:       no mpc is used to forecast and plan operation
-                                                  #   - optimized:  optimization problem is solved to forecast and
+                                                  #   - linopy:     linopy optimization problem is solved to forecast and
                                                   #                 plan operation
 
           horizon: 86_400                         # control horizon
@@ -3508,17 +3508,17 @@ producer:
     ems:
       controller:                                 # controller parameters
         rtc:                                      # real time controller parameters (acts only at last possible timestep)
-          method: rule-based                      # options:
+          method: linopy                          # options:
                                                   #   - None:       no rtc is used to correct behavior in last timestep
                                                   #   - rule-based: production is maxed out, EVs charge immediately
                                                   #                 at max power, HP and CHP run cyclically
                                                   #                 to fill storage
-                                                  #   - optimized:  optimization problem is solved to decide operation
+                                                  #   - linopy:     linopy optimization problem is solved
 
         mpc:                                      # model predictive controller parameters (acts into the future)
-          method: mpc                             # options:
+          method: linopy                          # options:
                                                   #   - None:       no mpc is used to forecast and plan operation
-                                                  #   - optimized:  optimization problem is solved to forecast and
+                                                  #   - linopy:     linopy optimization problem is solved to forecast and
                                                   #                 plan operation
 
           horizon: 86_400                         # control horizon
@@ -3680,26 +3680,26 @@ producer:
                                                 # note: if charge_from_grid is True it is always set to "local"
     ################################ energy management system (EMS) ################################
     ems:
-      controller:
+      controller:                                 # controller parameters
         rtc:                                      # real time controller parameters (acts only at last possible timestep)
-          method: rule-based                      # options:
+          method: linopy                          # options:
                                                   #   - None:       no rtc is used to correct behavior in last timestep
                                                   #   - rule-based: production is maxed out, EVs charge immediately
                                                   #                 at max power, HP and CHP run cyclically
                                                   #                 to fill storage
-                                                  #   - optimized:  optimization problem is solved to decide operation
+                                                  #   - linopy:     linopy optimization problem is solved
 
         mpc:                                      # model predictive controller parameters (acts into the future)
-          method: mpc                             # options:
+          method: linopy                          # options:
                                                   #   - None:       no mpc is used to forecast and plan operation
-                                                  #   - optimized:  optimization problem is solved to forecast and
+                                                  #   - linopy:     linopy optimization problem is solved to forecast and
                                                   #                 plan operation
 
           horizon: 86_400                         # control horizon
                                                   # unit: s
                                                   # note: applies to strategy: mpc
 
-      market:
+      market:                                     # market parameters
         strategy: [linear]                        # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
@@ -3727,6 +3727,7 @@ producer:
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
 
+      fcasts:                                     # forecasting settings for all forecasts
           retraining_period: 86_400               # period after which the forecast model is retrained
                                                   # unit: s
                                                   # note: does not apply when simulation ex-post markets
@@ -3791,17 +3792,17 @@ storage:
     ems:
       controller:                                 # controller parameters
         rtc:                                      # real time controller parameters (acts only at last possible timestep)
-          method: rule-based                      # options:
+          method: linopy                          # options:
                                                   #   - None:       no rtc is used to correct behavior in last timestep
                                                   #   - rule-based: production is maxed out, EVs charge immediately
                                                   #                 at max power, HP and CHP run cyclically
                                                   #                 to fill storage
-                                                  #   - optimized:  optimization problem is solved to decide operation
+                                                  #   - linopy:     linopy optimization problem is solved
 
         mpc:                                      # model predictive controller parameters (acts into the future)
-          method: mpc                             # options:
+          method: linopy                          # options:
                                                   #   - None:       no mpc is used to forecast and plan operation
-                                                  #   - optimized:  optimization problem is solved to forecast and
+                                                  #   - linopy:     linopy optimization problem is solved to forecast and
                                                   #                 plan operation
 
           horizon: 86_400                         # control horizon
@@ -3895,17 +3896,17 @@ storage:
     ems:
       controller:                                 # controller parameters
         rtc:                                      # real time controller parameters (acts only at last possible timestep)
-          method: rule-based                      # options:
+          method: linopy                          # options:
                                                   #   - None:       no rtc is used to correct behavior in last timestep
                                                   #   - rule-based: production is maxed out, EVs charge immediately
                                                   #                 at max power, HP and CHP run cyclically
                                                   #                 to fill storage
-                                                  #   - optimized:  optimization problem is solved to decide operation
+                                                  #   - linopy:     linopy optimization problem is solved
 
         mpc:                                      # model predictive controller parameters (acts into the future)
-          method: mpc                             # options:
+          method: linopy                          # options:
                                                   #   - None:       no mpc is used to forecast and plan operation
-                                                  #   - optimized:  optimization problem is solved to forecast and
+                                                  #   - linopy:     linopy optimization problem is solved to forecast and
                                                   #                 plan operation
 
           horizon: 86_400                         # control horizon
@@ -3999,17 +4000,17 @@ storage:
     ems:
       controller:                                 # controller parameters
         rtc:                                      # real time controller parameters (acts only at last possible timestep)
-          method: rule-based                      # options:
+          method: linopy                          # options:
                                                   #   - None:       no rtc is used to correct behavior in last timestep
                                                   #   - rule-based: production is maxed out, EVs charge immediately
                                                   #                 at max power, HP and CHP run cyclically
                                                   #                 to fill storage
-                                                  #   - optimized:  optimization problem is solved to decide operation
+                                                  #   - linopy:     linopy optimization problem is solved
 
         mpc:                                      # model predictive controller parameters (acts into the future)
-          method: mpc                             # options:
+          method: linopy                          # options:
                                                   #   - None:       no mpc is used to forecast and plan operation
-                                                  #   - optimized:  optimization problem is solved to forecast and
+                                                  #   - linopy:     linopy optimization problem is solved to forecast and
                                                   #                 plan operation
 
           horizon: 86_400                         # control horizon

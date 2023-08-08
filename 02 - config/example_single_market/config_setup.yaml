@@ -39,11 +39,11 @@ paths:                                    # paths relevant for the simulation
                                           # note: relative to the lemlab repository
 
 modeling:                                 # modeling settings
-  language: pyomo                         # modeling language to be used
+  language: linopy                        # modeling language to be used
                                           # options:
-                                          #   - jump: recommended
-                                          #   - pyomo
-                                          #   - linopy
+                                          #   - linopy: recommended
+                                          #   - jump: in development
+                                          #   - pyomo: in development
 
   solver: gurobi                          # solver for the simulation
                                           # options (preferably MIQP capable):
