@@ -34,17 +34,18 @@ class RegionDB:
         for agents_type in agents_types:
             # register agents for each type
             agents = f.get_all_subdirectories(os.path.join(self.path_region, 'agents', agents_type))
-            for agent in agents:
-                sub_agents = f.get_all_subdirectories(os.path.join(self.path_region, 'agents', agents_type, agent))
-                self.agents[agent] = AgentDB(path=os.path.join(self.path_region, 'agents', agents_type, agent),
-                                             type=agents_type)
-                if sub_agents is None:
-                    self.agents[agent].register_agent()
-                else:
-                    for sub_agent in sub_agents:
-                        self.agents[agent].register_sub_agent(id=sub_agent, path=os.path.join(self.path_region,
-                                                                                              'agents', agents_type,
-                                                                                              agent, sub_agent))
+            if agents:
+                for agent in agents:
+                    sub_agents = f.get_all_subdirectories(os.path.join(self.path_region, 'agents', agents_type, agent))
+                    self.agents[agent] = AgentDB(path=os.path.join(self.path_region, 'agents', agents_type, agent),
+                                                 type=agents_type)
+                    if sub_agents is None:
+                        self.agents[agent].register_agent()
+                    else:
+                        for sub_agent in sub_agents:
+                            self.agents[agent].register_sub_agent(id=sub_agent, path=os.path.join(self.path_region,
+                                                                                                  'agents', agents_type,
+                                                                                                  agent, sub_agent))
 
     def __register_all_markets(self):
         """Register all markets for this region."""
