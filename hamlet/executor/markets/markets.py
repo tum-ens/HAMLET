@@ -20,6 +20,8 @@ from datetime import datetime
 # - Use polars instead of pandas to increase performance
 # - Use parallel computing for market clearings
 
+# TODO: Change the structure of the markets to be more similar to the agents
+
 
 class Markets:
 
@@ -40,9 +42,6 @@ class Markets:
         # Instance of the market class
         market_type = timetable[0, 'market']  # extract market type by selecting the first row's market value
         self.market = self.types[market_type](timetable)
-
-        instance = Lem(name='example').f
-        instance2 = Lem(name='example2')
 
     def execute(self):
         """Executes the market"""
