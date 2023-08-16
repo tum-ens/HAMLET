@@ -12,13 +12,19 @@ from keras.models import Model
 from sktime.forecasting.arima import ARIMA
 from darts.models.forecasting.rnn_model import RNNModel
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from hamlet import constants as c
 
 
 class Forecaster:
-    def __init__(self, plants_config, timeseries, weather):
-        self.plants_config = plants_config
+    def __init__(self, agent, plants, ems, timeseries, market, weather, database):
+        self.agent = agent  # Contains all files related to the agent and should therefore be returned with the results
+        self.plants_config = plants
+        self.ems_config = ems
         self.timeseries = timeseries
+        self.market = market
         self.weather = weather
+        self.database = database
+        self.forecasts = agent[c.K_FORECASTS]
         self.fit_ts = {}
 
         # pre-defined models from packages
@@ -33,7 +39,7 @@ class Forecaster:
     def init_forecaster(self):
         """Initialize forecaster with corresponding model for each plant, initial fitting of models."""
         for plant_id in self.plants_config.keys:
-            # always get a object with fit and predict method
+            # always get an object with fit and predict method
             if 'fcast' in self.plants_config[plant_id].keys:
                 method = self.plants_config[plant_id]['fcast']['method']
                 self.models[plant_id] = getattr(self, method)(**self.plants_config[plant_id]['fcast']['method'])
@@ -45,7 +51,20 @@ class Forecaster:
                     # generate a list of timesteps where model need to be fitted again
                     self.fit_ts[plant_id] = []  # to-be generated
 
-    def forcast(self, plant_id, current_ts, length_to_predict):
+    def make_forecasts(self):
+        """Make forecasts for all plants."""
+        # TODO: @Jiahe, please implement this method
+
+        # Loop through all forecast columns (probably best to sort this by plant ID and market type)
+
+        # Check if the model needs to be re-fitted
+
+        # Make the forecast
+
+        # Return the forecasts dataframe (i.e. self.forecasts)
+        return self.forecasts
+
+    def forecast(self, plant_id, current_ts, length_to_predict):
         """Make forecast for the given timestep. Re-fit model before forecasting if needed."""
         if current_ts in self.fit_ts[plant_id]:
             # re-fit

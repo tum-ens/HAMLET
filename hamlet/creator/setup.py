@@ -501,17 +501,28 @@ class Creator:
                 else:
                     raise TypeError(f'File {file} is not a valid file type. Please use .json or .xlsx files.')
 
-    def __create_combined_grid_file(self):
+    def __create_combined_grid_file(self) -> None:
+        """
+        Create a combined grid by merging the main grid with the grids of the regions.
+
+        If the main grid is not found in self.grids, the function returns without creating the combined grid.
+
+        The combined grid is saved as a JSON file in the specified path.
+        """
+
+        # Check if the main grid's name exists in the dictionary
+        if self.name not in self.grids:
+            return
 
         # Take the main grid and expand it with the grids of the regions
         grid = self.grids[self.name]
 
-        # Loop through the grids and add them to the grid
+        # Loop through the grids and add them to the main grid
         for region, grid_region in self.grids.items():
             if region != self.name:
                 grid = pp.merge_nets(grid, grid_region, validate=False)
 
-        # Save the grid
+        # Save the combined grid as a JSON file
         pp.to_json(grid, os.path.join(self.path_scenarios, self.name, 'general', 'grid.json'))
 
     def __create_scenario_folders(self, delete: bool = True) -> None:

@@ -84,8 +84,6 @@ class Executor:
 
         self.__prepare_scenario()
 
-        # TODO: Put back in:
-
         self.__setup_database()
 
     def execute(self):
@@ -142,7 +140,7 @@ class Executor:
         """Executes all agent tasks for all agents in parallel"""
 
         # Get the data of the agents that are part of the tasklist
-        agents = self.database.get_agent_data(region=tasklist['region'].iloc[0])
+        agents = self.database.get_agent_data(region=tasklist[0, 'region'])
 
         # Define the function to be executed in parallel
         def tasks(data, timetable, agent_type):
@@ -193,7 +191,9 @@ class Executor:
         """
 
         # Get the data of the agents that are part of the tasklist
-        agents = self.database.get_agent_data(region=tasklist['region'].iloc[0])
+        agents = dict()
+        agents['sfh'] = self.database.get_agent_data(region=tasklist[0, 'region'])
+        print('Change back to "agents = ..." (__execute_agents)')
 
         results = []
 
@@ -201,7 +201,7 @@ class Executor:
         for agent_type, agent in agents.items():
             for agent_id, data in agent.items():
                 # Create an instance of the Agents class and execute its tasks
-                results.append(Agent(data, tasklist, agent_type).execute())
+                results.append(Agent(data, tasklist, agent_type, self.database).execute())
 
         # Post the agent data back to the database
         # self.database.post_agent_data(results)
@@ -240,9 +240,6 @@ class Executor:
         self.general = f.load_file(os.path.join(self.path_scenario, 'general', 'general.json'))
         self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'config_setup.yaml'))
 
-        # Set the simulation type
-        self.type = self.config['simulation']['type']
-
         # Load timetable
         self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),
                                      df='polars', method='eager')
@@ -251,7 +248,7 @@ class Executor:
         self.structure = self.general['structure']
 
         # Set the results path
-        self.path_results = os.path.join(self.config['simulation']['paths']['results'], self.name)
+        self.path_results = os.path.join(self.config['paths']['results'], self.name)
         # Check if the results folder exists and stop simulation if overwrite is set to False
         if os.path.exists(self.path_results) and self.overwrite is False:
             raise FileExistsError(f"Results folder already exists. "
