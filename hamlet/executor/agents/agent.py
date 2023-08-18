@@ -23,7 +23,7 @@ from pprint import pprint
 
 
 class Agent:
-    def __init__(self, data: dict, timetable: pl.DataFrame, agent_type: str, database):
+    def __init__(self, data: dict, timetable: pl.LazyFrame, agent_type: str, database):
 
         # Instance of the agent class
         self.agent = AgentFactory.create_agent(agent_type, data, timetable, database)
@@ -55,13 +55,13 @@ class AgentFactory:
 class AgentBase:
     """Base class for all agents. It provides a default implementation of the run method."""
 
-    def __init__(self, agent_type: str, data: dict, timetable: pd.DataFrame, database: Database):
+    def __init__(self, agent_type: str, agent: dict, timetable: pd.DataFrame, database: Database):
 
         # Type of agent
         self.agent_type = agent_type
 
         # Data
-        self.data = data
+        self.agent = agent
 
         # Timetable
         self.timetable = timetable
@@ -161,7 +161,7 @@ class AgentBase:
             controller = Controller(controller_type=controller, **params).create_instance()
 
             # Run the controller
-            self.data = controller.run(data=self.data, timetable=self.timetable, market=self.market)
+            self.agent = controller.run(agent=self.agent, timetable=self.timetable, market=self.market)
 
 
 
