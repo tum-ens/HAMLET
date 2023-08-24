@@ -70,7 +70,7 @@ class AgentBase:
         self.db = database
 
         # Market data
-        self.market = None
+        self.market = pl.LazyFrame()  # TODO: Replace with the market results
 
     def execute(self):
         """Executes the agent"""
