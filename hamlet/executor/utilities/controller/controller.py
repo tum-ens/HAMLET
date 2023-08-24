@@ -1,10 +1,15 @@
-# Class is supposed to be similar to the agent one where it allows to include new methods
-# Currently really rough draft and needs some thinking. Should probably work like pyomo or so
+__author__ = "MarkusDoepfert"
+__credits__ = ""
+__license__ = ""
+__maintainer__ = "MarkusDoepfert"
+__email__ = "markus.doepfert@tum.de"
 
-from hamlet.executor.utilities.controller.rtc import Rtc
-from hamlet.executor.utilities.controller.mpc import Mpc
+from hamlet.executor.utilities.controller.rtc.rtc import Rtc
+from hamlet.executor.utilities.controller.mpc.mpc import Mpc
+import hamlet.constants as c
 
 # Instructions: For a new controller type import the class here and add it to the mapping in the Controller class
+
 
 class Controller:
 
@@ -22,10 +27,11 @@ class Controller:
         self.controller = controllers.get(controller_type.lower())
 
         if self.controller is None:
-            raise ValueError(f'Controller method {controller_type} not available. If you think this is an error, you '
-                             f'might have forgotten to import the method to the class or named it incorrectly.')
+            raise ValueError(f'Controller method {controller_type} not available. \n'
+                             f'The available methods are: {controllers.keys()}. \n'
+                             f'If you think this is an error, you might have forgotten to import the method to the '
+                             f'class or named it incorrectly.')
 
     def create_instance(self):
-        print(self.method)
         return self.controller(**self.kwargs)
 

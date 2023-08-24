@@ -453,7 +453,7 @@ class Agents:
                 # Add state of charge (SOC) if applicable
                 try:
                     socs = socs.join(self.__make_soc(plant_id=plant_id,
-                                                     soc=info[f"soc_{num_plant}"] * info[f"capacity_{num_plant}"]))
+                                                     soc=round(info["sizing"]["soc"] * info["sizing"]["capacity"])))
                 except KeyError:
                     pass
 
@@ -905,7 +905,7 @@ class Agents:
         return df
 
     @staticmethod
-    def __make_soc(plant_id: str, soc: float = 0.8) -> pd.Series:
+    def __make_soc(plant_id: str, soc: int) -> pd.Series:
         """initialize a meter file with initial positive and negative meter readings
 
         Args:

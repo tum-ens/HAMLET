@@ -22,7 +22,7 @@ from hamlet.executor.agents.agent import AgentBase
 
 class Sfh(AgentBase):
 
-    def __init__(self, data, timetable, database):
+    def __init__(self, agent, timetable, database):
 
         # Type of agent
-        super().__init__(agent_type='sfh', data=data, timetable=timetable, database=database)
+        super().__init__(agent_type='sfh', agent=agent, timetable=timetable, database=database)
