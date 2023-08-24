@@ -29,6 +29,7 @@ from windpowerlib import ModelChain, WindTurbine
 import warnings
 import re
 from hamlet import functions as f
+from hamlet import constants as c
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -362,8 +363,8 @@ class Agents:
             f.create_folder(path)
 
             # Call the internal method to create the necessary data for the agent (e.g. plants, meters, etc.)
-            account["plants"], plants, meters, timeseries, socs, specs = self._create_plants_for_agent(
-                plants=account["plants"], agent_type=agent_type)
+            account["plants"], plants, meters, timeseries, socs, specs, setpoints, fcasts = (
+                self._create_plants_for_agent(account=account, agent_type=agent_type))
 
             # Organize the created data into a dictionary
             data = {
@@ -373,12 +374,14 @@ class Agents:
                 "timeseries.ft": timeseries,
                 "socs.ft": socs,
                 "specs.json": specs,
+                "setpoints.ft": setpoints,
+                "forecasts.ft": fcasts,
             }
 
             # Call the internal method to create the agent using the organized data
             self._create_agent(path, data)
 
-    def _create_plants_for_agent(self, plants: dict, agent_type: str) -> Tuple:
+    def _create_plants_for_agent(self, account: dict, agent_type: str) -> Tuple:
         """Creates the plants for the agent, including plant IDs, meters, time series, state of charges (SOCs), and specs.
 
         Args:
@@ -394,21 +397,55 @@ class Agents:
                 - DataFrame with SOCs
                 - Dictionary with plant specs.
         """
-        # Setup
-        # Get start and end time of the simulation in UTC and create a time range
+        # Retrieve info from account
+        plants = account["plants"]
+
+        # Set time ranges
+        # Length of the training period in days
+        train_period = self.__find_max_train_period(plants=plants)
+        # Length of the forecasting period in seconds
+        fcast_period = account['ems']['fcasts']['horizon']
+        # Start of the simulation in UTC
         start = self.setup['time']['start'].replace(tzinfo=datetime.timezone.utc)
-        end = start + datetime.timedelta(days=self.setup['time']['duration'])
-        timerange = pd.date_range(start=start, end=end, freq=f"{int(self.setup['time']['timestep'])}S")
+        # Start of the forecasting period in UTC
+        start_fcast_train = start - train_period
+        # End of the simulation in UTC (one day added to ensure no foreward forecasting issues)
+        end = start + datetime.timedelta(days=self.setup['time']['duration'] + 1)
+        # End of the first forecasting period in UTC
+        end_fcast_period = start + datetime.timedelta(seconds=fcast_period)
+        # Time range for the simulation
+        timerange = pd.date_range(start=start, end=end, freq=f"{int(self.setup['time']['timestep'])}S")[:-1]
+        # Time range for the forecasting training period
+        timerange_fcast_train = pd.date_range(start=start_fcast_train, end=end,
+                                              freq=f"{int(self.setup['time']['timestep'])}S")[:-1]
+        # Time range for the first forecasting period (first simulation period)
+        timerange_fcast_period = pd.date_range(start=start, end=end_fcast_period,
+                                              freq=f"{int(self.setup['time']['timestep'])}S")[:-1]
 
         # Initialize data structures
-        timeseries = pd.DataFrame(index=timerange)  # Time series of each plant
+        # Time series of each plant
+        timeseries = pd.DataFrame(index=timerange_fcast_train)
         timeseries.index.name = 'timestamp'
-        meters = pd.DataFrame(index=['in', 'out'])  # Meter values
-        socs = pd.DataFrame(index=['soc'])  # SOCs
-        plants_dict = {}  # All plant information
-        plant_dict = {}  # Single plant information
-        plants_ids = []  # Plant IDs
-        specs = {}  # Plant specs
+        # Meter values
+        meters = pd.DataFrame(index=timerange)
+        meters.index.name = 'timestamp'
+        # SOCs
+        socs = pd.DataFrame(index=timerange)
+        socs.index.name = 'timestamp'
+        # Setpoints
+        setpoints = pd.DataFrame(index=timerange_fcast_period)
+        setpoints.index.name = 'timestamp'
+        # Forecasts
+        forecasts = pd.DataFrame(index=timerange_fcast_period)
+        forecasts.index.name = 'timestamp'
+        # All plant information
+        plants_dict = {}
+        # Single plant information
+        plant_dict = {}
+        # Plant IDs
+        plants_ids = []
+        # Plant specs
+        specs = {}
 
         # Loop through the provided plants
         for plant, info in plants.items():
@@ -433,7 +470,7 @@ class Agents:
                 plants_ids += [plant_id]
 
                 # Add meter data
-                meters = meters.join(self.__make_meter(plant_id=plant_id))
+                meters[plant_id] = self.__init_vals(df=meters)
 
                 # Add and process additional plant information
                 plant_dict.update(info)
@@ -452,8 +489,8 @@ class Agents:
 
                 # Add state of charge (SOC) if applicable
                 try:
-                    socs = socs.join(self.__make_soc(plant_id=plant_id,
-                                                     soc=round(info["sizing"]["soc"] * info["sizing"]["capacity"])))
+                    socs[plant_id] = self.__init_vals(df=socs,
+                                                      vals=round(info["sizing"]["soc"] * info["sizing"]["capacity"]))
                 except KeyError:
                     pass
 
@@ -467,7 +504,7 @@ class Agents:
             # Reset for the next entry
             plant_dict = {}
 
-        return plants_ids, plants_dict, meters, timeseries, socs, specs
+        return plants_ids, plants_dict, meters, timeseries, socs, specs, setpoints, forecasts
 
     @staticmethod
     def _create_agent(path: str, data: dict) -> None:
@@ -784,20 +821,58 @@ class Agents:
         pass
 
     @staticmethod
-    def __make_meter(plant_id: str, vals: list = (0, 0)) -> pd.Series:
-        """initialize a meter file with initial positive and negative meter readings
+    def __init_vals(df: pd.DataFrame, vals: int | list[int] = 0, idx: int | list[int] = 0) -> list:
+        """
 
         Args:
-            meters: dictionary that contains all meter readings
-            id_meter: ID of the meter that is to be initialized
-            init_in: initial positive meter reading (energy flowing into plant)
-            init_out: initial negative meter reading (energy flowing out of plant)
+            df (pd.DataFrame): The DataFrame to which the meter values are to be added.
+            init (int, optional): The initial value of the meter. Default is 0.
 
         Returns:
-            None
+            list: A list of meter values.
 
         """
-        return pd.Series(vals, index=["in", "out"], name=plant_id)
+
+        # Create a list of zeros with the length of the time series
+        values = [0] * len(df.index)
+
+        # Set the first value to the specified SOC
+        values[idx] = vals
+
+        return values
+
+    @staticmethod
+    def __find_max_train_period(plants: dict, keys: str | list[str] = 'days', period: str = 'days') -> pd.Timedelta:
+
+        # Convert keys to a list if it is a string
+        if isinstance(keys, str):
+            keys = [keys]
+
+        # Find the maximum value for the given keys
+        val = 0
+        for name, plant in plants.items():
+            for key in keys:
+                try:
+                    method = plant['fcast']['method']
+                    val = max(val, plant['fcast'][method][key])
+                except KeyError:
+                    pass
+
+        # Convert the value to a timedelta object
+        if period == 'seconds':
+            val = datetime.timedelta(seconds=val)
+        elif period == 'minutes':
+            val = datetime.timedelta(minutes=val)
+        elif period == 'hours':
+            val = datetime.timedelta(hours=val)
+        elif period == 'days':
+            val = datetime.timedelta(days=val)
+        elif period == 'weeks':
+            val = datetime.timedelta(weeks=val)
+        else:
+            raise KeyError(f'Period {period} not recognized.')
+
+        return val
 
     def __make_timeseries(self, file_path: str, plant_id: str, plant_dict: dict, delta: pd.Timedelta) \
             -> tuple[pd.DataFrame, object | None]:
@@ -903,22 +978,6 @@ class Agents:
         df = df['heat'].round().astype(int).to_frame()
 
         return df
-
-    @staticmethod
-    def __make_soc(plant_id: str, soc: int) -> pd.Series:
-        """initialize a meter file with initial positive and negative meter readings
-
-        Args:
-            meters: dictionary that contains all meter readings
-            id_meter: ID of the meter that is to be initialized
-            init_in: initial positive meter reading (energy flowing into plant)
-            init_out: initial negative meter reading (energy flowing out of plant)
-
-        Returns:
-            None
-
-        """
-        return pd.Series(soc, index=['soc'], name=plant_id)
 
     @staticmethod
     def __list_to_dict(input_list: list, separator: str = '/') -> dict:
@@ -1849,6 +1908,7 @@ class Agents:
             return ids[0]
         else:
             return ids
+
 
 
 # Playground
