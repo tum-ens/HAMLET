@@ -38,6 +38,20 @@ DAYS_TO_SECONDS = 86400
 HOURS_TO_DAYS = 1 / 24
 DAYS_TO_HOURS = 24
 
+# ENERGY TYPES
+ET_ELECTRICITY = 'power'
+ET_HEAT = 'heat'
+ET_COOLING = 'cold'
+ET_H2 = 'h2'
+
+# OPERATION MODES
+# Note: Storage is not an operation mode. They are always modeled as loads and have negative values when generating.
+#       This can be changed for every controller individually though as it is only a convention.
+OM_GENERATION = 'gen'
+OM_LOAD = 'load'
+OM_STORAGE = 'storage'
+
+
 ### TABLES ###
 # NAMES
 TN_TIMETABLE = 'timetable'
