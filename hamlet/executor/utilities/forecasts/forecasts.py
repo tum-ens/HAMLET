@@ -6,9 +6,9 @@ import pytz
 import json
 import pandas as pd
 import polars as pl
-from keras import optimizers
-from keras.layers import Input, Dense, LSTM, Conv1D, MaxPooling1D, Flatten, Dropout
-from keras.models import Model
+# from keras import optimizers
+# from keras.layers import Input, Dense, LSTM, Conv1D, MaxPooling1D, Flatten, Dropout
+# from keras.models import Model
 from sktime.forecasting.arima import ARIMA
 from darts.models.forecasting.rnn_model import RNNModel
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
@@ -18,13 +18,13 @@ from hamlet import constants as c
 class Forecaster:
     def __init__(self, agent, plants, ems, timeseries, market, weather, database):
         self.agent = agent  # Contains all files related to the agent and should therefore be returned with the results
-        self.plants_config = plants
-        self.ems_config = ems
-        self.timeseries = timeseries
-        self.market = market
-        self.weather = weather
-        self.database = database
-        self.forecasts = agent[c.K_FORECASTS]
+        self.plants_config = plants     # dict
+        self.ems_config = ems       # dict
+        self.timeseries = timeseries    # dataframe
+        self.market = market    # dict
+        self.weather = weather      # dataframe
+        self.database = database    # database object
+        self.forecasts = agent[c.K_FORECASTS]   # ?
         self.fit_ts = {}
 
         # pre-defined models from packages
@@ -51,7 +51,7 @@ class Forecaster:
                     # generate a list of timesteps where model need to be fitted again
                     self.fit_ts[plant_id] = []  # to-be generated
 
-    def make_forecasts(self):
+    def make_all_forecasts(self):
         """Make forecasts for all plants."""
         # TODO: @Jiahe, please implement this method
 
@@ -64,7 +64,7 @@ class Forecaster:
         # Return the forecasts dataframe (i.e. self.forecasts)
         return self.forecasts
 
-    def forecast(self, plant_id, current_ts, length_to_predict):
+    def make_forecast(self, plant_id, current_ts, length_to_predict):
         """Make forecast for the given timestep. Re-fit model before forecasting if needed."""
         if current_ts in self.fit_ts[plant_id]:
             # re-fit
@@ -84,23 +84,23 @@ class Forecaster:
         def predict(self, length_to_predict, **kwargs):
             pass
 
-    class __cnn:
-        def __init__(self, seq_length, feature_length, **kwargs):
-            inputs = Input(shape=(seq_length, feature_length))
-            x = Conv1D(32, 3, activation='relu')(inputs)
-            x = MaxPooling1D(2)(x)
-            x = Conv1D(64, 3, activation='relu')(x)
-            x = MaxPooling1D(2)(x)
-            x = Flatten()(x)
-            outputs = Dense(1, activation='sigmoid')(x)
-
-            self.cnn_model = Model(inputs=inputs, outputs=outputs)
-
-        def fit(self, features, target, epoch, **kwargs):
-            self.cnn_model.fit(target, features)
-
-        def predict(self, features, **kwargs):
-            self.cnn_model.predict()
+    # class __cnn:
+    #     def __init__(self, seq_length, feature_length, **kwargs):
+    #         inputs = Input(shape=(seq_length, feature_length))
+    #         x = Conv1D(32, 3, activation='relu')(inputs)
+    #         x = MaxPooling1D(2)(x)
+    #         x = Conv1D(64, 3, activation='relu')(x)
+    #         x = MaxPooling1D(2)(x)
+    #         x = Flatten()(x)
+    #         outputs = Dense(1, activation='sigmoid')(x)
+    #
+    #         self.cnn_model = Model(inputs=inputs, outputs=outputs)
+    #
+    #     def fit(self, features, target, epoch, **kwargs):
+    #         self.cnn_model.fit(target, features)
+    #
+    #     def predict(self, features, **kwargs):
+    #         self.cnn_model.predict()
 
     """
     user can also define own model-object here. some basic rules:

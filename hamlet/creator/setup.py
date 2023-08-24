@@ -49,10 +49,10 @@ class Creator:
         # Load the config and set paths
         self.path_config = os.path.abspath(path)
         self.root_config = self.path_config.rsplit(os.sep, 1)[0]
-        self.config = self.load_config(path=os.path.join(self.path_config, 'config_general.yaml'))
-        self.path_input = os.path.abspath(self.config['simulation']['paths']['input'])
-        self.path_scenarios = os.path.abspath(self.config['simulation']['paths']['scenarios'])
-        self.path_results = os.path.abspath(self.config['simulation']['paths']['results'])
+        self.config = self.load_config(path=os.path.join(self.path_config, 'config_setup.yaml'))
+        self.path_input = os.path.abspath(self.config['paths']['input'])
+        self.path_scenarios = os.path.abspath(self.config['paths']['scenarios'])
+        self.path_results = os.path.abspath(self.config['paths']['results'])
 
         # Set the name of the scenario and create the scenario and folder structure
         self.name = name if name is not None else self.path_config.split(os.sep)[-1]
@@ -289,12 +289,7 @@ class Creator:
         # Return early as the functionality is not yet implemented
         return
 
-        # Create instance of Grids class
-        subpath = path_config.replace(self.root_config, '')  # get the subpath of the config file to the root
-        grids = Grids(config_path=path_config,
-                      config_root=os.path.join(self.root_config, subpath.split(os.sep, 2)[1]),
-                      input_path=self.path_input,
-                      scenario_path=os.path.join(self.path_scenarios, subpath.split(os.sep, 1)[-1]))
+        # Uncomment the following code once the functionality to create grid files is implemented
 
         # Determine the subpath of the config file relative to the root
         # subpath = path_config.replace(self.root_config, '')
@@ -433,7 +428,7 @@ class Creator:
         path_markets = os.path.join(path, 'markets')
         path_retailers = os.path.join(path, 'retailers')
 
-        # Get the region's name
+        # Determine the region's name by comparing the path_scenarios and the given path
         region = difflib.ndiff(self.path_scenarios.split(os.sep), path.split(os.sep))
         region = os.sep.join(x.split()[-1] for x in region if x.startswith('+ '))
 
