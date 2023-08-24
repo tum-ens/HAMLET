@@ -195,9 +195,7 @@ class Executor:
         """
 
         # Get the data of the agents that are part of the tasklist
-        agents = dict()
-        agents['sfh'] = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
-        print('Change back to "agents = ..." (__execute_agents)')
+        agents = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
 
         results = []
 
