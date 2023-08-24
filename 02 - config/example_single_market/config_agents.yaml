@@ -216,7 +216,7 @@ sfh:
 
   ################################ heat demand ####################################
   heat:
-    share: 0                                    # share of prosumers with heat
+    share: 1                                    # share of prosumers with heat
                                                 # unit: 1 [0, 1]
                                                 # note: users that do not have plants to cover the demand will be
                                                 #   assigned a generic non-electric supply
@@ -305,7 +305,7 @@ sfh:
 
   ################################ dhw (drinking hot water) ####################################
   dhw:
-    share: 0                                    # share of prosumers with dhw
+    share: 1                                    # share of prosumers with dhw
                                                 # unit: 1 [0, 1]
                                                 # note: users that do not have plants to cover the demand will be
                                                 #   assigned a generic non-electric supply
@@ -393,7 +393,7 @@ sfh:
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
-    share: 0.8                                  # share of agents with PV systems
+    share: 1                                  # share of agents with PV systems
                                                 # unit: 1 [0, 1]
       
     num: [1]                                    # number of pv systems
@@ -706,7 +706,7 @@ sfh:
 
   ################################ electric vehicles (EV) ####################################
   ev:
-    share: 0.5                                  # share of prosumers with EVs
+    share: 1                                  # share of prosumers with EVs
                                                 # unit: 1 [0, 1]
       
     num: [1, 1, 1, 1, 2]                        # number of EVs
@@ -736,11 +736,11 @@ sfh:
       charging_DC: [5e4, 1e5, 2e5]              # EV max charging power at DC chargers
                                                 # unit: W
                                                 
-      charging_efficiency: [9e4, 9e4, 9e4]      # one way charging efficiency of the vehicle
-                                                # unit: 1e5 (0, 1e5)
+      charging_efficiency: [0.9, 0.9, 0.9]      # one way charging efficiency of the vehicle
+                                                # unit: 1 [0, 1]
 
-      soc: [8e4, 8e4, 8e4]                      # initial state of charge of the battery
-                                                # unit: 1 [0, 1e5]
+      soc: [0.8, 0.8, 0.8]                      # initial state of charge of the battery
+                                                # unit: 1 [0, 1]
 
       v2g: [false, false, false]                # vehicle-to-grid possible
         
@@ -790,7 +790,7 @@ sfh:
 
   ################################ batteries ####################################
   battery:
-    share: 0.8                                  # share of agents with batteries (if share_dependent_on applies)
+    share: 1                                  # share of agents with batteries (if share_dependent_on applies)
                                                 # unit: 1 [0, 1]
 
     share_dependent_on: ["pv"]                  # does the share of batteries depend on the existence of other devices?
@@ -825,7 +825,7 @@ sfh:
 
   ################################ heat storage ####################################
   heat_storage:
-    share: 0                                  # share of agents with heat storage (if share_dependent_on applies)
+    share: 1                                  # share of agents with heat storage (if share_dependent_on applies)
                                                 # unit: 1 [0, 1]
 
     share_dependent_on: ["hp"]                  # does the share of storage depend on the existence of other devices?

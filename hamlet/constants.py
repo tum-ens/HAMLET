@@ -38,3 +38,72 @@ DAYS_TO_SECONDS = 86400
 HOURS_TO_DAYS = 1 / 24
 DAYS_TO_HOURS = 24
 
+# ENERGY TYPES
+ET_ELECTRICITY = 'power'
+ET_HEAT = 'heat'
+ET_COOLING = 'cold'
+ET_H2 = 'h2'
+
+# OPERATION MODES
+# Note: Storage is not an operation mode. They are always modeled as loads and have negative values when generating.
+#       This can be changed for every controller individually though as it is only a convention.
+OM_GENERATION = 'gen'
+OM_LOAD = 'load'
+OM_STORAGE = 'storage'
+
+
+### TABLES ###
+# NAMES
+TN_TIMETABLE = 'timetable'
+
+# COLUMNS
+TC_TIMESTAMP = 'timestamp'
+TC_TIMESTEP = 'timestep'
+TC_REGION = 'region'
+TC_MARKET = 'market'
+TC_NAME = 'name'
+TC_ACTION = 'action'
+TC_TYPE = 'type'
+TC_METHOD = 'method'
+TC_COUPLING = 'coupling'
+TC_TYPE_TRANSACTION = 'type_transaction'
+TC_ID_AGENT = 'id_agent'
+TC_ID_AGENT_IN = 'id_agent_in'
+TC_ID_AGENT_OUT = 'id_agent_out'
+TC_ID_METER = 'id_meter'
+TC_ENERGY = 'energy'
+TC_ENERGY_IN = 'energy_in'
+TC_ENERGY_OUT = 'energy_out'
+TC_ENERGY_USED = 'energy_used'
+TC_PRICE_PU = 'price_pu'
+TC_PRICE_PU_IN = 'price_pu_in'
+TC_PRICE_PU_OUT = 'price_pu_out'
+TC_PRICE = 'price'
+TC_PRICE_IN = 'price_in'
+TC_PRICE_OUT = 'price_out'
+TC_POWER = 'power'
+TC_POWER_IN = 'power_in'
+TC_POWER_OUT = 'power_out'
+TC_BALANCE_ACCOUNT = 'balance_account'
+TC_QUALITY = 'quality'
+TC_SHARE_QUALITY = 'share_quality'
+TC_TYPE_METER = 'type_meter'
+TC_TYPE_PLANTS = 'type_plants'
+TC_SOC = 'soc'
+TC_PLANT_VALUE = 'plant_value'
+
+
+# PLANTS
+P_INFLEXIBLE_LOAD = 'inflexible_load'
+P_FLEXIBLE_LOAD = 'flexible_load'
+P_HEAT = 'heat'
+P_DHW = 'dhw'
+P_PV = 'pv'
+P_WIND = 'wind'
+P_FIXED_GEN = 'fixed_gen'
+P_HP = 'hp'
+P_EV = 'ev'
+P_BATTERY = 'battery'
+P_PSH = 'psh'
+P_HYDROGEN = 'hydrogen'
+P_HEAT_STORAGE = 'heat_storage'

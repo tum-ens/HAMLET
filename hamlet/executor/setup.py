@@ -24,7 +24,6 @@ from hamlet.executor.agents.agent import Agent
 from hamlet.executor.markets.markets import Markets
 from hamlet.executor.grids.grids import Grids
 from hamlet.executor.utilities.database.database import Database
-pl.StringCache()
 
 # TODO: Considerations
 # - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator and should be continued for consistency
@@ -106,7 +105,8 @@ class Executor:
         # Note: The design assumes that there is nothing to be gained for the simulation to run in between market
         #   timestamps. Therefore, the simulation is only executed for the market timestamps
         # Iterate over timetable by timestamp
-        for timestamp in self.timetable.partition_by('timestamp'):
+        timetable = self.timetable.collect()
+        for timestamp in timetable.partition_by('timestamp'):
             # Wait for the timestamp to be reached if the simulation is to be carried out in real-time
             if self.type == 'rts':
                 self.wait_for_ts(timestamp.iloc[0, 0])
@@ -116,6 +116,10 @@ class Executor:
                 for market in region.partition_by('market'):
                     # Iterate over market by name:
                     for name in market.partition_by('name'):
+                        # Turn the tasklist into a polars LazyFrame
+                        name = name.lazy()
+
+                        # Execute the agents and market in parallel or sequentially
                         if self.pool:
                             # Execute the agents for this market
                             self.__execute_agents_parallel(tasklist=name)
@@ -136,11 +140,11 @@ class Executor:
         if self.pool:
             self.pool.shutdown()
 
-    def __execute_agents_parallel(self, tasklist: pl.DataFrame):
+    def __execute_agents_parallel(self, tasklist: pl.LazyFrame):
         """Executes all agent tasks for all agents in parallel"""
 
         # Get the data of the agents that are part of the tasklist
-        agents = self.database.get_agent_data(region=tasklist[0, 'region'])
+        agents = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
 
         # Define the function to be executed in parallel
         def tasks(data, timetable, agent_type):
@@ -186,13 +190,13 @@ class Executor:
         # Wait for all markets to complete
         concurrent.futures.wait(futures)
 
-    def __execute_agents(self, tasklist: pl.DataFrame):
+    def __execute_agents(self, tasklist: pl.LazyFrame):
         """Executes all agent tasks for all agents sequentially
         """
 
         # Get the data of the agents that are part of the tasklist
         agents = dict()
-        agents['sfh'] = self.database.get_agent_data(region=tasklist[0, 'region'])
+        agents['sfh'] = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
         print('Change back to "agents = ..." (__execute_agents)')
 
         results = []
@@ -242,7 +246,7 @@ class Executor:
 
         # Load timetable
         self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),
-                                     df='polars', method='eager')
+                                     df='polars', method='lazy')
 
         # Load scenario structure
         self.structure = self.general['structure']
