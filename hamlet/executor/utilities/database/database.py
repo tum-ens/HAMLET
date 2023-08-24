@@ -42,6 +42,26 @@ class Database:
     def get_meters(self, region, agent_id):
         return self.__regions[region].get_meters(agent_id)
 
+    @staticmethod
+    def filter_market_data(market, by: list[str], value: list[str], inclusive: bool = False):
+        """Filter market data by given columns and values.
+
+        @Jiahe: I want to hand it a market data table and only get the rows back where the values are in the given columns.
+
+        Args:
+            market: market data table
+            by: list of columns to filter by
+            value: list of values to filter by
+            inclusive: if True, returns rows where the values are in all the given columns,
+                       if False, returns rows where the values are in at least one of the given columns
+
+        Returns:
+            filtered market data table
+        """
+
+        # TODO: @Jiahe, please implement this function (once market data actually exists)
+        return market
+
     def __setup_general(self):
         """Setup general dictionary."""
         self.general['weather'] = f.load_file(path=os.path.join(self.path_scenario, 'general', 'weather', 'weather.ft'),
