@@ -30,7 +30,7 @@ class ControllerBase:
             c.P_HEAT_STORAGE: {c.ET_ELECTRICITY: c.OM_STORAGE},
 
             # Hybrid
-            c.P_HP: {c.ET_ELECTRICITY: c.OM_LOAD, c.ET_HEAT: c.OM_LOAD},
+            c.P_HP: {c.ET_ELECTRICITY: c.OM_LOAD, c.ET_HEAT: c.OM_GENERATION},
         }
 
     def run(self):

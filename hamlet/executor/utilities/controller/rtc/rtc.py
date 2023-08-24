@@ -77,10 +77,12 @@ class Rtc(ControllerBase):
             self.account = self.agent.account
             self.plants = self.agent.plants  # Formerly known as components
             self.setpoints = self.agent.setpoints
-            self.socs = self.agent.socs.collect()
             self.timeseries = self.agent.timeseries
+            self.socs = self.agent.socs.collect()
             # Filter the timeseries to only include the rows with the current timestamp
             self.timeseries = self.timeseries.join(self.timetable, on=c.TC_TIMESTAMP, how='semi')
+            # Filter the setpoints to only include the rows with the current timestamp
+            self.setpoints = self.setpoints.join(self.timetable, on=c.TC_TIMESTAMP, how='semi')
 
             # Raise warning if timeseries exceeds one row
             if len(self.timeseries.collect()) != 1:
@@ -244,8 +246,6 @@ class Rtc(ControllerBase):
             return self.model
 
         def define_objective(self):
-            print(self.model.variables)
-            exit()
             # TODO: This will need to be adjusted in the future once the storage items are following their setpoints
             #  from the mpc
             # Initialize the objective function as zero
@@ -263,6 +263,41 @@ class Rtc(ControllerBase):
 
             return self.model
 
+        def define_objective_gpt(self):
+            # TODO: This is the answer it gave to me to the following request:
+            #  "I want it to also include that preferably excess power generation is first put into electric vehicles,
+            #  then batteries and then the heat pump. The electric vehicle should also not be charged by the battery,
+            #  only if otherwise balancing energy would be needed.
+            #  Can you rewrite the objective function to reflect that?"  --> Check if any good and debug if worth it
+            # Weights to prioritize components
+            w1 = 1  # weight for electric vehicle
+            w2 = 2  # weight for battery
+            w3 = 3  # weight for heat pump
+            w4 = 4  # weight for balancing energy
+
+            # Initialize the objective function as zero
+            objective = 0
+
+            # Loop through the model's variables to identify different components and balancing variables
+            for variable_name, variable in self.model.variables.items():
+                if variable_name.startswith('ev_charge'):
+                    # Give priority to EV charging from excess generation, not from battery
+                    if 'from_battery' not in variable_name:
+                        objective += w1 * variable
+                    else:
+                        objective += w4 * variable
+                elif variable_name.startswith('battery_charge'):
+                    objective += w2 * variable
+                elif variable_name.startswith('heat_pump_use'):
+                    objective += w3 * variable
+                elif variable_name.startswith('balancing_'):
+                    objective += w4 * variable
+
+            # Set the objective function to the model with the minimize direction
+            self.model.add_objective(objective, sense="min")
+
+            return self.model
+
         def run(self):
 
             # Solve the optimization problem
@@ -270,32 +305,46 @@ class Rtc(ControllerBase):
             match solver:
                 case 'gurobi':
                     solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
-                    solution = self.model.solve(solver_name='gurobi', **solver_options)
+                    status = self.model.solve(solver_name='gurobi', **solver_options)
                 case _:
                     raise ValueError(f"Unsupported solver: {solver}")
 
-
             # TODO: Make the model silent and not put out any response.
 
-            # TODO: Solution seems as if one variable is turned upside down (charging or discharging flipped)
-
             # Check if the solution is optimal
-            if solution[0] != 'ok':
+            if status[0] != 'ok':
                 print(self.model.print_infeasibilities())
-                raise ValueError(f"Optimization failed: {solution}")
-
-            variable_values = {name: int(var.solution.values.item()) for name, var in self.model.variables.items()}
-            pprint(variable_values)
-
-            exit()
+                raise ValueError(f"Optimization failed: {status}")
 
             # Process the solution into control commands and return
-            control_commands = self.process_solution(solution)
-            return control_commands
+            self.agent = self.process_solution()
 
-        def process_solution(self, solution):
-            # Process the optimization solution into actionable control commands
-            return control_commands
+            return self.agent
+
+        def process_solution(self):
+
+            # Obtain the solution values
+            variable_values = {name: int(var.solution.values.item()) for name, var in self.model.variables.items()}
+            pprint(variable_values)
+            exit()
+
+            # TODO: Update setpoints
+            # TODO: Consider creating creating the setpoint and forecast table already in the creator
+            # Needs to clear the table, shift the time forward by one delta and then add the new setpoints (first row)
+            # Dummy code:
+            for col in self.setpoints.columns:
+                if col in variable_values.keys():
+                    self.setpoints[col] = variable_values[col]
+                else:
+                    pass
+
+            # TODO: Update socs
+            # TODO: Change the socs file so that it is a table with timestamps and not just one value to track soc
+
+            # TODO: Update meters
+            # TODO: Change the meters file so that it is a table with timestamps and not in/out rows
+
+            return self.agent
 
     class RuleBased(RtcBase):  # Note the change in class name
 
