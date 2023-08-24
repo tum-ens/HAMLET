@@ -69,7 +69,10 @@ def copy_folder(src: str, dst: str, only_files: bool = False, delete: bool = Tru
 
 def load_file(path: str, index: int = 0, df: str = 'pandas', parse_dates: bool | list | None = None,
               method: str = 'lazy') -> object:
+    # Find the file type
     file_type = path.rsplit('.', 1)[-1]
+
+    # Load the file
     if file_type == 'yaml' or file_type == 'yml':
         with open(path) as file:
             file = YAML().load(file)
@@ -78,7 +81,7 @@ def load_file(path: str, index: int = 0, df: str = 'pandas', parse_dates: bool |
             file = json.load(file)
     elif file_type == 'csv':
         if df == 'pandas':
-            file = pd.read_csv(path, index_col=index, parse_dates=parse_dates)
+            file = pd.read_csv(path, parse_dates=parse_dates, index_col=index)
         elif df == 'polars':
             if method == 'lazy':
                 file = pl.scan_csv(path, try_parse_dates=parse_dates)
@@ -98,7 +101,7 @@ def load_file(path: str, index: int = 0, df: str = 'pandas', parse_dates: bool |
             file = pd.read_feather(path)
         elif df == 'polars':
             if method == 'lazy':
-                file = pl.scan_ipc(path)
+                file = pl.scan_ipc(path, memory_map=False)
             elif method == 'eager':
                 # Workaround for polars bug
                 with pl.StringCache():
@@ -112,8 +115,10 @@ def load_file(path: str, index: int = 0, df: str = 'pandas', parse_dates: bool |
 
 
 def save_file(path: str, data, index: bool = True, df: str = 'pandas') -> None:
+    # Find the file type
     file_type = path.rsplit('.', 1)[-1]
 
+    # Save the file
     if file_type == 'yaml' or file_type == 'yml':
         with open(path, 'w') as file:
             YAML().dump(data, file)
