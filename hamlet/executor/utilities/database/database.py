@@ -28,37 +28,17 @@ class Database:
 
         self.__register_all_regions(structure)
 
-        a = 1
-
     # general data
     def get_general_data(self) -> dict:
-        # code
         return self.__general
 
     def get_weather_data(self):
-        # code
         return self.__general['weather']
 
     # market data
     def get_market_data(self, region: str):
-        # code
         return self.__regions[region].markets
 
-    # agent data
-    def get_agent_data(self, region, agent_type=None, agent_id=None):
-        """Get all agents data for the given region."""
-        if agent_type is None:
-            return self.__regions[region].agents
-        else:
-            return self.__regions[region].get_agent_data(agent_type, agent_id)
-
-    def edit_agent_data(self, region, agent_type, agent_id, table_name, new_df):
-        self.__regions[region].edit_agent_data(agent_type, agent_id, table_name, new_df)
-
-    def get_meters(self, region, agent_type, agent_id):
-        return self.__regions[region].get_meters(agent_type, agent_id)
-
-    # private functions
     @staticmethod
     def filter_market_data(market, by: list[str], value: list[str], inclusive: bool = False):
         """Filter market data by given columns and values.
@@ -79,14 +59,29 @@ class Database:
         # TODO: @Jiahe, please implement this function (once market data actually exists)
         return market
 
+    # agent data
+    def get_agent_data(self, region, agent_type=None, agent_id=None):
+        """Get all agents data for the given region."""
+        if agent_type is None:
+            return self.__regions[region].agents
+        else:
+            return self.__regions[region].get_agent_data(agent_type, agent_id)
+
+    def edit_agent_data(self, region, agent_type, agent_id, table_name, new_df):
+        self.__regions[region].edit_agent_data(agent_type, agent_id, table_name, new_df)
+
+    def get_meters(self, region, agent_type, agent_id):
+        return self.__regions[region].get_meters(agent_type, agent_id)
+
+    # private functions
     def __setup_general(self):
         """Setup general dictionary."""
         self.__general['weather'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'weather',
                                                                   'weather.ft'), df='polars')
         self.__general['retailer'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'retailer.ft'),
                                                  df='polars')
-        self.__general['timetable'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'retailer.ft'),
-                                                 df='polars')
+        self.__general['timetable'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
+                                                  df='polars')
 
     def __register_all_regions(self, structure):
         """Register all regions."""

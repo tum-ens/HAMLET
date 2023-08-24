@@ -98,7 +98,7 @@ def load_file(path: str, index: int = 0, df: str = 'pandas', parse_dates: bool |
             raise ValueError(f'Dataframe type "{df}" not supported')
     elif file_type == 'ft':
         if df == 'pandas':
-            file = pd.read_feather(path, memory_map=False)
+            file = pd.read_feather(path)
         elif df == 'polars':
             if method == 'lazy':
                 file = pl.scan_ipc(path, memory_map=False)

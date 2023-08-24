@@ -18,6 +18,8 @@ from hamlet import constants as c
 class Forecaster:
     def __init__(self, agent, plants, ems, timeseries, market, weather, database):
         self.agent = agent  # Contains all files related to the agent and should therefore be returned with the results
+                            # is this an AgentDB object?
+                            # plant is under agent, but market not. change structure to one forecaster overall?
         self.plants_config = plants     # dict
         self.ems_config = ems       # dict
         self.timeseries = timeseries    # dataframe
