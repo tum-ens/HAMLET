@@ -5,7 +5,7 @@ Hierarchical Agent-based Markets for Local Energy Trading
 
 An open-source tool for the agent-based development and testing of local energy market applications.
 
-IN DEVELOPMENT
+IN DEVELOPMENT: See "develop" branch for most current version
 
 ## License
 
