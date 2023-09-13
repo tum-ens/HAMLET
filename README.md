@@ -1,11 +1,11 @@
 HAMLET
 =======
 
-Hierarchical Agent-based Markets for Local Energy Trading
+**H**ierarchical **A**gent-based **M**arkets for **L**ocal **E**nergy **T**rading
 
-An open-source tool for the agent-based development and testing of local energy market applications.
+An open-source tool for the agent-based development and testing of energy market applications at a local level.
 
-IN DEVELOPMENT: See "develop" branch for most current version
+IN DEVELOPMENT
 
 ## License
 
