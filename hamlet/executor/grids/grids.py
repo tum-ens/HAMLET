@@ -26,9 +26,9 @@ class Grids:
     def __init__(self, grid: pp.pandapowerNet, grid_type: str):
 
         # Types of grids (add your own if others are created here)
-        from hamlet.creator.grids.electricity import Electricity
-        # from hamlet.creator.grids.heat import Heat
-        # from hamlet.creator.grids.hydrogen import Hydrogen
+        from hamlet.creator_backup.grids.electricity import Electricity
+        # from hamlet.creator_backup.grids.heat import Heat
+        # from hamlet.creator_backup.grids.hydrogen import Hydrogen
         self.types = {
             'electricity': Electricity,
             # 'heat': Heat,

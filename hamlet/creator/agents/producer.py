@@ -9,7 +9,7 @@ import os
 import pandas as pd
 import numpy as np
 from ruamel.yaml.compat import ordereddict
-
+from pprint import pprint
 
 class Producer(Agents):
     """
@@ -122,13 +122,7 @@ class Producer(Agents):
         self.fill_battery(**kwargs)
 
         # Fill the model predictive controller information in dataframe
-        self.fill_mpc()
-
-        # Fill the market agent information in dataframe
-        self.fill_market_agent()
-
-        # Fill the metering information in dataframe
-        self.fill_meter()
+        self.fill_ems()
 
         return self.df
 
@@ -163,33 +157,33 @@ class Producer(Agents):
             # Adjust the columns from "pv"
             if key == "pv":
                 self.num += self.config[key]["general"]["number_of"]
-                del cols[16:]
-                del cols[7]
-                del cols[5]
-                del cols[:3]
+                # Filter all columns that match the key
+                cols = [col for col in cols if key in col]
+                del cols[3]
+                del cols[1]
                 cols.insert(0, f"{key}/owner")
                 max_num = max(self.config[key][key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:8], num=max_num) + cols[8:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:7], num=max_num) + cols[7:]
             # Adjust the columns from "wind"
             elif key == "wind":
                 self.num += self.config[key]["general"]["number_of"]
-                del cols[14:]
-                del cols[7]
-                del cols[5]
-                del cols[:3]
+                # Filter all columns that match the key
+                cols = [col for col in cols if key in col]
+                del cols[3]
+                del cols[1]
                 cols.insert(0, f"{key}/owner")
                 max_num = max(self.config[key][key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "fixed_gen"
             elif key == "fixed_gen":
                 self.num += self.config[key]["general"]["number_of"]
-                del cols[14:]
-                del cols[7]
-                del cols[5]
-                del cols[:3]
+                # Filter all columns that match the key
+                cols = [col for col in cols if key in col]
+                del cols[3]
+                del cols[1]
                 cols.insert(0, f"{key}/owner")
                 max_num = max(self.config[key][key]["num"])
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             else:
                 raise NotImplementedError(
                     f"The configuration file contains a key word ('{key}') that has not been configured in "
@@ -203,17 +197,17 @@ class Producer(Agents):
 
         # Define and insert all columns that come before the plants
         aftcols = self.make_list_from_nested_dict(self.config[key])
-        aftkeys = ["battery", "mpc", "market_agent", "meter"]
+        aftkeys = ["battery", "ems"]
         for aftkey in aftkeys:
             # Get all columns that match the key
             cols = [col for col in aftcols if aftkey == col.split("/", 1)[0]]
             # Adjust the columns from "battery"
             if aftkey == "battery":
-                del cols[2]
+                del cols[1]
                 cols.insert(0, f"{aftkey}/owner")
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:-1], num=max_bat) + [cols[-1]]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:-1], num=max_bat) + [cols[-1]]
             # All columns that do not need to be adjusted
-            elif aftkey in ["mpc", "market_agent", "meter"]:
+            elif aftkey in ["ems"]:
                 pass
             else:
                 raise NotImplementedError(
@@ -247,6 +241,9 @@ class Producer(Agents):
         self.num_agents = self.config[f"{key}"]["general"]["number_of"]
         self.idx_start = len(self.df)
 
+        if self.num_agents == 0:
+            return
+
         # general
         self.fill_general(device=key)
 
@@ -257,13 +254,7 @@ class Producer(Agents):
         self.fill_battery(device=key)
 
         # mpc
-        self.fill_mpc(device=key)
-
-        # market_agent
-        self.fill_market_agent(device=key)
-
-        # meter
-        self.fill_meter(device=key)
+        self.fill_ems(device=key)
 
     def add_wind(self):
         """
@@ -271,6 +262,9 @@ class Producer(Agents):
         """
         key = "wind"
         self.num_agents = self.config[f"{key}"]["general"]["number_of"]
+
+        if self.num_agents == 0:
+            return
 
         # general
         self.fill_general(device=key)
@@ -282,13 +276,7 @@ class Producer(Agents):
         self.fill_battery(device=key)
 
         # mpc
-        self.fill_mpc(device=key)
-
-        # market_agent
-        self.fill_market_agent(device=key)
-
-        # meter
-        self.fill_meter(device=key)
+        self.fill_ems(device=key)
 
     def add_fixed_gen(self):
         """
@@ -300,6 +288,9 @@ class Producer(Agents):
         # general
         self.fill_general(device=key)
 
+        if self.num_agents == 0:
+            return
+
         # wind
         self.fill_fixed_gen(device=key)
 
@@ -307,13 +298,7 @@ class Producer(Agents):
         self.fill_battery(device=key)
 
         # mpc
-        self.fill_mpc(device=key)
-
-        # market_agent
-        self.fill_market_agent(device=key)
-
-        # meter
-        self.fill_meter(device=key)
+        self.fill_ems(device=key)
 
     def fill_general(self, device: str):
         """
@@ -332,10 +317,6 @@ class Producer(Agents):
         # general
         self.df.loc[self.idx_start:self.idx_end, f"{key}/agent_id"] = self._gen_new_ids(n=self.num_agents)
 
-        # forecast
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/fcast_retraining_frequency"] = config[
-            "fcast_retraining_frequency"]
-
         # market participation
         self.df.loc[self.idx_start:self.idx_end, f"{key}/market_participant"] = self._gen_rand_bool_list(
             n=self.num_agents, share_ones=config["market_participant_share"])
@@ -351,7 +332,8 @@ class Producer(Agents):
         self._add_general_info(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"])
+        pprint(config)
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -367,11 +349,16 @@ class Producer(Agents):
                 distr=config["sizing"]["power_deviation"], method="absolute")
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
                 vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # file
             self.df[f"{key}/sizing/file_{num}"] = self._pick_files(
                 list_type=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/file_{num}"],
                 device=f"{key}",
                 input_path=os.path.join(self.input_path, key))
+            # orientation
+            self.df[f"{key}/sizing/orientation_{num}"] = self.df[f"{key}/sizing/orientation_{num}"].astype('Int16')
+            # angle
+            self.df[f"{key}/sizing/angle_{num}"] = self.df[f"{key}/sizing/angle_{num}"].astype('Int16')
 
         # forecast
         self.df.loc[self.idx_start:self.idx_end] = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"],
@@ -391,7 +378,7 @@ class Producer(Agents):
         self._add_general_info(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -407,6 +394,7 @@ class Producer(Agents):
                 distr=config["sizing"]["power_deviation"], method="absolute")
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
                 vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # file
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/file_{num}"] = self._pick_files(
                 list_type=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/file_{num}"],
@@ -432,7 +420,7 @@ class Producer(Agents):
         self._add_general_info(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -448,6 +436,7 @@ class Producer(Agents):
                 distr=config["sizing"]["power_deviation"], method="absolute")
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
                 vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"], n=self.n_digits)
+            self.df[f"{key}/sizing/power_{num}"] = self.df[f"{key}/sizing/power_{num}"].astype('Int64')
             # file
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/file_{num}"] = self._pick_files(
                 list_type=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/file_{num}"],
@@ -472,7 +461,7 @@ class Producer(Agents):
         self._add_general_info_dependent(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -484,40 +473,22 @@ class Producer(Agents):
             # postprocessing
             # power
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"] *= self.df[f"{device}/sizing/power_0"]
+            self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
+                vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/power_{num}"], n=self.n_digits)
             # capacity
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"] *= self.df[
                 f"{device}/sizing/power_0"]
+            self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
+                vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"], n=self.n_digits)
 
         # quality
         self.df.loc[self.idx_start:self.idx_end, f"{key}/quality"] = config["quality"]
 
-    def fill_mpc(self, device: str):
+    def fill_ems(self, device: str):
         """
             Fills all battery columns
         """
-        key = "mpc"
-        config = self.config[f"{device}"][f"{key}"]
-
-        # general
-        self.df.loc[self.idx_start:self.idx_end] = self._add_info_simple(keys=[key], config=config,
-                                                                         df=self.df[self.idx_start:self.idx_end][:])
-
-    def fill_market_agent(self, device: str):
-        """
-            Fills all market agent columns
-        """
-        key = "market_agent"
-        config = self.config[f"{device}"][f"{key}"]
-
-        # general
-        self.df.loc[self.idx_start:self.idx_end] = self._add_info_random(keys=[key], config=config,
-                                                                         df=self.df[self.idx_start:self.idx_end][:])
-
-    def fill_meter(self, device: str):
-        """
-            Fills all battery columns
-        """
-        key = "meter"
+        key = "ems"
         config = self.config[f"{device}"][f"{key}"]
 
         # general
@@ -544,7 +515,6 @@ class Producer(Agents):
         self.df.loc[self.idx_start:self.idx_end, f"{key}/num"] = self._gen_dep_num_list(
             owner_list=self.df.loc[self.idx_start:self.idx_end, f"{key}/owner"], distr=config["num"])
         self.df.loc[self.idx_start:self.idx_end, f"{key}/num"] *= self.df[f"{key}/owner"]
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/has_submeter"] = config["has_submeter"]
 
     def _add_general_info_dependent(self, key: str, config: dict) -> None:
 
@@ -554,7 +524,6 @@ class Producer(Agents):
             owner_list=self.df.loc[self.idx_start:self.idx_end, f"{key}/owner"], distr=config["num"])
         self.df.loc[self.idx_start:self.idx_end, f"{key}/owner"] = \
             (self.df.loc[self.idx_start:self.idx_end, f"{key}/num"] > 0) * 1
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/has_submeter"] = config["has_submeter"]
 
     def _add_general_info_bat(self, key: str):
 
@@ -580,4 +549,3 @@ class Producer(Agents):
 
             self.df.loc[self.idx_start:self.idx_end, f"{key}/owner"] = list_owner
             self.df.loc[self.idx_start:self.idx_end, f"{key}/num"] = list_num
-            self.df.loc[self.idx_start:self.idx_end, f"{key}/has_submeter"] = str(self.config[f"{key}"]["has_submeter"])

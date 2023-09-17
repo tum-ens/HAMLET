@@ -14,8 +14,9 @@ from ruamel.yaml import YAML
 from pprint import pprint
 import json
 import polars as pl
+pl.enable_string_cache(True)
 from hamlet import functions as f
-from numba import njit, jit
+# from numba import njit, jit
 import pandapower as pp
 import concurrent.futures
 from typing import Callable
@@ -24,10 +25,9 @@ from hamlet.executor.agents.agent import Agent
 from hamlet.executor.markets.markets import Markets
 from hamlet.executor.grids.grids import Grids
 from hamlet.executor.utilities.database.database import Database
-pl.StringCache()
 
 # TODO: Considerations
-# - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator and should be continued for consistency
+# - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator_backup and should be continued for consistency
 # - Possible packages for multiprocessing: multiprocessing, joblib, threading (can actually be useful when using not just pure python)
 # - Decrease file size wherever possible (define data types, shorten file lengths, etc.) -> this needs to occur in the scenario creation
 # - Load all files into the RAM and not read/save as in lemlab to increase performance
@@ -84,48 +84,7 @@ class Executor:
 
         self.__prepare_scenario()
 
-        # TODO: Put back in:
-
         self.__setup_database()
-
-    def compare_pandas_polars(self, engine: str, runs: int = 100000) -> float:
-        # TODO: To be removed. This is just for testing purposes
-
-        # POLARS
-
-        # create a Polars DataFrame from the pandas DataFrame
-        df = self.timetable
-        print(df.estimated_size()/1e6)
-
-        df_p = df.to_pandas()
-        print(df_p.info())
-
-        start = time.time()
-
-        if engine == 'polars':
-
-            # group by the 'timestamp' column and get the unique keys
-            for _ in range(runs):
-                pltt = df.groupby('timestamp')
-
-            for row in pltt:
-                # with pl.Config() as cfg:
-                #     cfg.set_tbl_cols(30)
-                print(row)
-                break
-
-        elif engine == 'pandas':
-
-            # PANDAS
-
-            for _ in range(runs):
-                pdtt = df_p.groupby('timestamp')
-
-            for row in pdtt:
-                print(row[1].head(10).to_string())
-                break
-
-        return time.time() - start
 
     def execute(self):
         """Executes the scenario
@@ -147,7 +106,8 @@ class Executor:
         # Note: The design assumes that there is nothing to be gained for the simulation to run in between market
         #   timestamps. Therefore, the simulation is only executed for the market timestamps
         # Iterate over timetable by timestamp
-        for timestamp in self.timetable.partition_by('timestamp'):
+        timetable = self.timetable.collect()
+        for timestamp in timetable.partition_by('timestamp'):
             # Wait for the timestamp to be reached if the simulation is to be carried out in real-time
             if self.type == 'rts':
                 self.wait_for_ts(timestamp.iloc[0, 0])
@@ -157,6 +117,10 @@ class Executor:
                 for market in region.partition_by('market'):
                     # Iterate over market by name:
                     for name in market.partition_by('name'):
+                        # Turn the tasklist into a polars LazyFrame
+                        name = name.lazy()
+
+                        # Execute the agents and market in parallel or sequentially
                         if self.pool:
                             # Execute the agents for this market
                             self.__execute_agents_parallel(tasklist=name)
@@ -177,11 +141,11 @@ class Executor:
         if self.pool:
             self.pool.shutdown()
 
-    def __execute_agents_parallel(self, tasklist: pl.DataFrame):
+    def __execute_agents_parallel(self, tasklist: pl.LazyFrame):
         """Executes all agent tasks for all agents in parallel"""
 
         # Get the data of the agents that are part of the tasklist
-        agents = self.database.get_agent_data(region=tasklist['region'].iloc[0])
+        agents = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
 
         # Define the function to be executed in parallel
         def tasks(data, timetable, agent_type):
@@ -227,12 +191,15 @@ class Executor:
         # Wait for all markets to complete
         concurrent.futures.wait(futures)
 
-    def __execute_agents(self, tasklist: pl.DataFrame):
+    def __execute_agents(self, tasklist: pl.LazyFrame):
         """Executes all agent tasks for all agents sequentially
         """
 
         # Get the data of the agents that are part of the tasklist
-        agents = self.database.get_agent_data(region=tasklist['region'].iloc[0])
+        # agents = dict()
+        # agents['sfh'] = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
+        # print('Change back to "agents = ..." (__execute_agents)')
+        agents = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
 
         results = []
 
@@ -240,7 +207,7 @@ class Executor:
         for agent_type, agent in agents.items():
             for agent_id, data in agent.items():
                 # Create an instance of the Agents class and execute its tasks
-                results.append(Agent(data, tasklist, agent_type).execute())
+                results.append(Agent(agent_type=agent_type, data=agent[agent_id], timetable=tasklist, database=self.database).execute())
 
         # Post the agent data back to the database
         # self.database.post_agent_data(results)
@@ -277,20 +244,17 @@ class Executor:
 
         # Load general information and configuration
         self.general = f.load_file(os.path.join(self.path_scenario, 'general', 'general.json'))
-        self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'config_general.yaml'))
-
-        # Set the simulation type
-        self.type = self.config['simulation']['type']
+        self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'config_setup.yaml'))
 
         # Load timetable
         self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),
-                                     df='polars', method='eager')
+                                     df='polars', method='lazy')
 
         # Load scenario structure
         self.structure = self.general['structure']
 
         # Set the results path
-        self.path_results = os.path.join(self.config['simulation']['paths']['results'], self.name)
+        self.path_results = os.path.join(self.config['paths']['results'], self.name)
         # Check if the results folder exists and stop simulation if overwrite is set to False
         if os.path.exists(self.path_results) and self.overwrite is False:
             raise FileExistsError(f"Results folder already exists. "

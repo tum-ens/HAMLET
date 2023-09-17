@@ -26,7 +26,7 @@ class Grids:
 
 
         # Load setup plus configuration and/or agent file
-        self.setup = self._load_file(path=os.path.join(self.config_root, 'config_general.yaml'))
+        self.setup = self._load_file(path=os.path.join(self.config_root, 'config_setup.yaml'))
         # TODO: Change to config_grids.yaml once the files have been renamed
         self.config = self._load_file(path=os.path.join(self.config_path, 'config_grid.yaml'))
 

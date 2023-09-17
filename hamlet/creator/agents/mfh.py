@@ -1,3 +1,4 @@
+__author__ = "TUM-Doepfert"
 __credits__ = "jiahechu"
 __license__ = ""
 __maintainer__ = "TUM-Doepfert"
@@ -110,13 +111,7 @@ class Mfh(Agents):
         self.fill_heat_storage()
 
         # Fill the model predictive controller information in dataframe
-        self.fill_mpc()
-
-        # Fill the market agent information in dataframe
-        self.fill_market_agent()
-
-        # Fill the metering information in dataframe
-        self.fill_meter()
+        self.fill_ems()
 
         return self.df
 
@@ -187,13 +182,7 @@ class Mfh(Agents):
         self.fill_heat_storage(**kwargs)
 
         # Fill the model predictive controller information in dataframe
-        self.fill_mpc()
-
-        # Fill the market agent information in dataframe
-        self.fill_market_agent()
-
-        # Fill the metering information in dataframe
-        self.fill_meter()
+        self.fill_ems()
 
         return self.df
 
@@ -216,95 +205,89 @@ class Mfh(Agents):
             # Adjust the columns from "inflexible_load"
             elif key == "inflexible_load":
                 cols[0] = f"{key}/owner"
-                cols[6] = f"{key}/sizing/file"
-                del cols[4]
+                cols[5] = f"{key}/sizing/file"
+                del cols[3]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:5], num=max_num) + cols[5:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:4], num=max_num) + cols[4:]
             # Adjust the columns from "flexible_load"
             elif key == "flexible_load":
                 cols[0] = f"{key}/owner"
-                cols[6] = f"{key}/sizing/file"
-                del cols[4]
+                cols[5] = f"{key}/sizing/file"
+                del cols[3]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "heat"
             elif key == "heat":
                 cols[0] = f"{key}/owner"
-                cols[4] = f"{key}/sizing/demand"
+                cols[3] = f"{key}/sizing/demand"
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "dhw"
             elif key == "dhw":
                 cols[0] = f"{key}/owner"
-                del cols[4]
+                del cols[3]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "pv"
             elif key == "pv":
                 cols[0] = f"{key}/owner"
-                del cols[6]
-                del cols[4]
+                del cols[5]
+                del cols[3]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:8], num=max_num) + cols[8:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:7], num=max_num) + cols[7:]
             # Adjust the columns from "wind"
             elif key == "wind":
                 cols[0] = f"{key}/owner"
-                del cols[6]
-                del cols[4]
+                del cols[5]
+                del cols[3]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "fixed_gen"
             elif key == "fixed_gen":
                 cols[0] = f"{key}/owner"
-                del cols[6]
-                del cols[4]
+                del cols[5]
+                del cols[3]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:6], num=max_num) + cols[6:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "hp"
             elif key == "hp":
                 cols[0] = f"{key}/owner"
-                del cols[4]
+                del cols[3]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:5], num=max_num) + cols[5:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:4], num=max_num) + cols[4:]
             # Adjust the columns from "ev"
             elif key == "ev":
                 cols[0] = f"{key}/owner"
-                del cols[4]
+                del cols[3]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:13], num=max_num) + cols[13:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:11], num=max_num) + cols[11:]
             # Adjust the columns from "battery"
             elif key == "battery":
                 cols[0] = f"{key}/owner"
-                del cols[5]
+                del cols[4]
                 del cols[2]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:9], num=max_num) + cols[9:]
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:8], num=max_num) + cols[8:]
             # Adjust the columns from "heat_storage"
             elif key == "heat_storage":
                 cols[0] = f"{key}/owner"
-                del cols[5]
+                del cols[4]
                 del cols[2]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
-                cols = cols[:3] + self.repeat_columns(columns=cols[3:7], num=max_num) + cols[7:]
-            # Adjust the columns from "mpc"
-            elif key == "mpc":
-                pass
-            # Adjust the columns from "market_agent"
-            elif key == "market_agent":
-                pass
-            # Adjust the columns from "meter"
-            elif key == "meter":
+                cols = cols[:2] + self.repeat_columns(columns=cols[2:6], num=max_num) + cols[6:]
+            # All columns that do not need to be adjusted
+            elif key in ["ems"]:
                 pass
             else:
                 raise NotImplementedError(
@@ -469,7 +452,7 @@ class Mfh(Agents):
         self._add_general_info_config(key=key)
 
         # loop through buildings
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for agent, aps in self.ids.items():
             # get relevant sub dataframe that either contains building or apartments
             df_sub = self._preprocess_df_sub(agent, aps, key, aps_independent=True)
@@ -500,7 +483,7 @@ class Mfh(Agents):
                 self.df.loc[df_sub.index, :] = df_sub[:]
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         return self.df
 
@@ -521,10 +504,8 @@ class Mfh(Agents):
         # general
         self.df[f"{key}/owner"] = (df['demand'] > 0)
         self.df[f"{key}/owner"] = self.df[f"{key}/owner"].fillna(0).astype(int)
-        self.df[f"{key}/num"] = self.df[f"{key}/owner"].fillna(0).astype(
-            int)  # equals owner as only one inflexible load per agent
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
+        self.df[f"{key}/num"] = self.df[f"{key}/owner"].fillna(0).astype(int)   # equals owner as only one inflexible
+                                                                                # load per agent
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
@@ -544,7 +525,7 @@ class Mfh(Agents):
                 self._calc_total(key=key, vals=[f"sizing/demand_{num}"], agent_id=agent_id)
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         return self.df
 
@@ -555,7 +536,7 @@ class Mfh(Agents):
 
         key = "flexible_load"
         config = self.config[f"{key}"]
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
 
         # general
         self._add_general_info_config(key=key)
@@ -593,7 +574,7 @@ class Mfh(Agents):
                 self.df.loc[df_sub.index, :] = df_sub[:]
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
     def fill_heat(self, **kwargs) -> pd.DataFrame:
         """
@@ -623,7 +604,7 @@ class Mfh(Agents):
         self._add_general_info_config(key=key)
 
         # loop through buildings
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for agent, aps in self.ids.items():
             # get relevant sub dataframe that either contains building or apartments
             df_sub = self._preprocess_df_sub(agent, aps, key, aps_independent=True)
@@ -669,7 +650,7 @@ class Mfh(Agents):
                 self.df.loc[df_sub.index, :] = df_sub[:]
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         return self.df
 
@@ -702,8 +683,6 @@ class Mfh(Agents):
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
             'Int64')  # all agents that have plant type
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
@@ -713,7 +692,7 @@ class Mfh(Agents):
             self.df[f"{key}/sizing/temperature_{num}"] = self.df.index.map(df['temperature'])
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         return self.df
 
@@ -745,7 +724,7 @@ class Mfh(Agents):
         self._add_general_info_config(key=key)
 
         # loop through buildings
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for agent, aps in self.ids.items():
             # get relevant sub dataframe that either contains building or apartments
             df_sub = self._preprocess_df_sub(agent, aps, key, aps_independent=True)
@@ -783,7 +762,7 @@ class Mfh(Agents):
                 self.df.loc[df_sub.index, :] = df_sub[:]
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         return self.df
 
@@ -816,8 +795,7 @@ class Mfh(Agents):
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
             'Int64')  # all agents that have plant type
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
+
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
@@ -827,7 +805,7 @@ class Mfh(Agents):
             self.df[f"{key}/sizing/temperature_{num}"] = self.df.index.map(df['temperature'])
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         return self.df
 
@@ -858,7 +836,7 @@ class Mfh(Agents):
         self._add_general_info_config(key=key)
 
         # loop through buildings
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for agent, aps in self.ids.items():
             # get relevant sub dataframe that either contains building or apartments
             df_sub = self._preprocess_df_sub(agent, aps, key)
@@ -894,7 +872,7 @@ class Mfh(Agents):
             self.df.loc[df_sub.index, :] = df_sub[:]
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df.loc[:, f"{key}/quality"] = config["quality"]
@@ -933,8 +911,6 @@ class Mfh(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one pv per agent is supported
@@ -972,8 +948,8 @@ class Mfh(Agents):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-            # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -1006,7 +982,7 @@ class Mfh(Agents):
         self._add_general_info_config(key=key)
 
         # loop through buildings
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for agent, aps in self.ids.items():
             # get relevant sub dataframe that either contains building or apartments
             df_sub = self._preprocess_df_sub(agent, aps, key)
@@ -1041,7 +1017,7 @@ class Mfh(Agents):
             self.df.loc[df_sub.index, :] = df_sub[:]
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df.loc[:, f"{key}/quality"] = config["quality"]
@@ -1079,8 +1055,6 @@ class Mfh(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
@@ -1114,8 +1088,8 @@ class Mfh(Agents):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-            # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -1152,7 +1126,7 @@ class Mfh(Agents):
         self._add_general_info_config(key=key)
 
         # loop through buildings
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for agent, aps in self.ids.items():
             # get relevant sub dataframe that either contains building or apartments
             df_sub = self._preprocess_df_sub(agent, aps, key)
@@ -1187,7 +1161,7 @@ class Mfh(Agents):
             self.df.loc[df_sub.index, :] = df_sub[:]
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df.loc[:, f"{key}/quality"] = config["quality"]
@@ -1225,8 +1199,6 @@ class Mfh(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
@@ -1248,8 +1220,8 @@ class Mfh(Agents):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-            # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -1282,7 +1254,7 @@ class Mfh(Agents):
         self._add_general_info_config(key=key)
 
         # loop through buildings
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for agent, aps in self.ids.items():
             # get relevant sub dataframe that either contains building or apartments
             df_sub = self._preprocess_df_sub(agent, aps, key)
@@ -1303,7 +1275,8 @@ class Mfh(Agents):
                 # postprocessing
                 # power
                 df_sub.loc[:, f"{key}/sizing/power_{num}"] *= df_sub["heat/sizing/demand_0"] / 2000
-                # TODO: Fix rounding issue. Somehow the only one that is not working
+                df_sub.loc[:, f"{key}/sizing/power_{num}"] = df_sub.loc[:, f"{key}/sizing/power_{num}"].astype('Int64')
+                # TODO: Fix rounding issue. Somehow the only one that is not working (workaround above since int64)
                 # df_sub[f"{key}/sizing/power_{num}"] = pd.to_numeric(
                 #     df_sub[f"{key}/sizing/power_{num}"], errors='coerce').fillna(
                 #     df_sub[f"{key}/sizing/power_{num}"])
@@ -1354,8 +1327,6 @@ class Mfh(Agents):
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
             'Int64')  # all agents that have plant type
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
@@ -1404,7 +1375,7 @@ class Mfh(Agents):
         self._add_general_info_config(key=key)
 
         # loop through buildings
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for agent, aps in self.ids.items():
             # get relevant sub dataframe that either contains building or apartments
             df_sub = self._preprocess_df_sub(agent, aps, key, aps_independent=True)
@@ -1432,16 +1403,12 @@ class Mfh(Agents):
             # charging scheme
             df_sub = self._add_info_simple(keys=[key, "charging_scheme"], config=config["charging_scheme"],
                                            df=df_sub)
-            # postprocessing
-            # method
-            df_sub.loc[:, f"{key}/charging_scheme/method"] = random.choices(config["charging_scheme"]["method"],
-                                                                            k=len(df_sub))
 
             # copy results to main df
             self.df.loc[df_sub.index, :] = df_sub[:]
 
         # forecast
-        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"])
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df.loc[:, f"{key}/quality"] = config["quality"]
@@ -1480,8 +1447,6 @@ class Mfh(Agents):
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
             'Int64')  # all agents that have plant type
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
@@ -1529,7 +1494,7 @@ class Mfh(Agents):
         self._add_general_info_config(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for agent, aps in self.ids.items():
             # get relevant sub dataframe that either contains building or apartments
             df_sub = self._preprocess_df_sub(agent, aps, key)
@@ -1603,8 +1568,6 @@ class Mfh(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have battery
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
@@ -1648,7 +1611,7 @@ class Mfh(Agents):
         self._add_general_info_config(key=key)
 
         # sizing
-        max_num = max(config["num"])
+        max_num = max(config["num"]) if config['share'] else 0
         for agent, aps in self.ids.items():
             # get relevant sub dataframe that either contains building or apartments
             df_sub = self._preprocess_df_sub(agent, aps, key)
@@ -1721,8 +1684,6 @@ class Mfh(Agents):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        # note: always taken from config
-        self.df[f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
@@ -1737,36 +1698,17 @@ class Mfh(Agents):
 
         return self.df
 
-    def fill_mpc(self):
+    def fill_ems(self) -> pd.DataFrame:
         """
             Fills all battery columns
         """
-        key = "mpc"
+        key = "ems"
         config = self.config[f"{key}"]
 
         # general
-        self._add_info_simple(keys=[key], config=config)
+        self.df = self._add_info_simple(keys=[key], config=config, df=self.df)
 
-    def fill_market_agent(self):
-        """
-            Fills all battery columns
-        """
-        key = "market_agent"
-        config = self.config[f"{key}"]
-
-        # general
-        self._add_info_random(keys=[key], config=config)
-
-    def fill_meter(self):
-        """
-            Fills all battery columns
-        """
-        key = "meter"
-
-        # general
-        self.df.loc[:, f"{key}/prob_late"] = self.config[f"{key}"]["prob_late"]
-        self.df.loc[:, f"{key}/prob_late_95"] = self.config[f"{key}"]["prob_late_95"]
-        self.df.loc[:, f"{key}/prob_missing"] = self.config[f"{key}"]["prob_missing"]
+        return self.df
 
     def _get_df_sub(self, agent: str, aps: list, aps_independent: bool = True) -> pd.DataFrame:
         """ Returns the sub-dataframe with either the building or the apartments of the building"""
@@ -1778,12 +1720,13 @@ class Mfh(Agents):
             return self.df.loc[(self.df[f"general/agent_id"] == agent)
                                & (self.df[f"general/sub_id"] == self.main_subid)][:]
 
-    def _add_general_info_config(self, key: str) -> None:
+    def _add_general_info_config(self, key: str) -> pd.DataFrame:
 
         # fields that exist for all plants
         self.df.loc[self.df[f"general/sub_id"] == self.main_subid, f"{key}/owner"] = \
             self._gen_rand_bool_list(n=self.num, share_ones=self.config[f"{key}"]["share"])
-        self.df.loc[:, f"{key}/has_submeter"] = self.config[f"{key}"]["has_submeter"]
+
+        return self.df
 
     def _preprocess_df_sub(self, agent: str, aps: list, key: str, aps_independent: bool = None):
         """Does all the preprocessing and obtains the relevant df_sub"""
