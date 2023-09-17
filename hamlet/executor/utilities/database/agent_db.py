@@ -25,18 +25,19 @@ class AgentDB:
         setpoints (pl.LazyFrame): Setpoints data.
         forecasts (pl.LazyFrame): Forecast data.
     """
-    def __init__(self, path: str, agent_type: str) -> None:
+    def __init__(self, path: str, agent_type: str, agent_id: str) -> None:
         """
         Initializes the AgentDB with the given path and agent type.
 
         Args:
             path (str): The file path where the agent's information is stored.
             agent_type (str): The type of agent.
+            agent_id (str): the agent id.
         """
 
         self.agent_path = path
         self.agent_type = agent_type
-        self.agent_id = ''
+        self.agent_id = agent_id
         self.sub_agents = {}
         self.account = {}
         self.plants = {}
@@ -58,12 +59,16 @@ class AgentDB:
         Note:
             The loading process relies on the 'hamlet' library's load_file function.
         """
+        # load existing data
         self.account = f.load_file(path=os.path.join(self.agent_path, 'account.json'))
         self.plants = f.load_file(path=os.path.join(self.agent_path, 'plants.json'))
         self.specs = f.load_file(path=os.path.join(self.agent_path, 'specs.json'))
         self.meters = f.load_file(path=os.path.join(self.agent_path, 'meters.ft'), df='polars')
         self.timeseries = f.load_file(path=os.path.join(self.agent_path, 'timeseries.ft'), df='polars')
         self.socs = f.load_file(path=os.path.join(self.agent_path, 'socs.ft'), df='polars')
+        self.setpoints = f.load_file(path=os.path.join(self.agent_path, 'setpoints.ft'), df='polars')
+
+        # initialize setpoints and forecast
 
     def register_sub_agent(self, id: str, path: str) -> None:
         """
@@ -76,5 +81,5 @@ class AgentDB:
             id (str): The identifier for the sub-agent.
             path (str): The file path where the sub-agent's information is stored.
         """
-        self.sub_agents[id] = AgentDB(path, self.agent_type)
+        self.sub_agents[id] = AgentDB(path, self.agent_type, id)
         self.sub_agents[id].register_agent()

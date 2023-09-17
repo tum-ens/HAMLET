@@ -106,14 +106,14 @@ sfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -195,14 +195,14 @@ sfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -284,14 +284,14 @@ sfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -372,14 +372,14 @@ sfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -474,14 +474,14 @@ sfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -566,14 +566,14 @@ sfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -654,14 +654,14 @@ sfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -1038,14 +1038,14 @@ mfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -1134,14 +1134,14 @@ mfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -1230,14 +1230,14 @@ mfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -1325,14 +1325,14 @@ mfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -1439,14 +1439,14 @@ mfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -1541,14 +1541,14 @@ mfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -1637,14 +1637,14 @@ mfh:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -2024,14 +2024,14 @@ ctsp:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -2103,14 +2103,14 @@ ctsp:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -2198,14 +2198,14 @@ ctsp:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -2282,14 +2282,14 @@ ctsp:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -2361,14 +2361,14 @@ ctsp:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -2651,14 +2651,14 @@ industry:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -2730,14 +2730,14 @@ industry:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -2825,14 +2825,14 @@ industry:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -2910,14 +2910,14 @@ industry:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -2991,14 +2991,14 @@ industry:
 
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -3278,14 +3278,14 @@ producer:
 
         cnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
 
         rnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
@@ -3458,14 +3458,14 @@ producer:
 
         cnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
 
         rnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
@@ -3633,14 +3633,14 @@ producer:
 
         cnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
 
         rnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
