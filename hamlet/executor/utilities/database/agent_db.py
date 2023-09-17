@@ -67,6 +67,7 @@ class AgentDB:
         self.timeseries = f.load_file(path=os.path.join(self.agent_path, 'timeseries.ft'), df='polars')
         self.socs = f.load_file(path=os.path.join(self.agent_path, 'socs.ft'), df='polars')
         self.setpoints = f.load_file(path=os.path.join(self.agent_path, 'setpoints.ft'), df='polars')
+        self.forecasts = f.load_file(path=os.path.join(self.agent_path, 'forecasts.ft'), df='polars')
 
         # initialize setpoints and forecast
 
