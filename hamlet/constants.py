@@ -92,6 +92,23 @@ TC_TYPE_PLANTS = 'type_plants'
 TC_SOC = 'soc'
 TC_PLANT_VALUE = 'plant_value'
 
+# columns related to weather
+TC_CLOUD_COVER = 'cloud_cover'
+TC_TEMPERATURE = 'temp'
+TC_TEMPERATURE_FEELS_LIKE = 'temp_feels_like'
+TC_TEMPERATURE_MIN = 'temp_min'
+TC_TEMPERATURE_MAX = 'temp_max'
+TC_PRESSURE = 'pressure'
+TC_HUMIDITY = 'humidity'
+TC_VISIBILITY = 'visibility'
+TC_WIND_SPEED = 'wind_speed'
+TC_WIND_DIRECTION = 'wind_dir'
+TC_SUN_RISE = 'sunrise'
+TC_SUN_SET = 'sunset'
+TC_POP = 'pop'
+TC_GHI = 'ghi'
+TC_DHI = 'dhi'
+TC_DNI = 'dni'
 
 # PLANTS
 P_INFLEXIBLE_LOAD = 'inflexible_load'

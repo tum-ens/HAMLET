@@ -6,6 +6,7 @@ import pandas as pd
 import polars as pl
 from ruamel.yaml import YAML
 from typing import Callable
+import hamlet.constants as c
 
 
 # Contains all functions that are shared among the classes and used universally
@@ -213,3 +214,85 @@ def get_all_subdirectories(path_directory):
         return subdirectories  # Return the name of the first subdirectory
     else:
         return None  # No subdirectories found
+
+
+def calculate_timedelta(target_df, reference_ts):
+    """
+    Calculate time difference (timedelta) between current timestep and datetime index of given polars data/lazyframe.
+
+    The returned dataframe has an additional 'timedelta' column = current time step - datetime index. If 'timedelta'
+    is positive, the index is earlier than current ts. If negative, the index is later than current ts. The column used
+    as datetime index should be named as c.TC_TIMESTAMP.
+
+    FUNCTION SPECIFICALLY DESIGNED FOR DATA PROCESSING IN POLARS
+
+    Args:
+        target_df: dataframe or lazyframe to be calulated.
+        reference_ts: reference human time in datetime format.
+
+    Returns:
+        target_df: same as the input target_df with an additional 'timedelta' column.
+    """
+
+    # get time info from original dataframe
+    datetime_index = target_df.select(c.TC_TIMESTAMP)
+    dtype = datetime_index.dtypes[0]
+    time_unit = dtype.time_unit
+    time_zone = dtype.time_zone
+
+    # generate a new column with current timestep
+    target_df = target_df.with_columns(pl.lit(reference_ts).alias('current'))
+    target_df = target_df.with_columns(pl.col('current').dt.cast_time_unit(time_unit))  # change time unit
+    target_df = target_df.with_columns(pl.col('current').dt.replace_time_zone(time_zone))   # change time zone
+
+    # calculate timedelta
+    target_df = target_df.with_columns((pl.col('current') - pl.col(c.TC_TIMESTAMP)).alias('timedelta'))
+    target_df = target_df.drop('current')   # delete column with same current ts value
+
+    return target_df
+
+
+def slice_dataframe_between_times(target_df, reference_ts, duration: int, unit='second'):
+    """
+    Slice the given pl data/lazyframe to the given duration to the reference time step.
+
+    The reference ts and timestep column in target data should be in human time. The column used as datetime index
+    should be named as c.TC_TIMESTAMP. In this function, when slicing data in the future, the reference timestep won't
+    be considered. When slicing data from the past, the reference timestep will be considered.
+
+    FUNCTION SPECIFICALLY DESIGNED FOR DATA PROCESSING IN POLARS
+
+    Args:
+        target_df: dataframe or lazyframe to be sliced.
+        reference_ts: reference time step in datetime format.
+        duration: duration to the reference time step. Could be positive (after reference ts) or negative (before
+        reference ts).
+        unit: unit of the duration in 'second', 'minute', 'hour' or 'day'.
+
+    Returns:
+        sliced_df: sliced dataframe or lazyframe between reference ts and duration.
+    """
+
+    # add timedelta as a column
+    target_df = calculate_timedelta(target_df, reference_ts)
+
+    # convert duration to second
+    converter = {'second': 1,
+                 'minute': c.MINUTES_TO_SECONDS,
+                 'hour': c.HOURS_TO_SECONDS,
+                 'day': c.DAYS_TO_SECONDS}      # factors to multiply when converting the corresponding unit to second
+    duration = duration * converter[unit]
+
+    if duration > 0:    # slice data in the future, reference (current) timestep will not be included
+        filter_conditions = ((pl.col('timedelta') + pl.duration(seconds=duration) >= 0) &
+                             (pl.col('timedelta') < 0))
+    elif duration < 0:   # slice data from the past, reference (current) timestep will be included
+        filter_conditions = ((pl.col('timedelta') + pl.duration(seconds=duration) < 0) &
+                             (pl.col('timedelta') >= 0))
+    else:   # get data at current timestep
+        filter_conditions = pl.col('timedelta') == 0
+
+    sliced_df = target_df.filter(filter_conditions)
+    sliced_df = sliced_df.drop('timedelta')     # delete unnecessary column
+
+    return sliced_df
