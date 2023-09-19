@@ -233,7 +233,7 @@ class Forecaster:
             # add a day before simulation with the same data
             # TODO: here one day is hard-coded!
             day_before = f.slice_dataframe_between_times(target_df=target_wholesale, reference_ts=self.start_ts,
-                                                         duration=1, unit='day')
+                                                         duration=c.DAYS_TO_SECONDS + resolution)
             day_before = day_before.with_columns((pl.col(c.TC_TIMESTAMP) - pl.duration(days=1, seconds=resolution))
                                                  .alias(c.TC_TIMESTAMP))
             target_wholesale = pl.concat([day_before, target_wholesale], how='vertical')
