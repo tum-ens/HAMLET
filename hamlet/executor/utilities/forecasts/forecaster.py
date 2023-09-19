@@ -238,13 +238,17 @@ class Forecaster:
                                                  .alias(c.TC_TIMESTAMP))
             target_wholesale = pl.concat([day_before, target_wholesale], how='vertical')
 
+            # drop unnecessary columns
+            # TODO: update column name in constants
+            target_wholesale = target_wholesale.drop('index', c.TC_MARKET, c.TC_NAME, c.TC_REGION, 'retailer')
+
             # initial prepare for the wholesale market
             self.train_data[market_name + '_wholesale'] = {'target': target_wholesale}
 
             # initial prepare for the local market
             # TODO: check which columns should be taken for local market
             target_local = target_wholesale.select(c.TC_TIMESTAMP, 'energy_price_sell')\
-                                           .rename({'energy_price_sell': 'energy_price_sell_local'})
+                                           .rename({'energy_price_sell': 'energy_price_local'})
             self.train_data[market_name + '_local'] = {'target': target_local}
 
     def __prepare_plants_target_data(self):
@@ -359,7 +363,7 @@ class Forecaster:
             current_ts: Current timestamp for the forecasts.
 
         Returns:
-            forecasts_df: DataFrame containing the summarized forecast results.
+            forecasts_df: Lazyframe containing the summarized forecast results.
 
         """
         # generate a column contains time index
@@ -389,4 +393,8 @@ class Forecaster:
         # summarize everything together
         forecasts_df = pl.concat(forecasts_list, how='horizontal')
 
-        return forecasts_df
+        # add timestep column and switch it with timestamp
+        forecasts_df = forecasts_df.with_columns(pl.col(c.TC_TIMESTAMP).alias(c.TC_TIMESTEP))
+        forecasts_df = forecasts_df.with_columns(pl.lit(current_ts).alias(c.TC_TIMESTAMP))
+
+        return forecasts_df.lazy()
