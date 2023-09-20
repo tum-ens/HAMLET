@@ -1,7 +1,5 @@
 # Similar to optimization that it contains the class and calls the classes with functions
-import copy
-import pytz
-from datetime import datetime, timedelta
+from datetime import timedelta
 import polars as pl
 import numpy as np
 from keras.layers import Input, Dense, LSTM, Conv1D, MaxPooling1D, Flatten, Dropout
@@ -86,17 +84,14 @@ class SmoothedModel(ModelBase):
     """Prediction value is a moving mean of the future values with a specified window width."""
     def predict(self, current_ts, length_to_predict, steps, **kwargs):
         # calculate train data resolution first
-        target = f.calculate_timedelta(target_df=self.train_data['target'], reference_ts=current_ts)
-        target = target.filter(pl.col('timedelta') != 0)  # delete the row for the current ts
-        target = target.with_columns(abs(pl.col('timedelta')))  # set timedelta to absolute value
-        resolution = target.select(pl.min('timedelta')).collect().item()  # the smallest timedelta is the resolution
+        resolution = f.calculate_time_resolution(self.train_data['target'])
 
         # calculate the moving average for each timestep to predict
         forecast = []   # empty list, will contain the moving average for each horizon
-        for timestep in range(1, int(length_to_predict / resolution.seconds) + 1):
+        for timestep in range(1, int(length_to_predict / resolution) + 1):
             reference_ts = current_ts + timestep * resolution
             horizon = f.slice_dataframe_between_times(target_df=self.train_data['target'], reference_ts=reference_ts,
-                                                      duration=steps * resolution.seconds, unit='second')  # get horizon
+                                                      duration=steps * resolution, unit='second')  # get horizon
 
             # calculate average for the horizon
             forecast.append(horizon.mean())
@@ -264,10 +259,7 @@ class CNNModel(ModelBase):
 
     def predict(self, current_ts, length_to_predict, window_length, **kwargs):
         # calculate train data resolution first
-        target = f.calculate_timedelta(target_df=self.train_data['target'], reference_ts=current_ts)
-        target = target.filter(pl.col('timedelta') != 0)  # delete the row for the current ts
-        target = target.with_columns(abs(pl.col('timedelta')))  # set timedelta to absolute value
-        resolution = target.select(pl.min('timedelta')).collect().item()  # the smallest timedelta is the resolution
+        resolution = f.calculate_time_resolution(self.train_data['target'])
 
         # slice features for prediction
         features = f.slice_dataframe_between_times(target_df=self.train_data['features'], reference_ts=current_ts,
@@ -276,7 +268,7 @@ class CNNModel(ModelBase):
         # set future time steps as 'index'
         features = features.with_columns(pl.col(c.TC_TIMESTEP).alias(c.TC_TIMESTAMP))
         features = f.slice_dataframe_between_times(target_df=features, reference_ts=current_ts,
-                                                   duration=length_to_predict + resolution.seconds * window_length)
+                                                   duration=length_to_predict + resolution * window_length)
         features = features.drop(c.TC_TIMESTAMP, c.TC_TIMESTEP)  # delete time columns for prediction
 
         # convert data into pandas, since sklearn only takes pandas for now
@@ -389,10 +381,7 @@ class RNNModel(ModelBase):
 
     def predict(self, current_ts, length_to_predict, window_length, **kwargs):
         # calculate train data resolution first
-        target = f.calculate_timedelta(target_df=self.train_data['target'], reference_ts=current_ts)
-        target = target.filter(pl.col('timedelta') != 0)  # delete the row for the current ts
-        target = target.with_columns(abs(pl.col('timedelta')))  # set timedelta to absolute value
-        resolution = target.select(pl.min('timedelta')).collect().item()  # the smallest timedelta is the resolution
+        resolution = f.calculate_time_resolution(self.train_data['target'])
 
         # slice features for prediction
         features = f.slice_dataframe_between_times(target_df=self.train_data['features'], reference_ts=current_ts,
@@ -401,7 +390,7 @@ class RNNModel(ModelBase):
         # set future time steps as 'index'
         features = features.with_columns(pl.col(c.TC_TIMESTEP).alias(c.TC_TIMESTAMP))
         features = f.slice_dataframe_between_times(target_df=features, reference_ts=current_ts,
-                                                   duration=length_to_predict + resolution.seconds * window_length)
+                                                   duration=length_to_predict + resolution * window_length)
         features = features.drop(c.TC_TIMESTAMP, c.TC_TIMESTEP)  # delete time columns for prediction
 
         # convert data into pandas, since sklearn only takes pandas for now

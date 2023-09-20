@@ -224,11 +224,7 @@ class Forecaster:
 
             # pre-processing for retailer data
             # calculate market data resolution
-            target = f.calculate_timedelta(target_df=target_wholesale, reference_ts=self.start_ts)
-            target = target.filter(pl.col('timedelta') != 0)  # delete the row for the current ts
-            target = target.with_columns(abs(pl.col('timedelta')))  # set timedelta to absolute value
-            # the smallest timedelta is the resolution
-            resolution = target.select(pl.min('timedelta')).collect().item().seconds
+            resolution = f.calculate_time_resolution(target_wholesale)
 
             # add a day before simulation with the same data
             # TODO: here one day is hard-coded!
@@ -367,10 +363,23 @@ class Forecaster:
 
         """
         # generate a column contains time index
-        timestamp = f.slice_dataframe_between_times(target_df=self.agentDB.timeseries, reference_ts=current_ts,
+        timestamps = f.slice_dataframe_between_times(target_df=self.agentDB.timeseries, reference_ts=current_ts,
                                                     duration=self.length_to_predict).select(c.TC_TIMESTAMP)
+        # add timestep column
+        timestamps = timestamps.with_columns(pl.col(c.TC_TIMESTAMP).alias(c.TC_TIMESTEP))
 
-        forecasts_list = [timestamp.collect()]     # list which will contain all forecast lazyframes
+        # get time info from original dataframe
+        datetime_index = timestamps.select(c.TC_TIMESTAMP)
+        dtype = datetime_index.dtypes[0]
+        time_unit = dtype.time_unit
+        time_zone = dtype.time_zone
+
+        # adjust timestamp column to current time and keep the datatype
+        timestamps = timestamps.with_columns(pl.lit(current_ts).alias(c.TC_TIMESTAMP))
+        timestamps = timestamps.with_columns(pl.col(c.TC_TIMESTAMP).dt.cast_time_unit(time_unit))  # change time unit
+        timestamps = timestamps.with_columns(pl.col(c.TC_TIMESTAMP).dt.replace_time_zone(time_zone))  # change time zone
+
+        forecasts_list = [timestamps.collect()]     # list which will contain all forecast lazyframes
 
         for id, forecast in forecasts.items():
             # remove time column(s) for all forecasts
@@ -392,9 +401,5 @@ class Forecaster:
 
         # summarize everything together
         forecasts_df = pl.concat(forecasts_list, how='horizontal')
-
-        # add timestep column and switch it with timestamp
-        forecasts_df = forecasts_df.with_columns(pl.col(c.TC_TIMESTAMP).alias(c.TC_TIMESTEP))
-        forecasts_df = forecasts_df.with_columns(pl.lit(current_ts).alias(c.TC_TIMESTAMP))
 
         return forecasts_df.lazy()
