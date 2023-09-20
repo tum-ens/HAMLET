@@ -2,6 +2,7 @@
 
 
 # KEYS
+K_GENERAL = 'general'
 K_ACCOUNT = 'account'
 K_PLANTS = 'plants'
 K_EMS = 'ems'
@@ -38,19 +39,45 @@ DAYS_TO_SECONDS = 86400
 HOURS_TO_DAYS = 1 / 24
 DAYS_TO_HOURS = 24
 
+# MONEY CONSTANTS
+EURO_TO_CENT = 100
+CENT_TO_EURO = 1 / 100
+EUR_KWH_TO_UNIT_WH = 1e5
+
 # ENERGY TYPES
 ET_ELECTRICITY = 'power'
 ET_HEAT = 'heat'
 ET_COOLING = 'cold'
 ET_H2 = 'h2'
 
+# MARKET TYPES
+MT_LEM = 'lem'
+MT_LFM = 'lfm'
+MT_LHM = 'lhm'
+MT_LCM = 'lcm'
+MT_LH2M = 'lh2m'
+MT_WHOLESALE = 'wholesale'
+MT_BALANCING = 'balancing'
+
+# TRADED ENERGY TYPES
+TRADED_ENERGY = {
+    MT_LEM: ET_ELECTRICITY,
+    MT_LFM: ET_ELECTRICITY,
+    MT_LHM: ET_HEAT,
+    MT_LCM: ET_COOLING,
+    MT_LH2M: ET_H2,
+}
+
 # OPERATION MODES
-# Note: Storage is not an operation mode. They are always modeled as loads and have negative values when generating.
+# Note: Storage is not an operation mode. They are modeled as loads and have negative values when generating.
 #       This can be changed for every controller individually though as it is only a convention.
 OM_GENERATION = 'gen'
 OM_LOAD = 'load'
 OM_STORAGE = 'storage'
 
+# POWER FLOWS
+PF_IN = 'in'
+PF_OUT = 'out'
 
 ### TABLES ###
 # NAMES
@@ -62,9 +89,11 @@ TC_TIMESTEP = 'timestep'
 TC_REGION = 'region'
 TC_MARKET = 'market'
 TC_NAME = 'name'
+TC_ENERGY_TYPE = 'energy_type'
 TC_ACTION = 'action'
-TC_TYPE = 'type'
-TC_METHOD = 'method'
+TC_CLEARING_TYPE = 'type'  # TODO: Change to clearing_type
+TC_CLEARING_METHOD = 'method'  # TODO: Change to clearing_method
+TC_CLEARING_PRICING = 'pricing'  # TODO: Change to clearing_pricing
 TC_COUPLING = 'coupling'
 TC_TYPE_TRANSACTION = 'type_transaction'
 TC_ID_AGENT = 'id_agent'
@@ -124,3 +153,27 @@ P_BATTERY = 'battery'
 P_PSH = 'psh'
 P_HYDROGEN = 'hydrogen'
 P_HEAT_STORAGE = 'heat_storage'
+
+## COMPONENT MAPPING
+# Note: Key states which type of plant is addressed and the value states which type of operation it has for the given
+#       energy type
+COMP_MAP = {
+            # Electricity
+            P_INFLEXIBLE_LOAD: {ET_ELECTRICITY: OM_LOAD},
+            P_FLEXIBLE_LOAD: {ET_ELECTRICITY: OM_LOAD},
+            P_PV: {ET_ELECTRICITY: OM_GENERATION},
+            P_WIND: {ET_ELECTRICITY: OM_GENERATION},
+            P_FIXED_GEN: {ET_ELECTRICITY: OM_GENERATION},
+            P_EV: {ET_ELECTRICITY: OM_STORAGE},
+            P_BATTERY: {ET_ELECTRICITY: OM_STORAGE},
+            P_PSH: {ET_ELECTRICITY: OM_STORAGE},
+            P_HYDROGEN: {ET_ELECTRICITY: OM_STORAGE},
+
+            # Heat
+            P_HEAT: {ET_HEAT: OM_LOAD},
+            P_DHW: {ET_HEAT: OM_LOAD},
+            P_HEAT_STORAGE: {ET_ELECTRICITY: OM_STORAGE},
+
+            # Hybrid
+            P_HP: {ET_ELECTRICITY: OM_LOAD, ET_HEAT: OM_GENERATION},
+        }
