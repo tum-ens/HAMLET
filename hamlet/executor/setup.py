@@ -14,6 +14,7 @@ from ruamel.yaml import YAML
 from pprint import pprint
 import json
 import polars as pl
+pl.enable_string_cache(True)
 from hamlet import functions as f
 # from numba import njit, jit
 import pandapower as pp
@@ -26,7 +27,7 @@ from hamlet.executor.grids.grids import Grids
 from hamlet.executor.utilities.database.database import Database
 
 # TODO: Considerations
-# - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator and should be continued for consistency
+# - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator_backup and should be continued for consistency
 # - Possible packages for multiprocessing: multiprocessing, joblib, threading (can actually be useful when using not just pure python)
 # - Decrease file size wherever possible (define data types, shorten file lengths, etc.) -> this needs to occur in the scenario creation
 # - Load all files into the RAM and not read/save as in lemlab to increase performance
@@ -195,6 +196,9 @@ class Executor:
         """
 
         # Get the data of the agents that are part of the tasklist
+        # agents = dict()
+        # agents['sfh'] = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
+        # print('Change back to "agents = ..." (__execute_agents)')
         agents = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
 
         results = []
@@ -203,7 +207,7 @@ class Executor:
         for agent_type, agent in agents.items():
             for agent_id, data in agent.items():
                 # Create an instance of the Agents class and execute its tasks
-                results.append(Agent(data, tasklist, agent_type, self.database).execute())
+                results.append(Agent(agent_type=agent_type, data=agent[agent_id], timetable=tasklist, database=self.database).execute())
 
         # Post the agent data back to the database
         # self.database.post_agent_data(results)

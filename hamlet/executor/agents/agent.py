@@ -15,7 +15,7 @@ import time
 import logging
 import traceback
 from datetime import datetime
-from hamlet.executor.utilities.forecasts.forecasts import Forecaster
+from hamlet.executor.utilities.forecasts.forecaster import Forecaster
 from hamlet.executor.utilities.controller.controller import Controller
 from hamlet.executor.utilities.database.database import Database
 from hamlet import constants as c
@@ -55,16 +55,16 @@ class AgentFactory:
 class AgentBase:
     """Base class for all agents. It provides a default implementation of the run method."""
 
-    def __init__(self, agent_type: str, agent: dict, timetable: pd.DataFrame, database: Database):
+    def __init__(self, agent_type: str, agent, timetable: pd.DataFrame, database):
 
         # Type of agent
         self.agent_type = agent_type
 
         # Data
-        self.agent = agent
+        self.agentDB = agent  # agent dataframe
 
         # Timetable
-        self.timetable = timetable
+        self.timetable = timetable  # part of timetable for one timestep
 
         # Database
         self.db = database
@@ -80,7 +80,7 @@ class AgentBase:
         # Get the grid data (database)
         self.get_grid_data()
         # Get forecasts (train models if needed)
-        # self.get_forecasts()
+        self.get_forecasts()
         # Controller (RTC, MPC, etc.)
         self.set_controllers()
         # Log data
@@ -100,24 +100,10 @@ class AgentBase:
 
     def get_forecasts(self):
         """Gets the predictions for the agent"""
-
-        # Get the required data
-        plants = self.data[c.K_PLANTS]
-        ems = self.data[c.K_ACCOUNT][c.K_EMS]
-        timeseries = self.data[c.K_TIMESERIES]
-        market = self.data.get_market_data()
-        weather = self.db.get_weather_data()
-
-        # Create the forecasts object
-        fc = Forecaster(self.data, plants, ems, timeseries, market, weather, self.db)
-
-        # Init the forecaster
-        fc.init_forecaster()
-
         # Get the forecasts
-        self.data[c.K_FORECASTS] = fc.make_forecasts()
+        self.agentDB.forecasts = self.agentDB.forecaster.make_all_forecasts(self.timetable)
 
-        return self.data
+        return self.agentDB
 
     def set_controllers(self):
         """Sets the controller for the agent"""
@@ -162,8 +148,6 @@ class AgentBase:
 
             # Run the controller
             self.agent = controller.run(agent=self.agent, timetable=self.timetable, market=self.market)
-
-
 
     def log_data(self):
         """Logs the data of the agent"""

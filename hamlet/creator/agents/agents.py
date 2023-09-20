@@ -620,7 +620,8 @@ class Agents:
 
         return system
 
-    def __adjust_weather_data_for_pv(self, weather_path: str, location: tuple) -> pd.DataFrame:
+    @staticmethod
+    def __adjust_weather_data_for_pv(weather_path: str, location: tuple) -> pd.DataFrame:
         """adjust weather data to the right format that pvlib needed.
 
         Args:
@@ -636,15 +637,15 @@ class Agents:
 
         # get weather data from csv
         weather = f.load_file(weather_path)
-        weather = weather[weather['ts_delivery_current'] == weather['ts_delivery_fcast']]  # remove forcasting data
+        weather = weather[weather[c.TC_TIMESTAMP] == weather[c.TC_TIMESTEP]]  # remove forcasting data
 
         # convert time data to datetime (use utc time overall in pvlib)
-        time = pd.DatetimeIndex(pd.to_datetime(weather['ts_delivery_current'], unit='s', utc=True))
+        time = pd.DatetimeIndex(pd.to_datetime(weather[c.TC_TIMESTAMP], unit='s', utc=True))
         weather.index = time
         weather.index.name = 'utc_time'
 
         # adjust temperature data
-        weather.rename(columns={'temp': 'temp_air'}, inplace=True)  # rename to pvlib format
+        weather.rename(columns={c.TC_TEMPERATURE: 'temp_air'}, inplace=True)  # rename to pvlib format
         weather['temp_air'] -= 273.15  # convert unit to celsius
 
         # get solar position
@@ -655,11 +656,11 @@ class Agents:
             longitude=longitude,
             altitude=altitude,
             temperature=weather['temp_air'],
-            pressure=weather['pressure'],
+            pressure=weather[c.TC_PRESSURE],
         )
 
         # calculate dni with solar position
-        weather.loc[:, 'dni'] = (weather['ghi'] - weather['dhi']) / np.cos(solpos['zenith'])
+        weather.loc[:, c.TC_DNI] = (weather[c.TC_GHI] - weather[c.TC_DHI]) / np.cos(solpos['zenith'])
 
         return weather
 
@@ -709,15 +710,15 @@ class Agents:
         nominal_power = specs['module']['Impo'] * specs['module']['Vmpo']
 
         # set time index to origin timestamp
-        power.index = weather['ts_delivery_current']
-        power.index.name = 'timestamp'
+        power.index = weather[c.TC_TIMESTAMP]
+        power.index.name = c.TC_TIMESTAMP
 
         # rename and round data column
-        power.rename('power', inplace=True)
+        power.rename(c.ET_ELECTRICITY, inplace=True)
         power = power.to_frame()
 
         # calculate and round power
-        power /= nominal_power * plant['sizing']['power']
+        power = power / nominal_power * plant['sizing']['power']
         power = power.round().astype(int)
 
         # replace all negative values
@@ -725,7 +726,8 @@ class Agents:
 
         return power
 
-    def __adjust_weather_data_for_wind(self, weather_path: str) -> pd.DataFrame:
+    @staticmethod
+    def __adjust_weather_data_for_wind(weather_path: str) -> pd.DataFrame:
         """adjust weather data to the right format that windpowerlib needed.
 
         Args:
@@ -737,17 +739,17 @@ class Agents:
         """
         # get weather data from csv
         weather = f.load_file(weather_path)
-        weather = weather[weather['ts_delivery_current'] == weather['ts_delivery_fcast']]  # remove forcasting data
+        weather = weather[weather[c.TC_TIMESTAMP] == weather[c.TC_TIMESTEP]]  # remove forcasting data
 
         # convert time data to datetime
-        time = pd.DatetimeIndex(pd.to_datetime(weather['ts_delivery_current'], unit='s', utc=True))
+        time = pd.DatetimeIndex(pd.to_datetime(weather[c.TC_TIMESTAMP], unit='s', utc=True))
         weather.index = time
         weather.index.name = None
 
         # delete unnecessary columns and rename
-        weather.drop(['ts_delivery_fcast', 'cloud_cover', 'sunrise', 'sunset', 'ghi', 'dhi',
-                      'visibility', 'pop'], axis=1, inplace=True)
-        weather.rename(columns={'temp': 'temperature'}, inplace=True)
+        weather = weather[[c.TC_TIMESTAMP, c.TC_TEMPERATURE, c.TC_TEMPERATURE_FEELS_LIKE, c.TC_TEMPERATURE_MAX,
+                           c.TC_TEMPERATURE_MIN, c.TC_PRESSURE, c.TC_HUMIDITY, c.TC_WIND_SPEED, c.TC_WIND_DIRECTION]]
+        weather.rename(columns={c.TC_TEMPERATURE: 'temperature'}, inplace=True)
 
         if 'roughness_length' not in weather.columns:
             weather['roughness_length'] = 0.15
@@ -799,15 +801,15 @@ class Agents:
         power = mc_turbine.power_output
 
         # set time index to origin timestamp
-        power.index = weather['ts_delivery_current'].unstack(level=0).values
-        power.index.name = 'timestamp'
+        power.index = weather[c.TC_TIMESTAMP].unstack(level=0).values
+        power.index.name = c.TC_TIMESTAMP
 
         # rename data column
-        power.rename('power', inplace=True)
+        power.rename(c.ET_ELECTRICITY, inplace=True)
         power = power.to_frame()
 
         # calculate and round power
-        power /= nominal_power * plant['sizing']['power']
+        power = power / nominal_power * plant['sizing']['power']
         power = power.round().astype(int)
 
         return power
