@@ -16,16 +16,13 @@ import logging
 import traceback
 from datetime import datetime
 
-# TODO: Considerations
-# - Use polars instead of pandas to increase performance
-# - Use parallel computing for market clearings
 
 # TODO: Change the structure of the markets to be more similar to the agents
 
 
 class Markets:
 
-    def __init__(self, timetable: pl.DataFrame):
+    def __init__(self, timetable: pl.LazyFrame):
 
         # Types of markets (add your own if others are created here)
         from hamlet.executor.markets.lem import Lem
@@ -40,7 +37,7 @@ class Markets:
         }
 
         # Instance of the market class
-        market_type = timetable[0, 'market']  # extract market type by selecting the first row's market value
+        market_type = timetable.collect()[0, 'market']  # extract market type by selecting the first row's market value
         self.market = self.types[market_type](timetable)
 
     def execute(self):
