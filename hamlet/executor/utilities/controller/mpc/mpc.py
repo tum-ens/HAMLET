@@ -73,15 +73,15 @@ class Mpc(ControllerBase):
             self.ems = self.account['ems']
             self.plants = self.agent.plants  # Formerly known as components
             self.setpoints = self.agent.setpoints
-            # self.forecasts = self.agent.timeseries.collect()  # TODO: Replace with forecasts once they exist
-            self.forecasts = self.agent.forecasts.collect()
-            with pl.Config() as cfg:
-                cfg.set_tbl_width_chars(200)
-                cfg.set_tbl_cols(30)
-                print(self.forecasts)
-            print('Forecast is now implemented. Next step is to replace the dummy data with the actual forecasts. \n'
-                  'Also probably necessary to convert the retailer data as it is still using fractions')
-            exit()
+            self.forecasts = self.agent.timeseries.collect()  # TODO: Replace with forecasts once they exist
+            # self.forecasts = self.agent.forecasts.collect()
+            # with pl.Config() as cfg:
+            #     cfg.set_tbl_width_chars(200)
+            #     cfg.set_tbl_cols(30)
+            #     print(self.forecasts)
+            # print('Forecast is now implemented. Next step is to replace the dummy data with the actual forecasts. \n'
+            #       'Also probably necessary to convert the retailer data as it is still using fractions')
+            # exit()
             self.socs = self.agent.socs.collect()
 
             # Get the timetable
