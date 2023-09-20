@@ -70,7 +70,7 @@ sfh:
                                                 #   --> 2000<= 20% <=3000, 3000<= 60% <=5000, 5000<= 20% <=6000   
 
     fcast:
-      method: average                           # forecasting method
+      method: perfect                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -103,23 +103,32 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -159,7 +168,7 @@ sfh:
                                                 # note: defines the maximum amount of time a load can be shifted to the future
 
     fcast:
-      method: average                           # forecasting method
+      method: rfr                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -192,23 +201,32 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -248,7 +266,7 @@ sfh:
                                                 #   - 55: radiator-heating systems
 
     fcast:
-      method: average                           # forecasting method
+      method: naive                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -281,23 +299,32 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -355,7 +382,7 @@ sfh:
                                                 # unit: days
 
       average:                                  # average forecasting method parameters
-        offset: 1                               # offset in days to the current day
+        offset: 2                               # offset in days to the current day
                                                 # unit: days
 
         days: 2                                 # number of days to be used for averaging
@@ -369,23 +396,32 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -437,7 +473,7 @@ sfh:
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
     fcast:
-      method: average                           # forecasting method
+      method: rfr                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -471,23 +507,32 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -497,7 +542,7 @@ sfh:
 
   ################################ small-scale wind ####################################
   wind:
-    share: 0                                    # share of prosumers with wind power plant
+    share: 1                                    # share of prosumers with wind power plant
                                                 # unit: 1 [0, 1]
       
     num: [1]                                    # number of inflexible loads
@@ -529,7 +574,7 @@ sfh:
       controllable: [true, true]                # can the wind inverter be controlled? true or false
 
     fcast:
-      method: average                           # forecasting method
+      method: rnn                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -563,23 +608,32 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -651,23 +705,32 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -1075,23 +1138,32 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -1171,23 +1243,32 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -1267,23 +1348,32 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -1362,23 +1452,32 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -1476,23 +1575,32 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -1578,23 +1686,32 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -1674,23 +1791,32 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -2101,23 +2227,32 @@ ctsp:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -2180,23 +2315,32 @@ ctsp:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -2275,23 +2419,32 @@ ctsp:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -2359,23 +2512,32 @@ ctsp:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -2438,23 +2600,32 @@ ctsp:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -2768,23 +2939,32 @@ industry:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -2847,23 +3027,32 @@ industry:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -2942,23 +3131,32 @@ industry:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -3027,23 +3225,32 @@ industry:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -3108,23 +3315,32 @@ industry:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 90                                # past days that are used to train the neural network
+        days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -3435,23 +3651,32 @@ producer:
           order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                   96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
         cnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rfr:
           features: ['temp', 'time']              # used features in weather file to fit the model
+          days: 3                                 # past days that are used to train the neural network
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -3655,23 +3880,32 @@ producer:
           order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                   96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
         cnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rfr:
           features: ['temp', 'time']              # used features in weather file to fit the model
+          days: 3                                 # past days that are used to train the neural network
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -3870,23 +4104,32 @@ producer:
           order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                   96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
         cnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
-          days: 90                                # past days that are used to train the neural network
+          days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rfr:
           features: ['temp', 'time']              # used features in weather file to fit the model
+          days: 3                                 # past days that are used to train the neural network
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,

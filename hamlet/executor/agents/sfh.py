@@ -13,7 +13,7 @@ import time
 import logging
 import traceback
 from datetime import datetime
-from hamlet.executor.utilities.forecasts.forecasts import Forecaster
+from hamlet.executor.utilities.forecasts.forecaster import Forecaster
 from hamlet.executor.utilities.controller.controller import Controller
 from hamlet import constants as c
 from hamlet.executor.utilities.database.database import Database
