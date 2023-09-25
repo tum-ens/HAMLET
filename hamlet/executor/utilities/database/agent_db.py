@@ -47,6 +47,7 @@ class AgentDB:
         self.timeseries = pl.LazyFrame()
         self.setpoints = pl.LazyFrame()
         self.forecasts = pl.LazyFrame()
+        self.bids_offers = pl.LazyFrame()
 
     def register_agent(self) -> None:
         """

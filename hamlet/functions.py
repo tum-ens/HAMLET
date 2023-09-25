@@ -8,7 +8,6 @@ from ruamel.yaml import YAML
 from typing import Callable
 import hamlet.constants as c
 
-
 # Contains all functions that are shared among the classes and used universally
 
 
