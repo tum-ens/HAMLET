@@ -7,6 +7,7 @@ import ast
 from hamlet import constants as c
 import hamlet.executor.utilities.forecasts.models as models
 import hamlet.functions as f
+from pprint import pprint
 
 
 class Forecaster:
@@ -157,10 +158,10 @@ class Forecaster:
 
             # add to config dict
             # TODO: the param here is hard-coded!
-            self.config_dict[wholesale_id] = {'method': market_config['wholesale'],
+            self.config_dict[wholesale_id] = {'method': market_config['wholesale']['method'],
                                               'naive': {'offset': 1},
                                               'perfect': {}}
-            self.config_dict[local_id] = {'method': market_config['local'],
+            self.config_dict[local_id] = {'method': market_config['local']['method'],
                                           'naive': {'offset': 1},
                                           'perfect': {}}
 
