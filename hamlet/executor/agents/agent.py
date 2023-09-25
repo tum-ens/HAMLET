@@ -146,10 +146,8 @@ class AgentBase:
             strategy = Trading(strategy=market_info['strategy'], timetable=self.timetable,
                                market=market, market_data=self.market, agent=self.agent).create_instance()
 
-
             # Create bids and offers
             self.agent = strategy.create_bids_offers()
 
         return self.agent
-
 
