@@ -156,7 +156,6 @@ class TradingBase:
 
 
 class Linear(TradingBase):
-    # TODO: Will probably need to be changed in the future
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

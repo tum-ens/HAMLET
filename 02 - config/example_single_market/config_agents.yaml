@@ -955,24 +955,26 @@ sfh:
 
       fcast:
         local:
-          method: naive                            # forecasting method for local market prices
-                                                  # options:
-                                                  #   - flat:  no meaningful forecasting, flat price assumed
-                                                  #   - naive: expected price same as previous day (initialized flat)
-                                                  # note: does not apply when simulation ex-post markets
+          method: naive                         # forecasting method for local market prices
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                # note: does not apply when simulation ex-post markets
 
-          naive:
-            offset: 1
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
 
         wholesale:
-          method: naive                        # forecasting method for wholesale market prices
+          method: naive                         # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
 
-          naive:
-            offset: 1
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
 
         retailer:
           energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
