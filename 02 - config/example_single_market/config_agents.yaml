@@ -574,7 +574,7 @@ sfh:
       controllable: [true, true]                # can the wind inverter be controlled? true or false
 
     fcast:
-      method: rnn                           # forecasting method
+      method: naive                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
