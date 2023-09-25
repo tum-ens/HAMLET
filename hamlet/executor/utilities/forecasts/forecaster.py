@@ -178,8 +178,12 @@ class Forecaster:
         """
         Assign related forecast models.
 
-        Get all models from models module and assign them to a dict according to the given keywords, then assign the
-        chosen forecast model for each plant / market. Initialize the chosen forecast models.
+        Get all available models from models module and assign them to a dict according to the given keywords (name
+        attribute), then assign the chosen forecast model for each plant / market. Initialize the chosen forecast
+        models using given parameters in config file.
+
+        Special case for weather model: all columns in weather data will be taken as features, another key 'config'
+        will be added to the train data with value of specs dict.
 
         """
         # get all models from imported module
@@ -194,6 +198,14 @@ class Forecaster:
             # check if there's extra keyword arguments for model initialization
             self.used_models[id] = self.all_models[chosen_model](self.train_data[id],
                                                                  **self.config_dict[id][chosen_model])
+
+            # special case for weather model
+            # if chosen_model == 'weather':
+            #     # add other necessary data to train data
+            #     self.train_data[id]['specs'] = self.agentDB.specs[id]
+            #     self.train_data[id]['plant_config'] = self.agentDB.plants[id]
+            #     self.train_data[id]['general_config'] = self.general['general']
+            #     self.train_data[id][c.K_FEATURES] = self.weather
 
     def __prepare_train_data(self):
         """
@@ -221,8 +233,8 @@ class Forecaster:
 
         """
         for market_name, marketDB in self.marketsDB.items():  # assign market config dict for each market
-            # TODO: retailers columns need to be updated in constants, here change hard-coded column names
-            target_wholesale = marketDB.retailer    # get retailer data
+            # get retailer data
+            target_wholesale = marketDB.retailer
 
             # pre-processing for retailer data
             # calculate market data resolution
@@ -244,7 +256,6 @@ class Forecaster:
             self.train_data[market_name + '_wholesale'] = {c.K_TARGET: target_wholesale}
 
             # initial prepare for the local market
-            # TODO: check which columns should be taken for local market
             target_local = target_wholesale.select(c.TC_TIMESTAMP, 'energy_price_sell')\
                                            .rename({'energy_price_sell': 'energy_price_local'})
             self.train_data[market_name + '_local'] = {c.K_TARGET: target_local}
@@ -294,9 +305,6 @@ class Forecaster:
         representing seasonal fluctuation). Otherwise, only initialize an empty lazyframe. Add them to the train data
         of corresponding plant or market with key c.K_FEATURES as a lazyframe.
 
-        Special case for weather model: all columns in weather data will be taken as features, another key 'config'
-        will be added to the train data with value of specs dict.
-
         """
         for id in self.train_data.keys():
             # if given, get features
@@ -323,15 +331,6 @@ class Forecaster:
                 features = features.select(features_name)
             else:
                 features = pl.LazyFrame()
-
-            # special case for weather model
-            if self.used_models[id] == 'weather':
-                # add other necessary data to train data
-                self.train_data[id][c.K_SPECS] = self.agentDB.specs[id]
-                self.train_data['plant_config'] = self.agentDB.plants[id]
-                self.train_data['general_config'] = self.general['general']
-
-                features = self.weather
 
             self.train_data[id][c.K_FEATURES] = features
 

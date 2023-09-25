@@ -1,5 +1,6 @@
 # Similar to optimization that it contains the class and calls the classes with functions
 from datetime import timedelta
+import ast
 import polars as pl
 import pandas as pd
 import numpy as np
@@ -416,11 +417,13 @@ class RNNModel(ModelBase):
 @forecast_model(name='arima')
 class ARIMAModel(ModelBase):
     """Autoregressive integrated moving average model."""
-    def __init__(self, train_data, **kwargs):
+    def __init__(self, train_data, order, **kwargs):
         super().__init__(train_data, **kwargs)
-        self.arima = ARIMA()
+        self.arima = ARIMA(order=ast.literal_eval(order))
 
     def fit(self, current_ts, length_to_predict, t, n, **kwargs):
+        # prepare fitting data
+
         self.arima.fit()
 
     def predict(self, current_ts, length_to_predict, t, n, **kwargs):
@@ -434,11 +437,14 @@ class WeatherModel(ModelBase):
     This model is currently implemented using pandas.
     """
     # TODO: which specs file did agent use?
-    def __pv_model(self):
+    def __pv_model(self, current_ts, length_to_predict):
         # get pv orientation
-        surface_tilt, surface_azimuth = orientation
+        plant = self.train_data['plant_config']
+        surface_tilt = plant['sizing']['orientation']
+        surface_azimuth = plant['sizing']['angle']
 
         # get hardware data
+        config = self.train_data['specs']
         module = pd.Series(config['module'])
         inverter = pd.Series(config['inverter'])
 
@@ -455,11 +461,19 @@ class WeatherModel(ModelBase):
         )
 
         # get location data
-        latitude, longitude, name, altitude = location
+        location = self.setup['location']
+        latitude = location['latitude']
+        longitude = location['longitude']
+        name = location['name']
+        altitude = location['altitude']
 
         # get weather data from csv
-        weather = f.load_file(weather_path)
-        weather = weather[weather[c.TC_TIMESTAMP] == weather[c.TC_TIMESTEP]]  # remove forcasting data
+        weather = f.slice_dataframe_between_times(target_df=self.train_data[c.K_FEATURES], reference_ts=current_ts,
+                                                  duration=0)
+        weather = weather.with_columns(pl.col(c.TC_TIMESTEP).alias(c.TC_TIMESTAMP))
+        weather = f.slice_dataframe_between_times(target_df=weather, reference_ts=current_ts,
+                                                  duration=length_to_predict)
+        weather = weather.to_pandas()
 
         # convert time data to datetime (use utc time overall in pvlib)
         time = pd.DatetimeIndex(pd.to_datetime(weather[c.TC_TIMESTAMP], unit='s', utc=True))
@@ -484,23 +498,7 @@ class WeatherModel(ModelBase):
         # calculate dni with solar position
         weather.loc[:, c.TC_DNI] = (weather[c.TC_GHI] - weather[c.TC_DHI]) / np.cos(solpos['zenith'])
 
-        # get location information from config
-        location = self.setup['location']
-        location = (location['latitude'], location['longitude'], location['name'], location['altitude'])
-
-        # get plant orientation
-        orientation = (plant['sizing']['orientation'], plant['sizing']['angle'])
-
-        # get weather path
-        weather_path = os.path.join(self.input_path, 'general', 'weather',
-                                    self.setup['location']['weather'])
-
-        # create PVSystem and adjust weather data
-        system = self.__create_pv_system_from_config(config=specs, orientation=orientation)
-        weather = self.__adjust_weather_data_for_pv(weather_path=weather_path, location=location)
-
         # get location data and create corresponding pvlib Location object
-        latitude, longitude, name, altitude = location
         location = Location(
             latitude,
             longitude,
@@ -516,7 +514,7 @@ class WeatherModel(ModelBase):
         power = mc.results.ac
 
         # calculate nominal power
-        nominal_power = specs['module']['Impo'] * specs['module']['Vmpo']
+        nominal_power = module['Impo'] * module['Vmpo']
 
         # set time index to origin timestamp
         power.index = weather[c.TC_TIMESTAMP]
@@ -536,6 +534,9 @@ class WeatherModel(ModelBase):
         return power
 
     def __wind_model(self, current_ts, length_to_predict, specs):
+        # get spec file
+        specs = self.train_data['specs']
+
         # get forecasted weather data
         weather = f.slice_dataframe_between_times(target_df=self.train_data[c.K_FEATURES], reference_ts=current_ts,
                                                   duration=0)
@@ -596,7 +597,13 @@ class WeatherModel(ModelBase):
         return power
 
     def predict(self, current_ts, length_to_predict, **kwargs):
-        print(self.name, self.train_data)
+        # check if predicting pv power or wind power
+        if 'module' in self.train_data['specs'].keys():
+            forecast = self.__pv_model(current_ts, length_to_predict)
+        else:
+            forecast = self.__wind_model(current_ts, length_to_predict)
+
+        return pl.LazyFrame(forecast)
 
 
 @forecast_model(name='arrival')

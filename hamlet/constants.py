@@ -11,7 +11,6 @@ K_TIMESERIES = 'timeseries'
 K_SETPOINTS = 'setpoints'
 K_TARGET = 'target'     # relevant for forecast train data
 K_FEATURES = 'features'     # relevant for forecast train data
-K_SPECS = 'specs'   # relevant for forecast train data
 
 
 # UNIT CONSTANTS
