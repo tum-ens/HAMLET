@@ -954,18 +954,25 @@ sfh:
                                                 # note: range is limited by the control horizon
 
       fcast:
-        local: naive                            # forecasting method for local market prices
-                                                # options:
-                                                #   - flat:  no meaningful forecasting, flat price assumed
-                                                #   - naive: expected price same as previous day (initialized flat)
-                                                #   - perfect: perfect foresight of market price
-                                                # note: does not apply when simulation ex-post markets
+        local:
+          method: naive                            # forecasting method for local market prices
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  # note: does not apply when simulation ex-post markets
 
-        wholesale: naive                        # forecasting method for wholesale market prices
+          naive:
+            offset: 1
+
+        wholesale:
+          method: naive                        # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
+
+          naive:
+            offset: 1
 
         retailer:
           energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities

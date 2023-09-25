@@ -11,7 +11,7 @@ from pprint import pprint
 import numpy as np
 import pandas as pd
 import linopy
-import numba
+# import numba
 
 
 class LinopyComps:
@@ -24,7 +24,7 @@ class LinopyComps:
         self.timesteps = kwargs['timesteps']
         self.info = kwargs
 
-    def define_variables(self, model):
+    def define_variables(self, model, **kwargs):
         raise NotImplementedError()
 
     @staticmethod
@@ -257,7 +257,10 @@ class SimplePlant(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        self.power = [int(x) for x in list(self.fcast[f'{self.name}_power'].round())]  # TODO: Fix that round is not needed anymore
+        try:
+            self.power = [int(x) for x in list(self.fcast[f'{self.name}_power'].round())]  # TODO: Fix that round is not needed anymore
+        except:
+            self.power = list(self.fcast[f'{self.name}_power'])
         self.controllable = self.info['sizing']['controllable']
         self.lower = [0] * len(self.power) if self.controllable else self.power # TODO
 
@@ -277,14 +280,14 @@ class Pv(SimplePlant):
         super().__init__(name, **kwargs)
 
 
-class Wind(LinopyComps):
+class Wind(SimplePlant):
 
     def __init__(self, name, **kwargs):
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
 
-class FixedGen(LinopyComps):
+class FixedGen(SimplePlant):
 
     def __init__(self, name, **kwargs):
         # Call the parent class constructor

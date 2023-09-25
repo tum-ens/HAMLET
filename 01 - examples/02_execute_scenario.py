@@ -6,4 +6,3 @@ path = "../04 - scenarios/example_single_market"     # relative or absolute path
 simulation = Executor(path, num_workers=1)
 
 simulation.run()
-

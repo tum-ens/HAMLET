@@ -784,6 +784,7 @@ class Agents:
 
         # get weather data
         weather = self.__adjust_weather_data_for_wind(weather_path=weather_path)
+        specs_wind = specs.copy()
 
         # copy specs parameter
         specs_wind = copy.deepcopy(specs)

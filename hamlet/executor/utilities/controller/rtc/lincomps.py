@@ -18,7 +18,7 @@ class LinopyComps:
         self.ts = timeseries
         self.info = kwargs
 
-    def define_variables(self, model):
+    def define_variables(self, model, **kwargs):
         raise NotImplementedError()
 
     @staticmethod
@@ -173,7 +173,7 @@ class Pv(SimplePlant):
         super().__init__(name, **kwargs)
 
 
-class Wind(LinopyComps):
+class Wind(SimplePlant):
 
     def __init__(self, name, **kwargs):
 
@@ -181,7 +181,7 @@ class Wind(LinopyComps):
         super().__init__(name, **kwargs)
 
 
-class FixedGen(LinopyComps):
+class FixedGen(SimplePlant):
 
     def __init__(self, name, **kwargs):
 
