@@ -1,4 +1,4 @@
-HHAMLET
+HAMLET
 =======
 
 **H**ierarchical **A**gent-based **M**arkets for **L**ocal **E**nergy **T**rading
