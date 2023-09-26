@@ -181,6 +181,8 @@ class Lem(Markets):
 
         # Change dtypes for all columns
         timetable = timetable.astype({
+            c.TC_TIMESTAMP: 'datetime64[ns, UTC]',
+            c.TC_TIMESTEP: 'datetime64[ns, UTC]',
             c.TC_REGION: 'category',
             c.TC_MARKET: 'category',
             c.TC_NAME: 'category',

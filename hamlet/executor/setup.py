@@ -5,6 +5,7 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 import os
+from tqdm import tqdm
 import shutil
 import time
 import warnings
@@ -25,6 +26,7 @@ from hamlet.executor.agents.agent import Agent
 from hamlet.executor.markets.markets import Markets
 from hamlet.executor.grids.grids import Grids
 from hamlet.executor.utilities.database.database import Database
+import hamlet.constants as c
 # pl.enable_string_cache(True)
 
 # TODO: Considerations
@@ -90,7 +92,6 @@ class Executor:
     def execute(self):
         """Executes the scenario
 
-        # TODO: Add progress bar @Jiahe
         """
 
         # Get number of logical processors (for parallelization)
@@ -108,13 +109,28 @@ class Executor:
         #   timestamps. Therefore, the simulation is only executed for the market timestamps
         # Iterate over timetable by timestamp
         timetable = self.timetable.collect()
+
+        # TODO: Add progress bar @Jiahe
+        progress_bar = tqdm()
+        progress_bar.reset(total=len(timetable.partition_by('timestamp')))
+
         for timestamp in timetable.partition_by('timestamp'):
             # Wait for the timestamp to be reached if the simulation is to be carried out in real-time
             if self.type == 'rts':
                 self.__wait_for_ts(timestamp.iloc[0, 0])
+
+            # get current timestamp as string item for progress bar
+            timestamp_str = str(timestamp.select(c.TC_TIMESTAMP).sample(n=1).item())
+
             # Iterate over timestamp by region
             for region in timestamp.partition_by('region'):
+                # get current region as string item for progress bar
+                region_str = str(region.select(c.TC_REGION).sample(n=1).item())
                 region = region.lazy()
+
+                # update progress bar description
+                progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for region ' + region_str
+                                                 + ': ')
 
                 # Execute the agents and market in parallel or sequentially
                 if self.pool:
@@ -131,7 +147,10 @@ class Executor:
                     self.__execute_market(tasklist=region)
 
             # Calculate the grids for the current timestamp (calculated together as they are connected)
+            progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for grid: ')
             self.__execute_grids()
+
+            progress_bar.update(1)
 
         # Cleanup the thread pool
         if self.pool:
@@ -212,10 +231,11 @@ class Executor:
         print('results sequential:')
         for result in results:
             print(result.bids_offers.collect())
-        exit()
 
         # Post the agent data back to the database
-        # self.database.post_agent_data(results)
+        self.database.post_agents_to_region(region=tasklist.collect()[0, 'region'], agents=results)
+
+        exit()
 
     def __execute_market(self, tasklist: pl.DataFrame):
 

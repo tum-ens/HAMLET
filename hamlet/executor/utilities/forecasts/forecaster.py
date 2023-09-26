@@ -7,6 +7,7 @@ import ast
 from hamlet import constants as c
 import hamlet.executor.utilities.forecasts.models as models
 import hamlet.functions as f
+from pprint import pprint
 
 
 class Forecaster:
@@ -146,8 +147,6 @@ class Forecaster:
         Assign market config and plant config separately. The markets' configs are hard-coded with only two methods:
         naive and perfect. The plants' configs are taken from agentDB.
 
-        Special case for weather
-
         """
         # assign market config
         market_config = self.agentDB.account['ems']['market']['fcast']  # get forecast config for market
@@ -156,13 +155,18 @@ class Forecaster:
             local_id = market_name + '_local'
 
             # add to config dict
-            # TODO: the param here is hard-coded!
-            self.config_dict[wholesale_id] = {'method': market_config['wholesale'],
-                                              'naive': {'offset': 1},
-                                              'perfect': {}}
-            self.config_dict[local_id] = {'method': market_config['local'],
-                                          'naive': {'offset': 1},
-                                          'perfect': {}}
+            self.config_dict[wholesale_id] = market_config['wholesale']
+            self.config_dict[local_id] = market_config['local']
+
+            # if no additional parameters given for the chosen model, assign an empty dict
+            chosen_model_wholesale = market_config['wholesale']['method']
+            chosen_model_local = market_config['local']['method']
+
+            if chosen_model_wholesale not in list(market_config['wholesale'].keys()):
+                self.config_dict[wholesale_id][chosen_model_wholesale] = {}
+
+            if chosen_model_local not in list(market_config['local'].keys()):
+                self.config_dict[local_id][chosen_model_local] = {}
 
         # assign plants config
         for plant_id in self.agentDB.plants.keys():
@@ -170,6 +174,7 @@ class Forecaster:
                 self.config_dict[plant_id] = self.agentDB.plants[plant_id]['fcast']
                 self.config_dict[plant_id]['type'] = self.agentDB.plants[plant_id]['type']
                 chosen_model = self.config_dict[plant_id]['method']
+
                 # if no additional parameters given for the chosen model, assign an empty dict
                 if chosen_model not in list(self.config_dict[plant_id].keys()):
                     self.config_dict[plant_id][chosen_model] = {}
@@ -182,8 +187,8 @@ class Forecaster:
         attribute), then assign the chosen forecast model for each plant / market. Initialize the chosen forecast
         models using given parameters in config file.
 
-        Special case for weather model: all columns in weather data will be taken as features, another key 'config'
-        will be added to the train data with value of specs dict.
+        SPECIAL CASE FOR WEATHER MODEL: more data will be passed to the weather model. All columns in weather data will
+        be taken as features, another key 'config' will be added to the train data with value of specs dict.
 
         """
         # get all models from imported module
@@ -199,13 +204,13 @@ class Forecaster:
             self.used_models[id] = self.all_models[chosen_model](self.train_data[id],
                                                                  **self.config_dict[id][chosen_model])
 
-            # special case for weather model
-            # if chosen_model == 'weather':
-            #     # add other necessary data to train data
-            #     self.train_data[id]['specs'] = self.agentDB.specs[id]
-            #     self.train_data[id]['plant_config'] = self.agentDB.plants[id]
-            #     self.train_data[id]['general_config'] = self.general['general']
-            #     self.train_data[id][c.K_FEATURES] = self.weather
+            # SPECIAL CASE FOR WEATHER MODEL
+            if chosen_model == 'weather':
+                # add other necessary data to train data
+                self.train_data[id]['specs'] = self.agentDB.specs[id]
+                self.train_data[id]['plant_config'] = self.agentDB.plants[id]
+                self.train_data[id]['general_config'] = self.general['general']
+                self.train_data[id][c.K_FEATURES] = self.weather
 
     def __prepare_train_data(self):
         """
@@ -240,11 +245,12 @@ class Forecaster:
             # calculate market data resolution
             resolution = f.calculate_time_resolution(target_wholesale)
 
-            # add a day before simulation with the same data
-            # TODO: here one day is hard-coded!
+            # add offset day(s) before simulation with the same data
+            offset = self.config_dict[market_name + '_wholesale']['naive']['offset']    # here method is hard-coded
+
             day_before = f.slice_dataframe_between_times(target_df=target_wholesale, reference_ts=self.start_ts,
-                                                         duration=c.DAYS_TO_SECONDS + resolution)
-            day_before = day_before.with_columns((pl.col(c.TC_TIMESTAMP) - pl.duration(days=1, seconds=resolution))
+                                                         duration=c.DAYS_TO_SECONDS * offset + resolution)
+            day_before = day_before.with_columns((pl.col(c.TC_TIMESTAMP) - pl.duration(days=offset, seconds=resolution))
                                                  .alias(c.TC_TIMESTAMP))
             target_wholesale = pl.concat([day_before, target_wholesale], how='vertical')
 

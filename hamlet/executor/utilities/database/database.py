@@ -77,8 +77,21 @@ class Database:
 
     """post data"""
 
-    def update_database(self):
+    def post_agents_to_region(self, region: str, agents: list):
+        """Reassign the given agents to the given region."""
+        for agent in agents:
+            agent_id = agent.agent_id
+            self.__regions[region].agents[agent_id] = agent
+
+    def post_markets_to_region(self, region: str, markets: list):
+        """Reassign the given markets to the given region."""
+        for market in markets:
+            market_name = market.market_name
+            self.__regions[region].markets[market_name] = market
+
+    def update_forecaster(self):
         """Also include update forecaster."""
+        # calculate mean value and assign this value as local market price
         ...
 
     ########################################## PRIVATE METHODS ##########################################

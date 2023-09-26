@@ -784,25 +784,26 @@ class Agents:
 
         # get weather data
         weather = self.__adjust_weather_data_for_wind(weather_path=weather_path)
+        specs_wind = specs.copy()
 
         # copy specs parameter
-        specs_ = copy.deepcopy(specs)
+        specs_wind = copy.deepcopy(specs)
 
         # get nominal power
-        nominal_power = specs_['nominal_power']
+        nominal_power = specs_wind['nominal_power']
 
         # convert power curve to dataframe
-        specs_['power_curve'] = pd.DataFrame(data={
-            "value": specs_['power_curve'],
-            "wind_speed": specs_['wind_speed']})
+        specs_wind['power_curve'] = pd.DataFrame(data={
+            "value": specs_wind['power_curve'],
+            "wind_speed": specs_wind['wind_speed']})
 
         # convert power coefficient curve to dataframe
-        specs_['power_coefficient_curve'] = pd.DataFrame(data={
-            "value": specs_['power_coefficient_curve'],
-            "wind_speed": specs_['wind_speed']})
+        specs_wind['power_coefficient_curve'] = pd.DataFrame(data={
+            "value": specs_wind['power_coefficient_curve'],
+            "wind_speed": specs_wind['wind_speed']})
 
         # generate a WindTurbine object from data
-        turbine = WindTurbine(**specs_)
+        turbine = WindTurbine(**specs_wind)
 
         # calculate turbine model
         mc_turbine = ModelChain(turbine).run_model(weather)

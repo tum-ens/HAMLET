@@ -133,6 +133,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
   flexible_load:
@@ -231,6 +235,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ heat demand ####################################
   heat:
@@ -321,7 +329,7 @@ sfh:
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 3                                 # past days that are used to train the neural network
+        days: 3                                 # past days that are used to train the arima model
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -426,6 +434,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
@@ -447,7 +459,7 @@ sfh:
       power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
                                                 # unit: 1 [0, inf)
 
-      file: ["timeseries", "timeseries"]        # file type to calculate the power output
+      file: ["specs", "specs"]        # file type to calculate the power output
                                                 # options:
                                                 #   - specs: power output is calculated based on a randomly chosen specification
                                                 #            file (.json) and the weather file
@@ -473,7 +485,7 @@ sfh:
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
     fcast:
-      method: rfr                           # forecasting method
+      method: weather                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -537,6 +549,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -574,7 +590,7 @@ sfh:
       controllable: [true, true]                # can the wind inverter be controlled? true or false
 
     fcast:
-      method: naive                           # forecasting method
+      method: weather                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -638,6 +654,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
   
@@ -735,6 +755,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -954,18 +978,25 @@ sfh:
                                                 # note: range is limited by the control horizon
 
       fcast:
-        local: naive                            # forecasting method for local market prices
-                                                # options:
-                                                #   - flat:  no meaningful forecasting, flat price assumed
-                                                #   - naive: expected price same as previous day (initialized flat)
-                                                #   - perfect: perfect foresight of market price
-                                                # note: does not apply when simulation ex-post markets
+        local:
+          method: naive                            # forecasting method for local market prices
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  # note: does not apply when simulation ex-post markets
 
-        wholesale: naive                        # forecasting method for wholesale market prices
+          naive:
+            offset: 1
+
+        wholesale:
+          method: naive                        # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
+
+          naive:
+            offset: 1
 
         retailer:
           energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
@@ -1166,6 +1197,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
   flexible_load:
@@ -1271,6 +1306,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ heat demand ####################################
   heat:
@@ -1376,6 +1415,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ dhw (drinking hot water) ####################################
   dhw:
@@ -1480,6 +1523,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
@@ -1603,6 +1650,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -1714,7 +1765,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
-
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
   ################################ fixed generator ####################################
@@ -1819,6 +1873,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -2253,6 +2311,10 @@ ctsp:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
   flexible_load:
@@ -2341,6 +2403,10 @@ ctsp:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ photovoltaics (PV) ####################################
   pv:
@@ -2445,6 +2511,10 @@ ctsp:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -2538,6 +2608,11 @@ ctsp:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
   ################################ fixed generator ####################################
@@ -2626,6 +2701,10 @@ ctsp:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -2963,6 +3042,10 @@ industry:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
   flexible_load:
@@ -3051,6 +3134,10 @@ industry:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
@@ -3155,6 +3242,10 @@ industry:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -3249,6 +3340,10 @@ industry:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -3339,6 +3434,10 @@ industry:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -3673,6 +3772,10 @@ producer:
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                   # differences, and MA parameters to use
+          days: 3                                 # past days that are used to train the arima model
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
       quality: green_local                      # quality that the generated energy should be labelled with on the local markets
       
@@ -3900,6 +4003,10 @@ producer:
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                   # differences, and MA parameters to use
+          days: 3                                 # past days that are used to train the arima model
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
       quality: green_local                      # quality that the generated energy should be labelled with on the local markets
       
@@ -4124,6 +4231,10 @@ producer:
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                   # differences, and MA parameters to use
+          days: 3                                 # past days that are used to train the arima model
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
       quality: local                            # quality that the generated energy should be labelled with on the local markets
     ################################ battery ####################################
