@@ -40,6 +40,8 @@ import hamlet.constants as c
 
 class Executor:
 
+    progress_bar = tqdm()
+
     def __init__(self, path_scenario, name: str = None, num_workers: int = None, overwrite_sim: bool = True):
 
         # Paths
@@ -111,8 +113,8 @@ class Executor:
         timetable = self.timetable.collect()
 
         # TODO: Add progress bar @Jiahe
-        progress_bar = tqdm()
-        progress_bar.reset(total=len(timetable.partition_by('timestamp')))
+        self.progress_bar.reset(total=len(timetable.partition_by('timestamp')))
+        self.progress_bar.set_description_str(desc='Start execution')
 
         for timestamp in timetable.partition_by('timestamp'):
             # Wait for the timestamp to be reached if the simulation is to be carried out in real-time
@@ -129,7 +131,7 @@ class Executor:
                 region = region.lazy()
 
                 # update progress bar description
-                progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for region ' + region_str
+                self.progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for region ' + region_str
                                                  + ': ')
 
                 # Execute the agents and market in parallel or sequentially
@@ -147,10 +149,10 @@ class Executor:
                     self.__execute_market(tasklist=region)
 
             # Calculate the grids for the current timestamp (calculated together as they are connected)
-            progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for grid: ')
+            self.progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for grid: ')
             self.__execute_grids()
 
-            progress_bar.update(1)
+            self.progress_bar.update(1)
 
         # Cleanup the thread pool
         if self.pool:

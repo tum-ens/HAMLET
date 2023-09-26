@@ -43,24 +43,41 @@ class Database:
         return self.__regions[region].markets
 
     @staticmethod
-    def filter_market_data(market, by: list[str], value: list[str], inclusive: bool = False):
+    def filter_market_data(market, by: list[str], values: list[list], inclusive: bool = False) -> list:
         """Filter market data by given columns and values.
-
-        @Jiahe: I want to hand it a market data table and only get the rows back where the values are in the given columns.
 
         Args:
             market: market data table
-            by: list of columns to filter by
-            value: list of values to filter by
-            inclusive: if True, returns rows where the values are in all the given columns,
-                       if False, returns rows where the values are in at least one of the given columns
+            by: list of columns to filter by (column names)
+            value: list of values to filter by, 2D list. Should be the same length as by.
+            inclusive: if True, returns rows where the values are in all the given columns, (AND)
+                       if False, returns rows where the values are in at least one of the given columns (OR)
 
         Returns:
             filtered market data table
         """
+        filters = {}
 
-        # TODO: @Jiahe, please implement this function (once market data actually exists)
-        return market
+        # generate filter for each column
+        for i in range(len(by)):
+            filters[by[i]] = False  # init an empty list, will be filled with statements
+            for value in values[i]:
+                filters[by[i]] = filters[by[i]] | (pl.col(by[i]) == value)
+
+        # combine filters for all columns according to if inclusive
+        if inclusive:
+            filter = True
+            for column in filters.keys():
+                filter = filter & filters[column]
+        else:
+            filter = False
+            for column in filters.keys():
+                filter = filter | (filters[column])
+
+        # filtering
+        filtered_market = market.filter(filter)
+
+        return filtered_market
 
     def get_agent_data(self, region, agent_type=None, agent_id=None):
         """Get all agents data for the given region."""
