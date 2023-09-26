@@ -16,6 +16,7 @@ import logging
 import traceback
 from datetime import datetime
 import pandapower as pp
+import hamlet.constants as c
 
 # TODO: Considerations
 # - None so far
@@ -26,13 +27,13 @@ class Grids:
     def __init__(self, grid: pp.pandapowerNet, grid_type: str):
 
         # Types of grids (add your own if others are created here)
-        from hamlet.creator_backup.grids.electricity import Electricity
+        from hamlet.executor.grids.electricity import Electricity
         # from hamlet.creator_backup.grids.heat import Heat
         # from hamlet.creator_backup.grids.hydrogen import Hydrogen
         self.types = {
-            'electricity': Electricity,
-            # 'heat': Heat,
-            # 'hydrogen': Hydrogen,
+            c.ET_ELECTRICITY: Electricity,
+            # c.ET_HEAT: Heat,
+            # c.ET_H2: Hydrogen,
         }
 
         # Instance of the grid class

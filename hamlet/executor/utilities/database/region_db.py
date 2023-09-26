@@ -35,6 +35,14 @@ class RegionDB:
         else:
             return self.agents[agent_type][agent_id]
 
+    def get_market_data(self, market_type=None, market_name=None):
+        """Get all markets data for the given region."""
+        print(self.markets)
+        if market_type is None and market_name is None:
+            return self.markets
+        else:
+            return self.markets[market_name]
+
     def edit_agent_data(self, agent_type, agent_id, table_name, new_df):
         self.agents[agent_type][agent_id].setattr(table_name, new_df)
 
