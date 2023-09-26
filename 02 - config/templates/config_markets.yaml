@@ -1,7 +1,7 @@
 ########################################################################################################################
 ################################################### markets templates ##################################################
 ########################################################################################################################
-
+# TODO: Include the market types in the market templates
 lem_continuous:                       # type and name of the market "type_name" (must be unique)
                                       # note: markets with the same suffix can trade among each other if specified
   active: True                        # is the market active?

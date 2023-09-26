@@ -6,6 +6,7 @@ import hamlet.functions as f
 from hamlet.executor.utilities.database.region_db import RegionDB
 from hamlet.executor.utilities.database.agent_db import AgentDB
 from hamlet.executor.utilities.database.market_db import MarketDB
+from datetime import datetime
 
 
 class Database:
@@ -42,8 +43,25 @@ class Database:
     def get_market_data(self, region: str):
         return self.__regions[region].markets
 
+    def get_market_data(self, region: str, market_type=None, market_name=None):
+        """Get all markets data for the given region."""
+        if market_type is None and market_name is None:
+            return self.__regions[region].markets
+        elif market_name is None:
+            # TODO Jiahe: Return all markets of the given type
+            pass
+        else:
+            return self.__regions[region].get_market_data(market_type, market_name)
+
+    def get_bids_offers(self, region: str, market_type: str | list[str] = None, market_name: str | list[str] = None,
+                        timestep: datetime | list[datetime] = None):
+        """Get bids and offers for the given market and timestep."""
+        # TODO Jiahe: This function should return the bids and offers of all agents in a LazyFrame
+        #    market_type, market_name and timesteps are optional and if none are given all bids and offers are returned
+        return self.__regions[region].get_bids_offers(market_type, market_name, timestep)
+
     @staticmethod
-    def filter_market_data(market, by: list[str], value: list[str], inclusive: bool = False):
+    def filter_market_data(market, by: list[str], value: list[list], inclusive: bool = False):
         """Filter market data by given columns and values.
 
         @Jiahe: I want to hand it a market data table and only get the rows back where the values are in the given columns.
@@ -102,7 +120,7 @@ class Database:
                                                                   'weather.ft'), df='polars')
         self.__general['retailer'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'retailer.ft'),
                                                  df='polars')
-        self.__general['timetable'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
+        self.__general['tasks'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
                                                   df='polars')
         self.__general['general'] = f.load_file(path=os.path.join(self.__scenario_path, 'config', 'config_setup.yaml'))
 
