@@ -18,7 +18,7 @@ from hamlet import functions as f
 
 
 def forecast_model(name):
-    """Decorator to match model with given name. All forecast models need to use this decorator."""
+    """Decorator to match model with the given name. All forecast models should use this decorator."""
     def decorator(cls):
         cls.name = name
         return cls
@@ -26,17 +26,36 @@ def forecast_model(name):
 
 
 class ModelBase:
-    """Base class for all forecast models, contains fit and predict method."""
+    """
+    Base class for all forecast models, all forecast models should inherit from this class. This class contains the
+    basic necessary attributes and methods.
+
+    Attributes:
+        train_data:
+
+    """
     def __init__(self, train_data: dict, **kwarg):
         self.train_data = train_data
 
     def fit(self, **kwargs):
+        """
+        Implement this function when necessary, e.g. for machine learning or deep learning models. If fitting is not
+        necessary (e.g. statistical models), do nothing.
+        """
         pass
 
     def predict(self, **kwargs):
+        """
+        This function should be implemented for all models. The function should return a polars lazyframe contains
+        forecasting results with column name equals target column name.
+
+        E.g.
+
+        """
         raise NotImplementedError('The forecast model must have the \'predict\' method.')
 
     def update_train_data(self, new_train_data):
+
         self.train_data = new_train_data
 
 
@@ -113,7 +132,7 @@ class SARMAModel(ModelBase):
     """Seasonal autoregressive moving average model."""
     def __init__(self, train_data, **kwargs):
         super().__init__(train_data, **kwargs)
-        raise NotImplementedError('SARMA model is currently not available.')
+        raise NotImplementedError('SARMA model needs to be implemented!')
 
     def predict(self, **kwargs):
         ...
@@ -419,15 +438,44 @@ class ARIMAModel(ModelBase):
     """Autoregressive integrated moving average model."""
     def __init__(self, train_data, order, **kwargs):
         super().__init__(train_data, **kwargs)
+        self.fit_ts = None
         self.arima = ARIMA(order=ast.literal_eval(order))
+        raise NotImplementedError('ARIMA model needs to be fixed!')
 
-    def fit(self, current_ts, length_to_predict, t, n, **kwargs):
-        # prepare fitting data
+    def fit(self, current_ts, length_to_predict, days, **kwargs):
+        # slice target for training
+        target = f.slice_dataframe_between_times(target_df=self.train_data[c.K_TARGET], reference_ts=current_ts,
+                                                 duration=(-length_to_predict))
 
-        self.arima.fit()
+        # save fitting timeseries to attribute
+        self.fit_ts = target.select(c.TC_TIMESTAMP).collect()
 
-    def predict(self, current_ts, length_to_predict, t, n, **kwargs):
-        self.arima.predict()
+        # delete time columns for fitting
+        target = target.drop(c.TC_TIMESTAMP)
+
+        # convert data into pandas, since sklearn only takes pandas for now
+        target = target.collect().to_pandas()
+
+        # fitting
+        self.arima.fit(y=target)
+
+    def predict(self, current_ts, length_to_predict, **kwargs):
+        # get forecast horizon
+        target = f.slice_dataframe_between_times(target_df=self.train_data[c.K_TARGET], reference_ts=current_ts,
+                                                 duration=length_to_predict)
+        forecast_ts = target.with_columns(pl.col(c.TC_TIMESTAMP).cast(pl.Int64)).select(c.TC_TIMESTAMP)
+        fit_ts = self.fit_ts.with_columns(pl.col(c.TC_TIMESTAMP).cast(pl.Int64)).select(c.TC_TIMESTAMP)
+
+        forecast_horizon = forecast_ts.collect().to_numpy().ravel() - fit_ts.to_numpy().ravel()
+
+        # predict and convert result to polars lazyframe
+        forecast = self.arima.predict(fh=forecast_horizon)
+        plant_id = self.train_data[c.K_TARGET].columns  # get column name for result
+        plant_id.remove(c.TC_TIMESTAMP)
+        forecast = pl.LazyFrame({plant_id[0]: forecast.ravel()})
+
+        # forecasting
+        return forecast
 
 
 @forecast_model(name='weather')
@@ -436,7 +484,6 @@ class WeatherModel(ModelBase):
     Forecast based on weather forecast ("specs" only).
     This model is currently implemented using pandas.
     """
-    # TODO: which specs file did agent use?
     def __pv_model(self, current_ts, length_to_predict):
         # get pv orientation
         plant = self.train_data['plant_config']
@@ -461,7 +508,7 @@ class WeatherModel(ModelBase):
         )
 
         # get location data
-        location = self.setup['location']
+        location = self.train_data['general_config']['location']
         latitude = location['latitude']
         longitude = location['longitude']
         name = location['name']
@@ -473,7 +520,16 @@ class WeatherModel(ModelBase):
         weather = weather.with_columns(pl.col(c.TC_TIMESTEP).alias(c.TC_TIMESTAMP))
         weather = f.slice_dataframe_between_times(target_df=weather, reference_ts=current_ts,
                                                   duration=length_to_predict)
-        weather = weather.to_pandas()
+        weather = weather.collect().to_pandas()
+
+        # get real dhi data
+        filter_condition = (pl.col(c.TC_TIMESTAMP) == pl.col(c.TC_TIMESTEP))  # take only actual past weather data
+        weather_real = self.train_data[c.K_FEATURES].filter(filter_condition)
+        dhi_real = f.slice_dataframe_between_times(target_df=weather_real, reference_ts=current_ts,
+                                                   duration=length_to_predict).select(c.TC_DHI).collect().to_pandas()
+
+        # replace dhi with real dhi
+        weather[c.TC_DHI] = dhi_real[c.TC_DHI]
 
         # convert time data to datetime (use utc time overall in pvlib)
         time = pd.DatetimeIndex(pd.to_datetime(weather[c.TC_TIMESTAMP], unit='s', utc=True))
@@ -531,9 +587,14 @@ class WeatherModel(ModelBase):
         # replace all negative values
         power[power < 0] = 0
 
-        return power
+        # get column name
+        plant_column = self.train_data[c.K_TARGET].columns
+        plant_column.remove(c.TC_TIMESTAMP)
+        column_name = plant_column[0]
 
-    def __wind_model(self, current_ts, length_to_predict, specs):
+        return pl.LazyFrame(power).rename({'power': column_name})
+
+    def __wind_model(self, current_ts, length_to_predict):
         # get spec file
         specs = self.train_data['specs']
 
@@ -543,7 +604,7 @@ class WeatherModel(ModelBase):
         weather = weather.with_columns(pl.col(c.TC_TIMESTEP).alias(c.TC_TIMESTAMP))
         weather = f.slice_dataframe_between_times(target_df=weather, reference_ts=current_ts,
                                                   duration=length_to_predict)
-        weather = weather.to_pandas()
+        weather = weather.collect().to_pandas()
 
         # convert time data to datetime
         time = pd.DatetimeIndex(pd.to_datetime(weather[c.TC_TIMESTAMP], unit='s', utc=True))
@@ -551,8 +612,8 @@ class WeatherModel(ModelBase):
         weather.index.name = None
 
         # delete unnecessary columns and rename
-        weather = weather[[c.TC_TIMESTAMP, c.TC_TEMPERATURE, c.TC_TEMPERATURE_FEELS_LIKE, c.TC_TEMPERATURE_MAX,
-                           c.TC_TEMPERATURE_MIN, c.TC_PRESSURE, c.TC_HUMIDITY, c.TC_WIND_SPEED, c.TC_WIND_DIRECTION]]
+        weather = weather[[c.TC_TIMESTAMP, c.TC_TEMPERATURE, c.TC_TEMPERATURE_FEELS_LIKE, c.TC_PRESSURE, c.TC_HUMIDITY,
+                           c.TC_WIND_SPEED, c.TC_WIND_DIRECTION]]
         weather.rename(columns={c.TC_TEMPERATURE: 'temperature'}, inplace=True)
 
         if 'roughness_length' not in weather.columns:
@@ -591,10 +652,15 @@ class WeatherModel(ModelBase):
         power = power.to_frame()
 
         # calculate and round power
-        power = power / nominal_power * self.train_data['plant_power']    # plant['sizing']['power']
+        power = power / nominal_power * self.train_data['plant_config']['sizing']['power']
         power = power.round().astype(int)
 
-        return power
+        # get column name
+        plant_column = self.train_data[c.K_TARGET].columns
+        plant_column.remove(c.TC_TIMESTAMP)
+        column_name = plant_column[0]
+
+        return pl.LazyFrame(power).rename({'power': column_name})
 
     def predict(self, current_ts, length_to_predict, **kwargs):
         # check if predicting pv power or wind power
@@ -603,7 +669,7 @@ class WeatherModel(ModelBase):
         else:
             forecast = self.__wind_model(current_ts, length_to_predict)
 
-        return pl.LazyFrame(forecast)
+        return forecast
 
 
 @forecast_model(name='arrival')
