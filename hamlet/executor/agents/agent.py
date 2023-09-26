@@ -18,6 +18,8 @@ from datetime import datetime
 from hamlet.executor.utilities.forecasts.forecaster import Forecaster
 from hamlet.executor.utilities.controller.controller import Controller
 from hamlet.executor.utilities.database.database import Database
+from hamlet.executor.utilities.database.agent_db import AgentDB
+from hamlet.executor.utilities.trading.trading import Trading
 from hamlet import constants as c
 from pprint import pprint
 
@@ -55,13 +57,14 @@ class AgentFactory:
 class AgentBase:
     """Base class for all agents. It provides a default implementation of the run method."""
 
-    def __init__(self, agent_type: str, agent, timetable: pd.DataFrame, database):
+    def __init__(self, agent_type: str, agent: AgentDB, timetable: pd.DataFrame, database: Database):
+
 
         # Type of agent
         self.agent_type = agent_type
 
         # Data
-        self.agentDB = agent  # agent dataframe
+        self.agent = agent  # agent dataframe
 
         # Timetable
         self.timetable = timetable  # part of timetable for one timestep
@@ -75,18 +78,18 @@ class AgentBase:
     def execute(self):
         """Executes the agent"""
 
-        # Get the market data (database)
+        # Get the market data from the database
         # self.get_market_data()
-        # Get the grid data (database)
+        # Get the grid data from the database
         self.get_grid_data()
-        # Get forecasts (train models if needed)
+        # Get forecasts
         self.get_forecasts()
-        # Controller (RTC, MPC, etc.)
+        # Set controllers
         self.set_controllers()
-        # Log data
-        self.log_data()
-        # Post bids and offers
-        self.post_to_market()
+        # Create bids and offers based on trading strategy
+        self.create_bids_offers()
+
+        return self.agent
 
     def get_market_data(self):
         """Gets the market data from the database"""
@@ -101,45 +104,21 @@ class AgentBase:
     def get_forecasts(self):
         """Gets the predictions for the agent"""
         # Get the forecasts
-        self.agentDB.forecasts = self.agentDB.forecaster.make_all_forecasts(self.timetable)
+        self.agent.forecasts = self.agent.forecaster.make_all_forecasts(self.timetable)
 
-        return self.agentDB
+        return self.agent
 
     def set_controllers(self):
         """Sets the controller for the agent"""
 
         # Get the required data
-        # ems = self.data[c.K_ACCOUNT][c.K_EMS]
-
-        ems = {
-        "controller": {
-            "rtc": {
-                "method": "linopy"
-            },
-            "mpc": {
-                "method": "linopy",
-                "horizon": 86400
-            }
-        },
-        "market": {
-            "strategy": ['linear'],
-            "horizon": [10800, 21600, 32400, 43200],
-            "fcast": {
-                "local": "naive",
-                "wholesale": "naive"
-            }
-        },
-        "fcasts": {
-            "retraining_period": 86400,
-            "update_period": 3600
-        }
-    }
+        ems = self.agent.account[c.K_EMS]
 
         # Loop through the ems controllers
         for controller, params in ems['controller'].items():
-            # Get the method
-
             # Skip if method is None
+            # TODO: Check if this needs to be changed since it might be that the method is None but still something
+            #  needs to be done for the tables.
             if params['method'] is None:
                 continue
 
@@ -149,12 +128,28 @@ class AgentBase:
             # Run the controller
             self.agent = controller.run(agent=self.agent, timetable=self.timetable, market=self.market)
 
-    def log_data(self):
-        """Logs the data of the agent"""
-        ...
+        return self.agent
 
-    def post_to_market(self):
-        """Posts the bids and offers to the market"""
-        ...
+    def create_bids_offers(self):
+        """Create the bids and offers to the market based on the trading strategy"""
+
+        # Get the required data
+        market_info = self.agent.account[c.K_EMS][c.K_MARKET]
+
+        # Get the markets of the region from the timetable
+        markets = (self.timetable.unique(subset=[c.TC_MARKET, c.TC_NAME]).select(c.TC_NAME)
+                   .collect().to_series().to_list())
+
+        # Loop through the markets
+        for market in markets:
+            # Get the strategy
+            strategy = Trading(strategy=market_info['strategy'], timetable=self.timetable,
+                               market=market, market_data=self.market, agent=self.agent).create_instance()
+
+
+            # Create bids and offers
+            self.agent = strategy.create_bids_offers()
+
+        return self.agent
 
 

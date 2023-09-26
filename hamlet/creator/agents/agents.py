@@ -4,6 +4,7 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
+import copy
 import time
 import datetime
 import shutil
@@ -425,19 +426,19 @@ class Agents:
         # Initialize data structures
         # Time series of each plant
         timeseries = pd.DataFrame(index=timerange_fcast_train)
-        timeseries.index.name = 'timestamp'
+        timeseries.index.name = c.TC_TIMESTAMP
         # Meter values
         meters = pd.DataFrame(index=timerange)
-        meters.index.name = 'timestamp'
+        meters.index.name = c.TC_TIMESTAMP
         # SOCs
         socs = pd.DataFrame(index=timerange)
-        socs.index.name = 'timestamp'
+        socs.index.name = c.TC_TIMESTAMP
         # Setpoints
         setpoints = pd.DataFrame(index=timerange_fcast_period)
-        setpoints.index.name = 'timestamp'
+        setpoints.index.name = c.TC_TIMESTAMP
         # Forecasts
         forecasts = pd.DataFrame(index=timerange_fcast_period)
-        forecasts.index.name = 'timestamp'
+        forecasts.index.name = c.TC_TIMESTAMP
         # All plant information
         plants_dict = {}
         # Single plant information
@@ -445,7 +446,7 @@ class Agents:
         # Plant IDs
         plants_ids = []
         # Plant specs
-        specs = {}
+        specs_plants = {}
 
         # Loop through the provided plants
         for plant, info in plants.items():
@@ -470,7 +471,10 @@ class Agents:
                 plants_ids += [plant_id]
 
                 # Add meter data
-                meters[plant_id] = self.__init_vals(df=meters)
+                meters[plant_id] = self.__init_vals(df=meters)  # TODO: Ponder if rows need to be added here
+
+                # Add setpoints
+                setpoints[plant_id] = self.__init_vals(df=setpoints)  # TODO: Ponder if rows need to be added here
 
                 # Add and process additional plant information
                 plant_dict.update(info)
@@ -496,7 +500,7 @@ class Agents:
 
                 # Add specs file if applicable
                 if specs:
-                    specs[plant_id] = specs
+                    specs_plants[plant_id] = specs
 
                 # Add plant information to the main dictionary
                 plants_dict[plant_id] = plant_dict
@@ -504,7 +508,10 @@ class Agents:
             # Reset for the next entry
             plant_dict = {}
 
-        return plants_ids, plants_dict, meters, timeseries, socs, specs, setpoints, forecasts
+        # Add forecast columns
+        forecasts = pd.DataFrame(columns=timeseries.columns, index=forecasts.index)
+
+        return plants_ids, plants_dict, meters, timeseries, socs, specs_plants, setpoints, forecasts
 
     @staticmethod
     def _create_agent(path: str, data: dict) -> None:
@@ -777,22 +784,26 @@ class Agents:
 
         # get weather data
         weather = self.__adjust_weather_data_for_wind(weather_path=weather_path)
+        specs_wind = specs.copy()
+
+        # copy specs parameter
+        specs_wind = copy.deepcopy(specs)
 
         # get nominal power
-        nominal_power = specs['nominal_power']
+        nominal_power = specs_wind['nominal_power']
 
         # convert power curve to dataframe
-        specs['power_curve'] = pd.DataFrame(data={
-            "value": specs['power_curve'],
-            "wind_speed": specs['wind_speed']})
+        specs_wind['power_curve'] = pd.DataFrame(data={
+            "value": specs_wind['power_curve'],
+            "wind_speed": specs_wind['wind_speed']})
 
         # convert power coefficient curve to dataframe
-        specs['power_coefficient_curve'] = pd.DataFrame(data={
-            "value": specs['power_coefficient_curve'],
-            "wind_speed": specs['wind_speed']})
+        specs_wind['power_coefficient_curve'] = pd.DataFrame(data={
+            "value": specs_wind['power_coefficient_curve'],
+            "wind_speed": specs_wind['wind_speed']})
 
         # generate a WindTurbine object from data
-        turbine = WindTurbine(**specs)
+        turbine = WindTurbine(**specs_wind)
 
         # calculate turbine model
         mc_turbine = ModelChain(turbine).run_model(weather)

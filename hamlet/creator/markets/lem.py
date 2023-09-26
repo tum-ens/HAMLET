@@ -13,6 +13,7 @@ import json
 import datetime
 import time
 import shutil
+import hamlet.constants as c
 
 
 class Lem(Markets):
@@ -26,6 +27,7 @@ class Lem(Markets):
         self.name = name if name else f'{self.market["clearing"]["type"]}' \
                                       f'_{self.market["clearing"]["method"]}' \
                                       f'_{self.market["clearing"]["pricing"]}'
+        self.energy_type = c.TRADED_ENERGY.get(self.market_type)
 
         # Available types of clearing
         self.clearing_types = {
@@ -71,7 +73,8 @@ class Lem(Markets):
         end = end.replace(tzinfo=datetime.timezone.utc)  # needed to obtain correct time zone
 
         # Create timetable template and main template
-        tt = pd.DataFrame(columns=['timestamp', 'timestep', 'region', 'market', 'name', 'action'])  # template
+        tt = pd.DataFrame(columns=[c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE,
+                                   c.TC_ACTION])
         timetable = tt.copy()  # main template that will contain all timetables created in the following loop
         # tt['timestamp'] = pd.date_range(start=start, end=end, freq=f'{timing["frequency"]}S')
 
@@ -102,14 +105,14 @@ class Lem(Markets):
                 # Add the time steps where actions are to be executed
                 # Starting time is either the current time or the first timestamp of the horizon
                 start_frequency = max(time_opening + pd.Timedelta(timing['horizon'][0], unit='seconds'), time_frequency)
-                tt_frequency['timestep'] = pd.date_range(
+                tt_frequency[c.TC_TIMESTEP] = pd.date_range(
                     start=start_frequency,
                     end=time_opening + pd.Timedelta(timing['horizon'][1], unit='seconds'),
                     freq=f'{timing["duration"]}S',
                     inclusive='left')  # 'left' as the end time step is not included
 
                 # Add timestamp (at which time are all actions to be executed)
-                tt_frequency['timestamp'] = time_frequency
+                tt_frequency[c.TC_TIMESTAMP] = time_frequency
 
                 # Begin: Add actions
                 # Note: the actions depends on the timing parameters
@@ -125,10 +128,10 @@ class Lem(Markets):
                 # Check for time steps that are also to be settled
                 if timing['settling'] == 'continuous':
                     # Settle all time steps whose settling time is smaller/equal to current time (frequency)
-                    tt_frequency.loc[tt_frequency['timestep'] <= time_frequency, 'action'] += ',settle'
+                    tt_frequency.loc[tt_frequency[c.TC_TIMESTEP] <= time_frequency, 'action'] += ',settle'
                 elif timing['settling'] == 'periodic':
                     # Settle all time steps once the time frequency plus closing is greater/equal than the time step
-                    if any(tt_frequency['timestep']
+                    if any(tt_frequency[c.TC_TIMESTEP]
                            <= time_frequency + pd.Timedelta(timing['closing'], unit='seconds')):
                         tt_frequency['action'] += ',settle'
 
@@ -136,11 +139,11 @@ class Lem(Markets):
                 # Check if the closing time is to be applied continously 'c' or for the entire period/horizon 'p'
                 if timing['settling'] == 'continuous':
                     # Get all time steps whose closing time is before the current timestamp
-                    tt_frequency.loc[tt_frequency['timestep'] - tt_frequency['timestamp']
+                    tt_frequency.loc[tt_frequency[c.TC_TIMESTEP] - tt_frequency[c.TC_TIMESTAMP]
                                      < pd.Timedelta(timing['closing'], unit='seconds'), 'action'] = 'settle'
                 elif timing['settling'] == 'periodic':
                     # Set all time steps to be settled once first value (i.e. any value) becomes True
-                    if any(tt_frequency['timestep'] - tt_frequency['timestamp'] < pd.Timedelta(timing['closing'],
+                    if any(tt_frequency[c.TC_TIMESTEP] - tt_frequency[c.TC_TIMESTAMP] < pd.Timedelta(timing['closing'],
                                                                                            unit='seconds')):
                         tt_frequency['action'] = 'settle'
                 else:
@@ -162,34 +165,32 @@ class Lem(Markets):
             time_opening += pd.Timedelta(timing['opening'], unit='seconds')
 
         # Add market type and name
-        timetable['region'] = self.region
-        timetable['market'] = self.market_type
-        timetable['name'] = self.name
+        timetable[c.TC_REGION] = self.region
+        timetable[c.TC_MARKET] = self.market_type
+        timetable[c.TC_NAME] = self.name
+        timetable[c.TC_ENERGY_TYPE] = self.energy_type
 
         # Add remaining clearing information
-        timetable['type'] = clearing['type']
-        timetable['method'] = clearing['method']
-        timetable['pricing'] = clearing['pricing']
-        timetable['coupling'] = clearing['coupling']
+        timetable[c.TC_CLEARING_TYPE] = clearing['type']
+        timetable[c.TC_CLEARING_METHOD] = clearing['method']
+        timetable[c.TC_CLEARING_PRICING] = clearing['pricing']
+        timetable[c.TC_COUPLING] = clearing['coupling']
 
         # Sort timetable by timestamp and timestep
-        timetable.sort_values(by=['timestamp', 'timestep'], inplace=True)
-
-        # Change timestamps and timesteps to seconds
-        # timetable['timestamp'] = timetable['timestamp'].apply(lambda x: int(x.timestamp()))
-        # timetable['timestep'] = timetable['timestep'].apply(lambda x: int(x.timestamp()))
-        # Note: This was deprecated as working with datetime64[ns] is more convenient in both pandas and polars
+        timetable.sort_values(by=[c.TC_TIMESTAMP, c.TC_TIMESTEP], inplace=True)
 
         # Change dtypes for all columns
         timetable = timetable.astype({
-            'region': 'category',
-            'market': 'category',
-            'name': 'category',
-            'action': 'category',
-            'type': 'category',
-            'method': 'category',
-            'pricing': 'category',
-            'coupling': 'category',
+            c.TC_TIMESTAMP: 'datetime64[ns, UTC]',
+            c.TC_TIMESTEP: 'datetime64[ns, UTC]',
+            c.TC_REGION: 'category',
+            c.TC_MARKET: 'category',
+            c.TC_NAME: 'category',
+            c.TC_ACTION: 'category',
+            c.TC_CLEARING_TYPE: 'category',
+            c.TC_CLEARING_METHOD: 'category',
+            c.TC_CLEARING_PRICING: 'category',
+            c.TC_COUPLING: 'category',
         })
 
         return timetable

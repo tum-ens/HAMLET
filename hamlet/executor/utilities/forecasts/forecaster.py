@@ -1,12 +1,13 @@
 # Similar to optimization that it contains the class and calls the classes with functions
 import polars as pl
 import pytz
-from datetime import datetime, timedelta
+from datetime import datetime
 import inspect
 import ast
 from hamlet import constants as c
 import hamlet.executor.utilities.forecasts.models as models
 import hamlet.functions as f
+from pprint import pprint
 
 
 class Forecaster:
@@ -19,19 +20,28 @@ class Forecaster:
 
     Attributes:
         config_dict: dictionary contains forecast config
-        forecasts: forecast results
         train_data: data to feed into models
         all_models: all available forecast models
         used_models: chosen models for forecasting
         weather: weather dataframe
-        length_to_predict: length to predict everytime when calling forecast
+        length_to_predict: length to predict everytime when calling forecast. Unit: s
         start_ts: timestamp when simulation starts
+        refit_period: period, after which models should be refitted. Unit: s
 
     Methods:
 
     """
 
     def __init__(self, agentDB, marketsDB: dict, general: dict):
+        """
+        Initialize the Forecaster object.
+
+        Args:
+            agentDB: AgentDB object.
+            marketsDB: Dictionary containing MarketDB objects.
+            general: General data dictionary.
+
+        """
         self.agentDB = agentDB  # AgentDB object
         self.marketsDB = marketsDB  # MarketDB object
         self.general = general  # general data
@@ -49,7 +59,9 @@ class Forecaster:
     ########################################## PUBLIC METHODS ##########################################
 
     def init_forecaster(self):
-        """Initialize forecaster with corresponding model for each plant, initial fitting of models."""
+        """
+        Initialize forecaster with corresponding model and train data for each plant and market.
+        """
         # initialize config dict
         self.__assign_config_dict()
 
@@ -63,21 +75,38 @@ class Forecaster:
         self.__assign_models()
 
     def update_forecaster(self, id, dataframe, target=True):
-        """Update training data for e.g. local market. Will replace the given dataframe to the corresponding part of
-        train data. """
+        """
+        Update training data for e.g. local market. Will replace the given dataframe to the corresponding part of
+        train data.
+
+        Args:
+            id: Identifier for the plant or market.
+            dataframe: Updated data for the plant or market.
+            target: Boolean indicating if the updated data is a target variable.
+
+        """
         # TODO: implement this function
         # new train data with new target
-        self.train_data[id]['target'] = dataframe
+        self.train_data[id][c.K_TARGET] = dataframe
 
         # update model
         self.used_models[id].update_train_data(self.train_data[id])
 
     def make_all_forecasts(self, timetable):
-        """Make forecasts for all plants."""
-        forecasts = {}   # dict to store all forecast results
+        """
+        Make forecasts for all plants. Re-fit model if current time step is at the beginning of a refitting period.
+
+        Args:
+            timetable: Timetable lazyframe at current timestep for managing time-related and other necessary data.
+
+        Returns:
+            forecasts: DataFrame (lazyframe) containing all forecast results.
+
+        """
+        forecasts = {}   # empty dict to store all forecast results
         current_ts = timetable.select(c.TC_TIMESTAMP).collect().item(0, 0)      # get current timestep from timetable
 
-        # make forecast for each plant and assign results to a dict
+        # make forecast for each plant and assign results to the empty dict
         for id in self.config_dict.keys():
             forecast = self.__make_forecast_for_id(current_ts, id)
             forecasts[id] = forecast
@@ -93,7 +122,12 @@ class Forecaster:
     """relevant for initialization"""
 
     def __init_general_data(self):
-        """Initialize general variables and dataframes."""
+        """
+        Initialize general variables and dataframes.
+
+        Take information and data from the general dict and agent account and assign them to the class attributes.
+
+        """
         # assign weather data
         self.weather = self.general['weather']
 
@@ -107,7 +141,13 @@ class Forecaster:
         self.refit_period = self.agentDB.account['ems']['fcasts']['retraining']
 
     def __assign_config_dict(self):
-        """Summarize all forecast config into one dictionary."""
+        """
+        Summarize all forecast config into one dictionary.
+
+        Assign market config and plant config separately. The markets' configs are hard-coded with only two methods:
+        naive and perfect. The plants' configs are taken from agentDB.
+
+        """
         # assign market config
         market_config = self.agentDB.account['ems']['market']['fcast']  # get forecast config for market
         for market_name in self.marketsDB.keys():   # assign market config dict for each market
@@ -115,13 +155,18 @@ class Forecaster:
             local_id = market_name + '_local'
 
             # add to config dict
-            # TODO: the param here is hard-coded!
-            self.config_dict[wholesale_id] = {'method': market_config['wholesale'],
-                                              'naive': {'offset': 1},
-                                              'perfect': {}}
-            self.config_dict[local_id] = {'method': market_config['local'],
-                                          'naive': {'offset': 1},
-                                          'perfect': {}}
+            self.config_dict[wholesale_id] = market_config['wholesale']
+            self.config_dict[local_id] = market_config['local']
+
+            # if no additional parameters given for the chosen model, assign an empty dict
+            chosen_model_wholesale = market_config['wholesale']['method']
+            chosen_model_local = market_config['local']['method']
+
+            if chosen_model_wholesale not in list(market_config['wholesale'].keys()):
+                self.config_dict[wholesale_id][chosen_model_wholesale] = {}
+
+            if chosen_model_local not in list(market_config['local'].keys()):
+                self.config_dict[local_id][chosen_model_local] = {}
 
         # assign plants config
         for plant_id in self.agentDB.plants.keys():
@@ -129,6 +174,7 @@ class Forecaster:
                 self.config_dict[plant_id] = self.agentDB.plants[plant_id]['fcast']
                 self.config_dict[plant_id]['type'] = self.agentDB.plants[plant_id]['type']
                 chosen_model = self.config_dict[plant_id]['method']
+
                 # if no additional parameters given for the chosen model, assign an empty dict
                 if chosen_model not in list(self.config_dict[plant_id].keys()):
                     self.config_dict[plant_id][chosen_model] = {}
@@ -137,8 +183,13 @@ class Forecaster:
         """
         Assign related forecast models.
 
-        Get all models from models module and assign them to a dict according to the given keywords, then assign the
-        chosen forecast model for each plant / market. Initialization and initial fitting of the chosen forecast models.
+        Get all available models from models module and assign them to a dict according to the given keywords (name
+        attribute), then assign the chosen forecast model for each plant / market. Initialize the chosen forecast
+        models using given parameters in config file.
+
+        SPECIAL CASE FOR WEATHER MODEL: more data will be passed to the weather model. All columns in weather data will
+        be taken as features, another key 'config' will be added to the train data with value of specs dict.
+
         """
         # get all models from imported module
         all_models = inspect.getmembers(models, inspect.isclass)
@@ -153,9 +204,13 @@ class Forecaster:
             self.used_models[id] = self.all_models[chosen_model](self.train_data[id],
                                                                  **self.config_dict[id][chosen_model])
 
-            # initial fitting
-            # self.used_models[id].fit(current_ts=self.start_ts, length_to_predict=self.length_to_predict,
-            #                          **self.config_dict[id][chosen_model])
+            # SPECIAL CASE FOR WEATHER MODEL
+            if chosen_model == 'weather':
+                # add other necessary data to train data
+                self.train_data[id]['specs'] = self.agentDB.specs[id]
+                self.train_data[id]['plant_config'] = self.agentDB.plants[id]
+                self.train_data[id]['general_config'] = self.general['general']
+                self.train_data[id][c.K_FEATURES] = self.weather
 
     def __prepare_train_data(self):
         """
@@ -163,6 +218,7 @@ class Forecaster:
 
         The training data is a dictionary with two keys: features and target. The value of each key is a polars
         lazyframe.
+
         """
         self.__prepare_markets_target_data()
 
@@ -173,38 +229,50 @@ class Forecaster:
         self.__prepare_features()
 
     def __prepare_markets_target_data(self):
-        """Prepare target data for markets."""
+        """
+        Prepare target data for markets.
+
+        Each market has a wholesale and local market. The data for wholesale market are taken from retailer. The local
+        market firstly takes retailer data and will be updated during the simulation. The data for one day before the
+        beginning of the simulation will be added to the target data for naive method.
+
+        """
         for market_name, marketDB in self.marketsDB.items():  # assign market config dict for each market
-            # TODO: retailers columns need to be updated in constants, here change hard-coded column names
-            target_wholesale = marketDB.retailer    # get retailer data
+            # get retailer data
+            target_wholesale = marketDB.retailer
 
             # pre-processing for retailer data
             # calculate market data resolution
-            target = f.calculate_timedelta(target_df=target_wholesale, reference_ts=self.start_ts)
-            target = target.filter(pl.col('timedelta') != 0)  # delete the row for the current ts
-            target = target.with_columns(abs(pl.col('timedelta')))  # set timedelta to absolute value
-            # the smallest timedelta is the resolution
-            resolution = target.select(pl.min('timedelta')).collect().item().seconds
+            resolution = f.calculate_time_resolution(target_wholesale)
 
-            # add a day before simulation with the same data
-            # TODO: here one day is hard-coded!
+            # add offset day(s) before simulation with the same data
+            offset = self.config_dict[market_name + '_wholesale']['naive']['offset']    # here method is hard-coded
+
             day_before = f.slice_dataframe_between_times(target_df=target_wholesale, reference_ts=self.start_ts,
-                                                         duration=1, unit='day')
-            day_before = day_before.with_columns((pl.col(c.TC_TIMESTAMP) - pl.duration(days=1, seconds=resolution))
+                                                         duration=c.DAYS_TO_SECONDS * offset + resolution)
+            day_before = day_before.with_columns((pl.col(c.TC_TIMESTAMP) - pl.duration(days=offset, seconds=resolution))
                                                  .alias(c.TC_TIMESTAMP))
             target_wholesale = pl.concat([day_before, target_wholesale], how='vertical')
 
+            # drop unnecessary columns
+            # TODO: update column name in constants
+            target_wholesale = target_wholesale.drop('index', c.TC_MARKET, c.TC_NAME, c.TC_REGION, 'retailer')
+
             # initial prepare for the wholesale market
-            self.train_data[market_name + '_wholesale'] = {'target': target_wholesale}
+            self.train_data[market_name + '_wholesale'] = {c.K_TARGET: target_wholesale}
 
             # initial prepare for the local market
-            # TODO: check which columns should be taken for local market
             target_local = target_wholesale.select(c.TC_TIMESTAMP, 'energy_price_sell')\
-                                           .rename({'energy_price_sell': 'energy_price_sell_local'})
-            self.train_data[market_name + '_local'] = {'target': target_local}
+                                           .rename({'energy_price_sell': 'energy_price_local'})
+            self.train_data[market_name + '_local'] = {c.K_TARGET: target_local}
 
     def __prepare_plants_target_data(self):
-        """Prepare target data for plants."""
+        """
+        Prepare target data for plants.
+
+        Go through the timeseries and take each column as target data for corresponding plant.
+
+        """
         # get plants' timeseries
         plants_timeseries = self.agentDB.timeseries
 
@@ -216,29 +284,43 @@ class Forecaster:
         for column in plants_id:
             plant_id = column.split('_')[0]
             # assign target data to dict
-            self.train_data[plant_id] = {'target': plants_timeseries.select(c.TC_TIMESTAMP, column)}
+            self.train_data[plant_id] = {c.K_TARGET: plants_timeseries.select(c.TC_TIMESTAMP, column)}
 
     def __prepare_ev_target_data(self):
-        """Prepare target data for EVs."""
+        """
+        Prepare target data for EVs.
+
+        Go through the plants and check if there are EVs, For each EV, instead of take only one column for target data,
+        take both 'availability' and 'energy_consumed' as target data.
+
+        """
         plants_timeseries = self.agentDB.timeseries     # get plants' timeseries
         # get plants id for EV
         for plant_id in self.config_dict.keys():
             if 'type' in self.config_dict[plant_id].keys() and self.config_dict[plant_id]['type'] == c.P_EV:
                 ev_id = plant_id
                 target = plants_timeseries.select(c.TC_TIMESTAMP, ev_id + '_availability', ev_id + '_energy_consumed')
-                self.train_data[ev_id] = {'target': target}
+                self.train_data[ev_id] = {c.K_TARGET: target}
 
     def __prepare_features(self):
-        """If there's features assigned to the plant with given id, add them to the corresponding train data."""
+        """
+        Prepare feature data for each plant or market.
+
+        If there's features assigned to the plant with given id, collect them from weather data or generate them
+        (relevant for 'time' features, will generate two columns: 'hour' representing daily fluctuation and 'month'
+        representing seasonal fluctuation). Otherwise, only initialize an empty lazyframe. Add them to the train data
+        of corresponding plant or market with key c.K_FEATURES as a lazyframe.
+
+        """
         for id in self.train_data.keys():
             # if given, get features
             chosen_model = self.config_dict[id]['method']  # keyword of the chosen model as string
 
             # check if features columns need to be added
-            if ('features' in self.config_dict[id][chosen_model].keys() and
-                    ast.literal_eval(self.config_dict[id][chosen_model]['features'])):
+            if (c.K_FEATURES in self.config_dict[id][chosen_model].keys() and
+                    ast.literal_eval(self.config_dict[id][chosen_model][c.K_FEATURES])):
                 # get features name as strings
-                features_name = ast.literal_eval(self.config_dict[id][chosen_model]['features'])
+                features_name = ast.literal_eval(self.config_dict[id][chosen_model][c.K_FEATURES])
 
                 # get features data from weather file
                 features = self.weather
@@ -250,18 +332,28 @@ class Forecaster:
                     features = features.with_columns(pl.col(c.TC_TIMESTAMP).dt.month().alias('month'))
                     features_name += ['hour', 'month']
 
-                # add other weather features
+                # add other weather features and time steps for indexing
                 features_name += [c.TC_TIMESTAMP, c.TC_TIMESTEP]
                 features = features.select(features_name)
             else:
                 features = pl.LazyFrame()
 
-            self.train_data[id]['features'] = features
+            self.train_data[id][c.K_FEATURES] = features
 
     """relevant for data processing"""
 
     def __make_forecast_for_id(self, current_ts, id):
-        """Make forecast for the plant with given id. Re-fit model before forecasting if needed."""
+        """
+        Make forecast for the plant with given id. Re-fit model before forecasting if needed.
+
+        Args:
+            current_ts: Current timestamp for the forecast.
+            id: Identifier for the plant or market.
+
+        Returns:
+            forecast: Lazyframe containing the forecast result for the given plant.
+
+        """
         chosen_model = self.config_dict[id]['method']  # keyword of the chosen model as string
 
         # refit model if needed
@@ -271,20 +363,42 @@ class Forecaster:
             self.used_models[id].fit(current_ts=current_ts, length_to_predict=self.length_to_predict,
                                      **self.config_dict[id][chosen_model])
 
-        return self.used_models[id].predict(current_ts=current_ts, length_to_predict=self.length_to_predict,
-                                            **self.config_dict[id][chosen_model])  # predict
+        forecast = self.used_models[id].predict(current_ts=current_ts, length_to_predict=self.length_to_predict,
+                                                **self.config_dict[id][chosen_model])  # predict
+
+        return forecast
 
     def __summarize_forecasts_to_df(self, forecasts: dict, current_ts):
         """
-        Summarize all forecasts from dictionary to one polars lazyframe.
+        Summarize all forecasts from dictionary to one polars lazyframe. All forecasts should have the same length and
+        stored as a lazyframe.
 
-        All forecasts should have the same length and stored as a lazyframe.
+        Args:
+            forecasts: Dictionary containing forecast results for each plant or market.
+            current_ts: Current timestamp for the forecasts.
+
+        Returns:
+            forecasts_df: Lazyframe containing the summarized forecast results.
+
         """
         # generate a column contains time index
-        timestamp = f.slice_dataframe_between_times(target_df=self.agentDB.timeseries, reference_ts=current_ts,
-                                                    duration=self.length_to_predict).select(c.TC_TIMESTAMP)
+        timestamps = f.slice_dataframe_between_times(target_df=self.agentDB.timeseries, reference_ts=current_ts,
+                                                     duration=self.length_to_predict).select(c.TC_TIMESTAMP)
+        # add timestep column
+        timestamps = timestamps.with_columns(pl.col(c.TC_TIMESTAMP).alias(c.TC_TIMESTEP))
 
-        forecasts_list = [timestamp.collect()]     # list which will contain all forecast lazyframes
+        # get time info from original dataframe
+        datetime_index = timestamps.select(c.TC_TIMESTAMP)
+        dtype = datetime_index.dtypes[0]
+        time_unit = dtype.time_unit
+        time_zone = dtype.time_zone
+
+        # adjust timestamp column to current time and keep the datatype
+        timestamps = timestamps.with_columns(pl.lit(current_ts).alias(c.TC_TIMESTAMP))
+        timestamps = timestamps.with_columns(pl.col(c.TC_TIMESTAMP).dt.cast_time_unit(time_unit))  # change time unit
+        timestamps = timestamps.with_columns(pl.col(c.TC_TIMESTAMP).dt.replace_time_zone(time_zone))  # change time zone
+
+        forecasts_list = [timestamps.collect()]     # list which will contain all forecast lazyframes
 
         for id, forecast in forecasts.items():
             # remove time column(s) for all forecasts
@@ -293,6 +407,13 @@ class Forecaster:
             if c.TC_TIMESTEP in forecast.columns:
                 forecast = forecast.drop(c.TC_TIMESTEP)
 
+            # change data type of each forecast, should be the same as the target data
+            for column in forecast.columns:
+                dtype = self.train_data[id][c.K_TARGET].select(column).dtypes
+
+                # each column should only have one data type
+                forecast = forecast.with_columns(pl.col(column).cast(dtype[0]))
+
             # add lazyframe to list
             # TODO: are there smarter solutions?
             forecasts_list.append(forecast.collect())
@@ -300,4 +421,4 @@ class Forecaster:
         # summarize everything together
         forecasts_df = pl.concat(forecasts_list, how='horizontal')
 
-        return forecasts_df
+        return forecasts_df.lazy()

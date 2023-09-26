@@ -133,6 +133,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
   flexible_load:
@@ -231,6 +235,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ heat demand ####################################
   heat:
@@ -321,7 +329,7 @@ sfh:
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 3                                 # past days that are used to train the neural network
+        days: 3                                 # past days that are used to train the arima model
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
@@ -426,6 +434,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
@@ -473,7 +485,7 @@ sfh:
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
     fcast:
-      method: rfr                           # forecasting method
+      method: weather                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -537,6 +549,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -574,7 +590,7 @@ sfh:
       controllable: [true, true]                # can the wind inverter be controlled? true or false
 
     fcast:
-      method: rnn                           # forecasting method
+      method: weather                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -638,6 +654,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
   
@@ -735,6 +755,10 @@ sfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -808,9 +832,9 @@ sfh:
       v2g: [false, false, false]                # vehicle-to-grid possible
         
       v2h: [false, false, false]                # vehicle-to-home possible
-      
+
     charging_scheme:
-      method: "price_sensitive"                 # charging method for the EVs
+      method: min_soc                           # charging method for the EVs
                                                 # options:
                                                 #   - full:            charge at full power as soon as EV 
                                                 #                      is connected
@@ -942,32 +966,37 @@ sfh:
                                                 # cannot exceed forecast horizon
 
     market:                                     # market parameters
-      strategy: [linear]                        # market agent trading strategy
+      strategy: linear                          # market agent trading strategy
                                                 # options:
                                                 #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
-                                                # note: each agent selects a random value off this list
                                                 # note: does not apply when simulation ex-post markets
 
       horizon: 86_400                           # market agent trading horizon
                                                 # unit: s
                                                 # note: range is limited by the control horizon
-                                                # note: each agent selects a random value off this list
 
       fcast:
-        local: naive                            # forecasting method for local market prices
-                                                # options:
-                                                #   - flat:  no meaningful forecasting, flat price assumed
-                                                #   - naive: expected price same as previous day (initialized flat)
-                                                #   - perfect: perfect foresight of market price
-                                                # note: does not apply when simulation ex-post markets
+        local:
+          method: naive                            # forecasting method for local market prices
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  # note: does not apply when simulation ex-post markets
 
-        wholesale: naive                        # forecasting method for wholesale market prices
+          naive:
+            offset: 1
+
+        wholesale:
+          method: naive                        # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
+
+          naive:
+            offset: 1
 
         retailer:
           energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
@@ -1168,6 +1197,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
   flexible_load:
@@ -1273,6 +1306,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ heat demand ####################################
   heat:
@@ -1378,6 +1415,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ dhw (drinking hot water) ####################################
   dhw:
@@ -1482,6 +1523,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
@@ -1605,6 +1650,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -1716,7 +1765,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
-
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
   ################################ fixed generator ####################################
@@ -1821,6 +1873,10 @@ mfh:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -1910,7 +1966,7 @@ mfh:
       v2h: [false, false, false]                # vehicle-to-home possible
 
     charging_scheme:
-      method: "price_sensitive"                 # charging method for the EVs
+      method: min_soc                           # charging method for the EVs
                                                 # options:
                                                 #   - full:            charge at full power as soon as EV
                                                 #                      is connected
@@ -2059,18 +2115,16 @@ mfh:
                                                 # cannot exceed forecast horizon
 
     market:                                     # market parameters
-      strategy: [linear]                        # market agent trading strategy
+      strategy: linear                          # market agent trading strategy
                                                 # options:
                                                 #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
-                                                # note: each agent selects a random value off this list
                                                 # note: does not apply when simulation ex-post markets
 
       horizon: 86_400                           # market agent trading horizon
                                                 # unit: s
                                                 # note: range is limited by the control horizon
-                                                # note: each agent selects a random value off this list
 
       fcast:
         local: naive                            # forecasting method for local market prices
@@ -2257,6 +2311,10 @@ ctsp:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
   flexible_load:
@@ -2345,6 +2403,10 @@ ctsp:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ photovoltaics (PV) ####################################
   pv:
@@ -2449,6 +2511,10 @@ ctsp:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -2542,6 +2608,11 @@ ctsp:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
   ################################ fixed generator ####################################
@@ -2630,6 +2701,10 @@ ctsp:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -2664,7 +2739,7 @@ ctsp:
       charging_efficiency: [0.9, 0.9]           # one way charging efficiency of the vehicle
                                                 # unit: 1 [0, 1]
 
-      soc: [0.8, 0.8]                      # initial state of charge of the battery
+      soc: [0.8, 0.8]                           # initial state of charge of the battery
                                                 # unit: 1 [0, 1]
 
       v2g: [false, false]                       # vehicle-to-grid possible
@@ -2672,7 +2747,7 @@ ctsp:
       v2h: [false, false]                       # vehicle-to-home possible
 
     charging_scheme:
-      method: ["full", "price_sensitive"]       # charging method for the respective EVs
+      method: ["full", "min_soc"]               # charging method for the respective EVs
                                                 # options:
                                                 #   - full:            charge at full power as soon as EV
                                                 #                      is connected
@@ -2768,18 +2843,16 @@ ctsp:
                                                 # cannot exceed forecast horizon
 
     market:                                     # market parameters
-      strategy: [linear]                        # market agent trading strategy
+      strategy: linear                          # market agent trading strategy
                                                 # options:
                                                 #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
-                                                # note: each agent selects a random value off this list
                                                 # note: does not apply when simulation ex-post markets
 
       horizon: 86_400                           # market agent trading horizon
                                                 # unit: s
                                                 # note: range is limited by the control horizon
-                                                # note: each agent selects a random value off this list
 
       fcast:
         local: naive                            # forecasting method for local market prices
@@ -2969,6 +3042,10 @@ industry:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
   flexible_load:
@@ -3057,6 +3134,10 @@ industry:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
@@ -3161,6 +3242,10 @@ industry:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -3255,6 +3340,10 @@ industry:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -3345,6 +3434,10 @@ industry:
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -3387,7 +3480,7 @@ industry:
       v2h: [false, false]                       # vehicle-to-home possible
 
     charging_scheme:
-      method: ["full", "price_sensitive"]       # charging method for the respective EVs
+      method: ["full", "min_soc"]               # charging method for the respective EVs
                                                 # options:
                                                 #   - full:            charge at full power as soon as EV
                                                 #                      is connected
@@ -3484,18 +3577,16 @@ industry:
                                                 # cannot exceed forecast horizon
 
     market:                                     # market parameters
-      strategy: [linear]                        # market agent trading strategy
+      strategy: linear                          # market agent trading strategy
                                                 # options:
                                                 #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
-                                                # note: each agent selects a random value off this list
                                                 # note: does not apply when simulation ex-post markets
 
       horizon: 86_400                           # market agent trading horizon
                                                 # unit: s
                                                 # note: range is limited by the control horizon
-                                                # note: each agent selects a random value off this list
 
       fcast:
         local: naive                            # forecasting method for local market prices
@@ -3681,6 +3772,10 @@ producer:
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                   # differences, and MA parameters to use
+          days: 3                                 # past days that are used to train the arima model
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
       quality: green_local                      # quality that the generated energy should be labelled with on the local markets
       
@@ -3734,18 +3829,16 @@ producer:
                                                   # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
         horizon: 86_400                           # market agent trading horizon
                                                   # unit: s
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
 
         fcast:
           local: naive                            # forecasting method for local market prices
@@ -3910,6 +4003,10 @@ producer:
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                   # differences, and MA parameters to use
+          days: 3                                 # past days that are used to train the arima model
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
       quality: green_local                      # quality that the generated energy should be labelled with on the local markets
       
@@ -3961,7 +4058,7 @@ producer:
                                                   # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
@@ -4134,6 +4231,10 @@ producer:
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                   # differences, and MA parameters to use
+          days: 3                                 # past days that are used to train the arima model
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
       quality: local                            # quality that the generated energy should be labelled with on the local markets
     ################################ battery ####################################
@@ -4184,7 +4285,7 @@ producer:
                                                   # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
@@ -4334,18 +4435,16 @@ storage:
                                                   # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
         horizon: 86_400                           # market agent trading horizon
                                                   # unit: s
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
 
         fcast:
           local: naive                            # forecasting method for local market prices
@@ -4478,18 +4577,16 @@ storage:
                                                   # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
         horizon: 86_400                           # market agent trading horizon
                                                   # unit: s
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
 
         fcast:
           local: naive                            # forecasting method for local market prices
@@ -4622,18 +4719,16 @@ storage:
                                                   # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
         horizon: 86_400                           # market agent trading horizon
                                                   # unit: s
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
 
         fcast:
           local: naive                            # forecasting method for local market prices

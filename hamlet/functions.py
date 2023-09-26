@@ -8,7 +8,6 @@ from ruamel.yaml import YAML
 from typing import Callable
 import hamlet.constants as c
 
-
 # Contains all functions that are shared among the classes and used universally
 
 
@@ -252,6 +251,21 @@ def calculate_timedelta(target_df, reference_ts):
     return target_df
 
 
+def calculate_time_resolution(target_df):
+    """Calculate the time resolution of the given dataframe according to the c.TIMESTAMP column."""
+    # randomly choose a value in timestamp column
+    reference_ts = target_df.select(c.TC_TIMESTAMP).collect().sample(n=1).item()
+
+    # calculate time resolution
+    target = calculate_timedelta(target_df=target_df, reference_ts=reference_ts)
+    target = target.filter(pl.col('timedelta') != 0)  # delete the row for the current ts
+    target = target.with_columns(abs(pl.col('timedelta')))  # set timedelta to absolute value
+    resolution = target.select(pl.min('timedelta')).collect().item()  # the smallest timedelta is the resolution
+
+    # return resolution in seconds
+    return resolution.seconds
+
+
 def slice_dataframe_between_times(target_df, reference_ts, duration: int, unit='second'):
     """
     Slice the given pl data/lazyframe to the given duration to the reference time step.
@@ -284,11 +298,11 @@ def slice_dataframe_between_times(target_df, reference_ts, duration: int, unit='
     duration = duration * converter[unit]
 
     if duration > 0:    # slice data in the future, reference (current) timestep will not be included
-        filter_conditions = ((pl.col('timedelta') + pl.duration(seconds=duration) >= 0) &
+        filter_conditions = ((pl.col('timedelta') + pl.duration(seconds=duration) > 0) &
                              (pl.col('timedelta') < 0))
     elif duration < 0:   # slice data from the past, reference (current) timestep will be included
         filter_conditions = ((pl.col('timedelta') + pl.duration(seconds=duration) < 0) &
-                             (pl.col('timedelta') >= 0))
+                             (pl.col('timedelta') > 0))
     else:   # get data at current timestep
         filter_conditions = pl.col('timedelta') == 0
 

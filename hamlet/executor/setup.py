@@ -5,6 +5,7 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 import os
+from tqdm import tqdm
 import shutil
 import time
 import warnings
@@ -25,6 +26,8 @@ from hamlet.executor.agents.agent import Agent
 from hamlet.executor.markets.markets import Markets
 from hamlet.executor.grids.grids import Grids
 from hamlet.executor.utilities.database.database import Database
+import hamlet.constants as c
+# pl.enable_string_cache(True)
 
 # TODO: Considerations
 # - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator_backup and should be continued for consistency
@@ -89,7 +92,6 @@ class Executor:
     def execute(self):
         """Executes the scenario
 
-        # TODO: Add progress bar @Jiahe
         """
 
         # Get number of logical processors (for parallelization)
@@ -107,35 +109,48 @@ class Executor:
         #   timestamps. Therefore, the simulation is only executed for the market timestamps
         # Iterate over timetable by timestamp
         timetable = self.timetable.collect()
+
+        # TODO: Add progress bar @Jiahe
+        progress_bar = tqdm()
+        progress_bar.reset(total=len(timetable.partition_by('timestamp')))
+
         for timestamp in timetable.partition_by('timestamp'):
             # Wait for the timestamp to be reached if the simulation is to be carried out in real-time
             if self.type == 'rts':
-                self.wait_for_ts(timestamp.iloc[0, 0])
+                self.__wait_for_ts(timestamp.iloc[0, 0])
+
+            # get current timestamp as string item for progress bar
+            timestamp_str = str(timestamp.select(c.TC_TIMESTAMP).sample(n=1).item())
+
             # Iterate over timestamp by region
             for region in timestamp.partition_by('region'):
-                # Iterate over region by market
-                for market in region.partition_by('market'):
-                    # Iterate over market by name:
-                    for name in market.partition_by('name'):
-                        # Turn the tasklist into a polars LazyFrame
-                        name = name.lazy()
+                # get current region as string item for progress bar
+                region_str = str(region.select(c.TC_REGION).sample(n=1).item())
+                region = region.lazy()
 
-                        # Execute the agents and market in parallel or sequentially
-                        if self.pool:
-                            # Execute the agents for this market
-                            self.__execute_agents_parallel(tasklist=name)
+                # update progress bar description
+                progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for region ' + region_str
+                                                 + ': ')
 
-                            # Execute the market
-                            self.__execute_market_parallel(tasklist=name)
-                        else:
-                            # Execute the agents for this market
-                            self.__execute_agents(tasklist=name)
+                # Execute the agents and market in parallel or sequentially
+                if self.pool:
+                    # Execute the agents for this market
+                    self.__execute_agents_parallel(tasklist=region)
 
-                            # Execute the market
-                            self.__execute_market(tasklist=name)  # tasklist needs to
+                    # Execute the market
+                    self.__execute_market_parallel(tasklist=region)
+                else:
+                    # Execute the agents for this market
+                    self.__execute_agents(tasklist=region)
+
+                    # Execute the market
+                    self.__execute_market(tasklist=region)
 
             # Calculate the grids for the current timestamp (calculated together as they are connected)
+            progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for grid: ')
             self.__execute_grids()
+
+            progress_bar.update(1)
 
         # Cleanup the thread pool
         if self.pool:
@@ -148,27 +163,31 @@ class Executor:
         agents = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
 
         # Define the function to be executed in parallel
-        def tasks(data, timetable, agent_type):
-            # Create an instance of the Agents class and execute its tasks
-            Agent(data, timetable, agent_type).execute()
+        def tasks(agent):
+            # Execute the agent
+            agent.execute()
 
         # Create a list to store the agents
         agents_list = []
 
         # Iterate over the tasklist and populate the agents_list
         for agent_type, agent in agents.items():
-            for agent_id, agent_data in agent.items():
-                agents_list.append({agent_id: {'agent_type': agent_type,
-                                               'data': agent_data}})
+            for agent_id, data in agent.items():
+                agents_list.append(Agent(data, tasklist, agent_type, self.database))
 
         # Submit the agents for parallel execution
-        results = [self.pool.submit(tasks, agent['data'], tasklist, agent['agent_type']) for agent in agents_list]
+        results = [self.pool.submit(tasks, agent) for agent in agents_list]
 
         # Wait for all agents to complete
         concurrent.futures.wait(results)
 
+        print('results parallel:')
+        for result in results:
+            print(result.bids_offers.collect())
+        exit()
+
         # Post the agent data back to the database
-        self.database.post_agent_data(results)
+        # self.database.post_agent_data(results)
 
     def __execute_market_parallel(self, tasklist: pl.DataFrame):
         """Executes the market tasks in parallel"""
@@ -209,8 +228,14 @@ class Executor:
                 # Create an instance of the Agents class and execute its tasks
                 results.append(Agent(agent_type=agent_type, data=agent[agent_id], timetable=tasklist, database=self.database).execute())
 
+        print('results sequential:')
+        for result in results:
+            print(result.bids_offers.collect())
+
         # Post the agent data back to the database
-        # self.database.post_agent_data(results)
+        self.database.post_agents_to_region(region=tasklist.collect()[0, 'region'], agents=results)
+
+        exit()
 
     def __execute_market(self, tasklist: pl.DataFrame):
 
@@ -263,13 +288,19 @@ class Executor:
         # Note: For the execution the files in the results folder are used and not the ones in the scenario folder
         f.copy_folder(self.path_scenario, self.path_results)
 
+        # Create a gurobi env file in the cwd
+        with open("gurobi.env", "w") as file:
+            # Write the desired setting to the file
+            file.write("OutputFlag 0\n"
+                       "LogToConsole 0\n")
+
     def __setup_database(self):
         """Creates a database connector object"""
 
         self.database.setup_database(self.structure)
 
     @staticmethod
-    def wait_for_ts(timestamp):
+    def __wait_for_ts(timestamp):
         """Waits until the target timestamp is reached"""
 
         # Get current datetime
