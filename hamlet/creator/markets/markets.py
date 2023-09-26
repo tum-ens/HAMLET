@@ -44,16 +44,17 @@ class Markets:
         }
 
     def create_markets(self, file_type: str = 'ft'):
-        """Create markets from configuration file and create the timetable for each market"""
+        """Create markets from configuration file and create the tasks for each market"""
 
         # Dictionary to store the market information
         dict_markets = {}
 
         # Loop over all markets
         for key, config in self.config.items():
-            market_type = key.split('_', 1)[0]
+            # Get market type and name
+            market_type = config['type']
             try:
-                name = key.split('_', 1)[1]
+                name = key
             except IndexError:
                 name = None
             if market_type in self.types:

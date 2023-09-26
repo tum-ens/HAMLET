@@ -15,30 +15,33 @@ import time
 import logging
 import traceback
 from datetime import datetime
-
+from hamlet.executor.markets.lem import Lem
+from hamlet.executor.utilities.database.market_db import MarketDB
+from hamlet.executor.utilities.database.region_db import RegionDB
+from hamlet.executor.utilities.database.database import Database
+# from hamlet.executor.markets.lfm import Lfm  # currently not implemented
+# from hamlet.executor.markets.lhm import Lhm  # currently not implemented
+# from hamlet.executor.markets.lh2m import Lh2m  # currently not implemented
+import hamlet.constants as c
 
 # TODO: Change the structure of the markets to be more similar to the agents
 
 
 class Markets:
 
-    def __init__(self, timetable: pl.LazyFrame):
+    def __init__(self, data: MarketDB, tasks: dict, database: Database, **kwargs):
 
         # Types of markets (add your own if others are created here)
-        from hamlet.executor.markets.lem import Lem
-        # from hamlet.executor.markets.lfm import Lfm  # currently not implemented
-        # from hamlet.executor.markets.lhm import Lhm  # currently not implemented
-        # from hamlet.executor.markets.lh2m import Lh2m  # currently not implemented
         self.types = {
-            'lem': Lem,
-            # 'lfm': Lfm,
-            # 'lhm': Lhm,
-            # 'lh2m': Lh2m,
+            c.MT_LEM: Lem,
+            # c.MT_LFM: Lfm,
+            # c.MT_LHM: Lhm,
+            # c.MT_LH2M: Lh2m,
         }
 
         # Instance of the market class
-        market_type = timetable.collect()[0, 'market']  # extract market type by selecting the first row's market value
-        self.market = self.types[market_type](timetable)
+        market_type = tasks[c.TC_MARKET]  # extract market type by selecting the first row's market value
+        self.market = self.types[market_type](data, tasks, database)
 
     def execute(self):
         """Executes the market"""

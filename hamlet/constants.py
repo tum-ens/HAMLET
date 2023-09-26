@@ -91,7 +91,7 @@ TC_REGION = 'region'
 TC_MARKET = 'market'
 TC_NAME = 'name'
 TC_ENERGY_TYPE = 'energy_type'
-TC_ACTION = 'action'
+TC_ACTIONS = 'action'  # TODO: Change to actions
 TC_CLEARING_TYPE = 'type'  # TODO: Change to clearing_type
 TC_CLEARING_METHOD = 'method'  # TODO: Change to clearing_method
 TC_CLEARING_PRICING = 'pricing'  # TODO: Change to clearing_pricing
@@ -121,7 +121,6 @@ TC_TYPE_METER = 'type_meter'
 TC_TYPE_PLANTS = 'type_plants'
 TC_SOC = 'soc'
 TC_PLANT_VALUE = 'plant_value'
-
 # columns related to weather
 TC_CLOUD_COVER = 'cloud_cover'
 TC_TEMPERATURE = 'temp'
@@ -140,6 +139,15 @@ TC_GHI = 'ghi'
 TC_DHI = 'dhi'
 TC_DNI = 'dni'
 
+# AGENTS
+A_SFH = 'sfh'
+A_MFH = 'mfh'
+A_CTSP = 'ctsp'
+A_INDUSTRY = 'industry'
+A_PRODUCER = 'producer'
+A_STORAGE = 'storage'
+A_AGGREGATOR = 'aggregator'
+
 # PLANTS
 P_INFLEXIBLE_LOAD = 'inflexible_load'
 P_FLEXIBLE_LOAD = 'flexible_load'
@@ -155,7 +163,7 @@ P_PSH = 'psh'
 P_HYDROGEN = 'hydrogen'
 P_HEAT_STORAGE = 'heat_storage'
 
-## COMPONENT MAPPING
+# COMPONENT MAPPING
 # Note: Key states which type of plant is addressed and the value states which type of operation it has for the given
 #       energy type
 COMP_MAP = {

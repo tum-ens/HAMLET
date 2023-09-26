@@ -74,7 +74,7 @@ class Lem(Markets):
 
         # Create timetable template and main template
         tt = pd.DataFrame(columns=[c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE,
-                                   c.TC_ACTION])
+                                   c.TC_ACTIONS])
         timetable = tt.copy()  # main template that will contain all timetables created in the following loop
         # tt['timestamp'] = pd.date_range(start=start, end=end, freq=f'{timing["frequency"]}S')
 
@@ -186,7 +186,7 @@ class Lem(Markets):
             c.TC_REGION: 'category',
             c.TC_MARKET: 'category',
             c.TC_NAME: 'category',
-            c.TC_ACTION: 'category',
+            c.TC_ACTIONS: 'category',
             c.TC_CLEARING_TYPE: 'category',
             c.TC_CLEARING_METHOD: 'category',
             c.TC_CLEARING_PRICING: 'category',
