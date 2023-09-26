@@ -2,12 +2,16 @@
 ################################################# markets configuration ################################################
 ########################################################################################################################
 
-lem_continuous:                       # type and name of the market "type_name" (must be unique)
-                                      # note: markets with the same suffix can trade among each other if specified
+lem_continuous:                       # name of the market (must be unique in its region)
+                                      # note: markets with the same name can trade among each other if specified
   active: True                        # is the market active?
                                       # options:
                                       #   - True: market is active
                                       #   - False: market is inactive (market is ignored in simulation)
+
+  type: lem                           # type of the market
+                                      # options:
+                                      #   - lem: local energy market
 
   clearing:
     type: ex-ante                     # type of market clearing

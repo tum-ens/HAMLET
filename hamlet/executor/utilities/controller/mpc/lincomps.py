@@ -94,16 +94,14 @@ class Market(LinopyComps):
         self.comp_type = None
 
         # Calculate the upper and lower bounds for the market power
-        # TODO: Adjust once there is a forecast for the available energy
         self.upper = [int(round(x / self.dt_hours)) for x in self.fcast[f'energy_quantity_sell']]
         self.lower = [int(round(x / self.dt_hours * -1)) for x in self.fcast[f'energy_quantity_buy']]
 
         # Get market price forecasts
-        # TODO: Adjust once there is a forecast for the market prices
         self.price_sell = pd.Series(self.fcast[f'energy_price_sell'], index=self.timesteps)
         self.price_buy = pd.Series(self.fcast[f'energy_price_buy'], index=self.timesteps)
-        self.grid_sell = pd.Series(self.fcast[f'grid_sell'], index=self.timesteps)
-        self.grid_buy = pd.Series(self.fcast[f'grid_buy'], index=self.timesteps)
+        self.grid_sell = pd.Series(self.fcast[f'grid_local_sell'], index=self.timesteps)
+        self.grid_buy = pd.Series(self.fcast[f'grid_local_buy'], index=self.timesteps)
         self.levies_sell = pd.Series(self.fcast[f'levies_price_sell'], index=self.timesteps)
         self.levies_buy = pd.Series(self.fcast[f'levies_price_buy'], index=self.timesteps)
 
@@ -257,12 +255,9 @@ class SimplePlant(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        try:
-            self.power = [int(x) for x in list(self.fcast[f'{self.name}_power'].round())]  # TODO: Fix that round is not needed anymore
-        except:
-            self.power = list(self.fcast[f'{self.name}_power'])
+        self.power = list(self.fcast[f'{self.name}_power'])
         self.controllable = self.info['sizing']['controllable']
-        self.lower = [0] * len(self.power) if self.controllable else self.power # TODO
+        self.lower = [0] * len(self.power) if self.controllable else self.power
 
     def define_variables(self, model, **kwargs):
         comp_type = kwargs['comp_type']

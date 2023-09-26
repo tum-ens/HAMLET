@@ -13,6 +13,11 @@ import time
 import logging
 import traceback
 from datetime import datetime
+import hamlet.constants as c
+from hamlet.executor.utilities.database.market_db import MarketDB
+from hamlet.executor.utilities.database.region_db import RegionDB
+from hamlet.executor.utilities.database.database import Database
+from pprint import pprint
 
 # TODO: Considerations
 # - Each timestep is a new instance of the agent
@@ -21,8 +26,25 @@ from datetime import datetime
 
 class Lem:
 
-    def __init__(self, timetable):
-        self.timetable = timetable
+    def __init__(self, market: MarketDB, tasks: dict, database: Database):
+        # Market database
+        self.market = market
+
+        # Tasklist
+        self.tasks = tasks
+
+        # Database
+        self.database = database
+
+        print('This statement ist in the lem.py file of the executor right before it tries to get the bids and offers.')
+        pprint(tasks)
+        exit()
+
+        # Get bids and offers
+        self.bids_offers = self.database.get_bids_offers(region=self.tasks[c.TC_REGION],
+                                                         market_type=self.tasks[c.TC_MARKET],
+                                                         market_name=self.tasks[c.TC_NAME],
+                                                         timestep=self.tasks[c.TC_TIMESTEP])
 
         # Available actions (see market config)
         self.actions = {
@@ -51,6 +73,8 @@ class Lem:
 
         # Available coupling methods (see market config)
         # Note: This probably means that the upper market draws the offers and bids from the lower market (ponder)
+        # TODO: This needs to change. The creator will either have a value or not there and the market just executes.
+        #  In its current form there would be a more functionality in the executor that should be in the creator.
         self.coupling = {
             None: {},  # no coupling
             'above_c': {},  # continuously post offers and bids on market above
@@ -60,19 +84,26 @@ class Lem:
         }
 
     def execute(self):
-        """Executes all the actions of the LEM defined in the timetable"""
+        """Executes all the actions of the LEM defined in the tasks"""
 
         # Generated with co-pilot so might be not quite right
         # Get the actions to be executed
-        actions = self.timetable['actions']
+        actions = self.tasks[c.TC_ACTIONS].split(',')
         # Get the clearing type
-        clearing_type = self.timetable['clearing_type']
+        clearing_type = self.tasks[c.TC_CLEARING_TYPE]
         # Get the clearing method
-        clearing_method = self.timetable['clearing_method']
+        clearing_method = self.tasks[c.TC_CLEARING_METHOD]
         # Get the pricing method
-        pricing_method = self.timetable['pricing_method']
+        pricing_method = self.tasks[c.TC_CLEARING_PRICING]
         # Get the coupling method
-        coupling_method = self.timetable['coupling_method']
+        coupling_method = self.tasks[c.TC_COUPLING]
+
+        print(actions)
+        print(clearing_type)
+        print(clearing_method)
+        print(pricing_method)
+        print(coupling_method)
+        exit()
 
         # Execute the actions
         for action in actions:

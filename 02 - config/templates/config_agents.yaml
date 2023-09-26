@@ -892,18 +892,27 @@ sfh:
                                                 # note: each agent selects a random value off this list
 
       fcast:
-        local: naive                            # forecasting method for local market prices
+        local:
+          method: naive                         # forecasting method for local market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
-                                                #   - perfect: perfect foresight of market price
                                                 # note: does not apply when simulation ex-post markets
 
-        wholesale: naive                        # forecasting method for wholesale market prices
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
+
+        wholesale:
+          method: naive                         # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
+
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
 
     fcasts:                                     # forecasting settings for all forecasts
         retraining_period: 86_400               # period after which the forecast model is retrained
@@ -1906,18 +1915,27 @@ mfh:
                                                 # note: each agent selects a random value off this list
 
       fcast:
-        local: naive                            # forecasting method for local market prices
+        local:
+          method: naive                         # forecasting method for local market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
-                                                #   - perfect: perfect foresight of market price
                                                 # note: does not apply when simulation ex-post markets
 
-        wholesale: naive                        # forecasting method for wholesale market prices
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
+
+        wholesale:
+          method: naive                         # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
+
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
 
     fcasts:                                     # forecasting settings for all forecasts
         retraining_period: 86_400               # period after which the forecast model is retrained
@@ -2530,18 +2548,27 @@ ctsp:
                                                 # note: each agent selects a random value off this list
 
       fcast:
-        local: naive                            # forecasting method for local market prices
+        local:
+          method: naive                         # forecasting method for local market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
-                                                #   - perfect: perfect foresight of market price
                                                 # note: does not apply when simulation ex-post markets
 
-        wholesale: naive                        # forecasting method for wholesale market prices
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
+
+        wholesale:
+          method: naive                         # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
+
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
 
     fcasts:                                     # forecasting settings for all forecasts
         retraining_period: 86_400               # period after which the forecast model is retrained
@@ -3161,18 +3188,27 @@ industry:
                                                 # note: each agent selects a random value off this list
 
       fcast:
-        local: naive                            # forecasting method for local market prices
+        local:
+          method: naive                         # forecasting method for local market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
-                                                #   - perfect: perfect foresight of market price
                                                 # note: does not apply when simulation ex-post markets
 
-        wholesale: naive                        # forecasting method for wholesale market prices
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
+
+        wholesale:
+          method: naive                         # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
+
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
 
     fcasts:                                     # forecasting settings for all forecasts
         retraining_period: 86_400               # period after which the forecast model is retrained
@@ -3301,7 +3337,7 @@ producer:
       
     ################################ battery ####################################
     battery: 
-      num: [1]                                  # number of fixed generators
+      num: [1]                                  # number of batteries
                                                 # note: value is randomly chosen from list
 
       sizing:                                   # sizing of battery system
@@ -3362,18 +3398,27 @@ producer:
                                                   # note: each agent selects a random value off this list
 
         fcast:
-          local: naive                            # forecasting method for local market prices
+          local:
+            method: naive                         # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-          wholesale: naive                        # forecasting method for wholesale market prices
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
+
+          wholesale:
+            method: naive                         # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
+
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
 
       fcasts:                                     # forecasting settings for all forecasts
           retraining_period: 86_400               # period after which the forecast model is retrained
@@ -3540,18 +3585,27 @@ producer:
                                                   # note: each agent selects a random value off this list
 
         fcast:
-          local: naive                            # forecasting method for local market prices
+          local:
+            method: naive                         # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-          wholesale: naive                        # forecasting method for wholesale market prices
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
+
+          wholesale:
+            method: naive                         # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
+
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
 
       fcasts:                                     # forecasting settings for all forecasts
           retraining_period: 86_400               # period after which the forecast model is retrained
@@ -3714,18 +3768,27 @@ producer:
                                                   # note: each agent selects a random value off this list
 
         fcast:
-          local: naive                            # forecasting method for local market prices
+          local:
+            method: naive                         # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-          wholesale: naive                        # forecasting method for wholesale market prices
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
+
+          wholesale:
+            method: naive                         # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
+
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
 
       fcasts:                                     # forecasting settings for all forecasts
           retraining_period: 86_400               # period after which the forecast model is retrained
@@ -3824,18 +3887,27 @@ storage:
                                                   # note: each agent selects a random value off this list
 
         fcast:
-          local: naive                            # forecasting method for local market prices
+          local:
+            method: naive                         # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-          wholesale: naive                        # forecasting method for wholesale market prices
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
+
+          wholesale:
+            method: naive                         # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
+
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
 
       fcasts:                                     # forecasting settings for all forecasts
           retraining_period: 86_400               # period after which the forecast model is retrained
@@ -3928,18 +4000,27 @@ storage:
                                                   # note: each agent selects a random value off this list
 
         fcast:
-          local: naive                            # forecasting method for local market prices
+          local:
+            method: naive                         # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-          wholesale: naive                        # forecasting method for wholesale market prices
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
+
+          wholesale:
+            method: naive                         # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
+
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
 
       fcasts:                                     # forecasting settings for all forecasts
           retraining_period: 86_400               # period after which the forecast model is retrained
@@ -4032,18 +4113,27 @@ storage:
                                                   # note: each agent selects a random value off this list
 
         fcast:
-          local: naive                            # forecasting method for local market prices
+          local:
+            method: naive                         # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-          wholesale: naive                        # forecasting method for wholesale market prices
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
+
+          wholesale:
+            method: naive                         # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
+
+            naive:                                # naive forecasting method parameters
+              offset: 1                           # offset in days to the current day
+                                                  # unit: days
 
       fcasts:                                     # forecasting settings for all forecasts
           retraining_period: 86_400               # period after which the forecast model is retrained

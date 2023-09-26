@@ -146,7 +146,7 @@ class Executor:
                     self.__execute_agents(tasklist=region)
 
                     # Execute the market
-                    self.__execute_market(tasklist=region)
+                    self.__execute_markets(tasklist=region)
 
             # Calculate the grids for the current timestamp (calculated together as they are connected)
             self.progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for grid: ')
@@ -186,10 +186,11 @@ class Executor:
         print('results parallel:')
         for result in results:
             print(result.bids_offers.collect())
-        exit()
 
         # Post the agent data back to the database
-        # self.database.post_agent_data(results)
+        self.database.post_agents_to_region(region=tasklist.collect()[0, 'region'], agents=results)
+        print('Exiting...')
+        exit()
 
     def __execute_market_parallel(self, tasklist: pl.DataFrame):
         """Executes the market tasks in parallel"""
@@ -217,35 +218,48 @@ class Executor:
         """
 
         # Get the data of the agents that are part of the tasklist
-        # agents = dict()
-        # agents['sfh'] = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
-        # print('Change back to "agents = ..." (__execute_agents)')
         agents = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
 
+        # Create a list to store the results
         results = []
 
         # Iterate over the agents and execute them sequentially
         for agent_type, agent in agents.items():
             for agent_id, data in agent.items():
                 # Create an instance of the Agents class and execute its tasks
-                results.append(Agent(agent_type=agent_type, data=agent[agent_id], timetable=tasklist, database=self.database).execute())
+                results.append(Agent(agent_type=agent_type, data=agent[agent_id], timetable=tasklist,
+                                     database=self.database).execute())
 
-        print('results sequential:')
-        for result in results:
-            print(result.bids_offers.collect())
+        # print('results sequential:')
+        # for result in results:
+        #     print(result.bids_offers.collect())
 
         # Post the agent data back to the database
         self.database.post_agents_to_region(region=tasklist.collect()[0, 'region'], agents=results)
 
-        exit()
+    def __execute_markets(self, tasklist: pl.LazyFrame):
 
-    def __execute_market(self, tasklist: pl.DataFrame):
+        # Turn tasklist into dataframe to be able to iterate over it
+        tasklist = tasklist.collect()
 
-        # Pass info to markets class and execute its tasks
-        Markets(tasklist).execute()
+        # Create a list to store the results
+        results = []
+
+        # Iterate over tasklist row by row
+        for tasks in tasklist.iter_rows(named=True):
+            # Get the market data for the current market
+            market = self.database.get_market_data(region=tasks['region'],
+                                                   market_type=tasks['market'],
+                                                   market_name=tasks['name'])
+            # Create an instance of the Markets class and execute its tasks
+            results.append(Markets(data=market, tasks=tasks, database=self.database).execute())
+
+        # Post the agent data back to the database
+        self.database.post_agents_to_region(region=tasklist.collect()[0, 'region'], agents=results)
 
     def __execute_grids(self):
 
+        return
         # Pass info to grids class and execute its tasks
         Grids().execute()
 
