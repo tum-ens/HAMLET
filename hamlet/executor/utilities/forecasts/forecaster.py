@@ -38,7 +38,7 @@ class Forecaster:
 
         Args:
             agentDB: AgentDB object.
-            marketsDB: Dictionary containing MarketDB objects.
+            marketsDB: Dictionary containing all MarketDB objects in the region where the agent is.
             general: General data dictionary.
 
         """
