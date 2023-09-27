@@ -1,4 +1,9 @@
-# Similar to optimization that it contains the class and calls the classes with functions
+__author__ = "jiahechu"
+__credits__ = ""
+__license__ = ""
+__maintainer__ = "jiahechu"
+__email__ = "jiahe.chu@tum.de"
+
 from datetime import timedelta
 import ast
 import polars as pl
@@ -45,17 +50,29 @@ class ModelBase:
     def __init__(self, train_data: dict, **kwarg):
         self.train_data = train_data
 
-    def fit(self, **kwargs):
+    def fit(self, current_ts, length_to_predict, **kwargs):
         """
         Implement this function when necessary, e.g. for machine learning or deep learning models. If fitting is not
-        necessary (e.g. statistical models), do nothing.
+        necessary (e.g. statistical models), do nothing. 2 args will be passed to this method for all models:
+
+        Args:
+            current_ts: Current timestep when making the fitting.
+            length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
+            seconds.
         """
         pass
 
-    def predict(self, **kwargs):
+    def predict(self, current_ts, length_to_predict, **kwargs):
         """
         This function should be implemented for all models. The function should return a polars lazyframe contains
-        forecasting results with column name equals target column name.
+        forecasting results with column name equals target column name. 2 args will be passed to this method for all
+        models:
+
+        Args:
+            current_ts: Current timestep when making the prediction.
+            length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
+            seconds.
+
         """
         raise NotImplementedError('The forecast model must have the \'predict\' method.')
 
@@ -335,10 +352,10 @@ class RNNModel(ModelBase):
 
         Parameters:
             train_data (dict): The training data containing features and target.
-            window_length (int): The length of the input window for the recurrent neural network.
+            window_length (int): The length of the input window for the neural network.
             **kwargs: Additional keyword arguments for model initialization.
 
-        This constructor sets up the architecture of the recurrent neural network (RNN) model and compiles it.
+        This constructor sets up the architecture of the neural network model and compiles it.
 
         It calculates the number of features, defines the model architecture, and compiles the model with
         the mean squared error loss function and the Adam optimizer.
@@ -508,10 +525,7 @@ class ARIMAModel(ModelBase):
 
 @forecast_model(name='weather')
 class WeatherModel(ModelBase):
-    """
-    Forecast based on weather forecast ("specs" only).
-    This model is currently implemented using pandas.
-    """
+    """Forecast based on weather forecast ("specs" only). This model is currently implemented using pandas."""
     def __pv_model(self, current_ts, length_to_predict):
         # get pv orientation
         plant = self.train_data['plant_config']
@@ -539,7 +553,7 @@ class WeatherModel(ModelBase):
         location = self.train_data['general_config']['location']
         latitude = location['latitude']
         longitude = location['longitude']
-        name = location['name']
+        name = location[c.TC_NAME]
         altitude = location['altitude']
 
         # get weather data from csv
@@ -729,12 +743,18 @@ class ArrivalModel(ModelBase):
 # TODO: write more detailed documentation about user-defined models!
 """
 user can also define own model-object (class) here. some basic rules:
-1. The model object (class) must use the @forecast_model decorator. The 'name' argument should be the same string as 
+1. The model object (class) must use the @forecast_model decorator. The c.TC_NAME argument should be the same string as 
 defined in config file to identify models.
 2. The model object (class) must inherits from class ModelBase, which contains the train data to be forecasted. The
 train data is a dictionary consists of two keys: c.K_TARGET and c.K_FEATURES. The values are both polars lazyframes.
-3. the predict() method of the object must be implemented, fit() is optional
-4. all the functions need to contain **kwargs to make overall structure working
-5. if extra parameters need, define in config file with exactly same name
-    some general parameters include: features, target, length_to_predict
+3. The predict() method of the object must be implemented, fit() is optional. Two args will be passed to both methods 
+for all models:
+    Args:
+        current_ts: Current timestep when making the fitting / prediction.
+        length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
+        seconds.
+4. If extra args needed, define in config file with exactly same name. 
+5. All the functions need to contain **kwargs to make overall structure working.
+6. The predict() method needs to return a polars lazyframe with the forecasting result in the same column name as the
+target column name.
 """

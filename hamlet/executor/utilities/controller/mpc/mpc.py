@@ -99,7 +99,7 @@ class Mpc(ControllerBase):
             # TODO: Still needs to be done and then adjusted in the market objects (right now the names are simply
             #  local and wholesale as this will suffice as long as there is only one market)
             # Get the market data
-            self.market = kwargs['market']
+            self.market = kwargs[c.TC_MARKET]
             # Get the market names and types
             self.market_names = self.timetable.collect().select(c.TC_NAME).unique().to_series().to_list()
             self.market_types = self.timetable.collect().select(c.TC_MARKET).unique().to_series().to_list()

@@ -125,7 +125,7 @@ class Executor:
             timestamp_str = str(timestamp.select(c.TC_TIMESTAMP).sample(n=1).item())
 
             # Iterate over timestamp by region
-            for region in timestamp.partition_by('region'):
+            for region in timestamp.partition_by(c.TC_REGION):
                 # get current region as string item for progress bar
                 region_str = str(region.select(c.TC_REGION).sample(n=1).item())
                 region = region.lazy()
@@ -162,7 +162,7 @@ class Executor:
         """Executes all agent tasks for all agents in parallel"""
 
         # Get the data of the agents that are part of the tasklist
-        agents = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
+        agents = self.database.get_agent_data(region=tasklist.collect()[0, c.TC_REGION])
 
         # Define the function to be executed in parallel
         def tasks(agent):
@@ -188,7 +188,7 @@ class Executor:
             print(result.bids_offers.collect())
 
         # Post the agent data back to the database
-        self.database.post_agents_to_region(region=tasklist.collect()[0, 'region'], agents=results)
+        self.database.post_agents_to_region(region=tasklist.collect()[0, c.TC_REGION], agents=results)
         print('Exiting...')
         exit()
 
@@ -218,7 +218,7 @@ class Executor:
         """
 
         # Get the data of the agents that are part of the tasklist
-        agents = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
+        agents = self.database.get_agent_data(region=tasklist.collect()[0, c.TC_REGION])
 
         # Create a list to store the results
         results = []
@@ -235,7 +235,7 @@ class Executor:
         #     print(result.bids_offers.collect())
 
         # Post the agent data back to the database
-        self.database.post_agents_to_region(region=tasklist.collect()[0, 'region'], agents=results)
+        self.database.post_agents_to_region(region=tasklist.collect()[0, c.TC_REGION], agents=results)
 
     def __execute_markets(self, tasklist: pl.LazyFrame):
 
@@ -248,14 +248,14 @@ class Executor:
         # Iterate over tasklist row by row
         for tasks in tasklist.iter_rows(named=True):
             # Get the market data for the current market
-            market = self.database.get_market_data(region=tasks['region'],
-                                                   market_type=tasks['market'],
-                                                   market_name=tasks['name'])
+            market = self.database.get_market_data(region=tasks[c.TC_REGION],
+                                                   market_type=tasks[c.TC_MARKET],
+                                                   market_name=tasks[c.TC_NAME])
             # Create an instance of the Markets class and execute its tasks
             results.append(Markets(data=market, tasks=tasks, database=self.database).execute())
 
         # Post the agent data back to the database
-        self.database.post_agents_to_region(region=tasklist.collect()[0, 'region'], agents=results)
+        self.database.post_agents_to_region(region=tasklist.collect()[0, c.TC_REGION], agents=results)
 
     def __execute_grids(self):
 
