@@ -40,6 +40,8 @@ import hamlet.constants as c
 
 class Executor:
 
+    progress_bar = tqdm()
+
     def __init__(self, path_scenario, name: str = None, num_workers: int = None, overwrite_sim: bool = True):
 
         # Paths
@@ -111,8 +113,8 @@ class Executor:
         timetable = self.timetable.collect()
 
         # TODO: Add progress bar @Jiahe
-        progress_bar = tqdm()
-        progress_bar.reset(total=len(timetable.partition_by('timestamp')))
+        self.progress_bar.reset(total=len(timetable.partition_by('timestamp')))
+        self.progress_bar.set_description_str(desc='Start execution')
 
         for timestamp in timetable.partition_by('timestamp'):
             # Wait for the timestamp to be reached if the simulation is to be carried out in real-time
@@ -123,13 +125,13 @@ class Executor:
             timestamp_str = str(timestamp.select(c.TC_TIMESTAMP).sample(n=1).item())
 
             # Iterate over timestamp by region
-            for region in timestamp.partition_by('region'):
+            for region in timestamp.partition_by(c.TC_REGION):
                 # get current region as string item for progress bar
                 region_str = str(region.select(c.TC_REGION).sample(n=1).item())
                 region = region.lazy()
 
                 # update progress bar description
-                progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for region ' + region_str
+                self.progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for region ' + region_str
                                                  + ': ')
 
                 # Execute the agents and market in parallel or sequentially
@@ -144,13 +146,13 @@ class Executor:
                     self.__execute_agents(tasklist=region)
 
                     # Execute the market
-                    self.__execute_market(tasklist=region)
+                    self.__execute_markets(tasklist=region)
 
             # Calculate the grids for the current timestamp (calculated together as they are connected)
-            progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for grid: ')
+            self.progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for grid: ')
             self.__execute_grids()
 
-            progress_bar.update(1)
+            self.progress_bar.update(1)
 
         # Cleanup the thread pool
         if self.pool:
@@ -160,7 +162,7 @@ class Executor:
         """Executes all agent tasks for all agents in parallel"""
 
         # Get the data of the agents that are part of the tasklist
-        agents = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
+        agents = self.database.get_agent_data(region=tasklist.collect()[0, c.TC_REGION])
 
         # Define the function to be executed in parallel
         def tasks(agent):
@@ -184,10 +186,11 @@ class Executor:
         print('results parallel:')
         for result in results:
             print(result.bids_offers.collect())
-        exit()
 
         # Post the agent data back to the database
-        # self.database.post_agent_data(results)
+        self.database.post_agents_to_region(region=tasklist.collect()[0, c.TC_REGION], agents=results)
+        print('Exiting...')
+        exit()
 
     def __execute_market_parallel(self, tasklist: pl.DataFrame):
         """Executes the market tasks in parallel"""
@@ -215,35 +218,48 @@ class Executor:
         """
 
         # Get the data of the agents that are part of the tasklist
-        # agents = dict()
-        # agents['sfh'] = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
-        # print('Change back to "agents = ..." (__execute_agents)')
-        agents = self.database.get_agent_data(region=tasklist.collect()[0, 'region'])
+        agents = self.database.get_agent_data(region=tasklist.collect()[0, c.TC_REGION])
 
+        # Create a list to store the results
         results = []
 
         # Iterate over the agents and execute them sequentially
         for agent_type, agent in agents.items():
             for agent_id, data in agent.items():
                 # Create an instance of the Agents class and execute its tasks
-                results.append(Agent(agent_type=agent_type, data=agent[agent_id], timetable=tasklist, database=self.database).execute())
+                results.append(Agent(agent_type=agent_type, data=agent[agent_id], timetable=tasklist,
+                                     database=self.database).execute())
 
-        print('results sequential:')
-        for result in results:
-            print(result.bids_offers.collect())
+        # print('results sequential:')
+        # for result in results:
+        #     print(result.bids_offers.collect())
 
         # Post the agent data back to the database
-        self.database.post_agents_to_region(region=tasklist.collect()[0, 'region'], agents=results)
+        self.database.post_agents_to_region(region=tasklist.collect()[0, c.TC_REGION], agents=results)
 
-        exit()
+    def __execute_markets(self, tasklist: pl.LazyFrame):
 
-    def __execute_market(self, tasklist: pl.DataFrame):
+        # Turn tasklist into dataframe to be able to iterate over it
+        tasklist = tasklist.collect()
 
-        # Pass info to markets class and execute its tasks
-        Markets(tasklist).execute()
+        # Create a list to store the results
+        results = []
+
+        # Iterate over tasklist row by row
+        for tasks in tasklist.iter_rows(named=True):
+            # Get the market data for the current market
+            market = self.database.get_market_data(region=tasks[c.TC_REGION],
+                                                   market_type=tasks[c.TC_MARKET],
+                                                   market_name=tasks[c.TC_NAME])
+            # Create an instance of the Markets class and execute its tasks
+            results.append(Markets(data=market, tasks=tasks, database=self.database).execute())
+
+        # Post the agent data back to the database
+        self.database.post_agents_to_region(region=tasklist.collect()[0, c.TC_REGION], agents=results)
 
     def __execute_grids(self):
 
+        return
         # Pass info to grids class and execute its tasks
         Grids().execute()
 

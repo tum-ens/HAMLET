@@ -1,3 +1,9 @@
+__author__ = "jiahechu"
+__credits__ = "MarkusDoepfert"
+__license__ = ""
+__maintainer__ = "jiahechu"
+__email__ = "jiahe.chu@tum.de"
+
 import os.path
 import polars as pl
 from hamlet import functions as f

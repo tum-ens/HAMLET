@@ -16,7 +16,6 @@ from hamlet import constants as c
 from hamlet.executor.utilities.controller.mpc import lincomps
 from hamlet.executor.utilities.controller.base import ControllerBase
 from hamlet.executor.utilities.database.database import Database as db
-import math  # TODO: Take back out again once forecasts exist
 from hamlet import functions as f
 
 
@@ -73,15 +72,7 @@ class Mpc(ControllerBase):
             self.ems = self.account['ems']
             self.plants = self.agent.plants  # Formerly known as components
             self.setpoints = self.agent.setpoints
-            self.forecasts = self.agent.timeseries.collect()  # TODO: Replace with forecasts once they exist
-            # self.forecasts = self.agent.forecasts.collect()
-            # with pl.Config() as cfg:
-            #     cfg.set_tbl_width_chars(200)
-            #     cfg.set_tbl_cols(30)
-            #     print(self.forecasts)
-            # print('Forecast is now implemented. Next step is to replace the dummy data with the actual forecasts. \n'
-            #       'Also probably necessary to convert the retailer data as it is still using fractions')
-            # exit()
+            self.forecasts = self.agent.forecasts.collect()
             self.socs = self.agent.socs.collect()
 
             # Get the timetable
@@ -90,50 +81,30 @@ class Mpc(ControllerBase):
             self.dt = self.timetable.collect()[1, c.TC_TIMESTEP] - self.timetable.collect()[0, c.TC_TIMESTEP]
             # Get the current timestamp
             self.timestamp = self.timetable.collect()[0, c.TC_TIMESTAMP]
-            # Get the next timestamp
-            self.next_timestamp = self.timestamp + self.dt  # TODO: Might not be needed
             # Get the time horizon
             self.horizon = pd.Timedelta(seconds=self.ems['controller']['mpc']['horizon'])
 
             # Reduce the forecast to the horizon length
-            self.forecasts = self.forecasts.filter((self.timestamp < self.forecasts[c.TC_TIMESTAMP])
-                                                   & (self.forecasts[c.TC_TIMESTAMP] < self.timestamp + self.horizon))
+            self.forecasts = self.forecasts.filter((self.timestamp < self.forecasts[c.TC_TIMESTEP])
+                                                   & (self.forecasts[c.TC_TIMESTEP] < self.timestamp + self.horizon))
+
             # Get the timesteps and the number of timesteps in the forecast
             self.timesteps = pd.Index(self.forecasts.select(c.TC_TIMESTAMP).to_pandas(), name='timesteps')
             self.n_steps = pd.Index(range(len(self.timesteps)), name='timesteps')
-            self.timesteps = self.n_steps  # TODO: Take out again
+            # self.timesteps = self.n_steps  # Use this line if the timesteps are not needed and the index is sufficient
             # Reduce the socs to the current timestamp
             self.socs = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timestamp)
 
             # Get the market types
-            # TODO: Still needs to be done and then adjusted in the market objects
+            # TODO: Still needs to be done and then adjusted in the market objects (right now the names are simply
+            #  local and wholesale as this will suffice as long as there is only one market)
             # Get the market data
-            self.market = kwargs['market']
+            self.market = kwargs[c.TC_MARKET]
             # Get the market names and types
             self.market_names = self.timetable.collect().select(c.TC_NAME).unique().to_series().to_list()
             self.market_types = self.timetable.collect().select(c.TC_MARKET).unique().to_series().to_list()
             # Assign each market name to an energy type
             self.markets = {name: c.TRADED_ENERGY[mtype] for name, mtype in zip(self.market_names, self.market_types)}
-
-            # TODO: Take out again once the forecasts are available
-            # Create dummy forecasts for the market and append them to the forecasts
-            dummy = {}
-            dummy['energy_price_sell'] = [(math.cos(x)  + 4) / 100 for x in np.linspace(0, 2 * math.pi, len(self.timesteps))]
-            dummy['energy_price_buy'] = [(2 * math.cos(x) + 6) / 100 for x in np.linspace(0, 2 * math.pi, len(self.timesteps))]
-            dummy['energy_quantity_sell'] = [1e5] * len(self.timesteps)
-            dummy['energy_quantity_buy'] = [1e5] * len(self.timesteps)
-            dummy['grid_sell'] = [0] * len(self.timesteps)
-            dummy['grid_buy'] = [0.04] * len(self.timesteps)
-            dummy['grid_retail_sell'] = [0] * len(self.timesteps)
-            dummy['grid_retail_buy'] = [0.08] * len(self.timesteps)
-            dummy['levies_price_sell'] = [0] * len(self.timesteps)
-            dummy['levies_price_buy'] = [0.18] * len(self.timesteps)
-
-            # Combine the forecasts with the dummy forecasts
-            for col, vals in dummy.items():
-                self.forecasts = self.forecasts.with_columns(pl.Series(name=col, values=vals))
-            # print(self.forecasts)
-            # print(self.forecasts.columns)
 
             # Available plants
             self.available_plants = {
@@ -203,7 +174,7 @@ class Mpc(ControllerBase):
             """"""
 
             # Define variables from the market results and a balancing variable for each energy type
-            for market in self.markets: # TODO: Change once it is clear how the markets are defined
+            for market in self.markets:  # TODO: Change once it is clear how the markets are defined
                 # Create market object
                 self.market_objects[f'{market}'] = lincomps.Market(name=market,
                                                                    forecasts=self.forecasts,
@@ -418,7 +389,7 @@ class Mpc(ControllerBase):
             # Update setpoints
             self.setpoints = self.setpoints.update(adjusted_solution, on=c.TC_TIMESTAMP)
 
-            # with pl.Config(tbl_cols=20, fmt_str_lengths=50):
+            # with pl.Config(tbl_cols=20, fmt_str_lengths=200):
             #     print(self.setpoints)
             # exit()
 

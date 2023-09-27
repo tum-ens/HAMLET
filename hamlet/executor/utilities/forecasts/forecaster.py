@@ -1,4 +1,9 @@
-# Similar to optimization that it contains the class and calls the classes with functions
+__author__ = "jiahechu"
+__credits__ = ""
+__license__ = ""
+__maintainer__ = "jiahechu"
+__email__ = "jiahe.chu@tum.de"
+
 import polars as pl
 import pytz
 from datetime import datetime
@@ -38,7 +43,7 @@ class Forecaster:
 
         Args:
             agentDB: AgentDB object.
-            marketsDB: Dictionary containing MarketDB objects.
+            marketsDB: Dictionary containing all MarketDB objects in the region where the agent is.
             general: General data dictionary.
 
         """
@@ -149,7 +154,7 @@ class Forecaster:
 
         """
         # assign market config
-        market_config = self.agentDB.account['ems']['market']['fcast']  # get forecast config for market
+        market_config = self.agentDB.account['ems'][c.TC_MARKET]['fcast']  # get forecast config for market
         for market_name in self.marketsDB.keys():   # assign market config dict for each market
             wholesale_id = market_name + '_wholesale'
             local_id = market_name + '_local'
@@ -194,7 +199,7 @@ class Forecaster:
         # get all models from imported module
         all_models = inspect.getmembers(models, inspect.isclass)
         for model in all_models:
-            if hasattr(model[1], 'name'):  # include only models defined in the imported module with right format
+            if hasattr(model[1], c.TC_NAME):  # include only models defined in the imported module with right format
                 self.all_models[model[1].name] = model[1]
 
         # assign and initialize the chosen models

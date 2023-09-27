@@ -30,7 +30,7 @@ class TradingBase:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
         self.timetable = kwargs['timetable']
-        self.market = kwargs['market']
+        self.market = kwargs[c.TC_MARKET]
         self.market_data = kwargs['market_data']
         self.agent = kwargs['agent']
         self.bids_offers = None
@@ -87,7 +87,7 @@ class TradingBase:
             ]
         )
         # Drop unnecessary columns
-        self.forecast = self.forecast.drop([c.TC_TIMESTAMP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE, c.TC_ACTION, c.TC_CLEARING_TYPE, c.TC_CLEARING_METHOD, c.TC_CLEARING_PRICING, c.TC_COUPLING])
+        self.forecast = self.forecast.drop([c.TC_TIMESTAMP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE, c.TC_ACTIONS, c.TC_CLEARING_TYPE, c.TC_CLEARING_METHOD, c.TC_CLEARING_PRICING, c.TC_COUPLING])
 
     def create_bids_offers(self):
         raise NotImplementedError('This method has yet to be implemented.')
@@ -156,7 +156,6 @@ class TradingBase:
 
 
 class Linear(TradingBase):
-    # TODO: Will probably need to be changed in the future
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

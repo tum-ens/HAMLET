@@ -25,7 +25,7 @@ from pprint import pprint
 
 
 class Agent:
-    def __init__(self, data: dict, timetable: pl.LazyFrame, agent_type: str, database):
+    def __init__(self, agent_type: str, data: dict, timetable: pl.LazyFrame, database: Database):
 
         # Instance of the agent class
         self.agent = AgentFactory.create_agent(agent_type, data, timetable, database)
@@ -36,7 +36,7 @@ class Agent:
 
 class AgentFactory:
     @staticmethod
-    def create_agent(agent_type, data, timetable, database):
+    def create_agent(agent_type, data, timetable, database: Database):
         from hamlet.executor.agents.sfh import Sfh
         from hamlet.executor.agents.mfh import Mfh
         from hamlet.executor.agents.ctsp import Ctsp
@@ -57,7 +57,7 @@ class AgentFactory:
 class AgentBase:
     """Base class for all agents. It provides a default implementation of the run method."""
 
-    def __init__(self, agent_type: str, agent: AgentDB, timetable: pd.DataFrame, database: Database):
+    def __init__(self, agent_type: str, agent: AgentDB, timetable: pl.DataFrame, database: Database):
 
 
         # Type of agent
@@ -67,7 +67,7 @@ class AgentBase:
         self.agent = agent  # agent dataframe
 
         # Timetable
-        self.timetable = timetable  # part of timetable for one timestep
+        self.timetable = timetable  # part of tasks for one timestep
 
         # Database
         self.db = database
@@ -136,7 +136,7 @@ class AgentBase:
         # Get the required data
         market_info = self.agent.account[c.K_EMS][c.K_MARKET]
 
-        # Get the markets of the region from the timetable
+        # Get the markets of the region from the tasks
         markets = (self.timetable.unique(subset=[c.TC_MARKET, c.TC_NAME]).select(c.TC_NAME)
                    .collect().to_series().to_list())
 
@@ -146,10 +146,8 @@ class AgentBase:
             strategy = Trading(strategy=market_info['strategy'], timetable=self.timetable,
                                market=market, market_data=self.market, agent=self.agent).create_instance()
 
-
             # Create bids and offers
             self.agent = strategy.create_bids_offers()
 
         return self.agent
-
 
