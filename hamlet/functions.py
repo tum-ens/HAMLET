@@ -215,7 +215,7 @@ def get_all_subdirectories(path_directory):
         return None  # No subdirectories found
 
 
-def calculate_timedelta(target_df, reference_ts):
+def calculate_timedelta(target_df, reference_ts, by=c.TC_TIMESTAMP):
     """
     Calculate time difference (timedelta) between current timestep and datetime index of given polars data/lazyframe.
 
@@ -226,15 +226,16 @@ def calculate_timedelta(target_df, reference_ts):
     FUNCTION SPECIFICALLY DESIGNED FOR DATA PROCESSING IN POLARS
 
     Args:
-        target_df: dataframe or lazyframe to be calulated.
+        target_df: dataframe or lazyframe to be calculated.
         reference_ts: reference human time in datetime format.
+        by: column name of a time column to be calculated (usually c.TC_TIMESTAMP or c.TC_TIMESTEP).
 
     Returns:
         target_df: same as the input target_df with an additional 'timedelta' column.
     """
 
     # get time info from original dataframe
-    datetime_index = target_df.select(c.TC_TIMESTAMP)
+    datetime_index = target_df.select(by)
     dtype = datetime_index.dtypes[0]
     time_unit = dtype.time_unit
     time_zone = dtype.time_zone
@@ -245,19 +246,26 @@ def calculate_timedelta(target_df, reference_ts):
     target_df = target_df.with_columns(pl.col('current').dt.replace_time_zone(time_zone))   # change time zone
 
     # calculate timedelta
-    target_df = target_df.with_columns((pl.col('current') - pl.col(c.TC_TIMESTAMP)).alias('timedelta'))
+    target_df = target_df.with_columns((pl.col('current') - pl.col(by)).alias('timedelta'))
     target_df = target_df.drop('current')   # delete column with same current ts value
 
     return target_df
 
 
-def calculate_time_resolution(target_df):
-    """Calculate the time resolution of the given dataframe according to the c.TIMESTAMP column."""
+def calculate_time_resolution(target_df, by=c.TC_TIMESTAMP):
+    """
+    Calculate the time resolution of the given dataframe according to the given column.
+
+    Args:
+        target_df: dataframe or lazyframe to be calculated.
+        by: column name of a time column to be calculated (usually c.TC_TIMESTAMP or c.TC_TIMESTEP).
+
+    """
     # randomly choose a value in timestamp column
-    reference_ts = target_df.select(c.TC_TIMESTAMP).collect().sample(n=1).item()
+    reference_ts = target_df.select(by).collect().sample(n=1).item()
 
     # calculate time resolution
-    target = calculate_timedelta(target_df=target_df, reference_ts=reference_ts)
+    target = calculate_timedelta(target_df=target_df, reference_ts=reference_ts, by=by)
     target = target.filter(pl.col('timedelta') != 0)  # delete the row for the current ts
     target = target.with_columns(abs(pl.col('timedelta')))  # set timedelta to absolute value
     resolution = target.select(pl.min('timedelta')).collect().item()  # the smallest timedelta is the resolution
@@ -266,7 +274,7 @@ def calculate_time_resolution(target_df):
     return resolution.seconds
 
 
-def slice_dataframe_between_times(target_df, reference_ts, duration: int, unit='second'):
+def slice_dataframe_between_times(target_df, reference_ts, duration: int, unit='second', by=c.TC_TIMESTAMP):
     """
     Slice the given pl data/lazyframe to the given duration to the reference time step.
 
@@ -282,13 +290,14 @@ def slice_dataframe_between_times(target_df, reference_ts, duration: int, unit='
         duration: duration to the reference time step. Could be positive (after reference ts) or negative (before
         reference ts).
         unit: unit of the duration in 'second', 'minute', 'hour' or 'day'.
+        by: column name of a time column to be calculated (usually c.TC_TIMESTAMP or c.TC_TIMESTEP).
 
     Returns:
         sliced_df: sliced dataframe or lazyframe between reference ts and duration.
     """
 
     # add timedelta as a column
-    target_df = calculate_timedelta(target_df, reference_ts)
+    target_df = calculate_timedelta(target_df=target_df, reference_ts=reference_ts, by=by)
 
     # convert duration to second
     converter = {'second': 1,
