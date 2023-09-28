@@ -53,7 +53,8 @@ class ModelBase:
     def fit(self, current_ts, length_to_predict, **kwargs):
         """
         Implement this function when necessary, e.g. for machine learning or deep learning models. If fitting is not
-        necessary (e.g. statistical models), do nothing. 2 args will be passed to this method for all models:
+        necessary (e.g. statistical models), do nothing. 2 args will be passed to this method for all models (but users
+        can decide if they want to use them or not):
 
         Args:
             current_ts: Current timestep when making the fitting.
@@ -66,7 +67,7 @@ class ModelBase:
         """
         This function should be implemented for all models. The function should return a polars lazyframe contains
         forecasting results with column name equals target column name. 2 args will be passed to this method for all
-        models:
+        models (but users can decide if they want to use them or not):
 
         Args:
             current_ts: Current timestep when making the prediction.
@@ -92,6 +93,15 @@ class PerfectModel(ModelBase):
     def predict(self, current_ts, length_to_predict, **kwargs):
         """
         Simply take the actual data from target as forecast.
+
+        Args:
+            current_ts: Current timestep when making the prediction.
+            length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
+            seconds.
+
+        Returns:
+            forecast: Forecast result as lazyframe.
+
         """
         # predict
         forecast = f.slice_dataframe_between_times(target_df=self.train_data[c.K_TARGET], reference_ts=current_ts,
@@ -104,6 +114,16 @@ class NaiveModel(ModelBase):
     """Today will be the same as last day with offset."""
     def predict(self, current_ts, length_to_predict, offset, **kwargs):
         """
+        Take the data starting at the same time step as current_ts from offset day(s) before.
+
+        Args:
+            current_ts: Current timestep when making the prediction.
+            length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
+            seconds.
+            offset:  Offset in days to the current day. Unit: days.
+
+        Returns:
+            forecast: Forecast result as lazyframe.
 
         """
         reference_ts = current_ts - timedelta(days=offset)  # calculate reference time step
@@ -116,6 +136,21 @@ class NaiveModel(ModelBase):
 class AverageModel(ModelBase):
     """Today will be the same as the average of the last n days with offset."""
     def predict(self, current_ts, length_to_predict, offset, days, **kwargs):
+        """
+        Calculate the average of the last days of given number (days) with offset (offset) to current timestep, use the
+        result as forecast.
+
+        Args:
+            current_ts: Current timestep when making the prediction.
+            length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
+            seconds.
+            offset:  Offset in days to the current day. Unit: days.
+            days: Number of days to be used for averaging. Unit: days.
+
+        Returns:
+            forecast: Forecast result as lazyframe.
+
+        """
         # get column name
         plant_id = self.train_data[c.K_TARGET].drop(c.TC_TIMESTAMP).columns[0]
 
@@ -140,6 +175,22 @@ class AverageModel(ModelBase):
 class SmoothedModel(ModelBase):
     """Prediction value is a moving mean of the future values with a specified window width."""
     def predict(self, current_ts, length_to_predict, steps, **kwargs):
+        """
+        Calculate the moving average in the future as prediction.
+
+        For each to be predicted time step, calculate the average of the next "steps" timesteps and use the average as
+        the prediction for this to be predicted time step.
+
+        Args:
+            current_ts: Current timestep when making the prediction.
+            length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
+            seconds.
+            steps: Number of future time steps to be used for smoothing (T-ts). Unit: time steps
+
+        Returns:
+            forecast: Forecast result as lazyframe.
+
+        """
         # calculate train data resolution first
         resolution = f.calculate_time_resolution(self.train_data[c.K_TARGET])
 
@@ -178,6 +229,18 @@ class RandomForest(ModelBase):
         self.model = RandomForestRegressor()
 
     def fit(self, current_ts, days, **kwargs):
+        """
+        Prepare features and targets for fitting and fit the regressor.
+
+        The past actual (c.TC_TIMESTAMP == c.TC_TIMESTEP) feature data except c.TC_TIMESTAMP and c.TC_TIMESTEP columns
+        will be taken as features. The past target data except c.TC_TIMESTAMP column will be taken as target. Both
+        target and features data will be converted to pandas.DataFrame since sklearn does not support polars yet.
+
+        Args:
+            current_ts: Current timestep when making the fitting.
+            days: Past days that are used to fit the random forest regressor.
+
+        """
         # slice target for training
         target = f.slice_dataframe_between_times(target_df=self.train_data[c.K_TARGET], reference_ts=current_ts,
                                                  duration=(-days), unit='day')
@@ -192,7 +255,7 @@ class RandomForest(ModelBase):
         target = target.drop(c.TC_TIMESTAMP)
         features = features.drop(c.TC_TIMESTAMP, c.TC_TIMESTEP)
 
-        # convert data into pandas, since sklearn only takes pandas for now
+        # convert data into pandas, since sklearn does not support polars yet
         target = target.collect().to_pandas()
         features = features.collect().to_pandas()
 
@@ -200,6 +263,20 @@ class RandomForest(ModelBase):
         self.model.fit(X=features, y=target)
 
     def predict(self, current_ts, length_to_predict, **kwargs):
+        """
+        Make prediction using the random forest regressor.
+
+        The forecasted (take c.TC_TIMESTEP as time index) features data will be used as features and fed into the
+        regressor. The forecasting result from the regressor will be converted to a polars.LazyFrame as return.
+
+        Args:
+            current_ts: Current timestep when making the prediction.
+            length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
+            seconds.
+
+        Returns:
+            forecast: Forecast result as lazyframe.
+        """
         # slice features for prediction
         features = f.slice_dataframe_between_times(target_df=self.train_data[c.K_FEATURES], reference_ts=current_ts,
                                                    duration=0)   # get data at current ts
@@ -226,6 +303,20 @@ class RandomForest(ModelBase):
 class CNNModel(ModelBase):
     """Convolutional neural network."""
     def __init__(self, train_data, window_length, **kwargs):
+        """
+        Initialize the CNNModel.
+
+        Parameters:
+            train_data (dict): The training data containing features and target.
+            window_length (int): The length of the input window for the neural network.
+            **kwargs: Additional keyword arguments for model initialization.
+
+        This constructor sets up the architecture of the neural network model and compiles it.
+
+        It calculates the number of features, defines the model architecture, and compiles the model with
+        the mean squared error loss function and the Adam optimizer.
+
+        """
         super().__init__(train_data, **kwargs)
 
         # calculate number of features
@@ -250,6 +341,27 @@ class CNNModel(ModelBase):
 
     @staticmethod
     def __prepare_train_data(window_length, X_train, y_train):
+        """
+        Prepare training data for a neural network.
+
+        This function splits the provided training data into training and validation sets and organizes them into
+        sequences with the given window length suitable for training a CNN or RNN model. For each to be predicted
+        timestep, a window is used as features. The resulting sequences and targets are converted to numpy arrays with
+        float32 data type.
+
+        Parameters:
+            window_length (int): The length of the input sequences as features.
+            X_train (pandas.DataFrame): The training input data, typically a DataFrame.
+            y_train (pandas.Series): The training target data, typically a Series.
+
+        Returns:
+            train_sequences (numpy.ndarray): Sequences of training data with shape (num_samples, window_length,
+            num_features).
+            train_targets (numpy.ndarray): Target values corresponding to the training sequences.
+            val_sequences (numpy.ndarray): Sequences of validation data with shape (num_samples, window_length,
+            num_features).
+            val_targets (numpy.ndarray): Target values corresponding to the validation sequences.
+        """
         # split train and test data
         X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=0.2, shuffle=False)
 
@@ -277,6 +389,18 @@ class CNNModel(ModelBase):
 
     @staticmethod
     def __prepare_predict_data(window_length, X_predict):
+        """
+        Prepare prediction data for a neural network. Similar to self.__prepare_train_data, but only for features.
+
+        Parameters:
+            window_length (int): The length of the input sequences as features.
+            X_predict (pandas.DataFrame): The input data for prediction, typically a DataFrame.
+
+        Returns:
+            predict_sequences (numpy.ndarray): Sequences of input data for prediction with shape (num_samples,
+            window_length, num_features).
+
+        """
         seq_length = window_length
         target_length = 1
 
@@ -290,6 +414,24 @@ class CNNModel(ModelBase):
         return predict_sequences
 
     def fit(self, current_ts, days, window_length, epoch, **kwargs):
+        """
+        Prepare features and targets for fitting and fit the neural network.
+
+        The past actual (c.TC_TIMESTAMP == c.TC_TIMESTEP) feature data except c.TC_TIMESTAMP and c.TC_TIMESTEP columns
+        will be taken as features. The past target data except c.TC_TIMESTAMP column will be taken as target. Both
+        target and features data will be converted to sequences with the given window length in form of numpy arrays
+        (since keras does not support polars yet), each features' sequence matches one target timestep. The length of
+        the taken features data from self.train_data[c.K_FEATURES] is "window_length" longer than the taken target, the
+        actual feature sequences for fitting returned from self.__prepare_train_data is as long as the returned target
+        for fitting.
+
+        Args:
+            current_ts: Current timestep when making the fitting.
+            days: Past days that are used to fit the random forest regressor.
+            window_length: The length of the input sequences as features.
+            epoch: Number of epochs for fitting.
+
+        """
         # slice target for training
         target = f.slice_dataframe_between_times(target_df=self.train_data[c.K_TARGET], reference_ts=current_ts,
                                                  duration=(-days), unit='day')
@@ -315,6 +457,23 @@ class CNNModel(ModelBase):
         self.cnn_model.fit(train_sequences, train_targets, epochs=epoch, validation_data=(val_sequences, val_targets))
 
     def predict(self, current_ts, length_to_predict, window_length, **kwargs):
+        """
+        Make prediction using the neural network.
+
+        The forecasted (take c.TC_TIMESTEP as time index) features data will be used as features and converted into
+        sequences like in self.fit function. The forecasting result from the neural network will be converted to a
+        polars.LazyFrame as return.
+
+        Args:
+            current_ts: Current timestep when making the prediction.
+            length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
+            seconds.
+            window_length: The length of the input sequences as features.
+
+        Returns:
+            forecast: Forecast result as lazyframe.
+
+        """
         # calculate train data resolution first
         resolution = f.calculate_time_resolution(self.train_data[c.K_TARGET])
 
@@ -385,6 +544,27 @@ class RNNModel(ModelBase):
 
     @staticmethod
     def __prepare_train_data(window_length, X_train, y_train):
+        """
+        Prepare training data for a neural network.
+
+        This function splits the provided training data into training and validation sets and organizes them into
+        sequences with the given window length suitable for training a CNN or RNN model. For each to be predicted
+        timestep, a window is used as features. The resulting sequences and targets are converted to numpy arrays with
+        float32 data type.
+
+        Parameters:
+            window_length (int): The length of the input sequences as features.
+            X_train (pandas.DataFrame): The training input data, typically a DataFrame.
+            y_train (pandas.Series): The training target data, typically a Series.
+
+        Returns:
+            train_sequences (numpy.ndarray): Sequences of training data with shape (num_samples, window_length,
+            num_features).
+            train_targets (numpy.ndarray): Target values corresponding to the training sequences.
+            val_sequences (numpy.ndarray): Sequences of validation data with shape (num_samples, window_length,
+            num_features).
+            val_targets (numpy.ndarray): Target values corresponding to the validation sequences.
+        """
         # split train and test data
         X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=0.2, shuffle=False)
 
@@ -412,6 +592,18 @@ class RNNModel(ModelBase):
 
     @staticmethod
     def __prepare_predict_data(window_length, X_predict):
+        """
+        Prepare prediction data for a neural network. Similar to self.__prepare_train_data, but only for features.
+
+        Parameters:
+            window_length (int): The length of the input sequences as features.
+            X_predict (pandas.DataFrame): The input data for prediction, typically a DataFrame.
+
+        Returns:
+            predict_sequences (numpy.ndarray): Sequences of input data for prediction with shape (num_samples,
+            window_length, num_features).
+
+        """
         seq_length = window_length
         target_length = 1
 
@@ -425,6 +617,24 @@ class RNNModel(ModelBase):
         return predict_sequences
 
     def fit(self, current_ts, days, window_length, epoch, **kwargs):
+        """
+        Prepare features and targets for fitting and fit the neural network.
+
+        The past actual (c.TC_TIMESTAMP == c.TC_TIMESTEP) feature data except c.TC_TIMESTAMP and c.TC_TIMESTEP columns
+        will be taken as features. The past target data except c.TC_TIMESTAMP column will be taken as target. Both
+        target and features data will be converted to sequences with the given window length in form of numpy arrays
+        (since keras does not support polars yet), each features' sequence matches one target timestep. The length of
+        the taken features data from self.train_data[c.K_FEATURES] is "window_length" longer than the taken target, the
+        actual feature sequences for fitting returned from self.__prepare_train_data is as long as the returned target
+        for fitting.
+
+        Args:
+            current_ts: Current timestep when making the fitting.
+            days: Past days that are used to fit the random forest regressor.
+            window_length: The length of the input sequences as features.
+            epoch: Number of epochs for fitting.
+
+        """
         # slice target for training
         target = f.slice_dataframe_between_times(target_df=self.train_data[c.K_TARGET], reference_ts=current_ts,
                                                  duration=(-days), unit='day')
@@ -450,6 +660,23 @@ class RNNModel(ModelBase):
         self.rnn_model.fit(train_sequences, train_targets, epochs=epoch, validation_data=(val_sequences, val_targets))
 
     def predict(self, current_ts, length_to_predict, window_length, **kwargs):
+        """
+        Make prediction using the neural network.
+
+        The forecasted (take c.TC_TIMESTEP as time index) features data will be used as features and converted into
+        sequences like in self.fit function. The forecasting result from the neural network will be converted to a
+        polars.LazyFrame as return.
+
+        Args:
+            current_ts: Current timestep when making the prediction.
+            length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
+            seconds.
+            window_length: The length of the input sequences as features.
+
+        Returns:
+            forecast: Forecast result as lazyframe.
+
+        """
         # calculate train data resolution first
         resolution = f.calculate_time_resolution(self.train_data[c.K_TARGET])
 
@@ -753,7 +980,7 @@ for all models:
         current_ts: Current timestep when making the fitting / prediction.
         length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
         seconds.
-4. If extra args needed, define in config file with exactly same name. 
+4. If extra args needed, define in config file with exactly same names. 
 5. All the functions need to contain **kwargs to make overall structure working.
 6. The predict() method needs to return a polars lazyframe with the forecasting result in the same column name as the
 target column name.
