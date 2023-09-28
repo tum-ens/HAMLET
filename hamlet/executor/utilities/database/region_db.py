@@ -1,6 +1,8 @@
 import polars as pl
 import os
+from datetime import datetime
 from hamlet import functions as f
+from hamlet import constants as c
 from hamlet.executor.utilities.database.agent_db import AgentDB
 from hamlet.executor.utilities.database.market_db import MarketDB
 from hamlet.executor.utilities.forecasts.forecaster import Forecaster
@@ -23,31 +25,33 @@ class RegionDB:
 
     def register_forecasters_for_agents(self, general: dict):
         """Add forecaster for each agent."""
+        markets = {}
+        for market_type in self.markets.keys():
+            for market_name in self.markets[market_type].keys():
+                markets[market_name] = self.markets[market_type][market_name]
+
         for agent_type, agents in self.agents.items():
             for agent_id, agentDB in agents.items():
-                forecaster = Forecaster(agentDB=agentDB, marketsDB=self.markets, general=general)
+                forecaster = Forecaster(agentDB=agentDB, marketsDB=markets, general=general)
                 forecaster.init_forecaster()    # initialize
                 self.agents[agent_type][agent_id].forecaster = forecaster   # register
 
-    def get_agent_data(self, agent_type, agent_id):
-        if agent_id is None:
-            return self.agents[agent_type]
-        else:
-            return self.agents[agent_type][agent_id]
+    def get_bids_offers(self, market_type: str | list[str] = None, market_name: str | list[str] = None,
+                        timestep: datetime | list[datetime] = None):
+        """Get all bids and offers tables from all agents in this region."""
+        # get bids and offers table
+        bids_offers = {}
 
-    def get_market_data(self, market_type=None, market_name=None):
-        """Get all markets data for the given region."""
-        print(self.markets)
-        if market_type is None and market_name is None:
-            return self.markets
-        else:
-            return self.markets[market_name]
+        for agents in self.agents.values():
+            for agent_id, agentDB in agents.items():
+                bids_offers[agent_id] = agentDB.bids_offers
 
-    def edit_agent_data(self, agent_type, agent_id, table_name, new_df):
-        self.agents[agent_type][agent_id].setattr(table_name, new_df)
+        # combine tables
+        bids_offers_table = pl.concat(bids_offers.values(), how='vertical')
 
-    def get_meters(self, agent_type, agent_id):
-        return self.agents[agent_type][agent_id].meters
+        # if given, filter
+        if market_type:
+            bids_offers_table = bids_offers_table.filter(pl.col())
 
     def __register_all_agents(self):
         """Register all agents for this region."""
@@ -75,12 +79,13 @@ class RegionDB:
         """Register all markets for this region."""
         markets_types = f.get_all_subdirectories(os.path.join(self.region_path, 'markets'))
         for markets_type in markets_types:
+            self.markets[markets_type] = {}
             markets = f.get_all_subdirectories(os.path.join(self.region_path, 'markets', markets_type))
             for market in markets:
-                self.markets[market] = MarketDB(type=markets_type, name=market,
-                                                market_path=os.path.join(self.region_path, 'markets', markets_type,
-                                                                         market),
-                                                retailer_path=os.path.join(self.region_path, 'retailers', markets_type,
-                                                                           market))
-                self.markets[market].register_market()
+                self.markets[markets_type][market] = MarketDB(type=markets_type, name=market,
+                                                              market_path=os.path.join(self.region_path, 'markets',
+                                                                                       markets_type, market),
+                                                              retailer_path=os.path.join(self.region_path, 'retailers',
+                                                                                         markets_type, market))
+                self.markets[markets_type][market].register_market()
 

@@ -31,7 +31,15 @@ class ModelBase:
     basic necessary attributes and methods.
 
     Attributes:
-        train_data:
+        train_data: dictionary contains 2 keys: features and target. Target contains perfect data of plant / market
+        using this model. Features contain the data from weather file with user-defined columns. Column names of
+        features should be assigned in config file under 'features' and should be identical to the column names in
+        weather file.
+
+    Methods:
+        fit: fitting the forecast model. Relevant for e.g. ML or DL models.
+        predict: make forecast and return the resulting forecast data as a lazyframe.
+        update_train_data: replace the train data with a new train data.
 
     """
     def __init__(self, train_data: dict, **kwarg):
@@ -48,14 +56,15 @@ class ModelBase:
         """
         This function should be implemented for all models. The function should return a polars lazyframe contains
         forecasting results with column name equals target column name.
-
-        E.g.
-
         """
         raise NotImplementedError('The forecast model must have the \'predict\' method.')
 
     def update_train_data(self, new_train_data):
-
+        """
+        Replace train data with the given new train data. This function should be called in the Forecaster. Currently
+        only relevant for local market, because the "real" local market price need to be updated after each simulated
+        timestamp.
+        """
         self.train_data = new_train_data
 
 
@@ -64,6 +73,9 @@ class ModelBase:
 class PerfectModel(ModelBase):
     """Perfect forecast of the future."""
     def predict(self, current_ts, length_to_predict, **kwargs):
+        """
+        Simply take the actual data from target as forecast.
+        """
         # predict
         forecast = f.slice_dataframe_between_times(target_df=self.train_data[c.K_TARGET], reference_ts=current_ts,
                                                    duration=length_to_predict, unit='second')
@@ -74,6 +86,9 @@ class PerfectModel(ModelBase):
 class NaiveModel(ModelBase):
     """Today will be the same as last day with offset."""
     def predict(self, current_ts, length_to_predict, offset, **kwargs):
+        """
+
+        """
         reference_ts = current_ts - timedelta(days=offset)  # calculate reference time step
         forecast = f.slice_dataframe_between_times(target_df=self.train_data[c.K_TARGET], reference_ts=reference_ts,
                                                    duration=length_to_predict, unit='second')    # predict
@@ -315,6 +330,19 @@ class CNNModel(ModelBase):
 class RNNModel(ModelBase):
     """Recurrent neural network."""
     def __init__(self, train_data, window_length, **kwargs):
+        """
+        Initialize the RNNModel.
+
+        Parameters:
+            train_data (dict): The training data containing features and target.
+            window_length (int): The length of the input window for the recurrent neural network.
+            **kwargs: Additional keyword arguments for model initialization.
+
+        This constructor sets up the architecture of the recurrent neural network (RNN) model and compiles it.
+
+        It calculates the number of features, defines the model architecture, and compiles the model with
+        the mean squared error loss function and the Adam optimizer.
+        """
         super().__init__(train_data, **kwargs)
 
         # calculate number of features
