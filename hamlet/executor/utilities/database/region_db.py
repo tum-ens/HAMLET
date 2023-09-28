@@ -1,3 +1,9 @@
+__author__ = "jiahechu"
+__credits__ = ""
+__license__ = ""
+__maintainer__ = "jiahechu"
+__email__ = "jiahe.chu@tum.de"
+
 import polars as pl
 import os
 from datetime import datetime
@@ -35,23 +41,6 @@ class RegionDB:
                 forecaster = Forecaster(agentDB=agentDB, marketsDB=markets, general=general)
                 forecaster.init_forecaster()    # initialize
                 self.agents[agent_type][agent_id].forecaster = forecaster   # register
-
-    def get_bids_offers(self, market_type: str | list[str] = None, market_name: str | list[str] = None,
-                        timestep: datetime | list[datetime] = None):
-        """Get all bids and offers tables from all agents in this region."""
-        # get bids and offers table
-        bids_offers = {}
-
-        for agents in self.agents.values():
-            for agent_id, agentDB in agents.items():
-                bids_offers[agent_id] = agentDB.bids_offers
-
-        # combine tables
-        bids_offers_table = pl.concat(bids_offers.values(), how='vertical')
-
-        # if given, filter
-        if market_type:
-            bids_offers_table = bids_offers_table.filter(pl.col())
 
     def __register_all_agents(self):
         """Register all agents for this region."""

@@ -1,3 +1,9 @@
+__author__ = "jiahechu"
+__credits__ = ""
+__license__ = ""
+__maintainer__ = "jiahechu"
+__email__ = "jiahe.chu@tum.de"
+
 import os
 import polars as pl
 from hamlet import constants as c

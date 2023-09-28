@@ -30,7 +30,7 @@ class TradingBase:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
         self.timetable = kwargs['timetable']
-        self.market = kwargs['market']
+        self.market = kwargs[c.TC_MARKET]
         self.market_data = kwargs['market_data']
         self.agent = kwargs['agent']
         self.bids_offers = None
