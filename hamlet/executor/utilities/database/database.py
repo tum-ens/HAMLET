@@ -1,3 +1,9 @@
+__author__ = "jiahechu"
+__credits__ = ""
+__license__ = ""
+__maintainer__ = "jiahechu"
+__email__ = "jiahe.chu@tum.de"
+
 import pandas as pd
 import sqlalchemy as db
 import polars as pl
@@ -84,6 +90,7 @@ class Database:
         ```
         specific_agent = your_instance.get_agent_data('example_region', agent_type='sfh', agent_id='12345')
         ```
+
         """
         if not agent_type:
             return self.__regions[region].agents
@@ -194,13 +201,15 @@ class Database:
         """Reassign the given agents to the given region."""
         for agent in agents:
             agent_id = agent.agent_id
-            self.__regions[region].agents[agent_id] = agent
+            agent_type = agent.agent_type
+            self.__regions[region].agents[agent_type][agent_id] = agent
 
     def post_markets_to_region(self, region: str, markets: list):
         """Reassign the given markets to the given region."""
         for market in markets:
             market_name = market.market_name
-            self.__regions[region].markets[market_name] = market
+            market_type = market.market_type
+            self.__regions[region].markets[market_type][market_name] = market
 
     def update_forecaster(self):
         """Also include update forecaster."""

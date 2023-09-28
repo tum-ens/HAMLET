@@ -96,7 +96,7 @@ class Rtc(ControllerBase):
                 raise ValueError(f"Timeseries has {len(self.timeseries)} rows. It should only have 1 row for the rtc.")
 
             # Get the market data
-            self.market = kwargs['market']
+            self.market = kwargs[c.TC_MARKET]
             # Get market name
             # Get the market names and types
             self.market_names = self.timetable.collect().select(c.TC_NAME).unique().to_series().to_list()
