@@ -30,6 +30,7 @@ class Creator:
 
     """
 
+    # TODO: check if progress bar could be integrated somewhere
     progress_bar = tqdm()
 
     def __init__(self, path: str, name: str = None) -> None:

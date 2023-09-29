@@ -233,10 +233,8 @@ class Database:
             market_type = market.market_type
             self.__regions[region].markets[market_type][market_name] = market
 
-    def update_forecaster(self):
-        """Also include update forecaster."""
-        # calculate mean value and assign this value as local market price
-        ...
+            # update local market price in forecasters
+            self.__regions[region].update_local_market_in_forecasters()
 
     """static methods"""
 
@@ -349,6 +347,7 @@ class Database:
         agents in each region.
 
         """
+        # TODO: evtl. adjust code here if theres problem with multilevel markets
         for region in structure.keys():
             # initialize RegionDB object
             self.__regions[region] = RegionDB(os.path.join(os.path.dirname(self.__scenario_path), structure[region]))
