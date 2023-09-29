@@ -54,6 +54,47 @@ class RegionDB:
                 forecaster.init_forecaster()    # initialize
                 self.agents[agent_type][agent_id].forecaster = forecaster   # register
 
+    def update_local_market_in_forecasters(self):
+        """
+        Update local market train data with the current local market price forecaster for each agent in the region.
+
+        This function should first calculate the summarized (e.g. average) local market price for each market in this
+        region. Then replace a part of the train data for markets in each forecaster with the calculated market price
+        according to the c.TC_TIMESTAMP. Currently only relevant for local market, because the "real" local market price
+        need to be updated after each simulated timestamp.
+
+        """
+        for markets in self.markets.values():
+            for market in markets.values():
+                local_market_key = market.market_name + '_local'    # keys of local market for lookup in forecaster
+
+                # TODO: calculate the new market price, the result should be in this format:
+                # 'new_target' column should contain market price
+                market_price = pl.LazyFrame({c.TC_TIMESTAMP: [], 'new_target': []})
+
+                for agents in self.agents.values():
+                    for agent in agents.values():
+                        old_target = agent.forecaster.train_data[local_market_key][c.K_TARGET]
+
+                        # get column name of the old target
+                        column_name = old_target.columns
+                        column_name.remove(c.TC_TIMESTAMP)
+                        column_name = column_name[0]
+
+                        # replace a part of the old target with new target
+                        # NOTICE: adjust lazyframe to dataframe if necessary, polars concat is sometimes tricky
+                        new_target = pl.concat([old_target, market_price], how='diagonal')
+                        new_target = new_target.with_columns(pl.when(pl.col('new_target').is_null())
+                                                             .then(pl.col(column_name))
+                                                             .otherwise(pl.col('new_target')).alias(column_name))
+
+                        # delete unnecessary column
+                        new_target = new_target.drop('new_target')
+
+                        # update forecaster bzw. models
+                        # NOTICE: new_target should be lazyframe now
+                        agent.forecaster.update_forecaster(id=local_market_key, dataframe=new_target, target=True)
+
     def __register_all_agents(self):
         """
         Register all agents for this region.

@@ -5,6 +5,7 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 import os
+import sys
 from tqdm import tqdm
 import shutil
 import time
@@ -131,8 +132,11 @@ class Executor:
                 region = region.lazy()
 
                 # update progress bar description
-                self.progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for region ' + region_str
-                                                 + ': ')
+                self.progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for region ' +
+                                                      region_str + ': ')
+
+                # TODO: here print is deactivated
+                sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
 
                 # Execute the agents and market in parallel or sequentially
                 if self.pool:
@@ -148,8 +152,11 @@ class Executor:
                     # Execute the market
                     self.__execute_markets(tasklist=region)
 
+                sys.stdout = sys.__stdout__     # re-activate printing
+
             # Calculate the grids for the current timestamp (calculated together as they are connected)
             self.progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for grid: ')
+
             self.__execute_grids()
 
             self.progress_bar.update(1)
