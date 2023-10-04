@@ -90,9 +90,11 @@ class Forecaster:
             target: Boolean indicating if the updated data is a target variable.
 
         """
-        # TODO: implement this function
         # new train data with new target
-        self.train_data[id][c.K_TARGET] = dataframe
+        if target:
+            self.train_data[id][c.K_TARGET] = dataframe
+        else:
+            self.train_data[id][c.K_FEATURES] = dataframe
 
         # update model
         self.used_models[id].update_train_data(self.train_data[id])
@@ -197,6 +199,7 @@ class Forecaster:
 
         """
         # get all models from imported module
+        # TODO: change code here if models are seperated
         all_models = inspect.getmembers(models, inspect.isclass)
         for model in all_models:
             if hasattr(model[1], c.TC_NAME):  # include only models defined in the imported module with right format
