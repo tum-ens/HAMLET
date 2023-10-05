@@ -14,6 +14,7 @@ from hamlet.executor.utilities.database.region_db import RegionDB
 from hamlet.executor.utilities.database.agent_db import AgentDB
 from hamlet.executor.utilities.database.market_db import MarketDB
 from datetime import datetime
+from pprint import pprint
 
 
 class Database:
@@ -137,7 +138,7 @@ class Database:
             return self.__regions[region].markets
         elif market_type and not market_name:
             return self.__regions[region].markets[market_type]
-        elif market_type and not market_name:
+        else:
             return self.__regions[region].markets[market_type][market_name]
 
     def get_bids_offers(self, region: str, market_type: str | list[str] = None, market_name: str | list[str] = None,

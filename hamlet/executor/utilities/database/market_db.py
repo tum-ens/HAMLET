@@ -30,71 +30,9 @@ class MarketDB:
     def register_market(self):
         """Assign class attribute from data in market folder."""
         self.retailer = f.load_file(path=os.path.join(self.retailer_path, 'retailer.ft'), df='polars')
-        self.market_transactions = pl.LazyFrame({c.TC_TIMESTAMP: [],
-                                                 c.TC_TIMESTEP: [],
-                                                 c.TC_REGION: [],
-                                                 c.TC_MARKET: [],
-                                                 c.TC_NAME: [],
-                                                 c.TC_TYPE_TRANSACTION: [],
-                                                 c.TC_ID_AGENT: [],
-                                                 c.TC_ENERGY_IN: [],
-                                                 c.TC_ENERGY_OUT: [],
-                                                 c.TC_PRICE_PU_IN: [],
-                                                 c.TC_PRICE_PU_OUT: [],
-                                                 c.TC_PRICE_IN: [],
-                                                 c.TC_PRICE_OUT: [],
-                                                 c.TC_SHARE_QUALITY: []})
-        self.bids_cleared = pl.LazyFrame({c.TC_TIMESTAMP: [],
-                                          c.TC_TIMESTEP: [],
-                                          c.TC_REGION: [],
-                                          c.TC_MARKET: [],
-                                          c.TC_NAME: [],
-                                          c.TC_TYPE_TRANSACTION: [],
-                                          c.TC_ID_AGENT: [],
-                                          c.TC_ENERGY_IN: [],
-                                          c.TC_PRICE_PU_IN: [],
-                                          c.TC_PRICE_IN: []})
-        self.bids_uncleared = pl.LazyFrame({c.TC_TIMESTAMP: [],
-                                            c.TC_TIMESTEP: [],
-                                            c.TC_REGION: [],
-                                            c.TC_MARKET: [],
-                                            c.TC_NAME: [],
-                                            c.TC_TYPE_TRANSACTION: [],
-                                            c.TC_ID_AGENT: [],
-                                            c.TC_ENERGY_IN: [],
-                                            c.TC_PRICE_PU_IN: [],
-                                            c.TC_PRICE_IN: []})
-        self.offers_cleared = pl.LazyFrame({c.TC_TIMESTAMP: [],
-                                            c.TC_TIMESTEP: [],
-                                            c.TC_REGION: [],
-                                            c.TC_MARKET: [],
-                                            c.TC_NAME: [],
-                                            c.TC_TYPE_TRANSACTION: [],
-                                            c.TC_ID_AGENT: [],
-                                            c.TC_ENERGY_OUT: [],
-                                            c.TC_PRICE_PU_OUT: [],
-                                            c.TC_PRICE_OUT: [],
-                                            c.TC_QUALITY: []})
-        self.offers_uncleared = pl.LazyFrame({c.TC_TIMESTAMP: [],
-                                              c.TC_TIMESTEP: [],
-                                              c.TC_REGION: [],
-                                              c.TC_MARKET: [],
-                                              c.TC_NAME: [],
-                                              c.TC_TYPE_TRANSACTION: [],
-                                              c.TC_ID_AGENT: [],
-                                              c.TC_ENERGY_OUT: [],
-                                              c.TC_PRICE_PU_OUT: [],
-                                              c.TC_PRICE_OUT: [],
-                                              c.TC_QUALITY: []})
-        self.positions_matched = pl.LazyFrame({c.TC_TIMESTAMP: [],
-                                               c.TC_TIMESTEP: [],
-                                               c.TC_REGION: [],
-                                               c.TC_MARKET: [],
-                                               c.TC_NAME: [],
-                                               c.TC_TYPE_TRANSACTION: [],
-                                               c.TC_ID_AGENT_IN: [],
-                                               c.TC_ID_AGENT_OUT: [],
-                                               c.TC_ENERGY: [],
-                                               c.TC_PRICE_PU: [],
-                                               c.TC_PRICE: [],
-                                               c.TC_QUALITY: []})
+        self.market_transactions = pl.LazyFrame(schema=c.TS_MARKET_TRANSACTIONS)
+        self.bids_cleared = pl.LazyFrame(schema=c.TS_BIDS_CLEARED)
+        self.bids_uncleared = pl.LazyFrame(schema=c.TS_BIDS_UNCLEARED)
+        self.offers_cleared = pl.LazyFrame(schema=c.TS_OFFERS_CLEARED)
+        self.offers_uncleared = pl.LazyFrame(schema=c.TS_OFFERS_UNCLEARED)
+        self.positions_matched = pl.LazyFrame(schema=c.TS_POSITIONS_MATCHED)
