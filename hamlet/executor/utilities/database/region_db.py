@@ -30,8 +30,20 @@ class RegionDB:
         self.__register_all_markets()
 
     def register_forecasters_for_agents(self, general: dict):
-        """Add forecaster for each agent."""
+        """
+        Add forecaster for each agent in the region.
+
+        This function first summarize all markets in this region to one dictionary without market type keys. Then pass
+        initialize a forecaster with summarized markets dict and given general dict for each agent. Finally, the
+        initialized forecaster will be added to each AgentDB object as an attribute.
+
+        Args:
+            general: General dict of the Database.
+
+        """
         markets = {}
+
+        # summarize all markets in this region as a dict without market types
         for market_type in self.markets.keys():
             for market_name in self.markets[market_type].keys():
                 markets[market_name] = self.markets[market_type][market_name]
@@ -42,8 +54,56 @@ class RegionDB:
                 forecaster.init_forecaster()    # initialize
                 self.agents[agent_type][agent_id].forecaster = forecaster   # register
 
+    def update_local_market_in_forecasters(self):
+        """
+        Update local market train data with the current local market price forecaster for each agent in the region.
+
+        This function should first calculate the summarized (e.g. average) local market price for each market in this
+        region. Then replace a part of the train data for markets in each forecaster with the calculated market price
+        according to the c.TC_TIMESTAMP. Currently only relevant for local market, because the "real" local market price
+        need to be updated after each simulated timestamp.
+
+        """
+        for markets in self.markets.values():
+            for market in markets.values():
+                local_market_key = market.market_name + '_local'    # keys of local market for lookup in forecaster
+
+                # TODO: calculate the new market price, the result should be in this format:
+                # 'new_target' column should contain market price
+                market_price = pl.LazyFrame({c.TC_TIMESTAMP: [], 'new_target': []})
+
+                for agents in self.agents.values():
+                    for agent in agents.values():
+                        old_target = agent.forecaster.train_data[local_market_key][c.K_TARGET]
+
+                        # get column name of the old target
+                        column_name = old_target.columns
+                        column_name.remove(c.TC_TIMESTAMP)
+                        column_name = column_name[0]
+
+                        # replace a part of the old target with new target
+                        # NOTICE: adjust lazyframe to dataframe if necessary, polars concat is sometimes tricky
+                        new_target = pl.concat([old_target, market_price], how='diagonal')
+                        new_target = new_target.with_columns(pl.when(pl.col('new_target').is_null())
+                                                             .then(pl.col(column_name))
+                                                             .otherwise(pl.col('new_target')).alias(column_name))
+
+                        # delete unnecessary column
+                        new_target = new_target.drop('new_target')
+
+                        # update forecaster bzw. models
+                        # NOTICE: new_target should be lazyframe now
+                        agent.forecaster.update_forecaster(id=local_market_key, dataframe=new_target, target=True)
+
     def __register_all_agents(self):
-        """Register all agents for this region."""
+        """
+        Register all agents for this region.
+
+        This function loop through the agents path of this region and write each agent and its data to an AgentDB
+        object. The AgentDB objects will be stored in the dict self.agents with first level keys agent types and
+        second level keys agent ids.
+
+        """
         agents_types = f.get_all_subdirectories(os.path.join(self.region_path, 'agents'))
         for agents_type in agents_types:
             # register agents for each type
@@ -65,7 +125,14 @@ class RegionDB:
                                                                                                  agent, sub_agent))
 
     def __register_all_markets(self):
-        """Register all markets for this region."""
+        """
+        Register all markets for this region.
+
+        This function loop through the markets path of this region and write each market and its data to an MarketDB
+        object. The MarketDB objects will be stored in the dict self.markets with first level keys market types and
+        second level keys market names.
+
+        """
         markets_types = f.get_all_subdirectories(os.path.join(self.region_path, 'markets'))
         for markets_type in markets_types:
             self.markets[markets_type] = {}

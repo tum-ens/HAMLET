@@ -46,7 +46,7 @@ class Database:
     """initialize"""
 
     def setup_database(self, structure):
-        """Main initialize function"""
+        """Initialize the database."""
 
         self.__setup_general()
 
@@ -199,23 +199,43 @@ class Database:
     """post data"""
 
     def post_agents_to_region(self, region: str, agents: list):
-        """Reassign the given agents to the given region."""
+        """
+        Post the given agents to the given region.
+
+        The given agents are passed to the function as a list of AgentDB objects. The function maps each agent according
+        to the AgentDB attributes: agent_id and agent_type. If an agent in agent_type with agent_id already exists in
+        the region, replace it with the given new one. If not, add it to the region.
+
+        Args:
+            region: name of the region.
+            agents: list of AgentDB objects to be written into Database.
+
+        """
         for agent in agents:
             agent_id = agent.agent_id
             agent_type = agent.agent_type
             self.__regions[region].agents[agent_type][agent_id] = agent
 
     def post_markets_to_region(self, region: str, markets: list):
-        """Reassign the given markets to the given region."""
+        """
+        Post the given markets to the given region.
+
+        The given markets are passed to the function as a list of MarketDB objects. The function maps each market
+        according to the MarketDB attributes: market_name and market_type. If a market in market_type with market_name
+        already exists in the region, replace it with the given new one. If not, add it to the region.
+
+        Args:
+            region: name of the region.
+            markets: list of MarketDB objects to be written into Database.
+
+        """
         for market in markets:
             market_name = market.market_name
             market_type = market.market_type
             self.__regions[region].markets[market_type][market_name] = market
 
-    def update_forecaster(self):
-        """Also include update forecaster."""
-        # calculate mean value and assign this value as local market price
-        ...
+            # update local market price in forecasters
+            self.__regions[region].update_local_market_in_forecasters()
 
     """static methods"""
 
@@ -328,6 +348,7 @@ class Database:
         agents in each region.
 
         """
+        # TODO: evtl. adjust code here if theres problem with multilevel markets
         for region in structure.keys():
             # initialize RegionDB object
             self.__regions[region] = RegionDB(os.path.join(os.path.dirname(self.__scenario_path), structure[region]))

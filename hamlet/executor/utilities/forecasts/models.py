@@ -752,7 +752,13 @@ class ARIMAModel(ModelBase):
 
 @forecast_model(name='weather')
 class WeatherModel(ModelBase):
-    """Forecast based on weather forecast ("specs" only). This model is currently implemented using pandas."""
+    """
+    Forecast based on weather forecast ("specs" only).
+
+    This model is currently implemented using pandas. The functions are taken from the Creator. For detailed
+    documentations check hamlet/creator/agents/agents.py
+
+    """
     def __pv_model(self, current_ts, length_to_predict):
         # get pv orientation
         plant = self.train_data['plant_config']
@@ -943,15 +949,32 @@ class WeatherModel(ModelBase):
 
 @forecast_model(name='arrival')
 class ArrivalModel(ModelBase):
-    """Arrival model specified for EV."""
+    """Arrival model specific for EV."""
     def __init__(self, train_data, **kwargs):
         super().__init__(train_data, **kwargs)
-        # get ev id
+        # get ev plant id
         ev_id = train_data[c.K_TARGET].columns
         ev_id.remove(c.TC_TIMESTAMP)
         self.ev_id = ev_id[0].split('_')[0]
 
     def predict(self, current_ts, length_to_predict, **kwargs):
+        """
+        Predict availability and energy consumption for the EV.
+
+        The forecast result from this model depends on the EV availability at the current timestep. If EV is available
+        (id_availability == 1) at current_ts, the model will return a perfect forecast for both availability and
+        energy_consumed. If EV is not available at current_ts (id_availability == 0), the prediction for both
+        availability and energy_consumed will be all 0.
+
+        Parameters:
+            current_ts (datetime): The current timestep for prediction.
+            length_to_predict (int): The duration (in seconds) for which to make predictions.
+
+        Returns:
+            forecast (polars.LazyFrame): A LazyFrame containing the forecasted availability and energy consumption
+            values for the EV plant.
+
+        """
         # get availability at current timestep
         current_availability = f.calculate_timedelta(target_df=self.train_data[c.K_TARGET], reference_ts=current_ts)\
                                 .filter(pl.col('timedelta') == 0).select(self.ev_id + '_availability').collect()\
@@ -972,16 +995,17 @@ class ArrivalModel(ModelBase):
 user can also define own model-object (class) here. some basic rules:
 1. The model object (class) must use the @forecast_model decorator. The c.TC_NAME argument should be the same string as 
 defined in config file to identify models.
-2. The model object (class) must inherits from class ModelBase, which contains the train data to be forecasted. The
-train data is a dictionary consists of two keys: c.K_TARGET and c.K_FEATURES. The values are both polars lazyframes.
+2. The model object (class) must inherits from class ModelBase, which contains the train data to be forecasted as 
+attribute. The train data is a dictionary consists of two keys: c.K_TARGET and c.K_FEATURES. The values are both polars
+lazyframes.
 3. The predict() method of the object must be implemented, fit() is optional. Two args will be passed to both methods 
 for all models:
     Args:
         current_ts: Current timestep when making the fitting / prediction.
         length_to_predict: How long in the future should be covered in the resulting forecast of this model. Unit:
         seconds.
-4. If extra args needed, define in config file with exactly same names. 
-5. All the functions need to contain **kwargs to make overall structure working.
+4. If extra args needed, define in config file with exact same names. 
+5. All functions need to contain **kwargs to make overall structure working.
 6. The predict() method needs to return a polars lazyframe with the forecasting result in the same column name as the
 target column name.
 """
