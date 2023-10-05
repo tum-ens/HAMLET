@@ -1,5 +1,5 @@
 # This file contains all constants used in the project
-
+import polars as pl
 
 # KEYS
 K_GENERAL = 'general'
@@ -10,9 +10,8 @@ K_MARKET = 'market'
 K_FORECASTS = 'forecasts'
 K_TIMESERIES = 'timeseries'
 K_SETPOINTS = 'setpoints'
-K_TARGET = 'target'     # relevant for forecast train data
-K_FEATURES = 'features'     # relevant for forecast train data
-
+K_TARGET = 'target'  # relevant for forecast train data
+K_FEATURES = 'features'  # relevant for forecast train data
 
 # UNIT CONSTANTS
 WH_TO_MWH = 1e-6
@@ -41,9 +40,15 @@ HOURS_TO_DAYS = 1 / 24
 DAYS_TO_HOURS = 24
 
 # MONEY CONSTANTS
-EURO_TO_CENT = 100
-CENT_TO_EURO = 1 / 100
-EUR_KWH_TO_UNIT_WH = 1e5
+EUR_TO_CENT = 100
+CENT_TO_EUR = 1 / 100
+EUR_TO_EURe7 = 1e7
+EURe7_TO_EUR = 1e-7
+CENT_TO_EURe7 = 1e9
+EURe7_TO_CENT = 1e-9
+
+# OTHER CONSTANTS
+EUR_KWH_TO_EURe7_WH = EUR_TO_EURe7 / KWH_TO_WH  # conversion to ensure that the values are integers
 
 # ENERGY TYPES
 ET_ELECTRICITY = 'power'
@@ -83,6 +88,11 @@ PF_OUT = 'out'
 ### TABLES ###
 # NAMES
 TN_TIMETABLE = 'timetable'
+TN_MARKET_TRANSACTIONS = 'market_transactions'
+TN_BIDS_CLEARED = 'bids_cleared'
+TN_BIDS_UNCLEARED = 'bids_uncleared'
+TN_OFFERS_CLEARED = 'offers_cleared'
+TN_OFFERS_UNCLEARED = 'offers_uncleared'
 
 # COLUMNS
 TC_TIMESTAMP = 'timestamp'
@@ -139,6 +149,74 @@ TC_GHI = 'ghi'
 TC_DHI = 'dhi'
 TC_DNI = 'dni'
 
+# SCHEMAS
+# Note: The schemas are used to define the data types of the columns in the tables and are taken from tables.xlsx
+TS_MARKET_TRANSACTIONS = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                          TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                          TC_REGION: pl.Categorical,
+                          TC_MARKET: pl.Categorical,
+                          TC_NAME: pl.Categorical,
+                          TC_ENERGY_TYPE: pl.Categorical,
+                          TC_TYPE_TRANSACTION: pl.Categorical,
+                          TC_ID_AGENT: pl.Categorical,
+                          TC_ENERGY_IN: pl.UInt64,
+                          TC_ENERGY_OUT: pl.UInt64,
+                          TC_PRICE_PU_IN: pl.Int32,
+                          TC_PRICE_PU_OUT: pl.Int32,
+                          TC_PRICE_IN: pl.Int64,
+                          TC_PRICE_OUT: pl.Int64,
+                          TC_QUALITY: pl.UInt8}
+TS_BIDS_OFFERS = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                  TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                  TC_REGION: pl.Categorical,
+                  TC_MARKET: pl.Categorical,
+                  TC_NAME: pl.Categorical,
+                  TC_ENERGY_TYPE: pl.Categorical,
+                  TC_ID_AGENT: pl.Categorical,
+                  TC_ENERGY_IN: pl.UInt64,
+                  TC_ENERGY_OUT: pl.UInt64,
+                  TC_PRICE_PU_IN: pl.Int32,
+                  TC_PRICE_PU_OUT: pl.Int32,
+                  TC_PRICE_IN: pl.Int64,
+                  TC_PRICE_OUT: pl.Int64,
+                  TC_QUALITY: pl.UInt8}
+TS_BIDS_CLEARED = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                   TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                   TC_REGION: pl.Categorical,
+                   TC_MARKET: pl.Categorical,
+                   TC_NAME: pl.Categorical,
+                   TC_ENERGY_TYPE: pl.Categorical,
+                   TC_ID_AGENT: pl.Categorical,
+                   TC_ENERGY_IN: pl.UInt64,
+                   TC_PRICE_PU_IN: pl.Int32,
+                   TC_PRICE_IN: pl.Int64,
+                   TC_QUALITY: pl.UInt8}
+TS_BIDS_UNCLEARED = TS_BIDS_CLEARED
+TS_OFFERS_CLEARED = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                     TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                     TC_REGION: pl.Categorical,
+                     TC_MARKET: pl.Categorical,
+                     TC_NAME: pl.Categorical,
+                     TC_ENERGY_TYPE: pl.Categorical,
+                     TC_ID_AGENT: pl.Categorical,
+                     TC_ENERGY_OUT: pl.UInt64,
+                     TC_PRICE_PU_OUT: pl.Int32,
+                     TC_PRICE_OUT: pl.Int64,
+                     TC_QUALITY: pl.UInt8}
+TS_OFFERS_UNCLEARED = TS_OFFERS_CLEARED
+TS_POSITIONS_MATCHED = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                        TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                        TC_REGION: pl.Categorical,
+                        TC_MARKET: pl.Categorical,
+                        TC_NAME: pl.Categorical,
+                        TC_ENERGY_TYPE: pl.Categorical,
+                        TC_ID_AGENT_IN: pl.Categorical,
+                        TC_ID_AGENT_OUT: pl.Categorical,
+                        TC_ENERGY: pl.UInt64,
+                        TC_PRICE_PU: pl.Int32,
+                        TC_PRICE: pl.Int64,
+                        TC_QUALITY: pl.UInt8}
+
 # AGENTS
 A_SFH = 'sfh'
 A_MFH = 'mfh'
@@ -167,22 +245,22 @@ P_HEAT_STORAGE = 'heat_storage'
 # Note: Key states which type of plant is addressed and the value states which type of operation it has for the given
 #       energy type
 COMP_MAP = {
-            # Electricity
-            P_INFLEXIBLE_LOAD: {ET_ELECTRICITY: OM_LOAD},
-            P_FLEXIBLE_LOAD: {ET_ELECTRICITY: OM_LOAD},
-            P_PV: {ET_ELECTRICITY: OM_GENERATION},
-            P_WIND: {ET_ELECTRICITY: OM_GENERATION},
-            P_FIXED_GEN: {ET_ELECTRICITY: OM_GENERATION},
-            P_EV: {ET_ELECTRICITY: OM_STORAGE},
-            P_BATTERY: {ET_ELECTRICITY: OM_STORAGE},
-            P_PSH: {ET_ELECTRICITY: OM_STORAGE},
-            P_HYDROGEN: {ET_ELECTRICITY: OM_STORAGE},
+    # Electricity
+    P_INFLEXIBLE_LOAD: {ET_ELECTRICITY: OM_LOAD},
+    P_FLEXIBLE_LOAD: {ET_ELECTRICITY: OM_LOAD},
+    P_PV: {ET_ELECTRICITY: OM_GENERATION},
+    P_WIND: {ET_ELECTRICITY: OM_GENERATION},
+    P_FIXED_GEN: {ET_ELECTRICITY: OM_GENERATION},
+    P_EV: {ET_ELECTRICITY: OM_STORAGE},
+    P_BATTERY: {ET_ELECTRICITY: OM_STORAGE},
+    P_PSH: {ET_ELECTRICITY: OM_STORAGE},
+    P_HYDROGEN: {ET_ELECTRICITY: OM_STORAGE},
 
-            # Heat
-            P_HEAT: {ET_HEAT: OM_LOAD},
-            P_DHW: {ET_HEAT: OM_LOAD},
-            P_HEAT_STORAGE: {ET_ELECTRICITY: OM_STORAGE},
+    # Heat
+    P_HEAT: {ET_HEAT: OM_LOAD},
+    P_DHW: {ET_HEAT: OM_LOAD},
+    P_HEAT_STORAGE: {ET_ELECTRICITY: OM_STORAGE},
 
-            # Hybrid
-            P_HP: {ET_ELECTRICITY: OM_LOAD, ET_HEAT: OM_GENERATION},
-        }
+    # Hybrid
+    P_HP: {ET_ELECTRICITY: OM_LOAD, ET_HEAT: OM_GENERATION},
+}
