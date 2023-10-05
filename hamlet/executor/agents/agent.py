@@ -57,8 +57,7 @@ class AgentFactory:
 class AgentBase:
     """Base class for all agents. It provides a default implementation of the run method."""
 
-    def __init__(self, agent_type: str, agent: AgentDB, timetable: pl.DataFrame, database: Database):
-
+    def __init__(self, agent_type: str, agent: AgentDB, timetable: pl.LazyFrame, database: Database):
 
         # Type of agent
         self.agent_type = agent_type
@@ -73,13 +72,13 @@ class AgentBase:
         self.db = database
 
         # Market data
-        self.market = pl.LazyFrame()  # TODO: Replace with the market results
+        self.market = None
 
     def execute(self):
         """Executes the agent"""
 
         # Get the market data from the database
-        # self.get_market_data()
+        self.get_market_data()
         # Get the grid data from the database
         self.get_grid_data()
         # Get forecasts
@@ -95,7 +94,7 @@ class AgentBase:
         """Gets the market data from the database"""
 
         # Get the market data
-        self.market = self.db.get_market_data()
+        self.market = self.db.get_market_data(region=self.timetable.collect()[c.TC_REGION].head(1).to_list()[0])
 
     def get_grid_data(self):
         """Gets the grid data from the database"""
