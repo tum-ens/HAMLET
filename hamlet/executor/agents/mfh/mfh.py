@@ -15,8 +15,8 @@ import traceback
 from datetime import datetime
 
 
-class Ctsp:
+class Mfh:
 
     def __init__(self, data, timetable):
-        self.data = data
-        self.timetable = timetable
+
+        raise NotImplementedError
