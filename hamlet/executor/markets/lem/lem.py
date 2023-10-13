@@ -20,7 +20,7 @@ from hamlet.executor.utilities.database.database import Database
 from pprint import pprint
 
 # TODO: Considerations
-# - Each timestep is a new instance of the agent
+# - Each timestep is a new instance of the lem
 # - The commands are executed in the order of the methods
 
 
@@ -104,6 +104,7 @@ class Lem:
 
         # Execute the actions
         for action in actions:
+            print(action)
             self.actions[action](clearing_type, clearing_method, pricing_method, coupling_method)
 
         # Couple market
@@ -129,7 +130,7 @@ class Lem:
         """
         # TODO: For now practically ignores all the parameters and just clears the market. Needs to change.
 
-        # TODO: Check if there is anything to clear otherwise return
+        # Check if there is anything to clear otherwise return
         if self.bids_offers.collect().is_empty():
             return (self.transactions, self.offers_uncleared, self.bids_uncleared, self.offers_cleared,
                     self.bids_cleared)
@@ -238,6 +239,7 @@ class Lem:
             print(offers)
             print(bids_offers.collect())
             print(trades_cleared.collect())
+            print(trades_uncleared.collect())
         print(f'Time: {time.perf_counter() - start}')
         exit()
 
