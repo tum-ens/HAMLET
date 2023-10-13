@@ -190,10 +190,10 @@ class Linear(TradingBase):
             [
                 (((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table
                   * (len_table - pl.col('row_number'))) + pl.col('energy_price_buy'))
-                .alias(c.TC_PRICE_PU_IN).round().cast(pl.Int32),
+                .alias(c.TC_PRICE_PU_OUT).round().cast(pl.Int32),
                 (pl.col('energy_price_buy')
                  + ((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table * pl.col('row_number')))
-                .alias(c.TC_PRICE_PU_OUT).round().cast(pl.Int32),
+                .alias(c.TC_PRICE_PU_IN).round().cast(pl.Int32),
             ]
         )
 

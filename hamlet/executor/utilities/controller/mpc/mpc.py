@@ -14,7 +14,7 @@ import pandas as pd
 from pprint import pprint
 from hamlet import constants as c
 from hamlet.executor.utilities.controller.mpc import lincomps
-from hamlet.executor.utilities.controller.base import ControllerBase
+from hamlet.executor.utilities.controller.controller_base import ControllerBase
 from hamlet.executor.utilities.database.database import Database as db
 from hamlet import functions as f
 
