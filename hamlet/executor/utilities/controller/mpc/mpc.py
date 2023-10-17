@@ -359,9 +359,6 @@ class Mpc(ControllerBase):
             # Filter for columns that contain the energy type
             src_cols = [col for col in src_cols for e in self.energy_types if e in col]
 
-            # print(np.array(solution[f'continuous_power_{c.PF_IN}']).astype(int))
-            # print(np.array(solution[f'continuous_power_{c.PF_OUT}']).astype(int))
-
             # Change the solution so that the in and out columns are computed as one
             # TODO: Take out round() once values are surely correct
             adjusted_solution = {}
@@ -389,9 +386,9 @@ class Mpc(ControllerBase):
             # Update setpoints
             self.setpoints = self.setpoints.update(adjusted_solution, on=c.TC_TIMESTAMP)
 
-            # with pl.Config(tbl_cols=20, fmt_str_lengths=200):
-            #     print(self.setpoints)
-            # exit()
+            #with pl.Config(tbl_cols=20, fmt_str_lengths=200):
+            #    print(self.setpoints)
+            #exit()
 
             # Make LazyFrame again
             self.setpoints = self.setpoints.lazy()

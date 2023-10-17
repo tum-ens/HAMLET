@@ -103,10 +103,23 @@ class Rtc(ControllerBase):
             self.market_types = self.timetable.collect().select(c.TC_MARKET).unique().to_series().to_list()
             # Assign each market name to an energy type
             self.markets = {name: c.TRADED_ENERGY[mtype] for name, mtype in zip(self.market_names, self.market_types)}
-            # Filter the market data to only include the rows concerning the agent
-            # TODO: self.market = db.filter_market_data(self.market, [seller, vendor columns], self.agent.id)
+            # Get the market results for each market
+            self.market_results = {}
+            for market_type, market in self.market.items():
+                for market_name, data in market.items():
+                    # Get transactions table
+                    transactions = data.market_transactions.collect()
+                    # self.market_results[market_name] = db.filter_market_data(transactions, c.TC_ID_AGENT, self.agent.agent_id)  # Runs into an error for which the workaround was installed
+                    # Filter for agent ID
+                    transactions = transactions.filter(pl.col(c.TC_ID_AGENT) == self.agent.agent_id)
+                    # Get net energy amount for market
+                    self.market_results[market_name] = (transactions
+                                                        .select(pl.sum(c.TC_ENERGY_IN) - pl.sum(c.TC_ENERGY_OUT))
+                                                        .to_series().to_list()[0])
 
             # Obtain maximum balancing power
+            # TODO: Deprecate balancing market in the equations. The relevant value is the market itself.
+            #  Balancing occurs in the market section of the code.
             # TODO: self.balancing = db.get_balancing_power(market name, energy type)
 
             # Available plants
@@ -182,7 +195,10 @@ class Rtc(ControllerBase):
             for market in self.markets:
                 # Create market object
                 self.market_objects[market] = lincomps.Market(name=market,
-                                                              timeseries=self.market)
+                                                              timeseries=self.market,
+                                                              market_result=self.market_results[market],
+                                                              delta=self.dt)
+
 
                 # Create balancing market object
                 self.market_objects[f'{market}_{c.MT_BALANCING}'] = lincomps.Balancing(
@@ -310,41 +326,6 @@ class Rtc(ControllerBase):
 
             return self.model
 
-        def define_objective_gpt(self):
-            # TODO: This is the answer it gave to me to the following request:
-            #  "I want it to also include that preferably excess power generation is first put into electric vehicles,
-            #  then batteries and then the heat pump. The electric vehicle should also not be charged by the battery,
-            #  only if otherwise balancing energy would be needed.
-            #  Can you rewrite the objective function to reflect that?"  --> Check if any good and debug if worth it
-            # Weights to prioritize components
-            w1 = 1  # weight for electric vehicle
-            w2 = 2  # weight for battery
-            w3 = 3  # weight for heat pump
-            w4 = 4  # weight for balancing energy
-
-            # Initialize the objective function as zero
-            objective = 0
-
-            # Loop through the model's variables to identify different components and balancing variables
-            for variable_name, variable in self.model.variables.items():
-                if variable_name.startswith('ev_charge'):
-                    # Give priority to EV charging from excess generation, not from battery
-                    if 'from_battery' not in variable_name:
-                        objective += w1 * variable
-                    else:
-                        objective += w4 * variable
-                elif variable_name.startswith('battery_charge'):
-                    objective += w2 * variable
-                elif variable_name.startswith('heat_pump_use'):
-                    objective += w3 * variable
-                elif variable_name.startswith('balancing_'):
-                    objective += w4 * variable
-
-            # Set the objective function to the model with the minimize direction
-            self.model.add_objective(objective, sense="min")
-
-            return self.model
-
         def run(self):
 
             # Solve the optimization problem
@@ -405,7 +386,7 @@ class Rtc(ControllerBase):
 
             # Shift index according to timetable time
             self.setpoints.index = [self.timetable.collect()[0, c.TC_TIMESTAMP] + self.dt * t
-                           for t in range(len(self.setpoints))]
+                                    for t in range(len(self.setpoints))]
 
             # Update setpoints
             # TODO: Do this similar to the one in mpc (columns are added if missing, otherwise replaced)
@@ -417,9 +398,19 @@ class Rtc(ControllerBase):
                 # Assign setpoint value to first row
                 self.setpoints[0, src_col] = solution[src_col]
 
+            # Sum the respective market columns into one column
+            # (Will be deprecated once the balancing variable is taken out of the equations)
+            self.setpoints, src_cols = self.sum_market_columns(self.setpoints, src_cols, list(self.markets.keys()))
+
             # Drop all setpoint columns that are not part of src_cols (plus keep timestamp and timestep column)
             sel_cols = [self.setpoints.columns[0]] + src_cols
             self.setpoints = self.setpoints.select(sel_cols)
+
+            #with pl.Config() as cfg:
+            #    cfg.set_tbl_cols(20)
+            #    cfg.set_fmt_str_lengths(200)
+            #    print(self.setpoints)
+            #exit()
 
             # Make LazyFrame again
             self.setpoints = self.setpoints.lazy()
@@ -516,6 +507,27 @@ class Rtc(ControllerBase):
             self.meters = self.meters.lazy()
 
             return self.meters
+
+        @staticmethod
+        def sum_market_columns(df: pl.DataFrame, src_cols: list, markets: list):
+
+            # Loop through each market
+            for market_name in markets:
+                # Get the list of columns starting with 'lem_conti'
+                columns_to_combine = [col for col in df.columns if col.startswith(market_name)]
+
+                # Find the column with the shortest length
+                col_name = columns_to_combine[columns_to_combine.index(min(columns_to_combine, key=len))]
+
+                # Combine columns into a new column
+                df = df.with_columns(
+                    df.select(columns_to_combine).sum(axis=1).alias(col_name),
+                )
+
+            # Drop the columns containing 'balancing'
+            src_cols = [col for col in src_cols if c.MT_BALANCING not in col]
+
+            return df, src_cols
 
 
     class RuleBased(RtcBase):  # Note the change in class name

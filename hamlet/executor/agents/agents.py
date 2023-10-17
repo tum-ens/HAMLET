@@ -9,6 +9,12 @@ __email__ = "markus.doepfert@tum.de"
 # Imports
 import polars as pl
 from hamlet.executor.utilities.database.database import Database
+from hamlet.executor.agents.sfh.sfh import Sfh
+from hamlet.executor.agents.mfh.mfh import Mfh
+from hamlet.executor.agents.ctsp.ctsp import Ctsp
+from hamlet.executor.agents.industry.industry import Industry
+from hamlet.executor.agents.producer.producer import Producer
+from hamlet.executor.agents.storage.storage import Storage
 
 
 class Agent:
@@ -24,12 +30,6 @@ class Agent:
 class AgentFactory:
     @staticmethod
     def create_agent(agent_type, data, timetable, database: Database):
-        from hamlet.executor.agents.sfh.sfh import Sfh
-        from hamlet.executor.agents.mfh.mfh import Mfh
-        from hamlet.executor.agents.ctsp.ctsp import Ctsp
-        from hamlet.executor.agents.industry.industry import Industry
-        from hamlet.executor.agents.producer.producer import Producer
-        from hamlet.executor.agents.storage.storage import Storage
         types = {
             'sfh': Sfh,
             'mfh': Mfh,

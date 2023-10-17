@@ -130,6 +130,9 @@ class Lem:
         """
         # TODO: For now practically ignores all the parameters and just clears the market. Needs to change.
 
+        # Definition of temporary column names
+        c_energy_cumsum = 'energy_cumsum'
+
         # Check if there is anything to clear otherwise return
         if self.bids_offers.collect().is_empty():
             return (self.transactions, self.offers_uncleared, self.bids_uncleared, self.offers_cleared,
@@ -169,13 +172,13 @@ class Lem:
         #bids_offers = self.bids_offers.collect().vstack(retailer)
         bids_offers = pl.concat([self.bids_offers, retailer], how='align')
 
-        #with pl.Config() as cfg:
-        #    cfg.set_tbl_width_chars(400)
-        #    cfg.set_tbl_cols(25)
-        #    print(self.bids_offers.collect())
-        #    print(retailer.collect())
-        #    print(bids_offers.collect())
-        #exit()
+        with pl.Config() as cfg:
+           cfg.set_tbl_width_chars(400)
+           cfg.set_tbl_cols(25)
+           print(self.bids_offers.collect())
+           print(retailer.collect())
+           print(bids_offers.collect())
+        exit()
 
         # Split the bids and offers into separate bids and offers tables
         bids = bids_offers.filter(pl.col(c.TC_ENERGY_IN) > 0)
@@ -184,6 +187,10 @@ class Lem:
         # Drop the respective empty columns
         bids = bids.drop(c.TC_ENERGY_OUT, c.TC_PRICE_PU_OUT)
         offers = offers.drop(c.TC_ENERGY_IN, c.TC_PRICE_PU_IN)
+
+        # Rename agent column
+        bids = bids.rename({c.TC_ID_AGENT: c.TC_ID_AGENT_IN})
+        offers = offers.rename({c.TC_ID_AGENT: c.TC_ID_AGENT_OUT})
 
         # Shuffle the data to avoid bias
         bids = bids.collect().sample(fraction=1, shuffle=True)
@@ -225,11 +232,23 @@ class Lem:
         # Create new dataframe with the cleared bids and offers
         trades_cleared = bids_offers.filter(pl.col(c.TC_PRICE_PU_IN) >= pl.col(c.TC_PRICE_PU_OUT))
 
-        # Create new dataframe with the uncleared bids and offers
-        trades_uncleared = bids_offers.select(pl.col(c.TC_PRICE_PU_IN) < pl.col(c.TC_PRICE_PU_OUT))
-
-        # Calculate the price of the trades
+        # Calculate the pu price of the trades
         trades_cleared = self.pricing[pricing_method](trades_cleared)
+
+        # Calculate the price and energy of the trades
+        trades_cleared = trades_cleared.with_columns(
+            (trades_cleared.select([c.TC_ENERGY_IN, c.TC_ENERGY_OUT]).collect().min(axis=1).alias(c.TC_ENERGY)),
+        )
+        trades_cleared = trades_cleared.with_columns(
+            (pl.col(c.TC_PRICE_PU) * pl.col(c.TC_ENERGY)).alias(c.TC_PRICE),
+        )
+
+        # Make trades_cleared a dataframe
+        trades_cleared = trades_cleared.collect()
+
+        # Create new dataframe with the uncleared bids and offers
+        # Note: this tables includes the trades that were not cleared and the ones that were only partially cleared
+        trades_uncleared = bids_offers.filter(pl.col(c.TC_PRICE_PU_IN) < pl.col(c.TC_PRICE_PU_OUT))
 
         with pl.Config() as cfg:
             cfg.set_tbl_width_chars(400)
@@ -237,18 +256,111 @@ class Lem:
             cfg.set_tbl_rows(20)
             print(bids)
             print(offers)
-            print(bids_offers.collect())
-            print(trades_cleared.collect())
-            print(trades_uncleared.collect())
-        print(f'Time: {time.perf_counter() - start}')
-        exit()
+            print(trades_cleared)
+
+        # Create the cleared tables
+        # Filter out the bids and offers that were cleared by checking for the same agent id
+        bids_cleared = bids.join(trades_cleared, on=c.TC_ID_AGENT_IN, how='semi')
+        offers_cleared = offers.join(trades_cleared, on=c.TC_ID_AGENT_OUT, how='semi')
+
+        # Add the energy, price pu and price column from the trades_cleared table
+        cols = [c.TC_ID_AGENT_IN, c.TC_ENERGY, c.TC_PRICE_PU, c.TC_PRICE]
+        bids_cleared = bids_cleared.join(trades_cleared.select(cols), on=c.TC_ID_AGENT_IN, how='inner')
+        cols = [c.TC_ID_AGENT_OUT, c.TC_ENERGY, c.TC_PRICE_PU, c.TC_PRICE]
+        offers_cleared = offers_cleared.join(trades_cleared.select(cols), on=c.TC_ID_AGENT_OUT, how='inner')
+
+        # Drop the unnecessary columns and rename the relevant ones to create the final tables
+        bids_cleared = bids_cleared.drop(c.TC_ENERGY_IN, c.TC_PRICE_PU_IN, 'energy_cumsum')
+        bids_cleared = bids_cleared.rename({c.TC_ENERGY: c.TC_ENERGY_IN, c.TC_PRICE_PU: c.TC_PRICE_PU_IN,
+                                            c.TC_PRICE: c.TC_PRICE_IN})
+        offers_cleared = offers_cleared.drop(c.TC_ENERGY_OUT, c.TC_PRICE_PU_OUT, 'energy_cumsum')
+        offers_cleared = offers_cleared.rename({c.TC_ENERGY: c.TC_ENERGY_OUT, c.TC_PRICE_PU: c.TC_PRICE_PU_OUT,
+                                                c.TC_PRICE: c.TC_PRICE_OUT})
+
+        # Create the uncleared tables
+        # First take all bids and offers
+        bids_uncleared = bids
+        offers_uncleared = offers
+
+        # Subtract the cleared bids and offers energy amount by agent id
+        # Bids
+        # First get the sum of the cleared energy by agent id
+        bids_cleared_by_agent_id = bids_cleared.groupby(c.TC_ID_AGENT_IN).sum()
+        bids_cleared_by_agent_id = bids_cleared_by_agent_id.rename({c.TC_ENERGY_IN: c.TC_ENERGY})
+        bids_cleared_by_agent_id = bids_cleared_by_agent_id.select([c.TC_ID_AGENT_IN, c.TC_ENERGY])
+        # Join the dataframes to have the information about the energy that was cleared
+        bids_uncleared = bids_uncleared.join(bids_cleared_by_agent_id, on=c.TC_ID_AGENT_IN, how='outer')
+        # Set all null values in the energy column to 0
+        bids_uncleared = bids_uncleared.fill_null(0)
+        # Subtract the cleared energy from the uncleared energy
+        bids_uncleared = bids_uncleared.with_columns(
+            (pl.col(c.TC_ENERGY_IN) - pl.col(c.TC_ENERGY)).alias(c.TC_ENERGY_IN),
+        )
+        # Drop the rows where the energy is smaller or equal to 0
+        bids_uncleared = bids_uncleared.filter(pl.col(c.TC_ENERGY_IN) > 0)
+        # Drop the energy and energy_cumsum column
+        bids_uncleared = bids_uncleared.drop(c.TC_ENERGY, 'energy_cumsum')
+        # Drop all rows where the agent id is the same as the one in the retailer table
+        retailer_names = retailer.select(c.TC_ID_AGENT).collect().to_series().to_list()
+        bids_uncleared = bids_uncleared.filter(~pl.col(c.TC_ID_AGENT_IN).is_in(retailer_names))
+        # Offers
+        # First get the sum of the cleared energy by agent id
+        offers_cleared_by_agent_id = offers_cleared.groupby(c.TC_ID_AGENT_OUT).sum()
+        offers_cleared_by_agent_id = offers_cleared_by_agent_id.rename({c.TC_ENERGY_OUT: c.TC_ENERGY})
+        offers_cleared_by_agent_id = offers_cleared_by_agent_id.select([c.TC_ID_AGENT_OUT, c.TC_ENERGY])
+        # Join the dataframes to have the information about the energy that was cleared
+        offers_uncleared = offers_uncleared.join(offers_cleared_by_agent_id, on=c.TC_ID_AGENT_OUT, how='outer')
+        # Set all null values in the energy column to 0
+        offers_uncleared = offers_uncleared.fill_null(0)
+        # Subtract the cleared energy from the uncleared energy
+        offers_uncleared = offers_uncleared.with_columns(
+            (pl.col(c.TC_ENERGY_OUT) - pl.col(c.TC_ENERGY)).alias(c.TC_ENERGY_OUT),
+        )
+        # Drop the rows where the energy is smaller or equal to 0
+        offers_uncleared = offers_uncleared.filter(pl.col(c.TC_ENERGY_OUT) > 0)
+        # Drop the energy and energy_cumsum column
+        offers_uncleared = offers_uncleared.drop(c.TC_ENERGY, 'energy_cumsum')
+        # Drop all rows where the agent id is the same as the one in the retailer table
+        offers_uncleared = offers_uncleared.filter(~pl.col(c.TC_ID_AGENT_OUT).is_in(retailer_names))
+
+        # with pl.Config() as cfg:
+        #     cfg.set_tbl_width_chars(400)
+        #     cfg.set_tbl_cols(20)
+        #     cfg.set_tbl_rows(20)
+        #     print(bids_cleared)
+        #     #print(bids_cleared_by_agent_id)
+        #     print(bids_uncleared)
+        #     print(retailer.collect())
+        #     print(offers_cleared)
+        #     #print(offers_cleared_by_agent_id)
+        #     print(offers_uncleared)
+        #     #print(bids_offers.collect())
+        #     #print(trades_cleared.collect())
+        #     #print(trades_uncleared.collect())
+        #     #print(merged)
+        # print(f'Time: {time.perf_counter() - start}')
+        # exit()
+
+        # TODO: Reduce the available energy of the retailer by the amount that was bought/sold to them
 
         # Add the trades to their corresponding tables
-        self.bids_cleared = self.bids_cleared.append(trades_cleared.select(pl.col(c.TC_ENERGY_IN) > 0))
-        self.offers_cleared = self.offers_cleared.append(trades_cleared.select(pl.col(c.TC_ENERGY_OUT) > 0))
-        self.bids_uncleared = self.bids_uncleared.append(trades_uncleared.select(pl.col(c.TC_ENERGY_IN) > 0))
-        self.offers_uncleared = self.offers_uncleared.append(trades_uncleared.select(pl.col(c.TC_ENERGY_OUT) > 0))
-        self.transactions = self.transactions.append(trades_cleared)
+        self.bids_cleared = pl.concat([self.bids_cleared, bids_cleared], how='align')
+        self.offers_cleared = pl.concat([self.offers_cleared, offers_cleared], how='align')
+        self.bids_uncleared = pl.concat([self.bids_uncleared, bids_uncleared], how='align')
+        self.offers_uncleared = pl.concat([self.offers_uncleared, offers_uncleared], how='align')
+        self.transactions = pl.concat([self.transactions, trades_cleared], how='align')
+
+        with pl.Config() as cfg:
+            cfg.set_tbl_width_chars(400)
+            cfg.set_tbl_cols(20)
+            cfg.set_tbl_rows(20)
+            print(self.bids_cleared.collect())
+            print(self.offers_cleared.collect())
+            print(self.bids_uncleared.collect())
+            print(self.offers_uncleared.collect())
+            print(self.transactions.collect())
+        print(f'Time: {time.perf_counter() - start}')
+        exit()
 
         # TODO: Probably needs to append the transaction to the market right away
 
@@ -305,21 +417,15 @@ class Lem:
         ...
 
     def __pricing_uniform(self, trades):
-        """Prices the market with the uniform pricing method"""
+        """Prices the market with the uniform pricing method, thus everyone gets the same price which is the average
+        of the last value of the price_pu_in and price_pu_out"""
 
-        # OLD:
-        # Calculate uniform prices if demanded
-        #if 'uniform' == config_lem['types_pricing_ex_ante'][i]:
-        #    positions_cleared.loc[:, db_obj.db_param.PRICE_ENERGY_MARKET_ + type_pricing] = \
-        #        ((positions_cleared[db_obj.db_param.PRICE_ENERGY_OFFER].iloc[-1] +
-        #          positions_cleared[db_obj.db_param.PRICE_ENERGY_BID].iloc[-1]) / 2).astype(int)
-
-        # Add column that is the average of the last value of the price_pu_in and price_pu_out
+        # Price PU column: average of the last value of the price_pu_in and price_pu_out
         trades = trades.with_columns(
-            [
-                ((pl.col(c.TC_PRICE_PU_OUT).tail() + pl.col(c.TC_PRICE_PU_IN).tail()) / 2).round().cast(pl.Int32).alias(c.TC_PRICE_PU),
-            ]
+                ((pl.col(c.TC_PRICE_PU_OUT).tail() + pl.col(c.TC_PRICE_PU_IN).tail()) / 2)
+                .round().cast(pl.Int32).alias(c.TC_PRICE_PU),
         )
+
         return trades
 
     def __pricing_discriminatory(self):

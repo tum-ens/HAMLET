@@ -142,8 +142,8 @@ class TradingBase:
             ]
         )
 
-        # Drop row where time_to_trade is 0 or negative
-        self.bids_offers = self.bids_offers.filter(pl.col('time_to_trade') > 0)
+        # Drop row where time_to_trade is smaller than 0
+        self.bids_offers = self.bids_offers.filter(pl.col('time_to_trade') >= 0)
 
         return self.bids_offers
 
@@ -190,10 +190,10 @@ class Linear(TradingBase):
             [
                 (((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table
                   * (len_table - pl.col('row_number'))) + pl.col('energy_price_buy'))
-                .alias(c.TC_PRICE_PU_OUT).round().cast(pl.Int32),
+                .alias(c.TC_PRICE_PU_IN).round().cast(pl.Int32),
                 (pl.col('energy_price_buy')
                  + ((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table * pl.col('row_number')))
-                .alias(c.TC_PRICE_PU_IN).round().cast(pl.Int32),
+                .alias(c.TC_PRICE_PU_OUT).round().cast(pl.Int32),
             ]
         )
 
@@ -206,8 +206,9 @@ class Linear(TradingBase):
         # Update agent information
         self.agent.bids_offers = self.bids_offers
 
-        # with pl.Config(set_tbl_cols=20, set_tbl_width_chars=400):
-        #     print(self.bids_offers.collect())
+        #with pl.Config(set_tbl_cols=20, set_tbl_width_chars=400):
+        #    print(self.bids_offers.collect())
+        #exit()
 
         return self.agent
 
