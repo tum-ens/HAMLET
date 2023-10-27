@@ -41,7 +41,7 @@ class TradingBase:
 
         # Get the market data for the given market and agent
         # TODO: Include once it is possible to get the market data. It should be subtracted from the setpoints
-        # self.market_data = self.market_data.filter((pl.col(c.TC_MARKET) == self.market)
+        #self.market_data = self.market_data.filter((pl.col(c.TC_MARKET) == self.market)
         #                                            & (pl.col(c.TC_ID_AGENT) == self.agent)
         #                                            & (pl.col(c.TC_TIMESTEP) >= self.timetable[c.TC_TIMESTEP].first())
         #                                            & (pl.col(c.TC_TIMESTEP) <= self.timetable[c.TC_TIMESTEP].last()))
@@ -76,18 +76,23 @@ class TradingBase:
 
         # Get the forecast of the prices
         # TODO: Include once available
-        #self.forecast = self.agent.forecasts
+        # self.forecast = self.agent.forecasts
         # Dummy values for now
         # TODO: Delete once forecast is available
         self.forecast = self.timetable.clone()
         self.forecast = self.forecast.with_columns(
             [
-                pl.Series([0.14] * len(self.market_data.collect())).alias('energy_sell'),
-                pl.Series([0.06] * len(self.market_data.collect())).alias('energy_buy'),
+                pl.Series([1400] * len(self.market_data.collect())).alias('energy_price_sell'),
+                pl.Series([600] * len(self.market_data.collect())).alias('energy_price_buy'),
             ]
         )
         # Drop unnecessary columns
-        self.forecast = self.forecast.drop([c.TC_TIMESTAMP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE, c.TC_ACTIONS, c.TC_CLEARING_TYPE, c.TC_CLEARING_METHOD, c.TC_CLEARING_PRICING, c.TC_COUPLING])
+        self.forecast = self.forecast.drop([c.TC_TIMESTAMP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE,
+                                            c.TC_ACTIONS, c.TC_CLEARING_TYPE, c.TC_CLEARING_METHOD,
+                                            c.TC_CLEARING_PRICING, c.TC_COUPLING])
+
+        # with pl.Config(set_tbl_cols=20, set_tbl_width_chars=400):
+        #     print(self.forecast.collect())
 
     def create_bids_offers(self):
         raise NotImplementedError('This method has yet to be implemented.')
@@ -137,8 +142,8 @@ class TradingBase:
             ]
         )
 
-        # Drop row where time_to_trade is 0 or negative
-        self.bids_offers = self.bids_offers.filter(pl.col('time_to_trade') > 0)
+        # Drop row where time_to_trade is smaller than 0
+        self.bids_offers = self.bids_offers.filter(pl.col('time_to_trade') >= 0)
 
         return self.bids_offers
 
@@ -150,7 +155,8 @@ class TradingBase:
         self.bids_offers = self.bids_offers.filter((pl.col(c.TC_ENERGY_IN) != 0) | (pl.col(c.TC_ENERGY_OUT) != 0))
 
         # Drop unnecessary columns
-        self.bids_offers = self.bids_offers.drop(['within_horizon', 'time_to_trade', 'energy_sell', 'energy_buy'])
+        self.bids_offers = self.bids_offers.drop(['within_horizon', 'time_to_trade',
+                                                  'energy_price_sell', 'energy_price_buy'])
 
         return self.bids_offers
 
@@ -165,6 +171,9 @@ class Linear(TradingBase):
         # Preprocess the bids and offers table
         self.bids_offers = self._preprocess_bids_offers()
 
+        # with pl.Config(set_tbl_cols=20, set_tbl_width_chars=400):
+        #     print(self.bids_offers.collect())
+
         # Get the length of the table
         len_table = len(self.bids_offers.collect())
 
@@ -176,14 +185,15 @@ class Linear(TradingBase):
         )
 
         # Add columns for the price per unit
+        # TODO: Change them around as they seem in the wrong order
         self.bids_offers = self.bids_offers.with_columns(
             [
-                (((pl.col('energy_sell') - pl.col('energy_buy')) / len_table * (len_table - pl.col('row_number')))
-                 + pl.col('energy_buy'))
-                .alias(c.TC_PRICE_PU_IN),
-                (pl.col('energy_buy')
-                 + ((pl.col('energy_sell') - pl.col('energy_buy')) / len_table * pl.col('row_number')))
-                .alias(c.TC_PRICE_PU_OUT),
+                (((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table
+                  * (len_table - pl.col('row_number'))) + pl.col('energy_price_buy'))
+                .alias(c.TC_PRICE_PU_IN).round().cast(pl.Int32),
+                (pl.col('energy_price_buy')
+                 + ((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table * pl.col('row_number')))
+                .alias(c.TC_PRICE_PU_OUT).round().cast(pl.Int32),
             ]
         )
 
@@ -193,19 +203,19 @@ class Linear(TradingBase):
         # Postprocess the bids and offers table
         self.bids_offers = self._postprocess_bids_offers()
 
-        # Print output
-        # with pl.Config() as cfg:
-        #     cfg.set_tbl_cols(20)
-        #     cfg.set_tbl_width_chars(200)
-        #     print(self.bids_offers.collect())
-
         # Update agent information
         self.agent.bids_offers = self.bids_offers
+
+        #with pl.Config(set_tbl_cols=20, set_tbl_width_chars=400):
+        #    print(self.bids_offers.collect())
+        #exit()
 
         return self.agent
 
 
 class Zi(TradingBase):
+    """This class implements the zero intelligence trading strategy.
+    It means that the agent will choose a random value."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -221,25 +231,19 @@ class Zi(TradingBase):
         # Add columns for the price per unit
         self.bids_offers = self.bids_offers.with_columns(
             [
-                (((pl.col('energy_sell') - pl.col('energy_buy'))
+                (((pl.col('energy_price_sell') - pl.col('energy_price_buy'))
                   * pl.Series([random.random() for _ in range(len_table)]))
-                 + pl.col('energy_buy'))
+                 + pl.col('energy_price_buy'))
                 .alias(c.TC_PRICE_PU_IN),
-                (((pl.col('energy_sell') - pl.col('energy_buy'))
+                (((pl.col('energy_price_sell') - pl.col('energy_price_buy'))
                   * pl.Series([random.random() for _ in range(len_table)]))
-                 + pl.col('energy_buy'))
+                 + pl.col('energy_price_buy'))
                 .alias(c.TC_PRICE_PU_OUT),
             ]
         )
 
         # Postprocess the bids and offers table
         self.bids_offers = self._postprocess_bids_offers()
-
-        # Print output
-        # with pl.Config() as cfg:
-        #     cfg.set_tbl_cols(20)
-        #     cfg.set_tbl_width_chars(200)
-        #     print(self.bids_offers.collect())
 
         # Update agent information
         self.agent.bids_offers = self.bids_offers

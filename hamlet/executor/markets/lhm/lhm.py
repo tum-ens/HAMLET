@@ -19,3 +19,5 @@ class Lhm:
 
     def __init__(self, timetable):
         self.timetable = timetable
+
+        raise NotImplementedError

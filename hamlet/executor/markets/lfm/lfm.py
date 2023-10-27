@@ -15,7 +15,9 @@ import traceback
 from datetime import datetime
 
 
-class Lh2m:
+class Lfm:
 
     def __init__(self, timetable):
         self.timetable = timetable
+
+        raise NotImplementedError

@@ -23,7 +23,7 @@ import pandapower as pp
 import concurrent.futures
 from typing import Callable
 from datetime import datetime
-from hamlet.executor.agents.agent import Agent
+from hamlet.executor.agents.agents import Agent
 from hamlet.executor.markets.markets import Markets
 from hamlet.executor.grids.grids import Grids
 from hamlet.executor.utilities.database.database import Database
@@ -98,9 +98,10 @@ class Executor:
         """
 
         # Get number of logical processors (for parallelization)
+        # TODO: Benchmark with physical processors
         if not self.num_workers:
             self.num_workers = os.cpu_count() - 1  # logical processors (threads) - 1
-        # num_workers = mp.cpu_count() - 1  # physical processors - 1
+            # num_workers = mp.cpu_count() - 1  # physical processors - 1
         # Apparently this calculates the number of usable CPUs: len(os.sched_getaffinity(0)) (see os manual)
 
         # Setup up the thread pool for parallelization
@@ -113,7 +114,6 @@ class Executor:
         # Iterate over timetable by timestamp
         timetable = self.timetable.collect()
 
-        # TODO: Add progress bar @Jiahe
         self.progress_bar.reset(total=len(timetable.partition_by('timestamp')))
         self.progress_bar.set_description_str(desc='Start execution')
 
@@ -136,7 +136,7 @@ class Executor:
                                                       region_str + ': ')
 
                 # TODO: here print is deactivated
-                sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
+                # sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
 
                 # Execute the agents and market in parallel or sequentially
                 if self.pool:
@@ -152,7 +152,7 @@ class Executor:
                     # Execute the market
                     self.__execute_markets(tasklist=region)
 
-                sys.stdout = sys.__stdout__     # re-activate printing
+                # sys.stdout = sys.__stdout__     # re-activate printing
 
             # Calculate the grids for the current timestamp (calculated together as they are connected)
             self.progress_bar.set_description_str('Executing timestamp ' + timestamp_str + ' for grid: ')
@@ -253,7 +253,11 @@ class Executor:
         results = []
 
         # Iterate over tasklist row by row
+        iter = 0
         for tasks in tasklist.iter_rows(named=True):
+            if iter == 0:
+                iter += 1
+                continue
             # Get the market data for the current market
             market = self.database.get_market_data(region=tasks[c.TC_REGION],
                                                    market_type=tasks[c.TC_MARKET],

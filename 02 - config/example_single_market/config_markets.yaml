@@ -85,13 +85,14 @@ lem_continuous:                       # name of the market (must be unique in it
                                       #   - fixed: prices as defined by 'fixed' parameter
                                       #   - file: prices contained in file provided by 'file' parameter
 
-        fixed:
-          'price': [0.01, 0.10]       # fixed energy settings (retailer market offers from the agents' view)
+        fixed:                        # fixed retail energy settings (retailer market offers from the agents' view)
+          'price': [0.05, 0.15]       # retail energy prices
+                                      # unit: €/kWh
                                       # note: first position is for selling to, second for buying energy from retailer
 
-          'quantity': [1e5, 1e5]      # units: price: ct/kWh | quantity: Wh
+          'quantity': [1e5, 1e5]      # retail energy quantities
+                                      # unit: Wh
                                       # note: first position is for selling, second for buying energy
-                                      # note: the quantities cancel each other out and are therefore net amounts
 
           quality: 0                  # quality that the offered energy should be labelled with on the lem
                                       # note: the value needs to match the index of one of the values under types/qualities
@@ -116,11 +117,11 @@ lem_continuous:                       # name of the market (must be unique in it
 
         fixed:                        # fixed grid fees settings
           local: [0, 0.04]            # local grid fees (applies to this market)
-                                      # unit: ct/kWh
+                                      # unit: €/kWh
                                       # note: first position is for selling, second for buying energy
 
           retail: [0, 0.08]           # retail grid fees (applies to energy purchased form/sold to retailer)
-                                      # unit: ct/kWh
+                                      # unit: €/kWh
                                       # note: first position is for selling, second for buying energy
 
 
@@ -137,7 +138,7 @@ lem_continuous:                       # name of the market (must be unique in it
 
         fixed:                        # fixed levies settings
           price: [0, 0.18]            # price of the levies
-                                      # unit: ct/kWh
+                                      # unit: €/kWh
                                       # note: first position is for selling, second for buying energy
 
         file:
@@ -157,8 +158,8 @@ lem_continuous:                       # name of the market (must be unique in it
                                       #   - file: prices contained in file provided by 'file' parameter
 
         fixed:                        # fixed balancing settings
-          price: [0.10, 0.10]         # balancing energy prices
-                                      # unit: ct/kWh
+          price: [0.04, 0.16]         # balancing energy prices
+                                      # unit: €/kWh
                                       # note: first position is for selling, second for buying energy
 
           quantity: [1e6, 1e6]        # balancing energy quantities

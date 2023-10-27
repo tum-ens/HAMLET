@@ -46,7 +46,8 @@ class Market(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        self.power = 0  # TODO: This needs to be changed to the market result (0 is as if no energy was purchased)
+        self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
+        self.power = int(round(kwargs['market_result'] / self.dt * c.SECONDS_TO_HOURS))  # power in W
 
     def define_variables(self, model, **kwargs):
         energy_type = kwargs['energy_type']

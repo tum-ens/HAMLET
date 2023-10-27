@@ -7,58 +7,18 @@ __email__ = "markus.doepfert@tum.de"
 # This file is in charge of handling the agents in the execution of the scenario
 
 # Imports
-import os
-import pandas as pd
 import polars as pl
-import numpy as np
-import time
-import logging
-import traceback
-from datetime import datetime
-from hamlet.executor.utilities.forecasts.forecaster import Forecaster
 from hamlet.executor.utilities.controller.controller import Controller
 from hamlet.executor.utilities.database.database import Database
 from hamlet.executor.utilities.database.agent_db import AgentDB
 from hamlet.executor.utilities.trading.trading import Trading
 from hamlet import constants as c
-from pprint import pprint
-
-
-class Agent:
-    def __init__(self, agent_type: str, data: dict, timetable: pl.LazyFrame, database: Database):
-
-        # Instance of the agent class
-        self.agent = AgentFactory.create_agent(agent_type, data, timetable, database)
-
-    def execute(self):
-        return self.agent.execute()
-
-
-class AgentFactory:
-    @staticmethod
-    def create_agent(agent_type, data, timetable, database: Database):
-        from hamlet.executor.agents.sfh import Sfh
-        from hamlet.executor.agents.mfh import Mfh
-        from hamlet.executor.agents.ctsp import Ctsp
-        from hamlet.executor.agents.industry import Industry
-        from hamlet.executor.agents.producer import Producer
-        from hamlet.executor.agents.storage import Storage
-        types = {
-            'sfh': Sfh,
-            'mfh': Mfh,
-            'ctsp': Ctsp,
-            'industry': Industry,
-            'producer': Producer,
-            'storage': Storage,
-        }
-        return types[agent_type](data, timetable, database)
 
 
 class AgentBase:
     """Base class for all agents. It provides a default implementation of the run method."""
 
-    def __init__(self, agent_type: str, agent: AgentDB, timetable: pl.DataFrame, database: Database):
-
+    def __init__(self, agent_type: str, agent: AgentDB, timetable: pl.LazyFrame, database: Database):
 
         # Type of agent
         self.agent_type = agent_type
@@ -73,13 +33,13 @@ class AgentBase:
         self.db = database
 
         # Market data
-        self.market = pl.LazyFrame()  # TODO: Replace with the market results
+        self.market = None
 
     def execute(self):
         """Executes the agent"""
 
         # Get the market data from the database
-        # self.get_market_data()
+        self.get_market_data()
         # Get the grid data from the database
         self.get_grid_data()
         # Get forecasts
@@ -95,7 +55,7 @@ class AgentBase:
         """Gets the market data from the database"""
 
         # Get the market data
-        self.market = self.db.get_market_data()
+        self.market = self.db.get_market_data(region=self.timetable.collect()[c.TC_REGION].head(1).to_list()[0])
 
     def get_grid_data(self):
         """Gets the grid data from the database"""
@@ -150,4 +110,3 @@ class AgentBase:
             self.agent = strategy.create_bids_offers()
 
         return self.agent
-

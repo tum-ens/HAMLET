@@ -252,8 +252,8 @@ class Lem(Markets):
         # Add price information
         for key, val in config.items():
             if isinstance(val, list):
-                df[f'{prefix}_{key}_sell'] = val[0]
-                df[f'{prefix}_{key}_buy'] = val[1]
+                df[f'{prefix}_{key}_sell'] = int(val[0] * c.EUR_KWH_TO_EURe7_WH)
+                df[f'{prefix}_{key}_buy'] = int(val[1] * c.EUR_KWH_TO_EURe7_WH)
             else:
                 df[f'{prefix}_{key}'] = val
 

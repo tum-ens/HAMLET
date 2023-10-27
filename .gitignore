@@ -1,5 +1,9 @@
 .idea
 
+# Folders
+**/04 - scenarios/
+**/05 - results/
+
 # C extensions
 *.so
 
