@@ -17,16 +17,17 @@ import hamlet.constants as c
 from hamlet.executor.utilities.database.market_db import MarketDB
 from hamlet.executor.utilities.database.region_db import RegionDB
 from hamlet.executor.utilities.database.database import Database
+from hamlet.executor.markets.market_base import MarketBase
 from pprint import pprint
 
-# TODO: Considerations
-# - Each timestep is a new instance of the lem
-# - The commands are executed in the order of the methods
 
-
-class Lem:
+class Lem(MarketBase):
 
     def __init__(self, market: MarketDB, tasks: dict, database: Database):
+
+        # Call the super class
+        super().__init__()
+
         # Market database
         self.market = market
 
