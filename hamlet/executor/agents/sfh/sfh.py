@@ -6,7 +6,7 @@ __email__ = "markus.doepfert@tum.de"
 
 # Imports
 import hamlet.constants as c
-from hamlet.executor.agents.agents_base import AgentBase
+from hamlet.executor.agents.agent_base import AgentBase
 
 
 class Sfh(AgentBase):
