@@ -23,9 +23,9 @@ import pandapower as pp
 import concurrent.futures
 from typing import Callable
 from datetime import datetime
-from hamlet.executor.agents.agents import Agent
-from hamlet.executor.markets.markets import Markets
-from hamlet.executor.grids.grids import Grids
+from hamlet.executor.agents.agent import Agent
+from hamlet.executor.markets.market import Market
+from hamlet.executor.grids.grid import Grid
 from hamlet.executor.utilities.database.database import Database
 import hamlet.constants as c
 # pl.enable_string_cache(True)
@@ -204,8 +204,8 @@ class Executor:
 
         # Define the function to be executed in parallel
         def tasks(market):
-            # Create an instance of the Markets class and execute its tasks
-            Markets(market).execute()
+            # Create an instance of the Market class and execute its tasks
+            Market(market).execute()
 
         # Create a list to store the markets
         markets_list = []
@@ -262,8 +262,8 @@ class Executor:
             market = self.database.get_market_data(region=tasks[c.TC_REGION],
                                                    market_type=tasks[c.TC_MARKET],
                                                    market_name=tasks[c.TC_NAME])
-            # Create an instance of the Markets class and execute its tasks
-            results.append(Markets(data=market, tasks=tasks, database=self.database).execute())
+            # Create an instance of the Market class and execute its tasks
+            results.append(Market(data=market, tasks=tasks, database=self.database).execute())
 
         # Post the agent data back to the database
         self.database.post_agents_to_region(region=tasklist.collect()[0, c.TC_REGION], agents=results)
@@ -272,7 +272,7 @@ class Executor:
 
         return
         # Pass info to grids class and execute its tasks
-        Grids().execute()
+        Grid().execute()
 
     def pause(self):
         """Pauses the simulation"""
