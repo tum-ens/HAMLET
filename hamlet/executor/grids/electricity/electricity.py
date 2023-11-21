@@ -16,14 +16,17 @@ import logging
 import traceback
 from datetime import datetime
 import pandapower as pp
+from hamlet.executor.grids.grid_base import GridBase
 
-# TODO: Considerations
-# - None so far
+# TODO: This does not work yet but merely the code structure is shown
 
 
-class Electricity:
+class Electricity(GridBase):
 
     def __init__(self, grid: pp.pandapowerNet, trades: pl.DataFrame = None, method: str = 'dc'):
+
+        # Call the super class
+        super().__init__()
 
         # Grid (topology)
         self.grid = grid
