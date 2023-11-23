@@ -1,8 +1,8 @@
 .idea
 
 # Folders
-**/04 - scenarios/
-**/05 - results/
+04 - scenarios/*
+05 - results/*
 
 # C extensions
 *.so
@@ -128,11 +128,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-lem_analysis/monte_carlo/simulations/
-
-lem_analysis/
-
-scripts_case_study_1/
 
 **/__pycache__/
 scripts
