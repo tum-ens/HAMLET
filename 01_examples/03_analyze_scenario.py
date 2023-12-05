@@ -3,7 +3,7 @@ sys.path.append("..")  # Add the parent directory to the Python path for executi
 from hamlet import Analyzer
 
 # Path to the results folder (relative or absolute)
-path = "../05 - results/example_small"
+path = "../05_results/example_small"
 
 # Create the analyzer object
 sim = Analyzer(path)
