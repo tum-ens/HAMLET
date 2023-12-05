@@ -34,6 +34,4 @@ class Market:
 
     def execute(self):
         """Executes the market"""
-
-        # Execute the market's tasks
-        self.market.execute()
+        return self.market.execute()

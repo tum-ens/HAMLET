@@ -62,8 +62,15 @@ MT_LFM = 'lfm'
 MT_LHM = 'lhm'
 MT_LCM = 'lcm'
 MT_LH2M = 'lh2m'
-MT_WHOLESALE = 'wholesale'
-MT_BALANCING = 'balancing'
+MT_WHOLESALE = 'wholesale'  # might not be needed
+MT_BALANCING = 'balancing'  # might not be needed
+
+# TRADE TYPES
+TT_MARKET = 'market'
+TT_RETAIL = 'retail'
+TT_GRID = 'grid'
+TT_LEVIES = 'levies'
+TT_BALANCING = 'balancing'
 
 # TRADED ENERGY TYPES
 TRADED_ENERGY = {
