@@ -42,6 +42,7 @@ class AgentDB:
         """
 
         self.agent_path = path
+        self.agent_save = None  # path to save the agent
         self.agent_type = agent_type
         self.agent_id = agent_id
         self.sub_agents = {}
@@ -91,3 +92,27 @@ class AgentDB:
         """
         self.sub_agents[id] = AgentDB(path, self.agent_type, id)
         self.sub_agents[id].register_agent()
+
+    def save_agent(self, path: str, save_all: bool = False) -> None:
+        """
+        Saves the agent's data to the agent's folder.
+
+        The method saves the agent's data to the agent's folder as files.
+        The data is stored as files with the same name as the class attributes.
+        """
+
+        # Update agent path
+        self.agent_save = os.path.abspath(path)
+
+        # Save data
+        f.save_file(path=os.path.join(self.agent_save, 'meters.ft'), data=self.meters.collect(), df='polars')
+        f.save_file(path=os.path.join(self.agent_save, 'timeseries.ft'), data=self.timeseries.collect(), df='polars')
+        f.save_file(path=os.path.join(self.agent_save, 'socs.ft'), data=self.socs.collect(), df='polars')
+        f.save_file(path=os.path.join(self.agent_save, 'setpoints.ft'), data=self.setpoints.collect(), df='polars')
+        f.save_file(path=os.path.join(self.agent_save, 'forecasts.ft'), data=self.forecasts.collect(), df='polars')
+
+        # Data optional to save as there aren't any changes to them (as of now)
+        if save_all:
+            f.save_file(path=os.path.join(self.agent_save, 'account.json'), data=self.account)
+            f.save_file(path=os.path.join(self.agent_save, 'plants.json'), data=self.plants)
+            f.save_file(path=os.path.join(self.agent_save, 'specs.json'), data=self.specs)
