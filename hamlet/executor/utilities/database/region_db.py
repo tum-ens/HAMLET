@@ -19,6 +19,7 @@ class RegionDB:
     def __init__(self, path):
 
         self.region_path = path
+        self.region_save = None  # path to save the region
         self.agents = {}
         self.markets = {}
         self.subregions = {}
@@ -28,6 +29,16 @@ class RegionDB:
         self.__register_all_agents()
 
         self.__register_all_markets()
+
+    def save_region(self, path):
+        """Save this region."""
+
+        # Update region path
+        self.region_save = os.path.abspath(path)
+
+        self.__save_all_agents()
+
+        self.__save_all_markets()
 
     def register_forecasters_for_agents(self, general: dict):
         """
@@ -70,26 +81,33 @@ class RegionDB:
 
                 # TODO: calculate the new market price, the result should be in this format:
                 # 'new_target' column should contain market price
-                market_price = pl.LazyFrame({c.TC_TIMESTAMP: [], 'new_target': []})
+                market_price = pl.LazyFrame(schema={c.TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                                                    'new_target': pl.Int64})
 
                 for agents in self.agents.values():
                     for agent in agents.values():
+                        # print(f'updating local market for agent {agent.agent_id}')
                         old_target = agent.forecaster.train_data[local_market_key][c.K_TARGET]
+                        # print(old_target.collect())
 
                         # get column name of the old target
                         column_name = old_target.columns
                         column_name.remove(c.TC_TIMESTAMP)
                         column_name = column_name[0]
+                        # print('hi')
 
                         # replace a part of the old target with new target
                         # NOTICE: adjust lazyframe to dataframe if necessary, polars concat is sometimes tricky
-                        new_target = pl.concat([old_target, market_price], how='diagonal')
+                        new_target = pl.concat([old_target, market_price], how='diagonal').collect()
                         new_target = new_target.with_columns(pl.when(pl.col('new_target').is_null())
                                                              .then(pl.col(column_name))
                                                              .otherwise(pl.col('new_target')).alias(column_name))
+                        # print('hi2')
 
                         # delete unnecessary column
                         new_target = new_target.drop('new_target')
+                        # print(new_target)
+                        new_target = new_target.lazy()
 
                         # update forecaster bzw. models
                         # NOTICE: new_target should be lazyframe now
@@ -145,3 +163,36 @@ class RegionDB:
                                                                                          markets_type, market))
                 self.markets[markets_type][market].register_market()
 
+    def __save_all_agents(self):
+        """
+        Save all agents for this region.
+
+        This function loop through the agents dict of this region and save each AgentDB object to the corresponding
+        path.
+
+        """
+
+        for agents_type, agents in self.agents.items():
+            for agent_id, agentDB in agents.items():
+                # Path to save results to
+                path = os.path.join(self.region_save, 'agents', agents_type, agent_id)
+
+                # Save agent data
+                agentDB.save_agent(path)
+                # TODO: Add subagent functionality
+
+    def __save_all_markets(self):
+        """
+        Save all markets for this region.
+
+        This function loop through the markets dict of this region and save each MarketDB object to the corresponding
+        path.
+
+        """
+        for markets_type, markets in self.markets.items():
+            for market_name, marketDB in markets.items():
+                # Path to save results to
+                path = os.path.join(self.region_save, 'markets', markets_type, market_name)
+
+                # Save market data
+                marketDB.save_market(path)

@@ -1,8 +1,16 @@
+import sys
+sys.path.append("..")  # Add the parent directory to the Python path for execution outside of an IDE
 from hamlet import Creator
 
-path = "../02 - config/example_single_market"     # relative or absolute path to the config folder
+# Path to the scenario folder (relative or absolute)
+path = "../02 - config/example_single_market"
 
-simulation = Creator(path=path)
-simulation.new_scenario_from_configs()
-# simulation.new_scenario_from_grids()
-# simulation.new_scenario_from_files()
+# Create the creator object
+sim = Creator(path=path)
+
+# Create the scenario
+sim.new_scenario_from_configs()
+
+# Alternative methods to create the scenario:
+# sim.new_scenario_from_grids()
+# sim.new_scenario_from_files()

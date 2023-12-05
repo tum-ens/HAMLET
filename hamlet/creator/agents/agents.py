@@ -411,6 +411,11 @@ class Agents:
         # Start of the forecasting period in UTC
         start_fcast_train = start - train_period
         # End of the simulation in UTC (one day added to ensure no foreward forecasting issues)
+        # Make sure that fractions are properly read
+        if isinstance(self.setup['time']['duration'], str):
+            numerator, denominator = map(int, self.setup['time']['duration'].split('/'))
+            self.setup['time']['duration'] = numerator / denominator
+        # TODO: Make the end of the simulation the end of the timetable instead of guessing to add one day
         end = start + datetime.timedelta(days=self.setup['time']['duration'] + 1)
         # End of the first forecasting period in UTC
         end_fcast_period = start + datetime.timedelta(seconds=fcast_period)

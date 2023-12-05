@@ -43,7 +43,7 @@ class Database:
 
     ########################################## PUBLIC METHODS ##########################################
 
-    """initialize"""
+    """initialize database"""
 
     def setup_database(self, structure):
         """Initialize the database."""
@@ -323,6 +323,25 @@ class Database:
 
         return filtered_market
 
+    """save database"""
+
+    def save_database(self, path: str):
+        """
+        Save the database to the specified path.
+
+        Args:
+            path: The path to save the database to.
+
+        """
+
+        # create directory if not exists
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        # save region data
+        for region in self.__regions.keys():
+            self.__regions[region].save_region(path=os.path.join(path, region))
+
     ########################################## PRIVATE METHODS ##########################################
 
     def __setup_general(self):
@@ -348,7 +367,7 @@ class Database:
         agents in each region.
 
         """
-        # TODO: evtl. adjust code here if theres problem with multilevel markets
+
         for region in structure.keys():
             # initialize RegionDB object
             self.__regions[region] = RegionDB(os.path.join(os.path.dirname(self.__scenario_path), structure[region]))

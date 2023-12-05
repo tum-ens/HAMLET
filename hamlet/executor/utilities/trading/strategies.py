@@ -33,7 +33,7 @@ class TradingBase:
         self.market = kwargs[c.TC_MARKET]
         self.market_data = kwargs['market_data']
         self.agent = kwargs['agent']
-        self.bids_offers = None
+        self.bids_offers = pl.LazyFrame(schema=c.TS_BIDS_OFFERS)
 
         # Get agent id and trading horizon
         self.agent_id = self.agent.account[c.K_GENERAL]['agent_id']
@@ -105,8 +105,8 @@ class TradingBase:
             (pl.col(c.TC_ENERGY) - pl.col(f'{self.market}_{self.energy_type}')).alias('buy_sell'))
         self.market_data = self.market_data.with_columns(
             [
-                pl.col('buy_sell').apply(lambda x: abs(x) if x > 0 else 0).alias(c.TC_ENERGY_IN),
-                pl.col('buy_sell').apply(lambda x: abs(x) if x < 0 else 0).alias(c.TC_ENERGY_OUT),
+                pl.col('buy_sell').apply(lambda x: abs(x) if x > 0 else 0).alias(c.TC_ENERGY_IN).cast(pl.UInt64),
+                pl.col('buy_sell').apply(lambda x: abs(x) if x < 0 else 0).alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
             ]
         )
 
@@ -115,6 +115,7 @@ class TradingBase:
 
         # Create the dataframe for the bids and offers
         # TODO: In the future this will be based on the market data and the setpoints
+
         self.bids_offers = self.timetable.select([c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME,
                                                   c.TC_ENERGY_TYPE])
 
@@ -123,7 +124,7 @@ class TradingBase:
 
         self.bids_offers = self.bids_offers.with_columns(
             [
-                pl.Series([self.agent_id] * len_table).alias(c.TC_ID_AGENT),
+                pl.Series([self.agent_id] * len_table).alias(c.TC_ID_AGENT).cast(pl.Categorical),
             ]
         )
 
@@ -171,7 +172,7 @@ class Linear(TradingBase):
         # Preprocess the bids and offers table
         self.bids_offers = self._preprocess_bids_offers()
 
-        # with pl.Config(set_tbl_cols=20, set_tbl_width_chars=400):
+        # with pl.Config(set_tbl_cols=20, set_tbl_rows=20, set_tbl_width_chars=400):
         #     print(self.bids_offers.collect())
 
         # Get the length of the table
@@ -185,7 +186,6 @@ class Linear(TradingBase):
         )
 
         # Add columns for the price per unit
-        # TODO: Change them around as they seem in the wrong order
         self.bids_offers = self.bids_offers.with_columns(
             [
                 (((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table
@@ -206,9 +206,8 @@ class Linear(TradingBase):
         # Update agent information
         self.agent.bids_offers = self.bids_offers
 
-        #with pl.Config(set_tbl_cols=20, set_tbl_width_chars=400):
-        #    print(self.bids_offers.collect())
-        #exit()
+        # with pl.Config(set_tbl_cols=20, set_tbl_rows=20, set_tbl_width_chars=400):
+        #     print(self.bids_offers.collect())
 
         return self.agent
 

@@ -118,6 +118,11 @@ def save_file(path: str, data, index: bool = True, df: str = 'pandas') -> None:
     # Find the file type
     file_type = path.rsplit('.', 1)[-1]
 
+    # Create the folder if it does not exist
+    folder = os.path.dirname(path)
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
     # Save the file
     if file_type == 'yaml' or file_type == 'yml':
         with open(path, 'w') as file:

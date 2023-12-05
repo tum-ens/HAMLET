@@ -242,7 +242,7 @@ sfh:
 
   ################################ heat demand ####################################
   heat:
-    share: 1                                    # share of prosumers with heat
+    share: 0                                    # share of prosumers with heat
                                                 # unit: 1 [0, 1]
                                                 # note: users that do not have plants to cover the demand will be
                                                 #   assigned a generic non-electric supply
@@ -340,7 +340,7 @@ sfh:
 
   ################################ dhw (drinking hot water) ####################################
   dhw:
-    share: 1                                    # share of prosumers with dhw
+    share: 0                                    # share of prosumers with dhw
                                                 # unit: 1 [0, 1]
                                                 # note: users that do not have plants to cover the demand will be
                                                 #   assigned a generic non-electric supply
@@ -441,7 +441,7 @@ sfh:
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
-    share: 1                                  # share of agents with PV systems
+    share: 0.7                                  # share of agents with PV systems
                                                 # unit: 1 [0, 1]
       
     num: [1]                                    # number of pv systems
@@ -558,7 +558,7 @@ sfh:
 
   ################################ small-scale wind ####################################
   wind:
-    share: 1                                    # share of prosumers with wind power plant
+    share: 0                                    # share of prosumers with wind power plant
                                                 # unit: 1 [0, 1]
       
     num: [1]                                    # number of inflexible loads
@@ -793,7 +793,7 @@ sfh:
 
   ################################ electric vehicles (EV) ####################################
   ev:
-    share: 1                                  # share of prosumers with EVs
+    share: 0.5                                  # share of prosumers with EVs
                                                 # unit: 1 [0, 1]
       
     num: [1, 1, 1, 1, 2]                        # number of EVs
@@ -877,7 +877,7 @@ sfh:
 
   ################################ batteries ####################################
   battery:
-    share: 1                                  # share of agents with batteries (if share_dependent_on applies)
+    share: 0.8                                  # share of agents with batteries (if share_dependent_on applies)
                                                 # unit: 1 [0, 1]
 
     share_dependent_on: ["pv"]                  # does the share of batteries depend on the existence of other devices?
@@ -912,7 +912,7 @@ sfh:
 
   ################################ heat storage ####################################
   heat_storage:
-    share: 1                                  # share of agents with heat storage (if share_dependent_on applies)
+    share: 0                                  # share of agents with heat storage (if share_dependent_on applies)
                                                 # unit: 1 [0, 1]
 
     share_dependent_on: ["hp"]                  # does the share of storage depend on the existence of other devices?

@@ -40,12 +40,16 @@ class AgentBase:
 
         # Get the market data from the database
         self.get_market_data()
+
         # Get the grid data from the database
         self.get_grid_data()
+
         # Get forecasts
         self.get_forecasts()
+
         # Set controllers
         self.set_controllers()
+
         # Create bids and offers based on trading strategy
         self.create_bids_offers()
 

@@ -1,8 +1,12 @@
+import sys
+sys.path.append("..")  # Add the parent directory to the Python path for execution outside of an IDE
 from hamlet import Executor
 
+# Path to the scenario folder (relative or absolute)
+path = "../04 - scenarios/example_single_market"
 
-path = "../04 - scenarios/example_single_market"     # relative or absolute path to the scenario folder
+# Create the executor object
+sim = Executor(path)
 
-simulation = Executor(path, num_workers=1)
-
-simulation.run()
+# Run the simulation
+sim.run()

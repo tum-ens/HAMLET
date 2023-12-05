@@ -69,6 +69,10 @@ class Lem(Markets):
             else self.setup['time']['start'] + pd.Timedelta(timing['start'], unit='seconds')
         start = start.replace(tzinfo=datetime.timezone.utc)  # needed to obtain correct time zone
         # end is the end of the simulation
+        # Make sure that fractions are properly read
+        if isinstance(self.setup['time']['duration'], str):
+            numerator, denominator = map(int, self.setup['time']['duration'].split('/'))
+            self.setup['time']['duration'] = numerator / denominator
         end = self.setup['time']['start'] + pd.Timedelta(self.setup['time']['duration'], unit='days')
         end = end.replace(tzinfo=datetime.timezone.utc)  # needed to obtain correct time zone
 
@@ -186,6 +190,7 @@ class Lem(Markets):
             c.TC_REGION: 'category',
             c.TC_MARKET: 'category',
             c.TC_NAME: 'category',
+            c.TC_ENERGY_TYPE: 'category',
             c.TC_ACTIONS: 'category',
             c.TC_CLEARING_TYPE: 'category',
             c.TC_CLEARING_METHOD: 'category',
@@ -212,16 +217,20 @@ class Lem(Markets):
     def _create_retailer(self, name: str, config: dict, timetable: pd.DataFrame) -> pd.DataFrame:
         """Create retailer prices from configuration file"""
 
-        # Create price series by copying the timetable
-        prices = timetable['timestamp'].copy()
+        # Create price series by copying the timetable's timesteps
+        prices = timetable[c.TC_TIMESTEP].copy()
 
         # Get only unique timestamp values in the dataframe
         prices = prices.drop_duplicates().to_frame()
 
+        # Rename column and reset index
+        prices.rename(columns={c.TC_TIMESTEP: c.TC_TIMESTAMP}, inplace=True)
+        prices.reset_index(drop=True, inplace=True)
+
         # Add region, market and name of market
-        prices['region'] = self.region
-        prices['market'] = self.market_type
-        prices['name'] = self.name
+        prices[c.TC_REGION] = self.region
+        prices[c.TC_MARKET] = self.market_type
+        prices[c.TC_NAME] = self.name
 
         # Add retailer name
         prices['retailer'] = name

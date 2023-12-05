@@ -18,6 +18,7 @@ class MarketDB:
         self.market_type = type
         self.market_name = name
         self.market_path = market_path
+        self.market_save = None  # path to save the market
         self.retailer_path = retailer_path
         self.market_transactions = pl.LazyFrame()
         self.bids_cleared = pl.LazyFrame()
@@ -36,3 +37,28 @@ class MarketDB:
         self.offers_cleared = pl.LazyFrame(schema=c.TS_OFFERS_CLEARED)
         self.offers_uncleared = pl.LazyFrame(schema=c.TS_OFFERS_UNCLEARED)
         self.positions_matched = pl.LazyFrame(schema=c.TS_POSITIONS_MATCHED)
+
+    def save_market(self, path, save_all: bool = False):
+        """Save market data to given path."""
+
+        # Update market path
+        self.market_save = os.path.abspath(path)
+
+        f.save_file(path=os.path.join(path, 'market_transactions.csv'), data=self.market_transactions.collect()
+                    , df='polars')
+        f.save_file(path=os.path.join(path, 'positions_matched.csv'), data=self.positions_matched.collect()
+                    , df='polars')
+
+        # Data is not saved if save_all is False
+        if save_all:
+            f.save_file(path=os.path.join(path, 'bids_cleared.ft'), data=self.bids_cleared.collect()
+                        , df='polars')
+            f.save_file(path=os.path.join(path, 'bids_uncleared.ft'), data=self.bids_uncleared.collect()
+                        , df='polars')
+            f.save_file(path=os.path.join(path, 'offers_cleared.ft'), data=self.offers_cleared.collect()
+                        , df='polars')
+            f.save_file(path=os.path.join(path, 'offers_uncleared.ft'), data=self.offers_uncleared.collect()
+                        , df='polars')
+        f.save_file(path=os.path.join(path, 'retailer.ft'), data=self.retailer.collect()
+                    , df='polars')
+

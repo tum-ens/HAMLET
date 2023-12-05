@@ -110,6 +110,7 @@ class Forecaster:
             forecasts: DataFrame (lazyframe) containing all forecast results.
 
         """
+
         forecasts = {}   # empty dict to store all forecast results
         current_ts = timetable.select(c.TC_TIMESTAMP).collect().item(0, 0)      # get current timestep from timetable
 
@@ -389,6 +390,7 @@ class Forecaster:
             forecasts_df: Lazyframe containing the summarized forecast results.
 
         """
+
         # generate a column contains time index
         timestamps = f.slice_dataframe_between_times(target_df=self.agentDB.timeseries, reference_ts=current_ts,
                                                      duration=self.length_to_predict).select(c.TC_TIMESTAMP)
@@ -423,7 +425,6 @@ class Forecaster:
                 forecast = forecast.with_columns(pl.col(column).cast(dtype[0]))
 
             # add lazyframe to list
-            # TODO: are there smarter solutions?
             forecasts_list.append(forecast.collect())
 
         # summarize everything together
