@@ -902,12 +902,18 @@ class WeatherModel(ModelBase):
         nominal_power = specs['nominal_power']
 
         # convert power curve to dataframe
-        specs['power_curve'] = pd.DataFrame(data={"value": specs['power_curve'],
-                                                  "wind_speed": specs['wind_speed']})
+        data_pc = {"value": specs['power_curve'], "wind_speed": specs['wind_speed']}
+        # This needs to be done in some instances as sometimes the specs are read incorrectly (workaround)
+        if isinstance(data_pc['value'], pd.DataFrame):
+            data_pc['value'] = data_pc['value']['value'].values
+        specs['power_curve'] = pd.DataFrame(data=data_pc)
 
         # convert power coefficient curve to dataframe
-        specs['power_coefficient_curve'] = pd.DataFrame(data={"value": specs['power_coefficient_curve'],
-                                                              "wind_speed": specs['wind_speed']})
+        data_pcc = {"value": specs['power_coefficient_curve'], "wind_speed": specs['wind_speed']}
+        # This needs to be done in some instances as sometimes the specs are read incorrectly (workaround)
+        if isinstance(data_pcc['value'], pd.DataFrame):
+            data_pcc['value'] = data_pcc['value']['value'].values
+        specs['power_coefficient_curve'] = pd.DataFrame(data=data_pcc)
 
         # generate a WindTurbine object from data
         turbine = WindTurbine(**specs)

@@ -7,6 +7,7 @@ __email__ = "markus.doepfert@tum.de"
 import hamlet.constants as c
 from pprint import pprint
 import numpy as np
+import polars.exceptions as pl_e
 
 
 class LinopyComps:
@@ -211,7 +212,12 @@ class Ev(LinopyComps):
 
         # Get specific object attributes
         self.comp_type = None
-        self.target = kwargs['targets'][f'{self.name}'][0] # TODO: This needs to be changed as it will be this only in the first instance but then name_ev_target after the first time
+        # Workaround as it will be this only in the first instance but then name_ev_target after the first time
+        # In the future the column should already be in the format to begin with
+        try:
+            self.target = kwargs['targets'][f'{self.name}'][0]
+        except pl_e.ColumnNotFoundError:
+            self.target = kwargs['targets'][f'{self.name}_{c.P_EV}_{c.ET_ELECTRICITY}'][0]
         self.availability = self.ts[f'{self.name}_availability'][0]
         self.energy = self.ts[f'{self.name}_energy_consumed'][0]
         # For now this is always charging at home. In the future this can depend on the availability column if it shows
@@ -297,7 +303,10 @@ class SimpleBattery(LinopyComps):
 
         # Get specific object attributes
         self.comp_type = None
-        self.target = kwargs['targets'][f'{self.name}'][0]
+        try:
+            self.target = kwargs['targets'][f'{self.name}'][0]
+        except pl_e.ColumnNotFoundError:
+            self.target = kwargs['targets'][f'{self.name}_{c.P_BATTERY}_{c.ET_ELECTRICITY}'][0]
         self.capacity = self.info['sizing']['capacity']
         self.charging_power = self.info['sizing']['power']
         self.efficiency = self.info['sizing']['efficiency']

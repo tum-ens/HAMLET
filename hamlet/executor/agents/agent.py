@@ -24,6 +24,8 @@ class Agent:
         self.agent = AgentFactory.create_agent(agent_type, data, timetable, database)
 
     def execute(self):
+        """Executes the agent"""
+
         return self.agent.execute()
 
 
