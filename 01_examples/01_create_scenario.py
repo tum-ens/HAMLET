@@ -3,7 +3,7 @@ sys.path.append("..")  # Add the parent directory to the Python path for executi
 from hamlet import Creator
 
 # Path to the scenario folder (relative or absolute)
-path = "../02 - config/example_single_market"
+path = "../02_config/example_single_market"
 
 # Create the creator object
 sim = Creator(path=path)

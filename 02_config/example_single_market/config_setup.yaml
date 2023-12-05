@@ -29,13 +29,13 @@ location:                                 # location of the simulation
                                           # file types: csv, ft
 
 paths:                                    # paths relevant for the simulation
-  input: ../03 - input_data               # path that contains the input data
+  input: ../03_input_data               # path that contains the input data
                                           # note: relative to the lemlab repository
 
-  scenarios: ../04 - scenarios            # path that contains the scenario setup
+  scenarios: ../04_scenarios            # path that contains the scenario setup
                                           # note: relative to the lemlab repository
 
-  results: ../05 - results                # path that contains the scenario results
+  results: ../05_results                # path that contains the scenario results
                                           # note: relative to the lemlab repository
 
 modeling:                                 # modeling settings

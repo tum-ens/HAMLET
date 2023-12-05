@@ -1,8 +1,8 @@
 .idea
 
 # Folders
-04 - scenarios/*
-05 - results/*
+04_scenarios/*
+05_results/*
 
 # C extensions
 *.so
@@ -70,7 +70,7 @@ instance/
 .scrapy
 
 # Sphinx documentation
-00 - docs/_build/
+00_docs/_build/
 
 # PyBuilder
 target/
