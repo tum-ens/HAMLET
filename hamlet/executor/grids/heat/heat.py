@@ -16,12 +16,14 @@ import logging
 import traceback
 from datetime import datetime
 import pandapower as pp
+from hamlet.executor.grids.grid_base import GridBase
 
-# TODO: Considerations
-# - None so far
+# Not implemented yet
 
 
-class Heat:
+class Heat(GridBase):
 
-    def __init__(self):
-        ...
+    def __init__(self, grid):
+
+        # Call the super class
+        super().__init__()

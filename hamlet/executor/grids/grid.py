@@ -18,22 +18,20 @@ from datetime import datetime
 import pandapower as pp
 import hamlet.constants as c
 
-# TODO: Considerations
-# - None so far
+# Types of grids (add your own if others are created here)
+from hamlet.executor.grids.electricity.electricity import Electricity
+from hamlet.executor.grids.heat.heat import Heat
+from hamlet.executor.grids.hydrogen.hydrogen import Hydrogen
 
 
-class Grids:
+class Grid:
 
-    def __init__(self, grid: pp.pandapowerNet, grid_type: str):
+    def __init__(self, grid, grid_type: str):
 
-        # Types of grids (add your own if others are created here)
-        from hamlet.executor.grids.electricity import Electricity
-        # from hamlet.creator_backup.grids.heat import Heat
-        # from hamlet.creator_backup.grids.hydrogen import Hydrogen
         self.types = {
             c.ET_ELECTRICITY: Electricity,
-            # c.ET_HEAT: Heat,
-            # c.ET_H2: Hydrogen,
+            c.ET_HEAT: Heat,
+            c.ET_H2: Hydrogen,
         }
 
         # Instance of the grid class

@@ -954,6 +954,7 @@ class Agents:
         return file, specs
 
     def __make_timeseries_heat(self, df: pd.DataFrame, plant_dict: dict) -> pd.DataFrame:
+        # TODO: Change it so that it does not change the input values if it is not a pu file that is used (e.g. as it was the problem in the paper when Soner's input got reduced)
 
         # Get the goal values that are to be searched for: efficiency, occupants, temperature
         goal = [self.account['general']['parameters']['efficiency'],
