@@ -30,9 +30,6 @@ class Creator:
 
     """
 
-    # TODO: check if progress bar could be integrated somewhere
-    progress_bar = tqdm()
-
     def __init__(self, path: str, name: str = None) -> None:
         """Initialize a scenario instance.
 
@@ -43,6 +40,9 @@ class Creator:
         Returns:
             None
         """
+
+        # Initialize the progress bar
+        self.pbar = tqdm()
 
         # Initialize the YAML parser
         self.yaml = YAML()
@@ -106,15 +106,15 @@ class Creator:
             None
         """
         # Initialize progress bar
-        self.progress_bar.reset(total=6 * self.region_number + 3)
+        self.pbar.reset(total=6 * self.region_number + 3)
 
         # Create the missing agent files
-        self.progress_bar.set_description_str(self.progress_bar_description[self.__create_agent_files.__name__])
+        self.pbar.set_description_str(self.progress_bar_description[self.__create_agent_files.__name__])
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__create_agent_files, update_pbar=True, method='config')
 
         # TODO: Create the missing grid files
-        self.progress_bar.set_description_str(self.progress_bar_description[self.__create_grid_files.__name__])
+        self.pbar.set_description_str(self.progress_bar_description[self.__create_grid_files.__name__])
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__create_grid_files, update_pbar=True)
 
@@ -132,10 +132,10 @@ class Creator:
             None
         """
         # Initialize progress bar
-        self.progress_bar.reset(total=5 * self.region_number + 3)
+        self.pbar.reset(total=5 * self.region_number + 3)
 
         # Create the missing agent files
-        self.progress_bar.set_description_str(self.progress_bar_description[self.__create_agent_files.__name__])
+        self.pbar.set_description_str(self.progress_bar_description[self.__create_agent_files.__name__])
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__create_agent_files, update_pbar=True, method='grid')
 
@@ -152,45 +152,45 @@ class Creator:
             None
         """
         # Initialize progress bar if necessary
-        if self.progress_bar.total is None:
-            self.progress_bar.reset(total=4 * self.region_number + 3)
+        if self.pbar.total is None:
+            self.pbar.reset(total=4 * self.region_number + 3)
 
         # Create the folders for the scenario
-        self.progress_bar.set_description_str(self.progress_bar_description[self.__create_scenario_folders.__name__])
+        self.pbar.set_description_str(self.progress_bar_description[self.__create_scenario_folders.__name__])
         self.__create_scenario_folders(delete=delete)
-        self.progress_bar.update(1)
+        self.pbar.update(1)
 
         # Create the markets for each region by looping through the structure
-        self.progress_bar.set_description_str(self.progress_bar_description[self.__create_markets.__name__])
+        self.pbar.set_description_str(self.progress_bar_description[self.__create_markets.__name__])
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__create_markets, update_pbar=True)
 
         # Create the agents for each region by looping through the structure
-        self.progress_bar.set_description_str(self.progress_bar_description[self.__create_agents.__name__])
+        self.pbar.set_description_str(self.progress_bar_description[self.__create_agents.__name__])
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__create_agents, update_pbar=True)
 
         # Copy the grid files from the input folder to the scenario folder
-        self.progress_bar.set_description_str(self.progress_bar_description[self.__copy_grids.__name__])
+        self.pbar.set_description_str(self.progress_bar_description[self.__copy_grids.__name__])
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__copy_grids, update_pbar=True)
 
         # Copy the files from the config folder to the scenario folder
-        self.progress_bar.set_description_str(self.progress_bar_description[self.__copy_config_to_scenarios.__name__])
+        self.pbar.set_description_str(self.progress_bar_description[self.__copy_config_to_scenarios.__name__])
         self.__loop_through_dict(self.scenario_structure, path=self.path_config.rsplit(os.sep, 1)[0],
                                  func=self.__copy_config_to_scenarios, update_pbar=True)
 
         # Copy the files from the general config file to the scenario folder
-        self.progress_bar.set_description_str(self.progress_bar_description[self.__create_general_files.__name__])
+        self.pbar.set_description_str(self.progress_bar_description[self.__create_general_files.__name__])
         self.__create_general_files()
-        self.progress_bar.update(1)
+        self.pbar.update(1)
 
         # Combine the market and grid files
-        self.progress_bar.set_description_str(self.progress_bar_description[self.__combine_files.__name__])
+        self.pbar.set_description_str(self.progress_bar_description[self.__combine_files.__name__])
         self.__combine_files()
-        self.progress_bar.update(1)
+        self.pbar.update(1)
 
-        self.progress_bar.set_description_str('Successfully created scenario')
+        self.pbar.set_description_str('Successfully created scenario')
 
     def __combine_files(self) -> None:
         """Combine market, retailer, and grid files within the scenario.
@@ -613,8 +613,7 @@ class Creator:
                 dict[subfolder] = cls.__add_subfolders_to_dict(dict[subfolder], f"{path}/{subfolder}", max_level, cur_level)
         return dict
 
-    @classmethod
-    def __loop_through_dict(cls, nested_dict: dict, path: str, func: callable, update_pbar: bool = False, *args,
+    def __loop_through_dict(self, nested_dict: dict, path: str, func: callable, update_pbar: bool = False, *args,
                             **kwargs) -> None:
         """loops through the dictionary and calls the function for each item
 
@@ -630,26 +629,26 @@ class Creator:
             None
 
         """
-        pbar_desc = cls.progress_bar.desc
+        pbar_desc = self.pbar.desc
 
         # Loop through all key-value pairs of the dictionary
         for key, value in nested_dict.items():
             if update_pbar:     # update progress bar description if it is active
                 pbar_desc_new = pbar_desc + ' ' + key
-                cls.progress_bar.set_description_str(pbar_desc_new)
+                self.pbar.set_description_str(pbar_desc_new)
 
             # Check if value is a dictionary
             if isinstance(value, dict):
                 # If value is a dictionary, Call the function again
                 func(os.path.join(path, key), *args, **kwargs)
-                cls.__loop_through_dict(value, os.path.join(path, key), func, update_pbar, *args, **kwargs)
+                self.__loop_through_dict(value, os.path.join(path, key), func, update_pbar, *args, **kwargs)
             else:
                 # If value is not a dictionary, call the function
                 func(os.path.join(path, key), *args, **kwargs)
 
             if update_pbar:     # update progress bar if it is active
-                cls.progress_bar.update(1)
-                cls.progress_bar.set_description_str(pbar_desc)
+                self.pbar.update(1)
+                self.pbar.set_description_str(pbar_desc)
 
     @staticmethod
     def __create_folder(path: str, delete: bool = True) -> None:
