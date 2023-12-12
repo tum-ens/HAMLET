@@ -63,7 +63,7 @@ class TradingBase:
         )
 
         # Group the market data by the timestep
-        self.market_data = self.market_data.group_by(c.TC_TIMESTEP).agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum())
+        self.market_data = self.market_data.groupby(c.TC_TIMESTEP).agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum())
         self.market_data = self.market_data.with_columns((pl.col(c.TC_ENERGY_IN) - pl.col(c.TC_ENERGY_OUT)).alias(c.TC_ENERGY))
 
         # Get the energy type for the given market type
