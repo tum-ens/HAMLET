@@ -5,7 +5,6 @@ __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
 import pandas as pd
-import sqlalchemy as db
 import polars as pl
 import os
 import hamlet.functions as f
