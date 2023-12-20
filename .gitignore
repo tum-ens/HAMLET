@@ -134,3 +134,4 @@ scripts
 
 # for macbook
 **/.DS_Store
+.Rhistory
