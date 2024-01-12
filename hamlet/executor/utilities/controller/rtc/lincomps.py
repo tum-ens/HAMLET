@@ -6,7 +6,7 @@ __email__ = "markus.doepfert@tum.de"
 
 import hamlet.constants as c
 from pprint import pprint
-import numpy as np
+from numpy import inf
 import polars.exceptions as pl_e
 
 
@@ -48,32 +48,39 @@ class Market(LinopyComps):
 
         # Get specific object attributes
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
-        self.power = int(round(kwargs['market_result'] / self.dt * c.SECONDS_TO_HOURS))  # power in W
+        self.market_power = int(round(kwargs['market_result'] / self.dt * c.SECONDS_TO_HOURS))  # market power in W
+        self.balancing_power = 10000000000  # TODO: This needs to be changed to the max available balancing power
+
 
     def define_variables(self, model, **kwargs):
-        energy_type = kwargs['energy_type']
+        self.energy_type = kwargs['energy_type']
 
-        # Define the market variable
-        model.add_variables(name=f'{self.name}_{energy_type}', lower=self.power, upper=self.power, integer=True)
+        # Define the market power variable
+        model.add_variables(name=f'{self.name}_{self.energy_type}', lower=-inf, upper=inf, integer=True)
+        
+        # Define the target variable (what was previously bought/sold on the market)
+        model.add_variables(name=f'{self.name}_{self.energy_type}_target',
+                            lower=self.market_power, upper=self.market_power, integer=True)
+        
+        # Define the deviation variable for positive and negative deviations
+        # Deviation when more is bought/sold on the market than according to the market
+        model.add_variables(name=f'{self.name}_{c.TT_BALANCING}_{self.energy_type}_deviation_pos',
+                            lower=0, upper=self.balancing_power, integer=True)
+        # Deviation when less is needed from the grid than according to the market
+        model.add_variables(name=f'{self.name}_{c.TT_BALANCING}_{self.energy_type}_deviation_neg',
+                            lower=0, upper=self.balancing_power, integer=True)
 
         return model
 
+    def define_constraints(self, model):
 
-class Balancing(LinopyComps):
-
-    def __init__(self, name, **kwargs):
-
-        # Call the parent class constructor
-        super().__init__(name, **kwargs)
-
-        # Get specific object attributes
-        self.power = 10000000000  # TODO: This needs to be changed to the max available balancing energy
-
-    def define_variables(self, model, **kwargs):
-        energy_type = kwargs['energy_type']
-
-        # Define the balancing variable
-        x = model.add_variables(name=f'{self.name}_{energy_type}', lower=-self.power, upper=self.power, integer=True)
+        # Define the deviation constraint        
+        equation = (model.variables[f'{self.name}_{self.energy_type}']
+                    - model.variables[f'{self.name}_{self.energy_type}_target']
+                    == model.variables[f'{self.name}_{self.energy_type}_deviation_pos'] 
+                    - model.variables[f'{self.name}_{self.energy_type}_deviation_neg'])
+        
+        model.add_constraints(equation, name=f'{self.name}_deviation')
 
         return model
 
@@ -280,16 +287,12 @@ class Ev(LinopyComps):
     def define_constraints(self, model):
 
         # Define the deviation constraint
-        equation_pos = (model.variables[f'{self.name}_{self.comp_type}_power']
-                        - model.variables[f'{self.name}_{self.comp_type}_target']
-                        <= model.variables[f'{self.name}_{self.comp_type}_deviation_pos'])
-
-        equation_neg = (model.variables[f'{self.name}_{self.comp_type}_power']
-                        - model.variables[f'{self.name}_{self.comp_type}_target']
-                        >= model.variables[f'{self.name}_{self.comp_type}_deviation_neg'])
-
-        model.add_constraints(equation_pos, name=f'{self.name}_deviation_pos')
-        model.add_constraints(equation_neg, name=f'{self.name}_deviation_neg')
+        equation = (model.variables[f'{self.name}_{self.comp_type}_power']
+                    - model.variables[f'{self.name}_{self.comp_type}_target']
+                    == model.variables[f'{self.name}_{self.comp_type}_deviation_pos'] 
+                    - model.variables[f'{self.name}_{self.comp_type}_deviation_neg'])
+        
+        model.add_constraints(equation, name=f'{self.name}_deviation')
 
         return model
 
@@ -347,17 +350,13 @@ class SimpleBattery(LinopyComps):
 
     def define_constraints(self, model):
 
-        # Define the deviation constraint
-        equation_pos = (model.variables[f'{self.name}_{self.comp_type}_power']
-                        - model.variables[f'{self.name}_{self.comp_type}_target']
-                        <= model.variables[f'{self.name}_{self.comp_type}_deviation_pos'])
-
-        equation_neg = (model.variables[f'{self.name}_{self.comp_type}_power']
-                        - model.variables[f'{self.name}_{self.comp_type}_target']
-                        >= model.variables[f'{self.name}_{self.comp_type}_deviation_neg'])
-
-        model.add_constraints(equation_pos, name=f'{self.name}_deviation_pos')
-        model.add_constraints(equation_neg, name=f'{self.name}_deviation_neg')
+        # Define the deviation constraint        
+        equation = (model.variables[f'{self.name}_{self.comp_type}_power']
+                    - model.variables[f'{self.name}_{self.comp_type}_target']
+                    == model.variables[f'{self.name}_{self.comp_type}_deviation_pos'] 
+                    - model.variables[f'{self.name}_{self.comp_type}_deviation_neg'])
+        
+        model.add_constraints(equation, name=f'{self.name}_deviation')
 
         return model
 
