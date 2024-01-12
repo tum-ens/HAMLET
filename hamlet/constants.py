@@ -100,6 +100,7 @@ TN_BIDS_CLEARED = 'bids_cleared'
 TN_BIDS_UNCLEARED = 'bids_uncleared'
 TN_OFFERS_CLEARED = 'offers_cleared'
 TN_OFFERS_UNCLEARED = 'offers_uncleared'
+TN_POSITIONS_MATCHED = 'positions_matched'
 
 # COLUMNS
 TC_TIMESTAMP = 'timestamp'
@@ -247,6 +248,10 @@ P_BATTERY = 'battery'
 P_PSH = 'psh'
 P_HYDROGEN = 'hydrogen'
 P_HEAT_STORAGE = 'heat_storage'
+
+# CONTROLLERS
+C_RTC = 'rtc'
+C_MPC = 'mpc'
 
 # COMPONENT MAPPING
 # Note: Key states which type of plant is addressed and the value states which type of operation it has for the given
