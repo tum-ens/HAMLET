@@ -4,6 +4,8 @@ __license__ = ""
 __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
+import time
+
 import pandas as pd
 import polars as pl
 import os
@@ -228,13 +230,59 @@ class Database:
             markets: list of MarketDB objects to be written into Database.
 
         """
-        for market in markets:
-            market_name = market.market_name
-            market_type = market.market_type
-            self.__regions[region].markets[market_type][market_name] = market
+        # Dict to store all markets in the region
+        region_markets = {}
 
-            # update local market price in forecasters
-            self.__regions[region].update_local_market_in_forecasters()
+        # Seperator
+        item_separator = '----------------------------------------'
+
+        counter = 0
+        for market in markets:
+            # Create unique key for each market
+            unique_key = market.market_type + item_separator + market.market_name
+
+            # Check if market already exists in region
+            if unique_key in region_markets.keys():
+                # If market already exists, extend the list of market tables
+                region_markets[unique_key][c.TN_MARKET_TRANSACTIONS].append(market.market_transactions)
+                region_markets[unique_key][c.TN_BIDS_CLEARED].append(market.bids_cleared)
+                region_markets[unique_key][c.TN_BIDS_UNCLEARED].append(market.bids_uncleared)
+                region_markets[unique_key][c.TN_OFFERS_CLEARED].append(market.offers_cleared)
+                region_markets[unique_key][c.TN_OFFERS_UNCLEARED].append(market.offers_uncleared)
+                region_markets[unique_key][c.TN_POSITIONS_MATCHED].append(market.positions_matched)
+            else:
+                # If market does not exist, add it to the region
+                region_markets[unique_key] = {}
+                region_markets[unique_key][c.TN_MARKET_TRANSACTIONS] = [market.market_transactions]
+                region_markets[unique_key][c.TN_BIDS_CLEARED] = [market.bids_cleared]
+                region_markets[unique_key][c.TN_BIDS_UNCLEARED] = [market.bids_uncleared]
+                region_markets[unique_key][c.TN_OFFERS_CLEARED] = [market.offers_cleared]
+                region_markets[unique_key][c.TN_OFFERS_UNCLEARED] = [market.offers_uncleared]
+                region_markets[unique_key][c.TN_POSITIONS_MATCHED] = [market.positions_matched]
+
+        start = time.perf_counter()
+        # Save results to region
+        for market, results in region_markets.items():
+            # Split market name into market type and market name
+            market_type, market_name = market.split(item_separator)
+            market_db = self.__regions[region].markets.get(market_type, {}).get(market_name)
+
+            # Save results to region
+            # Tables that are to be expanded
+            market_db.set_market_transactions(pl.concat([market_db.market_transactions]
+                                                        + results[c.TN_MARKET_TRANSACTIONS], how='vertical'))
+            market_db.set_bids_cleared(pl.concat([market_db.bids_cleared]
+                                                 + results[c.TN_BIDS_CLEARED], how='vertical'))
+            market_db.set_offers_cleared(pl.concat([market_db.offers_cleared]
+                                                   + results[c.TN_OFFERS_CLEARED], how='vertical'))
+            # TODO: Positions matched
+            # market_db.set_positions_matched(pl.concat(results[c.TN_POSITIONS_MATCHED], how='vertical'))
+            # Tables that are to be overwritten
+            market_db.set_bids_uncleared(pl.concat(results[c.TN_BIDS_UNCLEARED], how='vertical'))
+            market_db.set_offers_uncleared(pl.concat(results[c.TN_OFFERS_UNCLEARED], how='vertical'))
+        # print(f'Post markets to region: {time.perf_counter() - start}')
+        # update local market price in forecasters
+        self.__regions[region].update_local_market_in_forecasters()
 
     """static methods"""
 

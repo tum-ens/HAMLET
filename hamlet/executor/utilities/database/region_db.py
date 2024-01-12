@@ -156,7 +156,7 @@ class RegionDB:
             self.markets[markets_type] = {}
             markets = f.get_all_subdirectories(os.path.join(self.region_path, 'markets', markets_type))
             for market in markets:
-                self.markets[markets_type][market] = MarketDB(type=markets_type, name=market,
+                self.markets[markets_type][market] = MarketDB(market_type=markets_type, name=market,
                                                               market_path=os.path.join(self.region_path, 'markets',
                                                                                        markets_type, market),
                                                               retailer_path=os.path.join(self.region_path, 'retailers',
