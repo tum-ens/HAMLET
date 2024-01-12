@@ -100,15 +100,16 @@ class AgentBase:
         # Get the required data
         market_info = self.agent.account[c.K_EMS][c.K_MARKET]
 
-        # Get the markets of the region from the tasks
-        markets = (self.timetable.unique(subset=[c.TC_MARKET, c.TC_NAME]).select(c.TC_NAME)
-                   .collect().to_series().to_list())
+        # Get the markets of the region from the timetable by selecting the unique market types and names
+        unique_types_names = self.timetable.unique(subset=[c.TC_MARKET, c.TC_NAME]).collect()
+        market_types = unique_types_names.select(c.TC_MARKET).to_series().to_list()
+        market_names = unique_types_names.select(c.TC_NAME).to_series().to_list()
 
         # Loop through the markets
-        for market in markets:
+        for m_type, m_name in zip(market_types, market_names):
             # Get the strategy
             strategy = Trading(strategy=market_info['strategy'], timetable=self.timetable,
-                               market=market, market_data=self.market, agent=self.agent).create_instance()
+                               market=m_name, market_data=self.market[m_type][m_name], agent=self.agent).create_instance()
 
             # Create bids and offers
             self.agent = strategy.create_bids_offers()
