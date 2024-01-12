@@ -17,7 +17,10 @@ from hamlet.executor.utilities.controller.mpc import lincomps
 from hamlet.executor.utilities.controller.controller_base import ControllerBase
 from hamlet.executor.utilities.database.database import Database as db
 from hamlet import functions as f
+import sys
 
+# 'O9n4HIGxRrV58t' '6amLPGSnTedGjou' '9l37kMNMXWcA0Nm'
+AGENT_ID = '9l37kMNMXWcA0Nm'
 
 class MpcBase:
     def run(self):
@@ -281,8 +284,12 @@ class Mpc(ControllerBase):
 
             # Loop through the model's variables to identify the balancing variables
             for variable_name, variable in self.model.variables.items():
+
+                # if self.agent.agent_id == AGENT_ID:
+                #     print(variable_name)
+                    # print(variable)
                 # If the variable name starts with 'balancing_', it's a balancing variable
-                if variable_name.startswith('market_'):
+                if variable_name.startswith(tuple(self.market_names)):
                     if variable_name.endswith('_costs'):
                         # Add the variable to the objective function
                         objective += variable
@@ -294,6 +301,9 @@ class Mpc(ControllerBase):
                 else:
                     pass
 
+            # if self.agent.agent_id == AGENT_ID:
+            #     print(objective)
+
             # Set the objective function to the model with the minimize direction
             self.model.add_objective(objective.sum())
 
@@ -302,15 +312,15 @@ class Mpc(ControllerBase):
         def run(self):
 
             # Solve the optimization problem
-            solver = 'gurobi'
+            solver = 'gurobi'  # TODO: Currently overwriting other solvers as only gurobi is available
             match solver:
                 case 'gurobi':
-                    # solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
+                    sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
+                    solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
                     status = self.model.solve(solver_name='gurobi') #, **solver_options)
+                    sys.stdout = sys.__stdout__     # re-activate printing
                 case _:
                     raise ValueError(f"Unsupported solver: {solver}")
-
-            # TODO: Make the model silent and not put out any response.
 
             # Check if the solution is optimal
             if status[0] != 'ok':
@@ -386,9 +396,10 @@ class Mpc(ControllerBase):
             # Update setpoints
             self.setpoints = self.setpoints.update(adjusted_solution, on=c.TC_TIMESTAMP)
 
-            #with pl.Config(tbl_cols=20, fmt_str_lengths=200):
-            #    print(self.setpoints)
-            #exit()
+            # if self.agent.agent_id == AGENT_ID:
+            # with pl.Config(tbl_rows=100, tbl_cols=20, fmt_str_lengths=200, tbl_width_chars=200):
+            #     print(self.setpoints)
+            # exit()
 
             # Make LazyFrame again
             self.setpoints = self.setpoints.lazy()
