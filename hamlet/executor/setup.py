@@ -29,6 +29,7 @@ from hamlet.executor.grids.grid import Grid
 from hamlet.executor.utilities.database.database import Database
 import hamlet.constants as c
 # pl.enable_string_cache(True)
+from copy import copy
 
 # TODO: Considerations
 # - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator_backup and should be continued for consistency
@@ -135,11 +136,10 @@ class Executor:
                 region = region.lazy()
 
                 # update progress bar description
-                self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for region ' +
-                                              region_str + ': ')
+                self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for region ' + region_str + ': ')
 
                 # TODO: here print is deactivated
-                sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
+                # sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
 
                 # Execute the agents and market in parallel or sequentially
                 if self.pool:
@@ -147,7 +147,8 @@ class Executor:
                     self.__execute_agents_parallel(tasklist=region)
 
                     # Execute the market
-                    self.__execute_market_parallel(tasklist=region)
+                    # TODO: Replace this with a parallel execution once it works
+                    self.__execute_markets(tasklist=region)
                 else:
                     # Execute the agents for this market
                     self.__execute_agents(tasklist=region)
@@ -155,7 +156,7 @@ class Executor:
                     # Execute the market
                     self.__execute_markets(tasklist=region)
 
-                sys.stdout = sys.__stdout__     # re-activate printing
+                # sys.stdout = sys.__stdout__     # re-activate printing
 
             # Calculate the grids for the current timestamp (calculated together as they are connected)
             self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid: ')
@@ -216,7 +217,7 @@ class Executor:
                 # e.g., logging or additional computations
             except Exception as e:
                 # Handle exceptions (e.g., log them)
-                print(f"An error occurred when retrieving agent results: {e}")
+                raise f"An error occurred when retrieving agent results: {e}"
 
         # Post the agent data back to the database
         self.database.post_agents_to_region(region=tasklist.collect()[0, c.TC_REGION], agents=results)
@@ -229,38 +230,44 @@ class Executor:
 
         # Define the function to be executed in parallel
         def tasks(market):
-            # Create an instance of the Market class and execute its tasks
+            # Execute the market
             return market.execute()
 
         # Create a list to store the markets
         markets_list = []
 
         # Iterate over the tasklist and populate the markets_list
-        for tasks in tasklist.iter_rows(named=True):
+        for task in tasklist.iter_rows(named=True): # Renamed 'tasks' to 'task'
             # Get the market data for the current market
-            market = self.database.get_market_data(region=tasks[c.TC_REGION],
-                                                   market_type=tasks[c.TC_MARKET],
-                                                   market_name=tasks[c.TC_NAME])
+            market = self.database.get_market_data(region=task[c.TC_REGION],
+                                                   market_type=task[c.TC_MARKET],
+                                                   market_name=task[c.TC_NAME])
+            market = copy(market)
             # Create an instance of the Market class and append it to the markets_list
-            markets_list.append(Market(data=market, tasks=tasks, database=self.database))
+            markets_list.append(Market(data=market, tasks=task, database=self.database))
+
 
         # Submit the markets for parallel execution
         futures = [self.pool.submit(tasks, market) for market in markets_list]
 
         # Wait for all markets to complete
+        # TODO: For some reason it gets stuck here. Investigate why.
         concurrent.futures.wait(futures)
 
         # Retrieve and process results from the futures
         results = []
         for future in futures:
             try:
-                result = future.result()
+                result = future.result(timeout=60)
                 results.append(result)
                 # Optionally process each result as needed
                 # e.g., logging or additional computations
             except Exception as e:
                 # Handle exceptions (e.g., log them)
-                print(f"An error occurred when retrieving market results: {e}")
+                raise f"An error occurred when retrieving market results: {e}"
+
+        print(results)
+        exit()
 
         # Post the agent data back to the database
         self.database.post_markets_to_region(region=tasks[c.TC_REGION], markets=results)
@@ -301,6 +308,14 @@ class Executor:
                                                    market_name=tasks[c.TC_NAME])
             # Create an instance of the Market class and execute its tasks
             results.append(Market(data=market, tasks=tasks, database=self.database).execute())
+
+        # counter = 0
+        # for result in results:
+        #     with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=100):
+        #         print(result.market_transactions.collect())
+        #     counter += 1
+        #     if counter > 1:
+        #         break
 
         # Post the agent data back to the database
         self.database.post_markets_to_region(region=tasks[c.TC_REGION], markets=results)
