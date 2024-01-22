@@ -31,7 +31,8 @@ class LinopyComps:
     def define_constraints(model):
         return model
 
-    def define_electricity_variable(self, model: linopy.Model, comp_type: str, lower, upper, direction: str = None):
+    def define_electricity_variable(self, model: linopy.Model, comp_type: str, lower, upper, direction: str = None,
+                                    integer=False):
         """Creates the electricity variable for the component. The direction is either in or out."""
 
         # Set the name of the variable
@@ -41,11 +42,12 @@ class LinopyComps:
             name = f'{self.name}_{comp_type}_{c.ET_ELECTRICITY}'
 
         # Define the variable
-        model.add_variables(name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=True)
+        model.add_variables(name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=integer)
 
         return model
 
-    def define_heat_variable(self, model: linopy.Model, comp_type: str, lower, upper, direction: str = None):
+    def define_heat_variable(self, model: linopy.Model, comp_type: str, lower, upper, direction: str = None,
+                                    integer=False):
         """Creates the heat variable for the component. The direction is either in or out."""
 
         # Set the name of the variable
@@ -55,18 +57,19 @@ class LinopyComps:
             name = f'{self.name}_{comp_type}_{c.ET_HEAT}'
 
         # Define the variable
-        model.add_variables(name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=True)
+        model.add_variables(name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=integer)
 
         return model
 
-    def define_storage_variable(self, model: linopy.Model, comp_type: str, lower, upper):
+    def define_storage_variable(self, model: linopy.Model, comp_type: str, lower, upper,
+                                    integer=False):
         """Creates the state-of-charge variable for the component."""
 
         # Set the name
         name = f'{self.name}_{comp_type}_soc'
 
         # Define the variable
-        model.add_variables(name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=True)
+        model.add_variables(name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=integer)
 
         return model
 
@@ -93,7 +96,7 @@ class Market(LinopyComps):
         self.dt_hours = kwargs['delta'].total_seconds() * c.SECONDS_TO_HOURS  # time delta in hours
         self.comp_type = None
 
-        # Calculate the upper and lower bounds for the market power
+        # Calculate the upper and lower bounds for the market power from the energy quantity
         self.upper = [int(round(x / self.dt_hours)) for x in self.fcast[f'energy_quantity_sell']]
         self.lower = [int(round(x / self.dt_hours * -1)) for x in self.fcast[f'energy_quantity_buy']]
 
@@ -116,11 +119,10 @@ class Market(LinopyComps):
         self.comp_type = kwargs['comp_type']
 
         # Define the market power variables (need to be positive and negative due to different pricing)
-        # TODO: Check if both need to be positive and thus change the balancing constraints
-        model.add_variables(name=f'{self.name}_{self.comp_type}_{c.PF_IN}', lower=self.lower, upper=0,
-                            coords=[self.timesteps], integer=True)  # buying
-        model.add_variables(name=f'{self.name}_{self.comp_type}_{c.PF_OUT}', lower=0, upper=self.upper,
-                            coords=[self.timesteps], integer=True)  # selling
+        model.add_variables(name=f'{self.name}_{self.comp_type}_{c.PF_OUT}', lower=self.lower, upper=0,
+                            coords=[self.timesteps], integer=True)  # outflow from the building (selling)
+        model.add_variables(name=f'{self.name}_{self.comp_type}_{c.PF_IN}', lower=0, upper=self.upper,
+                            coords=[self.timesteps], integer=True)  # inflow into the building (buying)
         # Define mode flag that decides whether the market energy is bought or sold
         model.add_variables(name=f'{self.name}_mode', coords=[self.timesteps], binary=True)
 
@@ -144,20 +146,19 @@ class Market(LinopyComps):
         """Adds the constraint that energy can either be bought or sold but not both at the same time."""
 
         # Define the variables
-        max_power = max(self.lower, self.upper)  # helper variable  TODO: Adjust so that actual lower upper is used
         mode_var = model.variables[f'{self.name}_mode']  # mode variable
-        var_in = model.variables[f'{self.name}_{self.comp_type}_{c.PF_IN}']  # inflow
-        var_out = model.variables[f'{self.name}_{self.comp_type}_{c.PF_OUT}']  # outflow
+        var_in = model.variables[f'{self.name}_{self.comp_type}_{c.PF_IN}']  # inflow (buying)
+        var_out = model.variables[f'{self.name}_{self.comp_type}_{c.PF_OUT}']  # outflow (selling)
+
+        # Define the constraint for outflow
+        eq_out = (var_out >= -(mode_var - 1) * self.lower)
+        model.add_constraints(eq_out, name=f'{self.name}_outflowflag', coords=[self.timesteps])
 
         # Define the constraint for inflow
         # Note: The constraints should look something like: var_charge <= max_power * (1 - mode_var)
         #       However, linopy does not support it. Thus, the somewhat more complicated version below is used.
-        eq_in = (var_in <= -(mode_var - 1) * max_power)
-        model.add_constraints(eq_in, name=f'{self.name}_outflowflag', coords=[self.timesteps])
-
-        # Define the constraint for outflow
-        eq_out = (var_out <= mode_var * max_power)
-        model.add_constraints(eq_out, name=f'{self.name}_inflowflag', coords=[self.timesteps])
+        eq_in = (var_in <= mode_var * self.upper)
+        model.add_constraints(eq_in, name=f'{self.name}_inflowflag', coords=[self.timesteps])
 
         return model
 
@@ -165,22 +166,88 @@ class Market(LinopyComps):
         """Adds the constraint that the market cost and revenue are linked to the power."""
 
         # Define the variables
-        var_in = model.variables[f'{self.name}_{self.comp_type}_{c.PF_IN}']  # inflow
-        var_out = model.variables[f'{self.name}_{self.comp_type}_{c.PF_OUT}']  # outflow
+        var_in = model.variables[f'{self.name}_{self.comp_type}_{c.PF_IN}']  # inflow (buying)
+        var_out = model.variables[f'{self.name}_{self.comp_type}_{c.PF_OUT}']  # outflow (selling)
         var_cost = model.variables[f'{self.name}_costs']  # costs
         var_revenue = model.variables[f'{self.name}_revenue']  # revenue
         dt_hours = pd.Series([self.dt_hours] * len(self.timesteps), index=self.timesteps)  # time delta
 
         # Define the constraint for costs
-        # TODO: These are changed as that is a temp fix until the variables are switched around again.
-        eq_cost = (var_cost == var_out * dt_hours * (self.price_buy + self.grid_buy + self.levies_buy))
+        eq_cost = (var_cost == var_in * dt_hours * (self.price_buy + self.grid_buy + self.levies_buy))
         model.add_constraints(eq_cost, name=f'{self.name}_costs', coords=[self.timesteps])
 
         # Define the constraint for revenue
-        eq_revenue = (var_revenue == -var_in * dt_hours * (self.price_sell + self.grid_sell + self.levies_sell))
+        eq_revenue = (var_revenue == -var_out * dt_hours * (self.price_sell + self.grid_sell + self.levies_sell))
         model.add_constraints(eq_revenue, name=f'{self.name}_revenue', coords=[self.timesteps])
 
         return model
+    # def define_variables(self, model, **kwargs):
+    #     self.comp_type = kwargs['comp_type']
+    #
+    #     # Define the market power variables (need to be positive and negative due to different pricing)
+    #     model.add_variables(name=f'{self.name}_{self.comp_type}_{c.PF_IN}', lower=self.lower, upper=0,
+    #                         coords=[self.timesteps], integer=True)  # buying
+    #     model.add_variables(name=f'{self.name}_{self.comp_type}_{c.PF_OUT}', lower=0, upper=self.upper,
+    #                         coords=[self.timesteps], integer=True)  # selling
+    #     # Define mode flag that decides whether the market energy is bought or sold
+    #     model.add_variables(name=f'{self.name}_mode', coords=[self.timesteps], binary=True)
+    #
+    #     # Define the market cost and revenue variables
+    #     model.add_variables(name=f'{self.name}_costs', lower=0, upper=np.inf, coords=[self.timesteps])
+    #     model.add_variables(name=f'{self.name}_revenue', lower=0, upper=np.inf, coords=[self.timesteps])
+    #
+    #     return model
+
+    # def define_constraints(self, model):
+    #     # Add constraint that the market can either buy or sell but not both at the same time
+    #     model = self.__constraint_operation_mode(model)
+    #
+    #     # Add constraint that the market cost and revenue are linked to the power
+    #     model = self.__constraint_cost_revenue(model)
+    #
+    #     return model
+    #
+    #
+    # def __constraint_operation_mode(self, model):
+    #     """Adds the constraint that energy can either be bought or sold but not both at the same time."""
+    #
+    #     # Define the variables
+    #     mode_var = model.variables[f'{self.name}_mode']  # mode variable
+    #     var_in = model.variables[f'{self.name}_{self.comp_type}_{c.PF_IN}']  # inflow
+    #     var_out = model.variables[f'{self.name}_{self.comp_type}_{c.PF_OUT}']  # outflow
+    #
+    #     # Define the constraint for inflow
+    #     # Note: The constraints should look something like: var_charge <= max_power * (1 - mode_var)
+    #     #       However, linopy does not support it. Thus, the somewhat more complicated version below is used.
+    #     eq_in = (var_in >= -(mode_var - 1) * self.lower)
+    #     model.add_constraints(eq_in, name=f'{self.name}_outflowflag', coords=[self.timesteps])
+    #
+    #     # Define the constraint for outflow
+    #     eq_out = (var_out <= mode_var * self.upper)
+    #     model.add_constraints(eq_out, name=f'{self.name}_inflowflag', coords=[self.timesteps])
+    #
+    #     return model
+    #
+    # def __constraint_cost_revenue(self, model):
+    #     """Adds the constraint that the market cost and revenue are linked to the power."""
+    #
+    #     # Define the variables
+    #     var_in = model.variables[f'{self.name}_{self.comp_type}_{c.PF_IN}']  # inflow (buying)
+    #     var_out = model.variables[f'{self.name}_{self.comp_type}_{c.PF_OUT}']  # outflow (selling)
+    #     var_cost = model.variables[f'{self.name}_costs']  # costs
+    #     var_revenue = model.variables[f'{self.name}_revenue']  # revenue
+    #     dt_hours = pd.Series([self.dt_hours] * len(self.timesteps), index=self.timesteps)  # time delta
+    #
+    #     # Define the constraint for costs
+    #     # TODO: These are changed as that is a temp fix until the variables are switched around again.
+    #     eq_cost = (var_cost == -var_in * dt_hours * (self.price_buy + self.grid_buy + self.levies_buy))
+    #     model.add_constraints(eq_cost, name=f'{self.name}_costs', coords=[self.timesteps])
+    #
+    #     # Define the constraint for revenue
+    #     eq_revenue = (var_revenue == var_out * dt_hours * (self.price_sell + self.grid_sell + self.levies_sell))
+    #     model.add_constraints(eq_revenue, name=f'{self.name}_revenue', coords=[self.timesteps])
+    #
+    #     return model
 
 
 class InflexibleLoad(LinopyComps):
@@ -190,13 +257,13 @@ class InflexibleLoad(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        self.power = pd.Series(self.fcast[f'{self.name}_power'], index=self.timesteps)
+        self.power = pd.Series(self.fcast[f'{self.name}_power'], index=self.timesteps, dtype='int32')
 
     def define_variables(self, model, **kwargs):
         comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self.define_electricity_variable(model, comp_type=comp_type, lower=self.power, upper=self.power)
+        model = self.define_electricity_variable(model, comp_type=comp_type, lower=-self.power, upper=-self.power)
 
         return model
 
@@ -218,13 +285,13 @@ class Heat(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        self.heat = pd.Series(self.fcast[f'{self.name}_heat'], index=self.timesteps)
+        self.heat = pd.Series(self.fcast[f'{self.name}_heat'], index=self.timesteps, dtype='int32')
 
     def define_variables(self, model, **kwargs):
         comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self.define_heat_variable(model, comp_type=comp_type, lower=self.heat, upper=self.heat)
+        model = self.define_heat_variable(model, comp_type=comp_type, lower=-self.heat, upper=-self.heat)
 
         return model
 
@@ -243,7 +310,7 @@ class Dhw(LinopyComps):
         comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self.define_heat_variable(model, comp_type=comp_type, lower=self.heat, upper=self.heat)
+        model = self.define_heat_variable(model, comp_type=comp_type, lower=-self.heat, upper=-self.heat)
 
         return model
 
@@ -336,14 +403,11 @@ class Ev(LinopyComps):
     def define_variables(self, model, **kwargs):
         self.comp_type = kwargs['comp_type']
 
-        # Define the power variable
-        # model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=self.lower, upper=self.upper)
-
         # Define the power variables (need to be positive and negative due to the efficiency)
-        model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=0, upper=self.upper,
-                                                 direction=c.PF_IN)  # charging
         model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=self.lower, upper=0,
-                                                 direction=c.PF_OUT)  # discharging
+                                                 direction=c.PF_OUT)  # flow out of the home (charging battery)
+        model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=0, upper=self.upper,
+                                                 direction=c.PF_IN)  # flow into the home (discharging battery)
         # Define mode flag that decides whether the battery is charging or discharging
         model = self.define_mode_flag(model, comp_type=self.comp_type)
 
@@ -351,8 +415,7 @@ class Ev(LinopyComps):
         model = self.define_storage_variable(model, comp_type=self.comp_type, lower=0, upper=self.capacity)
 
         # Define the soc variable for the previous timestep (thus the value of self.soc[0]) as needed for constraints
-        model.add_variables(name=f'{self.name}_{self.comp_type}_soc_init', lower=self.soc[0], upper=self.soc[0],
-                            integer=True)
+        model.add_variables(name=f'{self.name}_{self.comp_type}_soc_init', lower=self.soc[0], upper=self.soc[0])
 
         return model
 
@@ -374,8 +437,8 @@ class Ev(LinopyComps):
         """Defines the lower and upper bounds for the charging power based on the availability and v2g."""
 
         # Define the charging power variables (depends on availability and v2g)
-        self.upper = self.charging_power * np.array(self.availability)
-        self.lower = -self.charging_power * self.v2g * np.array(self.availability)
+        self.upper = self.charging_power * self.v2g * np.array(self.availability)
+        self.lower = -self.charging_power * np.array(self.availability)
 
         return self.lower, self.upper
 
@@ -385,17 +448,17 @@ class Ev(LinopyComps):
         # Define the variables
         max_power = self.charging_power  # helper variable
         mode_var = model.variables[f'{self.name}_{self.comp_type}_mode']  # mode variable
-        var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # charging power
-        var_discharge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # discharging
+        var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # charging power
+        var_discharge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # discharging
 
         # Define the constraint for charging
         # Note: The constraints should look something like: var_charge <= max_power * (1 - mode_var)
         #       However, linopy does not support it. Thus, the somewhat more complicated version below is used.
-        equation_charging = (var_charge <= -(mode_var - 1) * max_power)
+        equation_charging = (var_charge + mode_var * self.lower >= self.lower)
         model.add_constraints(equation_charging, name=f'{self.name}_chargingflag', coords=[self.timesteps])
 
         # Define the constraint for discharging
-        equation_discharging = (var_discharge <= mode_var * max_power)
+        equation_discharging = (var_discharge - mode_var * self.upper <= 0)
         model.add_constraints(equation_discharging, name=f'{self.name}_dischargingflag', coords=[self.timesteps])
 
         return model
@@ -505,59 +568,30 @@ class Ev(LinopyComps):
         """Adds the constraint that the soc of the battery is that of the previous timestep plus dis-/charging power"""
 
         # Define the variables
-        dt_hours = pd.Series([self.dt * c.SECONDS_TO_HOURS] * len(self.timesteps), index=self.timesteps)  # delta time in hours
+        dt_hours = pd.Series([self.dt * c.SECONDS_TO_HOURS] * len(self.timesteps), index=self.timesteps)  # time in h
         efficiency = pd.Series([self.efficiency] * len(self.timesteps), index=self.timesteps)  # efficiency
         var_soc = model.variables[f'{self.name}_{self.comp_type}_soc']  # soc variable
-        var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # charging power
-        var_discharge = model.variables[
-            f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # discharging
+        var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # charging power
+        var_discharge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # discharging
 
         # Define the array that contains all previous socs
-        var_soc_first = model.variables[f'{self.name}_{self.comp_type}_soc_init']  # current soc
+        var_soc_init = model.variables[f'{self.name}_{self.comp_type}_soc_init']  # current soc
         var_soc_prev = var_soc.roll(timesteps=1)  # previous soc
         # Update the first soc value with the initial soc
-        var_soc_prev.lower[0] = var_soc_first.lower
-        var_soc_prev.upper[0] = var_soc_first.upper
-        var_soc_prev.labels[0] = var_soc_first.labels
+        var_soc_prev.lower[0] = var_soc_init.lower
+        var_soc_prev.upper[0] = var_soc_init.upper
+        var_soc_prev.labels[0] = var_soc_init.labels
 
         # Define the constraint for charging
         # Constraint: soc_new = soc_old + charge * efficiency * dt - discharge / efficiency * dt
         # Note: Everything is moved to the lhs as linopy cannot handle it otherwise
         eq = (var_soc
               - var_soc_prev
-              - var_charge * efficiency * dt_hours
-              - var_discharge / efficiency * dt_hours  # negative as discharging is negative
+              + var_charge * efficiency * dt_hours
+              + var_discharge / efficiency * dt_hours  # negative as discharging is negative
               == 0)
 
         model.add_constraints(eq, name=f'{self.name}_soc')
-
-        ## OLD VERSION
-        # # Define the variables
-        # dt_hours = self.dt * c.SECONDS_TO_HOURS  # delta time in hours
-        # var_soc = model.variables[f'{self.name}_{self.comp_type}_soc']  # soc variable
-        # var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # charging power
-        # var_discharge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # discharging
-        #
-        #
-        # # Define the constraint for charging
-        # # Constraint: soc_new = soc_old + charge * efficiency * dt - discharge / efficiency * dt
-        # # Note: Everything is moved to the lhs as linopy cannot handle it otherwise
-        # for idx, t in enumerate(self.timesteps):
-        #     # If it is the first timestep, set the initial soc
-        #     if idx == 0:
-        #         eq = (var_soc.sel(timesteps=t)
-        #               - self.soc[0]
-        #               - var_charge.sel(timesteps=t) * self.efficiency * dt_hours
-        #               - var_discharge.sel(timesteps=t) / self.efficiency * dt_hours
-        #               == 0)
-        #     else:
-        #         t_prev = self.timesteps[idx - 1]
-        #         eq = (var_soc.sel(timesteps=t)
-        #               - var_soc.sel(timesteps=t_prev)
-        #               - var_charge.sel(timesteps=t) * self.efficiency * dt_hours
-        #               - var_discharge.sel(timesteps=t) / self.efficiency * dt_hours
-        #               == 0)
-        #     model.add_constraints(eq, name=f'{self.name}_soc_{t}')
 
         return model
 
@@ -696,16 +730,17 @@ class SimpleBattery(LinopyComps):
         self.energy_to_full = self.capacity - self.soc  # energy needed to charge to full
 
         # Define the charging and discharging power limits
+        # Charging is treated as negative (load), discharging as positive (generation)
         self.lower, self.upper = -self.charging_power, self.charging_power
 
     def define_variables(self, model, **kwargs):
         self.comp_type = kwargs['comp_type']
 
         # Define the power variables (need to be positive and negative due to the efficiency)
-        model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=0, upper=self.upper,
-                                                 direction=c.PF_IN)  # charging
         model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=self.lower, upper=0,
-                                                 direction=c.PF_OUT)  # discharging
+                                                 direction=c.PF_OUT)  # flow out of the home (charging battery)
+        model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=0, upper=self.upper,
+                                                 direction=c.PF_IN)  # flow into the home (discharging battery)
         # Define mode flag that decides whether the battery is charging or discharging
         model = self.define_mode_flag(model, comp_type=self.comp_type)
 
@@ -713,8 +748,7 @@ class SimpleBattery(LinopyComps):
         model = self.define_storage_variable(model, comp_type=self.comp_type, lower=0, upper=self.capacity)
 
         # Define the soc variable for the previous timestep (thus the value of self.soc[0]) as needed for constraints
-        model.add_variables(name=f'{self.name}_{self.comp_type}_soc_init', lower=self.soc, upper=self.soc,
-                            integer=True)
+        model.add_variables(name=f'{self.name}_{self.comp_type}_soc_init', lower=self.soc, upper=self.soc)
 
         return model
 
@@ -736,19 +770,18 @@ class SimpleBattery(LinopyComps):
         """Adds the constraint that the battery can either charge or discharge but not both at the same time."""
 
         # Define the variables
-        max_power = self.charging_power  # helper variable
         mode_var = model.variables[f'{self.name}_{self.comp_type}_mode']  # mode variable
-        var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # charging power
-        var_discharge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # discharging
+        var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # charging power
+        var_discharge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # discharging
 
         # Define the constraint for charging
-        # Note: The constraints should look something like: var_charge <= max_power * (1 - mode_var)
+        # Note: The constraints should look something like: var_discharge >= -max_power * (1 - mode_var)
         #       However, linopy does not support it. Thus, the somewhat more complicated version below is used.
-        equation_charging = (var_charge <= -(mode_var - 1) * max_power)
+        equation_charging = (var_charge + mode_var * self.lower >= self.lower)
         model.add_constraints(equation_charging, name=f'{self.name}_chargingflag', coords=[self.timesteps])
 
         # Define the constraint for discharging
-        equation_discharging = (var_discharge <= mode_var * max_power)
+        equation_discharging = (var_discharge - mode_var * self.upper <= 0)
         model.add_constraints(equation_discharging, name=f'{self.name}_dischargingflag', coords=[self.timesteps])
 
         return model
@@ -759,63 +792,33 @@ class SimpleBattery(LinopyComps):
     def __constraint_soc(self, model):
         """Adds the constraint that the soc of the battery is that of the previous timestep plus dis-/charging power"""
 
-
-
         # Define the variables
-        dt_hours = pd.Series([self.dt * c.SECONDS_TO_HOURS] * len(self.timesteps), index=self.timesteps)  # delta time in hours
+        dt_hours = pd.Series([self.dt * c.SECONDS_TO_HOURS] * len(self.timesteps), index=self.timesteps)  # time in h
         efficiency = pd.Series([self.efficiency] * len(self.timesteps), index=self.timesteps)  # efficiency
         var_soc = model.variables[f'{self.name}_{self.comp_type}_soc']  # soc variable
-        var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # charging power
-        var_discharge = model.variables[
-            f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # discharging
+        var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # charging power
+        var_discharge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # discharging
 
         # Define the array that contains all previous socs
-        var_soc_first = model.variables[f'{self.name}_{self.comp_type}_soc_init']  # current soc
+        var_soc_init = model.variables[f'{self.name}_{self.comp_type}_soc_init']  # current soc
         var_soc_prev = var_soc.roll(timesteps=1)  # previous soc
         # Update the first soc value with the initial soc
-        var_soc_prev.lower[0] = var_soc_first.lower
-        var_soc_prev.upper[0] = var_soc_first.upper
-        var_soc_prev.labels[0] = var_soc_first.labels
+        var_soc_prev.lower[0] = var_soc_init.lower
+        var_soc_prev.upper[0] = var_soc_init.upper
+        var_soc_prev.labels[0] = var_soc_init.labels
 
         # Define the constraint for charging
         # Constraint: soc_new = soc_old + charge * efficiency * dt - discharge / efficiency * dt
         # Note: Everything is moved to the lhs as linopy cannot handle it otherwise
         eq = (var_soc
               - var_soc_prev
-              - var_charge * efficiency * dt_hours
-              - var_discharge / efficiency * dt_hours  # negative as discharging is negative
+              + var_charge * efficiency * dt_hours
+              + var_discharge / efficiency * dt_hours
               == 0)
-
         model.add_constraints(eq, name=f'{self.name}_soc')
 
-        ### OLD VERSION
-        # # Define the variables
-        # dt_hours = self.dt * c.SECONDS_TO_HOURS  # delta time in hours
-        # var_soc = model.variables[f'{self.name}_{self.comp_type}_soc']  # soc variable
-        # var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # charging power
-        # var_discharge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # discharging
-        #
-        # # Define the constraint for charging
-        # # Constraint: soc_new = soc_old + charge * efficiency * dt - discharge / efficiency * dt
-        # # Note: Everything is moved to the lhs as linopy cannot handle it otherwise
-        # for idx, t in enumerate(self.timesteps):
-        #     # If it is the first timestep, set the initial soc
-        #     if idx == 0:
-        #         eq = (var_soc.sel(timesteps=t)
-        #               - self.soc
-        #               - var_charge.sel(timesteps=t) * self.efficiency * dt_hours
-        #               - var_discharge.sel(timesteps=t) / self.efficiency * dt_hours
-        #               == 0)
-        #     else:
-        #         t_prev = self.timesteps[idx - 1]
-        #         eq = (var_soc.sel(timesteps=t)
-        #               - var_soc.sel(timesteps=t_prev)
-        #               - var_charge.sel(timesteps=t) * self.efficiency * dt_hours
-        #               - var_discharge.sel(timesteps=t) / self.efficiency * dt_hours
-        #               == 0)
-        #     model.add_constraints(eq, name=f'{self.name}_soc_{t}')
-
         return model
+
 
 class Battery(SimpleBattery):
 

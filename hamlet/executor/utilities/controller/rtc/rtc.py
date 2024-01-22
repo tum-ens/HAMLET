@@ -269,14 +269,15 @@ class Rtc(ControllerBase):
                             component_energy_mode = self.mapping[component_type][energy_type]
 
                             # Add the variable to the balance equation
-                            # Note: Generation is positive, load and storage are negative (this follows the convention
-                            #       that inflows are positive and outflows are negative)
-                            # TODO: Maybe change this already to positive and negative in the plant objects to avoid confusion
-                            # TODO: Probably change convention of storage to positive as well (load becomes negative)
+                            # Note: All components are modeled positively meaning that positive flows flow into the
+                            #  main meter while negative flows flow out of the main meter. The components are modeled
+                            #  accordingly
                             if component_energy_mode == c.OM_GENERATION:
                                 balance_equations[energy_type] += variable
-                            elif component_energy_mode == c.OM_LOAD or component_energy_mode == c.OM_STORAGE:
-                                balance_equations[energy_type] -= variable
+                            elif component_energy_mode == c.OM_LOAD:
+                                balance_equations[energy_type] += variable
+                            elif component_energy_mode == c.OM_STORAGE:
+                                balance_equations[energy_type] += variable
                             else:
                                 raise ValueError(f"Unsupported operation mode: {component_energy_mode}")
                         else:
@@ -339,7 +340,8 @@ class Rtc(ControllerBase):
 
             # Check if the solution is optimal
             if status[0] != 'ok':
-                print(self.agent.agent_id)
+                print(f'Exited with status "{status[0]}". \n '
+                      f'Infeasibilities for agent {self.agent.agent_id}:')
                 print(self.model.print_infeasibilities())
                 raise ValueError(f"Optimization failed: {status}")
 
@@ -410,11 +412,6 @@ class Rtc(ControllerBase):
             # Drop all setpoint columns that are not part of src_cols (plus keep timestamp and timestep column)
             sel_cols = [self.setpoints.columns[0]] + src_cols
             self.setpoints = self.setpoints.select(sel_cols)
-
-            # with pl.Config(set_tbl_rows=1, set_tbl_cols=20, set_fmt_str_lengths=200):
-            #     print(self.agent.agent_id)
-            #     print(self.setpoints)
-            # exit()
 
             # Make LazyFrame again
             self.setpoints = self.setpoints.lazy()

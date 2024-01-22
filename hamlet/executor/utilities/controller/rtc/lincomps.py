@@ -99,7 +99,7 @@ class InflexibleLoad(LinopyComps):
         comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self.define_electricity_variable(model, comp_type=comp_type, lower=self.power, upper=self.power)
+        model = self.define_electricity_variable(model, comp_type=comp_type, lower=-self.power, upper=-self.power)
 
         return model
 
@@ -129,7 +129,7 @@ class Heat(LinopyComps):
         comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self.define_heat_variable(model, comp_type=comp_type, lower=self.heat, upper=self.heat)
+        model = self.define_heat_variable(model, comp_type=comp_type, lower=-self.heat, upper=-self.heat)
 
         return model
 
@@ -148,7 +148,7 @@ class Dhw(LinopyComps):
         comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self.define_heat_variable(model, comp_type=comp_type, lower=self.heat, upper=self.heat)
+        model = self.define_heat_variable(model, comp_type=comp_type, lower=-self.heat, upper=-self.heat)
 
         return model
 
@@ -320,7 +320,6 @@ class SimpleBattery(LinopyComps):
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
         self.soc = kwargs['socs'][f'{self.name}'][0]  # state of charge at timestep (energy)
         self.energy_to_full = self.capacity - self.soc  # energy needed to charge to full
-
 
         # Define the charging and discharging power variables (depend on capacity, soc, efficiency and dt)
         self.upper = int(round(min(self.charging_power,

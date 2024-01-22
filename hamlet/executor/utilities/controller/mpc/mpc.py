@@ -19,8 +19,6 @@ from hamlet.executor.utilities.database.database import Database as db
 from hamlet import functions as f
 import sys
 
-# 'O9n4HIGxRrV58t' '6amLPGSnTedGjou' '9l37kMNMXWcA0Nm'
-AGENT_ID = '9l37kMNMXWcA0Nm'
 
 class MpcBase:
     def run(self):
@@ -60,7 +58,7 @@ class Mpc(ControllerBase):
     class Linopy(MpcBase):
         def __init__(self, **kwargs):
             # Create the model
-            self.model = Model()
+            self.model = Model(force_dim_names=True)
 
             # Store the mapping of the components to the energy types and operation modes
             self.mapping = kwargs['mapping']
@@ -92,8 +90,8 @@ class Mpc(ControllerBase):
                                                    & (self.forecasts[c.TC_TIMESTEP] < self.timestamp + self.horizon))
 
             # Get the timesteps and the number of timesteps in the forecast
-            self.timesteps = pd.Index(self.forecasts.select(c.TC_TIMESTAMP).to_pandas(), name='timesteps')
-            self.n_steps = pd.Index(range(len(self.timesteps)), name='timesteps')
+            self.timesteps = pd.Index(self.forecasts.select(c.TC_TIMESTEP).to_pandas(), name='timesteps')
+            self.n = pd.Index(range(len(self.timesteps)), name='timesteps')
             # self.timesteps = self.n_steps  # Use this line if the timesteps are not needed and the index is sufficient
             # Reduce the socs to the current timestamp
             self.socs = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timestamp)
@@ -139,6 +137,17 @@ class Mpc(ControllerBase):
             self.define_constraints()
             self.define_objective()
 
+            # if self.agent.agent_id == AGENT_ID:
+            #     for name, var in self.model.variables.items():
+            #         if 'ev' in name:
+            #             print(name, var)
+            #     for name, con in self.model.constraints.items():
+            #         if 'uXWPwBK6w61DDsS' in name or 'balance' in name:
+            #             print(name)
+            #             print(con)
+                # print(self.model.objective)
+                # exit()
+
         def create_plants(self):
             for plant_name, plant_data in self.plants.items():
 
@@ -177,7 +186,7 @@ class Mpc(ControllerBase):
             """"""
 
             # Define variables from the market results and a balancing variable for each energy type
-            for market in self.markets:  # TODO: Change once it is clear how the markets are defined
+            for market in self.markets:
                 # Create market object
                 self.market_objects[f'{market}'] = lincomps.Market(name=market,
                                                                    forecasts=self.forecasts,
@@ -202,7 +211,6 @@ class Mpc(ControllerBase):
             for plant_name, plant in self.plant_objects.items():
                 self.model = plant.define_constraints(self.model)
 
-
             # Define constraints for each market
             for market_name, market in self.market_objects.items():
                 self.model = market.define_constraints(self.model)
@@ -224,7 +232,6 @@ class Mpc(ControllerBase):
                 for variable_name, variable in self.model.variables.items():
 
                     # Add the variable as generation if it is a market variable for the current energy type
-                    # Note: Markets are modeled as generators.
                     if ((variable_name.startswith(tuple(self.market_objects.keys())))
                           and (energy_type in variable_name)
                           and (variable_name.endswith(f'_{c.PF_IN}') or variable_name.endswith(f'_{c.PF_OUT}'))):
@@ -245,13 +252,15 @@ class Mpc(ControllerBase):
                             component_energy_mode = self.mapping[component_type][energy_type]
 
                             # Add the variable to the balance equation
-                            # Note: Generation is positive, load and storage are negative (this follows the convention
-                            #       that inflows are positive and outflows are negative)
-                            # TODO: Maybe change this already to positive and negative in the plant objects to avoid confusion
+                            # Note: All components are modeled positively meaning that positive flows flow into the
+                            #  main meter while negative flows flow out of the main meter. The components are modeled
+                            #  accordingly
                             if component_energy_mode == c.OM_GENERATION:
                                 balance_equations[energy_type] += variable
-                            elif component_energy_mode == c.OM_LOAD or component_energy_mode == c.OM_STORAGE:
-                                balance_equations[energy_type] -= variable
+                            elif component_energy_mode == c.OM_LOAD:
+                                balance_equations[energy_type] += variable
+                            elif component_energy_mode == c.OM_STORAGE:
+                                balance_equations[energy_type] += variable
                             else:
                                 raise ValueError(f"Unsupported operation mode: {component_energy_mode}")
                         else:
@@ -265,9 +274,6 @@ class Mpc(ControllerBase):
             for energy_type, equation in balance_equations.items():
                 self.model.add_constraints(equation == 0, name="balance_" + energy_type)
 
-            # exit()
-
-
             return self.model
 
         def define_objective(self):
@@ -276,19 +282,9 @@ class Mpc(ControllerBase):
             # Initialize the objective function as zero
             objective = self.model.add_variables(name='objective', lower=0, upper=0, integer=True)
 
-            # TODO: This is currently not the correct format as the names of the markets are not correct yet.
-            #  They will be replaced by the names of the market inputs
-
-            # TODO: Another issue that in the future there needs to be a forecast for wholesale and local prices
-            #  (ponder if regional also needs to be addressed here)
-
             # Loop through the model's variables to identify the balancing variables
             for variable_name, variable in self.model.variables.items():
-
-                # if self.agent.agent_id == AGENT_ID:
-                #     print(variable_name)
-                    # print(variable)
-                # If the variable name starts with 'balancing_', it's a balancing variable
+                # Only consider the cost and revenue components of the markets
                 if variable_name.startswith(tuple(self.market_names)):
                     if variable_name.endswith('_costs'):
                         # Add the variable to the objective function
@@ -301,9 +297,6 @@ class Mpc(ControllerBase):
                 else:
                     pass
 
-            # if self.agent.agent_id == AGENT_ID:
-            #     print(objective)
-
             # Set the objective function to the model with the minimize direction
             self.model.add_objective(objective.sum())
 
@@ -312,23 +305,20 @@ class Mpc(ControllerBase):
         def run(self):
 
             # Solve the optimization problem
-            solver = 'gurobi'  # TODO: Currently overwriting other solvers as only gurobi is available
+            solver = 'gurobi'  # Note: Currently overwriting other solvers as only gurobi is available
             match solver:
                 case 'gurobi':
                     sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
-                    solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
-                    status = self.model.solve(solver_name='gurobi') #, **solver_options)
+                    solver_options = {'OutputFlag': 0, 'LogToConsole': 0, 'TimeLimit': 2}
+                    status = self.model.solve(solver_name='gurobi', **solver_options)
                     sys.stdout = sys.__stdout__     # re-activate printing
                 case _:
                     raise ValueError(f"Unsupported solver: {solver}")
 
             # Check if the solution is optimal
             if status[0] != 'ok':
-                # subset = self.model.compute_set_of_infeasible_constraints()
-                # print(subset)
-                # labels = self.model.compute_infeasibilities()
-                # print(labels)
-                # print(self.model.constraints.print_labels(labels))
+                print(f'Exited with status "{status[0]}". \n '
+                      f'Infeasibilities for agent {self.agent.agent_id}:')
                 print(self.model.print_infeasibilities())
                 raise ValueError(f"Optimization failed: {status}")
 
@@ -341,8 +331,6 @@ class Mpc(ControllerBase):
 
             # Obtain the solution values
             solution = {name: sol for name, sol in self.model.solution.items()}
-
-            # TODO: Solution is definitely not correct yet but it is a start: Focus on market results first
 
             # Update setpoints
             self.setpoints = self.update_setpoints(solution)
@@ -361,8 +349,6 @@ class Mpc(ControllerBase):
             ids = set([col.split('_', 1)[0] for col in solution.keys()
                               if not col.startswith('objective') and not col.startswith('balance')])
 
-            # with pl.Config(tbl_cols=20, fmt_str_lengths=50):
-            #     print(self.setpoints)
             # Get the relevant columns
             # Filter for columns that start with one of the ids
             src_cols = [col for col in solution.keys() for i in ids if i in col]
@@ -370,7 +356,6 @@ class Mpc(ControllerBase):
             src_cols = [col for col in src_cols for e in self.energy_types if e in col]
 
             # Change the solution so that the in and out columns are computed as one
-            # TODO: Take out round() once values are surely correct
             adjusted_solution = {}
             for col in src_cols:
                 # Check if the column is an in or out column
@@ -391,15 +376,9 @@ class Mpc(ControllerBase):
             adjusted_solution = pl.DataFrame(adjusted_solution)
             # Add timestamp column from setpoints
             adjusted_solution = adjusted_solution.hstack(self.setpoints.select(c.TC_TIMESTAMP).slice(1))
-            # print(adjusted_solution)
 
             # Update setpoints
             self.setpoints = self.setpoints.update(adjusted_solution, on=c.TC_TIMESTAMP)
-
-            # if self.agent.agent_id == AGENT_ID:
-            # with pl.Config(tbl_rows=100, tbl_cols=20, fmt_str_lengths=200, tbl_width_chars=200):
-            #     print(self.setpoints)
-            # exit()
 
             # Make LazyFrame again
             self.setpoints = self.setpoints.lazy()
