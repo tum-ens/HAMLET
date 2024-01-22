@@ -313,10 +313,10 @@ def slice_dataframe_between_times(target_df, reference_ts, duration: int, unit='
 
     if duration > 0:    # slice data in the future, reference (current) timestep will not be included
         filter_conditions = ((pl.col('timedelta') + pl.duration(seconds=duration) > 0) &
-                             (pl.col('timedelta') < 0))
+                             (pl.col('timedelta') <= 0))
     elif duration < 0:   # slice data from the past, reference (current) timestep will be included
         filter_conditions = ((pl.col('timedelta') + pl.duration(seconds=duration) < 0) &
-                             (pl.col('timedelta') > 0))
+                             (pl.col('timedelta') >= 0))
     else:   # get data at current timestep
         filter_conditions = pl.col('timedelta') == 0
 

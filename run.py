@@ -4,7 +4,7 @@ sys.path.append("./")  # Add the current directory to the Python path for execut
 from hamlet import Executor
 
 # Path to the scenario folder (relative or absolute)
-path = "../04_scenarios/example_single_market"
+path = "./04_scenarios/example_single_market"
 
 # Create the executor object
 sim = Executor(path, num_workers=1)

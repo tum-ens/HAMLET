@@ -15,6 +15,8 @@ from hamlet.executor.utilities.database.database import Database as db
 from hamlet import functions as f
 import warnings
 import logging
+import sys
+import os
 
 # warnings.filterwarnings("ignore")
 logging.getLogger('linopy').setLevel(logging.CRITICAL)
@@ -112,9 +114,17 @@ class Rtc(ControllerBase):
                     # self.market_results[market_name] = db.filter_market_data(transactions, c.TC_ID_AGENT, self.agent.agent_id)  # Runs into an error for which the workaround was installed
                     # Filter for agent ID
                     transactions = transactions.filter(pl.col(c.TC_ID_AGENT) == self.agent.agent_id)
+                    # Filter for current timestamp
+                    transactions = transactions.filter(pl.col(c.TC_TIMESTEP) == self.timestamp)
+                    # Fill NaN values with 0
+                    transactions = transactions.fill_null(0)
+                    #if len(transactions) > 0:
+                    #    with pl.Config(set_tbl_rows= 50, set_tbl_cols=20, set_fmt_str_lengths=200):
+                    #        print(transactions)
                     # Get net energy amount for market
                     self.market_results[market_name] = (transactions
-                                                        .select(pl.sum(c.TC_ENERGY_IN) - pl.sum(c.TC_ENERGY_OUT))
+                                                        .select(pl.sum(c.TC_ENERGY_IN).cast(pl.Int64)
+                                                                - pl.sum(c.TC_ENERGY_OUT).cast(pl.Int64))
                                                         .to_series().to_list()[0])
 
             # Obtain maximum balancing power
@@ -199,12 +209,6 @@ class Rtc(ControllerBase):
                                                               market_result=self.market_results[market],
                                                               delta=self.dt)
 
-
-                # Create balancing market object
-                self.market_objects[f'{market}_{c.MT_BALANCING}'] = lincomps.Balancing(
-                    name=f'{market}_{c.MT_BALANCING}',
-                    timeseries=self.market)
-
             return self.market_objects
 
         def define_variables(self):
@@ -215,7 +219,7 @@ class Rtc(ControllerBase):
             # Define variables for each market
             for market_name, market in self.market_objects.items():
                 # Balancing markets are not explicitly modeled and have the same comp_type as their original market
-                if c.MT_BALANCING in market_name:
+                if c.TT_BALANCING in market_name:
                     energy_type = self.markets[market_name.rsplit('_', 1)[0]]
                 else:
                     energy_type = self.markets[market_name]
@@ -265,14 +269,15 @@ class Rtc(ControllerBase):
                             component_energy_mode = self.mapping[component_type][energy_type]
 
                             # Add the variable to the balance equation
-                            # Note: Generation is positive, load and storage are negative (this follows the convention
-                            #       that inflows are positive and outflows are negative)
-                            # TODO: Maybe change this already to positive and negative in the plant objects to avoid confusion
-                            # TODO: Probably change convention of storage to positive as well (load becomes negative)
+                            # Note: All components are modeled positively meaning that positive flows flow into the
+                            #  main meter while negative flows flow out of the main meter. The components are modeled
+                            #  accordingly
                             if component_energy_mode == c.OM_GENERATION:
                                 balance_equations[energy_type] += variable
-                            elif component_energy_mode == c.OM_LOAD or component_energy_mode == c.OM_STORAGE:
-                                balance_equations[energy_type] -= variable
+                            elif component_energy_mode == c.OM_LOAD:
+                                balance_equations[energy_type] += variable
+                            elif component_energy_mode == c.OM_STORAGE:
+                                balance_equations[energy_type] += variable
                             else:
                                 raise ValueError(f"Unsupported operation mode: {component_energy_mode}")
                         else:
@@ -284,16 +289,10 @@ class Rtc(ControllerBase):
             # Add the constraints for each energy type
             for energy_type, equation in balance_equations.items():
                 self.model.add_constraints(equation == 0, name="balance_" + energy_type)
-
+                
             return self.model
 
         def define_objective(self):
-            # TODO: Something is still wrong here as it should discharge the battery and not use balancing energy
-            #  Check as well if balancing constraint is correct and not tainted by the new variables
-            #  Alternative would be introducing a milp in the balancing constraints of battery and ev but they should be correct already
-
-            # TODO: Check balancing constraint and objective function for correctness
-
             # Weights to prioritize components
             w_bat = 1  # weight for battery
             w_ev = 2  # weight for electric vehicle
@@ -302,38 +301,38 @@ class Rtc(ControllerBase):
             # Initialize the objective function as zero
             objective = self.model.add_variables(name='objective', lower=0, upper=0, integer=True)
 
-            # Loop through the model's variables to identify the balancing variables
+            # Loop through the model's variables to identify the balancing variables that need to be minimized
             for variable_name, variable in self.model.variables.items():
-                # If the variable name starts with 'balancing_', it's a balancing variable
-                if variable_name.startswith('balancing_'):
-                    # Add the variable to the objective function
-                    objective += variable * w_bal
-                elif c.P_EV in variable_name and '_deviation_' in variable_name:
-                    if variable_name.endswith('_pos'):
-                        objective += variable * w_ev / 2
-                    elif variable_name.endswith('_neg'):
-                        objective += variable * w_ev / 2
-                elif c.P_BATTERY in variable_name and '_deviation_' in variable_name:
-                    if variable_name.endswith('_pos'):
-                        objective += variable * w_bat / 2
-                    elif variable_name.endswith('_neg'):
-                        objective += variable * w_bat / 2
+                # Balancing deviation
+                if f'_{c.TT_BALANCING}_' in variable_name and '_deviation_' in variable_name:
+                        objective += variable * w_bal
+                # Heat pump deviation
+                elif f'_{c.P_HP}_' in variable_name and '_deviation_' in variable_name:
+                        objective += variable * w_hp
+                # EV deviation
+                elif f'_{c.P_EV}_' in variable_name and '_deviation_' in variable_name:
+                        objective += variable * w_ev
+                # Battery deviation
+                elif f'_{c.P_BATTERY}_' in variable_name and '_deviation_' in variable_name:
+                        objective += variable * w_bat
                 else:
                     pass
 
             # Set the objective function to the model with the minimize direction
             self.model.add_objective(objective)
-
+            
             return self.model
 
         def run(self):
 
             # Solve the optimization problem
-            solver = 'gurobi'
+            solver = 'gurobi'  # TODO: Currently overwriting other solvers as only gurobi is available
             match solver:
                 case 'gurobi':
+                    sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
                     solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
                     status = self.model.solve(solver_name='gurobi', **solver_options)
+                    sys.stdout = sys.__stdout__     # re-activate printing
                 case _:
                     raise ValueError(f"Unsupported solver: {solver}")
 
@@ -341,6 +340,8 @@ class Rtc(ControllerBase):
 
             # Check if the solution is optimal
             if status[0] != 'ok':
+                print(f'Exited with status "{status[0]}". \n '
+                      f'Infeasibilities for agent {self.agent.agent_id}:')
                 print(self.model.print_infeasibilities())
                 raise ValueError(f"Optimization failed: {status}")
 
@@ -374,6 +375,10 @@ class Rtc(ControllerBase):
 
             # Make LazyFrames into DataFrames
             self.setpoints = self.setpoints.collect()
+            
+            # Set all setpoints to 0
+            for col in self.setpoints.columns[1:]:
+                self.setpoints = self.setpoints.with_columns(pl.lit(0).alias(col))
 
             # Get relevant column name beginnings (i.e. the plant names and market and balancing)
             beginnings = set([col.split('_', 1)[0] for col in solution.keys()
@@ -385,8 +390,10 @@ class Rtc(ControllerBase):
                         if col.split('_', 1)[0] in beginnings and col.rsplit('_', 1)[-1] in endings]
 
             # Shift index according to timetable time
-            self.setpoints.index = [self.timetable.collect()[0, c.TC_TIMESTAMP] + self.dt * t
-                                    for t in range(len(self.setpoints))]
+            timesteps = [self.timetable.collect()[0, c.TC_TIMESTAMP] + self.dt * t for t in range(len(self.setpoints))]
+            self.setpoints = self.setpoints.with_columns(pl.Series(timesteps)
+                                                         .cast(pl.Datetime(time_unit='ns', time_zone='UTC'))
+                                                         .alias(c.TC_TIMESTAMP))
 
             # Update setpoints
             # TODO: Do this similar to the one in mpc (columns are added if missing, otherwise replaced)
@@ -405,12 +412,6 @@ class Rtc(ControllerBase):
             # Drop all setpoint columns that are not part of src_cols (plus keep timestamp and timestep column)
             sel_cols = [self.setpoints.columns[0]] + src_cols
             self.setpoints = self.setpoints.select(sel_cols)
-
-            #with pl.Config() as cfg:
-            #    cfg.set_tbl_cols(20)
-            #    cfg.set_fmt_str_lengths(200)
-            #    print(self.setpoints)
-            #exit()
 
             # Make LazyFrame again
             self.setpoints = self.setpoints.lazy()
@@ -528,7 +529,6 @@ class Rtc(ControllerBase):
             src_cols = [col for col in src_cols if c.MT_BALANCING not in col]
 
             return df, src_cols
-
 
     class RuleBased(RtcBase):  # Note the change in class name
 

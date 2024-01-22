@@ -19,8 +19,8 @@ class Controller:
 
         # Mapping of controller types to classes
         controllers = {
-            'rtc': Rtc,
-            'mpc': Mpc,
+            c.C_RTC: Rtc,
+            c.C_MPC: Mpc,
         }
 
         # Lookup the class based on the controller_type

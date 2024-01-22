@@ -14,8 +14,8 @@ class MarketDB:
     """Database contains all the information for markets.
     Should only be connected with Database class, no connection with main Executor."""
 
-    def __init__(self, type, name, market_path, retailer_path):
-        self.market_type = type
+    def __init__(self, market_type, name, market_path, retailer_path):
+        self.market_type = market_type
         self.market_name = name
         self.market_path = market_path
         self.market_save = None  # path to save the market
@@ -46,7 +46,10 @@ class MarketDB:
 
         f.save_file(path=os.path.join(path, 'market_transactions.csv'), data=self.market_transactions.collect()
                     , df='polars')
-        f.save_file(path=os.path.join(path, 'positions_matched.csv'), data=self.positions_matched.collect()
+        # TODO: put back in when the data is available. If there is no use for the table, remove it and create it in the analyzer
+        # f.save_file(path=os.path.join(path, 'positions_matched.csv'), data=self.positions_matched.collect()
+        #             , df='polars')
+        f.save_file(path=os.path.join(path, 'retailer.ft'), data=self.retailer.collect()
                     , df='polars')
 
         # Data is not saved if save_all is False
@@ -59,6 +62,21 @@ class MarketDB:
                         , df='polars')
             f.save_file(path=os.path.join(path, 'offers_uncleared.ft'), data=self.offers_uncleared.collect()
                         , df='polars')
-        f.save_file(path=os.path.join(path, 'retailer.ft'), data=self.retailer.collect()
-                    , df='polars')
 
+    def set_market_transactions(self, data):
+        self.market_transactions = data
+
+    def set_bids_cleared(self, data):
+        self.bids_cleared = data
+
+    def set_bids_uncleared(self, data):
+        self.bids_uncleared = data
+
+    def set_offers_cleared(self, data):
+        self.offers_cleared = data
+
+    def set_offers_uncleared(self, data):
+        self.offers_uncleared = data
+
+    def set_positions_matched(self, data):
+        self.positions_matched = data

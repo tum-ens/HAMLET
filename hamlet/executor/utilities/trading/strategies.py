@@ -28,94 +28,87 @@ import random
 class TradingBase:
 
     def __init__(self, **kwargs):
+        
+        # Get the kwarguments
         self.kwargs = kwargs
+        
+        # Get the timetable and timestep
         self.timetable = kwargs['timetable']
-        self.market = kwargs[c.TC_MARKET]
+        self.dt = self.timetable.collect()[1, c.TC_TIMESTEP] - self.timetable.collect()[0, c.TC_TIMESTEP]  # in datetime format
+        self.dt_hours = self.dt / pd.Timedelta(hours=1)  # in hours
+            
+        # Get the energy type
+        self.energy_type = self.timetable.collect().row(0, named=True)[c.TC_ENERGY_TYPE]
+        
+        # Get the market data, name, type and transactions
         self.market_data = kwargs['market_data']
+        self.market_name = self.market_data.market_name
+        self.market_type = self.market_data.market_type
+        self.market_transactions = self.market_data.market_transactions
+        
+        # Get the agent data, id and trading horizon
         self.agent = kwargs['agent']
-        self.bids_offers = pl.LazyFrame(schema=c.TS_BIDS_OFFERS)
-
-        # Get agent id and trading horizon
         self.agent_id = self.agent.account[c.K_GENERAL]['agent_id']
         self.trading_horizon = pd.Timedelta(seconds=self.agent.account[c.K_EMS][c.K_MARKET]['horizon'])
+        
+        # Create the bids and offers table
+        self.bids_offers = pl.LazyFrame(schema=c.TS_BIDS_OFFERS)
 
-        # Get the market data for the given market and agent
-        # TODO: Include once it is possible to get the market data. It should be subtracted from the setpoints
-        #self.market_data = self.market_data.filter((pl.col(c.TC_MARKET) == self.market)
-        #                                            & (pl.col(c.TC_ID_AGENT) == self.agent)
-        #                                            & (pl.col(c.TC_TIMESTEP) >= self.timetable[c.TC_TIMESTEP].first())
-        #                                            & (pl.col(c.TC_TIMESTEP) <= self.timetable[c.TC_TIMESTEP].last()))
+        # Get the market transactions for the given market and agent for the given time horizon
+        self.market_transactions = self.market_transactions.filter((pl.col(c.TC_MARKET) == self.market_type)
+                                                                   & (pl.col(c.TC_NAME) == self.market_name)
+                                                                   & (pl.col(c.TC_TYPE_TRANSACTION) == c.TT_MARKET)
+                                                                   & (pl.col(c.TC_ID_AGENT) == self.agent_id)
+                                                                   & (pl.col(c.TC_TIMESTEP) >= self.timetable.collect().select(pl.first(c.TC_TIMESTEP)))
+                                                                   & (pl.col(c.TC_TIMESTEP) <= self.timetable.collect().select(pl.last(c.TC_TIMESTEP)))
+                                                                   ).collect()  # Turned into a dataframe due to a bug in polars (.agg() does not work on lazyframes)
+        # Group the market data by the timestep      
+        self.market_transactions = self.market_transactions.groupby(c.TC_TIMESTEP).agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum())
+        # Fill all empty columns with zero
+        self.market_transactions = self.market_transactions.fill_null(0)
+        # Compute the net energy
+        self.market_transactions = self.market_transactions.with_columns((pl.col(c.TC_ENERGY_IN).cast(pl.Int64) - pl.col(c.TC_ENERGY_OUT).cast(pl.Int64)).alias(c.TC_ENERGY)).lazy() 
 
-        # Create some dummy values for now
-        # TODO: Delete once market data is available
-        self.market_data = self.timetable.clone()
-        self.market_data = self.market_data.with_columns(
-            [
-                pl.Series([self.agent_id] * len(self.market_data.collect())).alias(c.TC_ID_AGENT),
-                pl.Series(random.sample(range(-100, 100), len(self.market_data.collect()))).alias(c.TC_ENERGY),
-            ]
-        )
-        self.market_data = self.market_data.with_columns(
-            [
-                pl.col(c.TC_ENERGY).apply(lambda x: abs(x) if x > 0 else 0).alias(c.TC_ENERGY_IN),
-                pl.col(c.TC_ENERGY).apply(lambda x: abs(x) if x < 0 else 0).alias(c.TC_ENERGY_OUT),
-            ]
-        )
-
-        # Group the market data by the timestep
-        self.market_data = self.market_data.groupby(c.TC_TIMESTEP).agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum())
-        self.market_data = self.market_data.with_columns((pl.col(c.TC_ENERGY_IN) - pl.col(c.TC_ENERGY_OUT)).alias(c.TC_ENERGY))
-
-        # Get the energy type for the given market type
-        # self.energy_type = self.market_data.select(c.TC_ENERGY_TYPE).first()[0] TODO: Put back in once market data is available
-        self.energy_type = c.ET_ELECTRICITY
-
-        # Get the setpoints for the given market and agent
-        self.setpoints = self.agent.setpoints.select([c.TC_TIMESTAMP, f'{self.market}_{self.energy_type}'])
+        # Get the setpoints for the given market and agent and convert them to energy (unit: Wh)
+        self.setpoints = self.agent.setpoints.select([c.TC_TIMESTAMP, f'{self.market_name}_{self.energy_type}'])
         self.setpoints = self.setpoints.rename({c.TC_TIMESTAMP: c.TC_TIMESTEP})
-
+        self.setpoints = self.setpoints.with_columns((pl.col(f'{self.market_name}_{self.energy_type}') * self.dt_hours).cast(pl.Int32))
+        
         # Get the forecast of the prices
-        # TODO: Include once available
-        # self.forecast = self.agent.forecasts
-        # Dummy values for now
-        # TODO: Delete once forecast is available
-        self.forecast = self.timetable.clone()
-        self.forecast = self.forecast.with_columns(
-            [
-                pl.Series([1400] * len(self.market_data.collect())).alias('energy_price_sell'),
-                pl.Series([600] * len(self.market_data.collect())).alias('energy_price_buy'),
-            ]
-        )
-        # Drop unnecessary columns
-        self.forecast = self.forecast.drop([c.TC_TIMESTAMP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE,
-                                            c.TC_ACTIONS, c.TC_CLEARING_TYPE, c.TC_CLEARING_METHOD,
-                                            c.TC_CLEARING_PRICING, c.TC_COUPLING])
-
-        # with pl.Config(set_tbl_cols=20, set_tbl_width_chars=400):
-        #     print(self.forecast.collect())
+        self.forecast = self.agent.forecasts
+        # Reduce the table to only include the relevant columns (energy price sell and buy)
+        relevant_cols = [c.TC_TIMESTEP, 'energy_price_sell', 'energy_price_buy']
+        self.forecast = self.forecast.select(relevant_cols)
 
     def create_bids_offers(self):
         raise NotImplementedError('This method has yet to be implemented.')
 
     def _preprocess_bids_offers(self):
-
         # Combine setpoints and market data to know how much energy is needed
-        self.market_data = self.market_data.join(self.setpoints, on=c.TC_TIMESTEP, how='left')
-        self.market_data = self.market_data.with_columns(
-            (pl.col(c.TC_ENERGY) - pl.col(f'{self.market}_{self.energy_type}')).alias('buy_sell'))
-        self.market_data = self.market_data.with_columns(
+        self.market_transactions = self.market_transactions.join(self.setpoints, on=c.TC_TIMESTEP, how='outer')
+        
+        # with pl.Config(tbl_cols=20, fmt_str_lengths=200, tbl_rows=100):
+        #     print(self.market_transactions.collect())
+        
+        # Fill all empty columns with zero
+        self.market_transactions = self.market_transactions.fill_null(0)
+        
+        # Check if there is a difference between the setpoints and the previous market results
+        self.market_transactions = self.market_transactions.with_columns(
+            (pl.col(f'{self.market_name}_{self.energy_type}') - pl.col(c.TC_ENERGY)).alias('buy_sell').cast(pl.Int32))
+        
+        # Split the buy and sell values
+        self.market_transactions = self.market_transactions.with_columns(
             [
                 pl.col('buy_sell').apply(lambda x: abs(x) if x > 0 else 0).alias(c.TC_ENERGY_IN).cast(pl.UInt64),
                 pl.col('buy_sell').apply(lambda x: abs(x) if x < 0 else 0).alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
             ]
-        )
-
+        ) 
+        
         # Drop unnecessary columns
-        self.market_data = self.market_data.drop([c.TC_ENERGY, 'buy_sell', f'{self.market}_{self.energy_type}'])
+        self.market_transactions = self.market_transactions.drop([c.TC_ENERGY, 'buy_sell', f'{self.market_name}_{self.energy_type}'])
 
         # Create the dataframe for the bids and offers
-        # TODO: In the future this will be based on the market data and the setpoints
-
         self.bids_offers = self.timetable.select([c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME,
                                                   c.TC_ENERGY_TYPE])
 
@@ -129,7 +122,7 @@ class TradingBase:
         )
 
         # Add energy in and out
-        self.bids_offers = self.bids_offers.join(self.market_data, on=c.TC_TIMESTEP, how='left')
+        self.bids_offers = self.bids_offers.join(self.market_transactions, on=c.TC_TIMESTEP, how='left')
 
         # Add forecast values
         self.bids_offers = self.bids_offers.join(self.forecast, on=c.TC_TIMESTEP, how='left')
@@ -158,11 +151,13 @@ class TradingBase:
         # Drop unnecessary columns
         self.bids_offers = self.bids_offers.drop(['within_horizon', 'time_to_trade',
                                                   'energy_price_sell', 'energy_price_buy'])
-
+        
         return self.bids_offers
 
 
 class Linear(TradingBase):
+    """This class implements the linear trading strategy.
+    It means that the agent's offers/bids will linearly increase/'."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -188,11 +183,11 @@ class Linear(TradingBase):
         # Add columns for the price per unit
         self.bids_offers = self.bids_offers.with_columns(
             [
-                (((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table
-                  * (len_table - pl.col('row_number'))) + pl.col('energy_price_buy'))
-                .alias(c.TC_PRICE_PU_IN).round().cast(pl.Int32),
                 (pl.col('energy_price_buy')
                  + ((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table * pl.col('row_number')))
+                .alias(c.TC_PRICE_PU_IN).round().cast(pl.Int32),
+                (((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table
+                  * (len_table - pl.col('row_number'))) + pl.col('energy_price_buy'))
                 .alias(c.TC_PRICE_PU_OUT).round().cast(pl.Int32),
             ]
         )
@@ -205,9 +200,6 @@ class Linear(TradingBase):
 
         # Update agent information
         self.agent.bids_offers = self.bids_offers
-
-        # with pl.Config(set_tbl_cols=20, set_tbl_rows=20, set_tbl_width_chars=400):
-        #     print(self.bids_offers.collect())
 
         return self.agent
 

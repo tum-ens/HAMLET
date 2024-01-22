@@ -17,6 +17,6 @@ from datetime import datetime
 
 class Mfh:
 
-    def __init__(self, data, timetable):
+    def __init__(self, agent, timetable, database):
 
         raise NotImplementedError

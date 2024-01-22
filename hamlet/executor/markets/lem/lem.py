@@ -113,6 +113,9 @@ class Lem(MarketBase):
         # Couple market
         # Note: This is not part of the actions, but is executed after the actions
         self.__couple_markets(clearing_type, clearing_method, pricing_method, coupling_method)
+                
+        # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=20):
+        #     print(self.transactions.collect())
 
         return self.market
 
@@ -143,6 +146,21 @@ class Lem(MarketBase):
 
         # Update the tables and market database
         self.__update_database(bids_cleared, offers_cleared, bids_uncleared, offers_uncleared, transactions)
+        
+        # Print statements to check results
+        # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=20):
+        #     print(self.bids_cleared.collect())
+        #     print(self.offers_cleared.collect())
+        #     print(self.bids_uncleared.collect())
+        #     print(self.offers_uncleared.collect())
+        #     print(self.transactions.collect())
+        #     print(bids_offers.collect())
+        #     print(bids_cleared)
+        #     print(offers_cleared)
+        #     print(bids_uncleared)
+        #     print(offers_uncleared)
+        #     print(transactions)
+        # exit()
 
         return self.transactions
 
@@ -184,16 +202,16 @@ class Lem(MarketBase):
         retailer = retailer.select(self.bids_offers.columns)
         # retailer = retailer(schema=self.bids_offers.schema)
         # bids_offers = self.bids_offers.collect().vstack(retailer)
-        bids_offers = pl.concat([self.bids_offers, retailer], how='align')
+        bids_offers = pl.concat([self.bids_offers, retailer], how='vertical')
 
         # Fill all empty values using ffill
         bids_offers = bids_offers.fill_null(strategy='forward')
 
         # Print statements to check results
-        # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25) as cfg:
-        #    cfg.set_tbl_width_chars(400)
-        #    cfg.set_tbl_cols(25)
-        #    cfg.set_tbl_rows(20)
+        #with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=20):
+        #    print(self.bids_offers.collect())
+        #    print(retailer.collect())
+        #    print(bids_offers.collect())
         #    print(self.bids_offers.collect())
         #    print(retailer.collect())
         #    print(bids_offers.collect())
@@ -420,13 +438,13 @@ class Lem(MarketBase):
 
     def __action_settle(self, clearing_type, clearing_method, pricing_method, coupling_method, **kwargs):
         """Settles the market"""
-        # TODO: At this point the trades that occured get settled thus balancing energy is determined
-        #  as well as levies and taxes are applied
+        # At this point the trades that occured get settled thus balancing energy is determined
+        # as well as levies and taxes are applied
 
         # Determine balancing energy
         self.transactions, self.bids_uncleared, self.offers_uncleared = self.__determine_balancing_energy()
 
-        # TODO: Apply levies and taxes
+        # Apply levies and taxes
         self.transactions = self.__apply_levies_taxes()
 
         # Update the market database
@@ -458,7 +476,8 @@ class Lem(MarketBase):
                                         & (pl.col(c.TC_NAME) == self.tasks[c.TC_NAME])).collect().to_dict()
 
         # Create new trades table that contains only the balancing transactions
-        transactions = pl.concat([bids_uncleared, offers_uncleared], how='diagonal')
+        transactions = pl.concat([bids_uncleared.collect(), offers_uncleared.collect()], how='diagonal').lazy()
+            
         # Add temporary columns
         transactions = transactions.with_columns([
             pl.lit(retailer["balancing_price_sell"].alias("balancing_price_sell")),
@@ -479,6 +498,7 @@ class Lem(MarketBase):
         ])
         # Calculate the total price
         # TODO: Check mpc and rtc to see why this needs to be in there.
+        flag = False
         try:
             transactions = transactions.with_columns([
                 (pl.col(c.TC_PRICE_PU_IN) * pl.col(c.TC_ENERGY_IN)).round().alias(c.TC_PRICE_IN).cast(pl.Int64),
@@ -495,6 +515,7 @@ class Lem(MarketBase):
                 (pl.col(c.TC_PRICE_PU_OUT) * pl.col(c.TC_ENERGY_OUT)).round().alias(c.TC_PRICE_OUT).cast(pl.Int64),
             ])
             print('Energy had to be limited to 1e6.')
+            flag = True
         # Drop unnecessary columns
         transactions = transactions.drop(c.TC_ID_AGENT_IN, c.TC_ID_AGENT_OUT,
                                          "balancing_price_sell", "balancing_price_buy")
@@ -507,12 +528,14 @@ class Lem(MarketBase):
         self.bids_uncleared = bids_uncleared.clear()
         self.offers_uncleared = offers_uncleared.clear()
 
-        # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=21, set_tbl_rows=20):
-        #     print(bids_uncleared.collect())
-        #     print(offers_uncleared.collect())
-        #     print(transactions.collect())
-        #     print(self.transactions.collect())
-        # exit()
+        if flag:
+            with pl.Config(set_tbl_width_chars=400, set_tbl_cols=21, set_tbl_rows=20):
+                # print(bids_uncleared.collect())
+                # print(offers_uncleared.collect())
+                print(transactions.collect())
+                # print(self.transactions.collect())
+            raise Warning('Currently used to check what the problem is when the balancing gets too high. '
+                          'Can be ignored if not working on it.')
 
         return self.transactions, self.bids_uncleared, self.offers_uncleared
 
