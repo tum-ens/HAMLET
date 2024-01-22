@@ -47,6 +47,10 @@ EURe7_TO_EUR = 1e-7
 CENT_TO_EURe7 = 1e9
 EURe7_TO_CENT = 1e-9
 
+# WEATHER CONSTANTS
+KELVIN_TO_CELSIUS = -273.15
+CELSIUS_TO_KELVIN = 273.15
+
 # OTHER CONSTANTS
 EUR_KWH_TO_EURe7_WH = EUR_TO_EURe7 / KWH_TO_WH  # conversion to ensure that the values are integers
 
@@ -55,6 +59,14 @@ ET_ELECTRICITY = 'power'
 ET_HEAT = 'heat'
 ET_COOLING = 'cold'
 ET_H2 = 'h2'
+
+# SYMBOLS (symbols used for the units in the tables)
+S_POWER = 'P'
+S_ENERGY = 'E'
+S_PRICE = 'price'
+S_PRICE_PU = 'price_pu'
+S_SOC = 'soc'
+S_COP = 'COP100'
 
 # MARKET TYPES
 MT_LEM = 'lem'
