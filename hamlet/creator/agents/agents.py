@@ -27,6 +27,7 @@ import pvlib
 from pvlib.pvsystem import PVSystem
 from pvlib.location import Location
 from windpowerlib import ModelChain, WindTurbine
+from hplib import hplib
 import warnings
 import re
 from hamlet import functions as f
@@ -658,7 +659,7 @@ class Agents:
 
         # adjust temperature data
         weather.rename(columns={c.TC_TEMPERATURE: 'temp_air'}, inplace=True)  # rename to pvlib format
-        weather['temp_air'] -= 273.15  # convert unit to celsius
+        weather['temp_air'] += c.KELVIN_TO_CELSIUS  # convert unit to celsius
 
         # get solar position
         # test data find in https://www.suncalc.org/#/48.1364,11.5786,15/2022.02.15/16:21/1/3
@@ -831,12 +832,97 @@ class Agents:
         return power
 
     def __timeseries_from_specs_hp(self, specs: dict, plant: dict):
-        # TODO: @Zhengjie
-        # input is the specs of the plant and the plant dict
-        print(specs)
-        print(plant)
-        # output is the timeseries of the plant. This should be a pandas dataframe with the index being the unix timestamp and the columns named "power" and "cop" (if applicable)
-        pass
+        """Creates a time series for hp config spec file using hplib model.
+
+        Args:
+            specs (dict): A dictionary of hp hardware config.
+            plant (dict): A dictionary of hp plant information.
+
+        Returns:
+            power: A Pandas Dataframe object representing the time series data for the hp plant.
+
+        """
+
+        # obtain the model type of the heat pump predefined in agents.xlsx
+        hp_model = specs['model']
+        hp_type = specs['type']
+        dtemp_transfer_loss = 5  # delta T of inlet and outlet in the secondary side is fixed at 5K
+        # TODO: Currently temperature levels are fixed, but should be read from the config file
+        supply_temp = {c.P_HEAT: 40, c.P_DHW: 55}
+
+        # get weather path
+        weather_path = os.path.join(self.input_path, 'general', 'weather',
+                                    self.setup['location']['weather'])
+        weather = f.load_file(weather_path)
+        weather = weather[weather[c.TC_TIMESTAMP] == weather[c.TC_TIMESTEP]]  # remove forcasting data
+
+        # convert time data to datetime
+        time_index = pd.DatetimeIndex(pd.to_datetime(weather[c.TC_TIMESTAMP], unit='s', utc=True))
+        weather.index = time_index
+        weather.index.name = 'utc_time'
+
+        # abstract the input data needed for hp simulation from specs and plant
+        t_amb = weather[c.TC_TEMPERATURE] + c.KELVIN_TO_CELSIUS  # convert unit to celsius
+        t_brine = self.calc_brine_temp(t_amb)
+
+        # obtain the parameters of heat pumps based on reference/set temperature and thermal power
+        parameters = hplib.get_parameters(model=hp_model)
+
+        # create hp system
+        system = hplib.HeatPump(parameters)
+
+        # simulate the heat pump and attain the results
+        # mode=1 -> heating, mode=2 -> cooling
+        # delta T of inlet and outlet in the secondary side is fixed at dtemp_transfer_loss
+        if hp_type == "Outdoor Air/Water":
+            t_in = t_amb
+        else:
+            t_in = t_brine
+        res_sh = system.simulate(t_in_primary=np.array(t_in),
+                                 t_in_secondary=supply_temp[c.P_HEAT] - dtemp_transfer_loss,
+                                 t_amb=np.array(t_amb), mode=1)
+        res_dhw = system.simulate(t_in_primary=np.array(t_in),
+                                  t_in_secondary=supply_temp[c.P_DHW] - dtemp_transfer_loss,
+                                  t_amb=np.array(t_amb), mode=1)
+
+        # Reformat the results in the right format (W for power and COP * 100 for COP)
+        res_hp = {
+            f'{c.S_POWER}_{c.ET_ELECTRICITY}_{c.P_HEAT}': list(res_sh['P_el']),
+            f'{c.S_POWER}_{c.ET_HEAT}_{c.P_HEAT}': list(res_sh['P_th']),
+            f'{c.S_COP}_{c.P_HEAT}': list(res_sh['COP'] * 100),
+            f'{c.S_POWER}_{c.ET_ELECTRICITY}_{c.P_DHW}': list(res_dhw['P_el']),
+            f'{c.S_POWER}_{c.ET_HEAT}_{c.P_DHW}': list(res_dhw['P_th']),
+            f'{c.S_COP}_{c.P_DHW}': list(res_dhw['COP'] * 100)
+        }
+        # Create dataframe from dict
+        ts_hp = pd.DataFrame(data=res_hp)
+        ts_hp = ts_hp.round().astype(int)
+
+        # set time index to origin timestamp
+        ts_hp.index = weather[c.TC_TIMESTAMP]
+        ts_hp.index.name = c.TC_TIMESTAMP
+
+        return ts_hp
+
+    @staticmethod
+    def calc_brine_temp(t_avg_d: float):
+        """
+        Calculate the soil temperature by the average Temperature of the day.
+        Source: „WP Monitor“ Feldmessung von Wärmepumpenanlagen S. 115, Frauenhofer ISE, 2014
+        added 9 points at -15°C average day at 3°C soil temperature in order to prevent higher temperature of soil below -10°C.
+
+        Parameters
+        ----------
+        t_avg_d : the average temperature of the day.
+
+        Returns:
+        ----------
+        t_brine : the temperature of the soil/ Brine inflow temperature
+        """
+
+        t_brine = -0.0003 * t_avg_d ** 3 + 0.0086 * t_avg_d ** 2 + 0.3047 * t_avg_d + 5.0647
+
+        return t_brine
 
     @staticmethod
     def __init_vals(df: pd.DataFrame, vals: int | list[int] = 0, idx: int | list[int] = 0) -> list:
@@ -939,8 +1025,8 @@ class Agents:
                 file = self.plants[plant_dict['type']]['specs'](specs=file, plant=plant_dict)
             except KeyError:
                 # If the specs function is not available for this plant type, raise an error
-                raise KeyError(
-                    f'Time series creation from spec file not available for plant type {plant_dict["type"]}.')
+                raise KeyError(f'Time series creation from spec file not available for plant type '
+                               f'{plant_dict["type"]}.')
 
         # Apply a special function to the time series if specified
         if func_ts := self.plants[plant_dict['type']].get('func_ts'):
