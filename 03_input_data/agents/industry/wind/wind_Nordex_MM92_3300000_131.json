@@ -1,4 +1,5 @@
 {
+    "type": "wind",
     "manufacture": "Nordex",
     "name": "MM92",
     "nominal_power": 3300000,

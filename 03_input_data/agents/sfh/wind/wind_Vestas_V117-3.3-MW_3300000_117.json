@@ -1,4 +1,5 @@
 {
+    "type": "wind",
     "manufacture": "Vestas",
     "name": "V117-3.3-MW",
     "nominal_power": 3300000,

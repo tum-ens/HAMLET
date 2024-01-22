@@ -1,4 +1,5 @@
 {
+    "type": "wind",
     "manufacture": "Senvion-REpower",
     "name": "3.2M122",
     "nominal_power": 3200000,

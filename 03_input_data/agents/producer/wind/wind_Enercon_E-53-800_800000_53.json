@@ -1,4 +1,5 @@
 {
+    "type": "wind",
     "manufacture": "Enercon",
     "name": "E-53-800",
     "nominal_power": 800000,
