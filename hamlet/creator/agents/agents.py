@@ -889,10 +889,10 @@ class Agents:
         res_hp = {
             f'{c.S_POWER}_{c.ET_ELECTRICITY}_{c.P_HEAT}': list(res_sh['P_el']),
             f'{c.S_POWER}_{c.ET_HEAT}_{c.P_HEAT}': list(res_sh['P_th']),
-            f'{c.S_COP}_{c.P_HEAT}': list(res_sh['COP'] * 100),
+            f'{c.S_COP}_{c.P_HEAT}': list(res_sh['COP'] * c.COP_TO_COP100),
             f'{c.S_POWER}_{c.ET_ELECTRICITY}_{c.P_DHW}': list(res_dhw['P_el']),
             f'{c.S_POWER}_{c.ET_HEAT}_{c.P_DHW}': list(res_dhw['P_th']),
-            f'{c.S_COP}_{c.P_DHW}': list(res_dhw['COP'] * 100)
+            f'{c.S_COP}_{c.P_DHW}': list(res_dhw['COP'] * c.COP_TO_COP100)
         }
         # Create dataframe from dict
         ts_hp = pd.DataFrame(data=res_hp)

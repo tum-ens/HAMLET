@@ -1103,6 +1103,9 @@ class Sfh(Agents):
                                                                    device=f"{key}",
                                                                    input_path=os.path.join(self.input_path, key))
 
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
+
         # quality
         self.df[f"{key}/quality"] = config["quality"]
 
@@ -1153,6 +1156,9 @@ class Sfh(Agents):
                 self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                        device=f"{key}",
                                                                        input_path=os.path.join(self.input_path, key))
+
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]

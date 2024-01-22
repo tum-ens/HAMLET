@@ -1290,6 +1290,9 @@ class Mfh(Agents):
             # copy results to main df
             self.df.loc[df_sub.index, :] = df_sub[:]
 
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
+
         # quality
         self.df[f"{key}/quality"] = config["quality"]
 
@@ -1342,6 +1345,9 @@ class Mfh(Agents):
                 self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
                                                                        device=f"{key}",
                                                                        input_path=os.path.join(self.input_path, key))
+
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
