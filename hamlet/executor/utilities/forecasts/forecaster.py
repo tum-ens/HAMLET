@@ -200,7 +200,7 @@ class Forecaster:
 
         """
         # get all models from imported module
-        # TODO: change code here if models are seperated
+        # Note: change code here if models are separated into separate files
         all_models = inspect.getmembers(models, inspect.isclass)
         for model in all_models:
             if hasattr(model[1], c.TC_NAME):  # include only models defined in the imported module with right format
@@ -259,8 +259,11 @@ class Forecaster:
 
             day_before = f.slice_dataframe_between_times(target_df=target_wholesale, reference_ts=self.start_ts,
                                                          duration=c.DAYS_TO_SECONDS * offset + resolution)
+
             day_before = day_before.with_columns((pl.col(c.TC_TIMESTAMP) - pl.duration(days=offset, seconds=resolution))
-                                                 .alias(c.TC_TIMESTAMP))
+                                                 .alias(c.TC_TIMESTAMP)
+                                                 .cast(pl.Datetime(time_unit='ns', time_zone='UTC')))
+
             target_wholesale = pl.concat([day_before, target_wholesale], how='vertical')
 
             # drop unnecessary columns
@@ -410,7 +413,7 @@ class Forecaster:
 
         forecasts_list = [timestamps.collect()]     # list which will contain all forecast lazyframes
 
-        for id, forecast in forecasts.items():
+        for user_id, forecast in forecasts.items():
             # remove time column(s) for all forecasts
             if c.TC_TIMESTAMP in forecast.columns:
                 forecast = forecast.drop(c.TC_TIMESTAMP)
@@ -419,12 +422,12 @@ class Forecaster:
 
             # change data type of each forecast, should be the same as the target data
             for column in forecast.columns:
-                dtype = self.train_data[id][c.K_TARGET].select(column).dtypes
+                dtype = self.train_data[user_id][c.K_TARGET].select(column).dtypes
 
                 # each column should only have one data type
                 forecast = forecast.with_columns(pl.col(column).cast(dtype[0]))
 
-            # add lazyframe to list
+            # add forecast to the list
             forecasts_list.append(forecast.collect())
 
         # summarize everything together
