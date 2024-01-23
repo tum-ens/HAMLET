@@ -793,7 +793,7 @@ sfh:
 
   ################################ electric vehicles (EV) ####################################
   ev:
-    share: 0.5                                  # share of prosumers with EVs
+    share: 0                                  # share of prosumers with EVs
                                                 # unit: 1 [0, 1]
       
     num: [1, 1, 1, 1, 2]                        # number of EVs
@@ -877,7 +877,7 @@ sfh:
 
   ################################ batteries ####################################
   battery:
-    share: 0.8                                  # share of agents with batteries (if share_dependent_on applies)
+    share: 0                                  # share of agents with batteries (if share_dependent_on applies)
                                                 # unit: 1 [0, 1]
 
     share_dependent_on: ["pv"]                  # does the share of batteries depend on the existence of other devices?
