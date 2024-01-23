@@ -331,7 +331,7 @@ class Rtc(ControllerBase):
                 case 'gurobi':
                     sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
                     solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
-                    status = self.model.solve(solver_name='gurobi', **solver_options)
+                    status = self.model.solve(solver_name='highs', **solver_options)
                     sys.stdout = sys.__stdout__     # re-activate printing
                 case _:
                     raise ValueError(f"Unsupported solver: {solver}")
