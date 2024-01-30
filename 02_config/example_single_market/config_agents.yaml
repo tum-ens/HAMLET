@@ -41,7 +41,7 @@ sfh:
                                                 # unit: 1
 
   ################################ inflexible load ####################################
-  inflexible_load:
+  inflexible-load:
     share: 1                                    # share of prosumers with inflexible loads
                                                 # unit: 1 [0, 1]
       
@@ -139,7 +139,7 @@ sfh:
                                                 # in weather file
 
   ################################ flexible load ####################################
-  flexible_load:
+  flexible-load:
     share: 0                                    # share of prosumers with flexible load
                                                 # unit: 1 [0, 1]
       
@@ -242,7 +242,7 @@ sfh:
 
   ################################ heat demand ####################################
   heat:
-    share: 0                                    # share of prosumers with heat
+    share: 1                                    # share of prosumers with heat
                                                 # unit: 1 [0, 1]
                                                 # note: users that do not have plants to cover the demand will be
                                                 #   assigned a generic non-electric supply
@@ -662,7 +662,7 @@ sfh:
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
   
   ################################ fixed generator ####################################
-  fixed_gen:
+  fixed-gen:
     share: 0                                    # share of prosumers with fixed power generators
                                                 # unit: 1 [0, 1]
 
@@ -764,7 +764,7 @@ sfh:
 
   ################################ heat pumps (HP) ####################################
   hp:
-    share: 0                                    # share of prosumers with heat pumps
+    share: 1                                    # share of prosumers with heat pumps
                                                 # unit: 1 [0, 1]
       
     num: [1]                                    # number of heat pumps
@@ -788,6 +788,78 @@ sfh:
                                                 #   - air: air-water heat pump
                                                 #   - water: water-water heat pump
                                                 #   - "file name": give specific file name (e.g. "hp_NIBE-F2120-12_air.json")
+
+
+
+    fcast:
+      method: perfect                           # forecasting method
+                                                # options:
+                                                #   - perfect:  perfect knowledge of the future
+                                                #   - naive:    today will be the same as last day with offset t
+                                                #   - average:  today will be the same as the average of the last
+                                                #               n days with offset t
+                                                #   - smoothed: prediction value is a moving mean of the future
+                                                #               values with a specified window width
+                                                #   - sarma:    seasonal autoregressive moving average model
+                                                #   - rfr:      random forest regressor
+                                                #   - cnn:      convolutional neural network
+                                                #   - rnn:      recurrent neural network
+                                                #   - arima:    autoregressive integrated moving average model
+                                                #   - weather:  forecast based on weather forecast ("specs" only)
+
+      naive:                                    # naive forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+      average:                                  # average forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+        days: 2                                 # number of days to be used for averaging
+                                                # unit: days
+
+      smoothed:
+        steps: 9                                # number of future time steps to be used for smoothing (T-ts)
+                                                # unit: time steps
+
+      sarma:
+        order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
+                96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rfr:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      arima:
+        order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -911,8 +983,8 @@ sfh:
                                                 # on the local markets
 
   ################################ heat storage ####################################
-  heat_storage:
-    share: 0                                  # share of agents with heat storage (if share_dependent_on applies)
+  heat-storage:
+    share: 1                                  # share of agents with heat storage (if share_dependent_on applies)
                                                 # unit: 1 [0, 1]
 
     share_dependent_on: ["hp"]                  # does the share of storage depend on the existence of other devices?
@@ -1099,7 +1171,7 @@ mfh:
                                                 #   should not be applied in can be changed in the created Excel file
 
   ################################ inflexible load (household) ####################################
-  inflexible_load:
+  inflexible-load:
     share: 1                                    # share of prosumers with inflexible loads (in this case used as household
                                                 #   load and therefore should be applied to all MFHs)
                                                 # unit: 1 [0, 1]
@@ -1205,7 +1277,7 @@ mfh:
                                                 # in weather file
 
   ################################ flexible load ####################################
-  flexible_load:
+  flexible-load:
     share: 1                                    # share of prosumers with flexible load
                                                 # note: share is applied to number of buildings, if building
                                                 #   has device and apartments are independent all apartments
@@ -1774,7 +1846,7 @@ mfh:
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
   ################################ fixed generator ####################################
-  fixed_gen:
+  fixed-gen:
     share: 1                                    # share of prosumers with fixed power generators
                                                 # note: share is applied to number of buildings, if building
                                                 #   has device and apartments are independent all apartments
@@ -2056,7 +2128,7 @@ mfh:
                                                 # on the local markets
 
   ################################ heat storage ####################################
-  heat_storage:
+  heat-storage:
     share: 0.8                                  # share of agents with batteries (if share_dependent_on applies)
                                                 # unit: 1 [0, 1]
                                                 # note: agent equals entire MFH
@@ -2230,7 +2302,7 @@ ctsp:
     market_participant_share: 1                 # share of agents that participate in the local markets
 
   ################################ inflexible load ####################################
-  inflexible_load:
+  inflexible-load:
     share: [1, 1]                               # relative share of device per agent type
                                                 # unit: 1
                                                 # IMPORTANT: length of this variable needs to match
@@ -2319,7 +2391,7 @@ ctsp:
                                                 # in weather file
 
   ################################ flexible load ####################################
-  flexible_load:
+  flexible-load:
     share: [1, 0]                               # relative share of device per agent type
                                                 # unit: 1
                                                 # IMPORTANT: length of this variable needs to match
@@ -2618,7 +2690,7 @@ ctsp:
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
   ################################ fixed generator ####################################
-  fixed_gen:
+  fixed-gen:
     share: [0, 1]                               # share of agents with fixed power generators per type
                                                 # unit: 1 [0, 1]
 
@@ -2961,7 +3033,7 @@ industry:
     market_participant_share: 1                 # share of agents that participate in the local markets
 
   ################################ inflexible load ####################################
-  inflexible_load:
+  inflexible-load:
     share: [1, 1]                               # relative share of device per agent type
                                                 # unit: 1
                                                 # IMPORTANT: length of this variable needs to match
@@ -3050,7 +3122,7 @@ industry:
                                                 # in weather file
 
   ################################ flexible load ####################################
-  flexible_load:
+  flexible-load:
     share: [1, 0]                               # relative share of device per agent type
                                                 # unit: 1
                                                 # IMPORTANT: length of this variable needs to match
@@ -3350,7 +3422,7 @@ industry:
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
   ################################ fixed generator ####################################
-  fixed_gen:
+  fixed-gen:
     share: [1, 0]                               # share of agents with fixed power generators per type
                                                 # unit: 1 [0, 1]
 
@@ -4136,7 +4208,7 @@ producer:
                                                   # note: applies to all forecasts
 
   ################################ large-scale fixed generation ####################################
-  fixed_gen:
+  fixed-gen:
     ################################ general ####################################
     general:
       number_of: 0                              # number of large-scale wind producers
@@ -4144,7 +4216,7 @@ producer:
       market_participant_share: 1               # share of agents that participate in the local markets
       
     ################################ plant ####################################
-    fixed_gen:
+    fixed-gen:
       num: [1]                                  # number of fixed generators
                                                 # note: value is randomly chosen from list
 

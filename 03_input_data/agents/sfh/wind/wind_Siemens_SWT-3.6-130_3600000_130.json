@@ -1,4 +1,5 @@
 {
+    "type": "wind",
     "manufacture": "Siemens",
     "name": "SWT-3.6-130",
     "nominal_power": 3600000,

@@ -112,7 +112,7 @@ class Forecaster:
         """
 
         forecasts = {}   # empty dict to store all forecast results
-        current_ts = timetable.select(c.TC_TIMESTAMP).collect().item(0, 0)      # get current timestep from timetable
+        current_ts = timetable.select(c.TC_TIMESTAMP).item(0, 0)      # get current timestep from timetable
 
         # make forecast for each plant and assign results to the empty dict
         for id in self.config_dict.keys():
@@ -200,7 +200,7 @@ class Forecaster:
 
         """
         # get all models from imported module
-        # TODO: change code here if models are seperated
+        # Note: change code here if models are separated into separate files
         all_models = inspect.getmembers(models, inspect.isclass)
         for model in all_models:
             if hasattr(model[1], c.TC_NAME):  # include only models defined in the imported module with right format
@@ -233,8 +233,6 @@ class Forecaster:
 
         self.__prepare_plants_target_data()
 
-        self.__prepare_ev_target_data()
-
         self.__prepare_features()
 
     def __prepare_markets_target_data(self):
@@ -259,8 +257,11 @@ class Forecaster:
 
             day_before = f.slice_dataframe_between_times(target_df=target_wholesale, reference_ts=self.start_ts,
                                                          duration=c.DAYS_TO_SECONDS * offset + resolution)
+
             day_before = day_before.with_columns((pl.col(c.TC_TIMESTAMP) - pl.duration(days=offset, seconds=resolution))
-                                                 .alias(c.TC_TIMESTAMP))
+                                                 .alias(c.TC_TIMESTAMP)
+                                                 .cast(pl.Datetime(time_unit='ns', time_zone='UTC')))
+
             target_wholesale = pl.concat([day_before, target_wholesale], how='vertical')
 
             # drop unnecessary columns
@@ -286,30 +287,17 @@ class Forecaster:
         plants_timeseries = self.agentDB.timeseries
 
         # get all related plants except timestamps
-        plants_id = plants_timeseries.columns
-        plants_id.remove(c.TC_TIMESTAMP)
+        plants_cols = plants_timeseries.columns
+        plants_cols.remove(c.TC_TIMESTAMP)
+        # get plants id
+        plants_ids = list(set([col.split('_')[0] for col in plants_cols]))
 
         # get target data
-        for column in plants_id:
-            plant_id = column.split('_')[0]
+        for plant_id in plants_ids:
+            # combine timestamp and all columns for the plant using the plant id
+            columns = [c.TC_TIMESTAMP] + [col for col in plants_cols if col.split('_')[0] == plant_id]
             # assign target data to dict
-            self.train_data[plant_id] = {c.K_TARGET: plants_timeseries.select(c.TC_TIMESTAMP, column)}
-
-    def __prepare_ev_target_data(self):
-        """
-        Prepare target data for EVs.
-
-        Go through the plants and check if there are EVs, For each EV, instead of take only one column for target data,
-        take both 'availability' and 'energy_consumed' as target data.
-
-        """
-        plants_timeseries = self.agentDB.timeseries     # get plants' timeseries
-        # get plants id for EV
-        for plant_id in self.config_dict.keys():
-            if 'type' in self.config_dict[plant_id].keys() and self.config_dict[plant_id]['type'] == c.P_EV:
-                ev_id = plant_id
-                target = plants_timeseries.select(c.TC_TIMESTAMP, ev_id + '_availability', ev_id + '_energy_consumed')
-                self.train_data[ev_id] = {c.K_TARGET: target}
+            self.train_data[plant_id] = {c.K_TARGET: plants_timeseries.select(columns)}
 
     def __prepare_features(self):
         """
@@ -377,7 +365,7 @@ class Forecaster:
 
         return forecast
 
-    def __summarize_forecasts_to_df(self, forecasts: dict, current_ts):
+    def __summarize_forecasts_to_df(self, forecasts: dict, current_ts) -> pl.DataFrame:
         """
         Summarize all forecasts from dictionary to one polars lazyframe. All forecasts should have the same length and
         stored as a lazyframe.
@@ -387,7 +375,7 @@ class Forecaster:
             current_ts: Current timestamp for the forecasts.
 
         Returns:
-            forecasts_df: Lazyframe containing the summarized forecast results.
+            forecasts_df: Dataframe containing the summarized forecast results.
 
         """
 
@@ -404,13 +392,13 @@ class Forecaster:
         time_zone = dtype.time_zone
 
         # adjust timestamp column to current time and keep the datatype
-        timestamps = timestamps.with_columns(pl.lit(current_ts).alias(c.TC_TIMESTAMP))
-        timestamps = timestamps.with_columns(pl.col(c.TC_TIMESTAMP).dt.cast_time_unit(time_unit))  # change time unit
-        timestamps = timestamps.with_columns(pl.col(c.TC_TIMESTAMP).dt.replace_time_zone(time_zone))  # change time zone
+        timestamps = timestamps.with_columns(pl.lit(current_ts)
+                                             .alias(c.TC_TIMESTAMP)
+                                             .cast(pl.Datetime(time_unit=time_unit, time_zone=time_zone)))
 
-        forecasts_list = [timestamps.collect()]     # list which will contain all forecast lazyframes
+        forecasts_list = [timestamps]     # list which will contain all forecast dataframes
 
-        for id, forecast in forecasts.items():
+        for user_id, forecast in forecasts.items():
             # remove time column(s) for all forecasts
             if c.TC_TIMESTAMP in forecast.columns:
                 forecast = forecast.drop(c.TC_TIMESTAMP)
@@ -419,15 +407,15 @@ class Forecaster:
 
             # change data type of each forecast, should be the same as the target data
             for column in forecast.columns:
-                dtype = self.train_data[id][c.K_TARGET].select(column).dtypes
+                dtype = self.train_data[user_id][c.K_TARGET].select(column).dtypes
 
                 # each column should only have one data type
                 forecast = forecast.with_columns(pl.col(column).cast(dtype[0]))
 
-            # add lazyframe to list
-            forecasts_list.append(forecast.collect())
+            # add forecast to the list
+            forecasts_list.append(forecast)
 
         # summarize everything together
         forecasts_df = pl.concat(forecasts_list, how='horizontal')
 
-        return forecasts_df.lazy()
+        return forecasts_df

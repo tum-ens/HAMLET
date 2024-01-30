@@ -115,13 +115,11 @@ class Executor:
         # Note: The design assumes that there is nothing to be gained for the simulation to run in between market
         #   timestamps. Therefore, the simulation is only executed for the market timestamps
         # Iterate over timetable by timestamp
-        timetable = self.timetable.collect()
-
         # Set the progress bar
-        self.pbar.reset(total=len(timetable.partition_by('timestamp')))
+        self.pbar.reset(total=len(self.timetable.partition_by('timestamp')))
         self.pbar.set_description(desc='Start execution')
 
-        for timestamp in timetable.partition_by('timestamp'):
+        for timestamp in self.timetable.partition_by('timestamp'):
             # Wait for the timestamp to be reached if the simulation is to be carried out in real-time
             if self.type == 'rts':
                 self.__wait_for_ts(timestamp.iloc[0, 0])
@@ -133,13 +131,9 @@ class Executor:
             for region in timestamp.partition_by(c.TC_REGION):
                 # get current region as string item for progress bar
                 region_str = str(region.select(c.TC_REGION).sample(n=1).item())
-                region = region.lazy()
 
                 # update progress bar description
                 self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for region ' + region_str + ': ')
-
-                # TODO: here print is deactivated
-                # sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
 
                 # Execute the agents and market in parallel or sequentially
                 if self.pool:
@@ -155,8 +149,6 @@ class Executor:
 
                     # Execute the market
                     self.__execute_markets(tasklist=region)
-
-                # sys.stdout = sys.__stdout__     # re-activate printing
 
             # Calculate the grids for the current timestamp (calculated together as they are connected)
             self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid: ')
@@ -181,16 +173,17 @@ class Executor:
         """Resumes the simulation"""
         raise NotImplementedError("Resume functionality not implemented yet")
 
-    def __execute_agents_parallel(self, tasklist: pl.LazyFrame):
+    def __execute_agents_parallel(self, tasklist: pl.DataFrame):
         """Executes all agent tasks for all agents in parallel"""
-
-        # Get the data of the agents that are part of the tasklist
-        agents = self.database.get_agent_data(region=tasklist.collect()[0, c.TC_REGION])
 
         # Define the function to be executed in parallel
         def tasks(agent):
             # Execute the agent
             return agent.execute()
+
+        # Get the data of the agents that are part of the tasklist
+        region = tasklist.select(pl.first(c.TC_REGION)).item()
+        agents = self.database.get_agent_data(region=region)
 
         # Create a list to store the agents
         agents_list = []
@@ -220,13 +213,10 @@ class Executor:
                 raise f"An error occurred when retrieving agent results: {e}"
 
         # Post the agent data back to the database
-        self.database.post_agents_to_region(region=tasklist.collect()[0, c.TC_REGION], agents=results)
+        self.database.post_agents_to_region(region=region, agents=results)
 
     def __execute_market_parallel(self, tasklist: pl.DataFrame):
         """Executes the market tasks in parallel"""
-
-        # Turn tasklist into dataframe to be able to iterate over it
-        tasklist = tasklist.collect()
 
         # Define the function to be executed in parallel
         def tasks(market):
@@ -237,7 +227,7 @@ class Executor:
         markets_list = []
 
         # Iterate over the tasklist and populate the markets_list
-        for task in tasklist.iter_rows(named=True): # Renamed 'tasks' to 'task'
+        for task in tasklist.iter_rows(named=True):
             # Get the market data for the current market
             market = self.database.get_market_data(region=task[c.TC_REGION],
                                                    market_type=task[c.TC_MARKET],
@@ -270,14 +260,15 @@ class Executor:
         exit()
 
         # Post the agent data back to the database
-        self.database.post_markets_to_region(region=tasks[c.TC_REGION], markets=results)
+        self.database.post_markets_to_region(region=task[c.TC_REGION], markets=results)
 
-    def __execute_agents(self, tasklist: pl.LazyFrame):
+    def __execute_agents(self, tasklist: pl.DataFrame):
         """Executes all agent tasks for all agents sequentially
         """
 
         # Get the data of the agents that are part of the tasklist
-        agents = self.database.get_agent_data(region=tasklist.collect()[0, c.TC_REGION])
+        region = tasklist.select(pl.first(c.TC_REGION)).item()
+        agents = self.database.get_agent_data(region=region)
 
         # Create a list to store the results
         results = []
@@ -290,12 +281,9 @@ class Executor:
                                      database=self.database).execute())
 
         # Post the agent data back to the database
-        self.database.post_agents_to_region(region=tasklist.collect()[0, c.TC_REGION], agents=results)
+        self.database.post_agents_to_region(region=region, agents=results)
 
-    def __execute_markets(self, tasklist: pl.LazyFrame):
-
-        # Turn tasklist into dataframe to be able to iterate over it
-        tasklist = tasklist.collect()
+    def __execute_markets(self, tasklist: pl.DataFrame):
 
         # Create a list to store the results
         results = []
@@ -312,7 +300,7 @@ class Executor:
         # counter = 0
         # for result in results:
         #     with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=100):
-        #         print(result.market_transactions.collect())
+        #         print(result.market_transactions)
         #     counter += 1
         #     if counter > 1:
         #         break
@@ -335,7 +323,7 @@ class Executor:
 
         # Load timetable
         self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),
-                                     df='polars', method='lazy')
+                                     df='polars', method='eager')
 
         # Load scenario structure
         self.structure = self.general['structure']
@@ -349,12 +337,6 @@ class Executor:
         # Copy the scenario folder to the results folder
         # Note: For the execution the files in the results folder are used and not the ones in the scenario folder
         f.copy_folder(self.path_scenario, self.path_results)
-
-        # Create a gurobi env file in the cwd
-        with open("gurobi.env", "w") as file:
-            # Write the desired setting to the file
-            file.write("OutputFlag 0\n"
-                       "LogToConsole 0\n")
 
     def __setup_database(self):
         """Creates a database connector object"""

@@ -246,9 +246,9 @@ def calculate_timedelta(target_df, reference_ts, by=c.TC_TIMESTAMP):
     time_zone = dtype.time_zone
 
     # generate a new column with current timestep
-    target_df = target_df.with_columns(pl.lit(reference_ts).alias('current'))
-    target_df = target_df.with_columns(pl.col('current').dt.cast_time_unit(time_unit))  # change time unit
-    target_df = target_df.with_columns(pl.col('current').dt.replace_time_zone(time_zone))   # change time zone
+    target_df = target_df.with_columns(pl.lit(reference_ts)
+                                       .alias('current')
+                                       .cast(pl.Datetime(time_unit=time_unit, time_zone=time_zone)))
 
     # calculate timedelta
     target_df = target_df.with_columns((pl.col('current') - pl.col(by)).alias('timedelta'))
@@ -267,13 +267,13 @@ def calculate_time_resolution(target_df, by=c.TC_TIMESTAMP):
 
     """
     # randomly choose a value in timestamp column
-    reference_ts = target_df.select(by).collect().sample(n=1).item()
+    reference_ts = target_df.select(by).sample(n=1).item()
 
     # calculate time resolution
     target = calculate_timedelta(target_df=target_df, reference_ts=reference_ts, by=by)
     target = target.filter(pl.col('timedelta') != 0)  # delete the row for the current ts
     target = target.with_columns(abs(pl.col('timedelta')))  # set timedelta to absolute value
-    resolution = target.select(pl.min('timedelta')).collect().item()  # the smallest timedelta is the resolution
+    resolution = target.select(pl.min('timedelta')).item()  # the smallest timedelta is the resolution
 
     # return resolution in seconds
     return resolution.seconds

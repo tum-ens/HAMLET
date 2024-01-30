@@ -1,4 +1,5 @@
 {
+    "type": "wind",
     "manufacture": "Enercon",
     "name": "E-101-3500-E2",
     "nominal_power": 3500000,

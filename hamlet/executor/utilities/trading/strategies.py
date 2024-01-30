@@ -34,11 +34,11 @@ class TradingBase:
         
         # Get the timetable and timestep
         self.timetable = kwargs['timetable']
-        self.dt = self.timetable.collect()[1, c.TC_TIMESTEP] - self.timetable.collect()[0, c.TC_TIMESTEP]  # in datetime format
+        self.dt = self.timetable[1, c.TC_TIMESTEP] - self.timetable[0, c.TC_TIMESTEP]  # in datetime format
         self.dt_hours = self.dt / pd.Timedelta(hours=1)  # in hours
             
         # Get the energy type
-        self.energy_type = self.timetable.collect().row(0, named=True)[c.TC_ENERGY_TYPE]
+        self.energy_type = self.timetable.row(0, named=True)[c.TC_ENERGY_TYPE]
         
         # Get the market data, name, type and transactions
         self.market_data = kwargs['market_data']
@@ -59,15 +59,15 @@ class TradingBase:
                                                                    & (pl.col(c.TC_NAME) == self.market_name)
                                                                    & (pl.col(c.TC_TYPE_TRANSACTION) == c.TT_MARKET)
                                                                    & (pl.col(c.TC_ID_AGENT) == self.agent_id)
-                                                                   & (pl.col(c.TC_TIMESTEP) >= self.timetable.collect().select(pl.first(c.TC_TIMESTEP)))
-                                                                   & (pl.col(c.TC_TIMESTEP) <= self.timetable.collect().select(pl.last(c.TC_TIMESTEP)))
-                                                                   ).collect()  # Turned into a dataframe due to a bug in polars (.agg() does not work on lazyframes)
+                                                                   & (pl.col(c.TC_TIMESTEP) >= self.timetable.select(pl.first(c.TC_TIMESTEP)))
+                                                                   & (pl.col(c.TC_TIMESTEP) <= self.timetable.select(pl.last(c.TC_TIMESTEP)))
+                                                                   )
         # Group the market data by the timestep      
         self.market_transactions = self.market_transactions.groupby(c.TC_TIMESTEP).agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum())
         # Fill all empty columns with zero
         self.market_transactions = self.market_transactions.fill_null(0)
         # Compute the net energy
-        self.market_transactions = self.market_transactions.with_columns((pl.col(c.TC_ENERGY_IN).cast(pl.Int64) - pl.col(c.TC_ENERGY_OUT).cast(pl.Int64)).alias(c.TC_ENERGY)).lazy() 
+        self.market_transactions = self.market_transactions.with_columns((pl.col(c.TC_ENERGY_IN).cast(pl.Int64) - pl.col(c.TC_ENERGY_OUT).cast(pl.Int64)).alias(c.TC_ENERGY))
 
         # Get the setpoints for the given market and agent and convert them to energy (unit: Wh)
         self.setpoints = self.agent.setpoints.select([c.TC_TIMESTAMP, f'{self.market_name}_{self.energy_type}'])
@@ -88,7 +88,7 @@ class TradingBase:
         self.market_transactions = self.market_transactions.join(self.setpoints, on=c.TC_TIMESTEP, how='outer')
         
         # with pl.Config(tbl_cols=20, fmt_str_lengths=200, tbl_rows=100):
-        #     print(self.market_transactions.collect())
+        #     print(self.market_transactions)
         
         # Fill all empty columns with zero
         self.market_transactions = self.market_transactions.fill_null(0)
@@ -113,7 +113,7 @@ class TradingBase:
                                                   c.TC_ENERGY_TYPE])
 
         # Compute length of table
-        len_table = len(self.bids_offers.collect())
+        len_table = len(self.bids_offers)
 
         self.bids_offers = self.bids_offers.with_columns(
             [
@@ -168,10 +168,10 @@ class Linear(TradingBase):
         self.bids_offers = self._preprocess_bids_offers()
 
         # with pl.Config(set_tbl_cols=20, set_tbl_rows=20, set_tbl_width_chars=400):
-        #     print(self.bids_offers.collect())
+        #     print(self.bids_offers)
 
         # Get the length of the table
-        len_table = len(self.bids_offers.collect())
+        len_table = len(self.bids_offers)
 
         # Add column that contains the number of the row
         self.bids_offers = self.bids_offers.with_columns(
@@ -217,7 +217,7 @@ class Zi(TradingBase):
         self.bids_offers = self._preprocess_bids_offers()
 
         # Get the length of the table
-        len_table = len(self.bids_offers.collect())
+        len_table = len(self.bids_offers)
 
         # Add columns for the price per unit
         self.bids_offers = self.bids_offers.with_columns(

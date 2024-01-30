@@ -338,9 +338,9 @@ class Database:
 
                     # generate a new column with current timestep and adjust data type
                     column_name = 'new_columns_' + str(new_columns_count)
-                    market = market.with_columns(pl.lit(value).alias(column_name))
-                    market = market.with_columns(pl.col(column_name).dt.cast_time_unit(time_unit))
-                    market = market.with_columns(pl.col(column_name).dt.replace_time_zone(time_zone))
+                    market = market.with_columns(pl.lit(value)
+                                                 .alias(column_name)
+                                                 .cast(pl.Datetime(time_unit=time_unit, time_zone=time_zone)))
 
                     # update new columns count and name
                     new_columns_count += 1
@@ -399,11 +399,11 @@ class Database:
 
         """
         self.__general['weather'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'weather',
-                                                                  'weather.ft'), df='polars')
+                                                                  'weather.ft'), df='polars', method='eager')
         self.__general['retailer'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'retailer.ft'),
-                                                 df='polars')
+                                                 df='polars', method='eager')
         self.__general['tasks'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
-                                                  df='polars')
+                                                  df='polars', method='eager')
         self.__general['general'] = f.load_file(path=os.path.join(self.__scenario_path, 'config', 'config_setup.yaml'))
 
     def __register_all_regions(self, structure):

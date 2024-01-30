@@ -73,12 +73,11 @@ class Rtc(ControllerBase):
             # Get the timetable and filter it to only include the rows with the current timestep
             self.timetable = kwargs[c.TN_TIMETABLE]
             # Get the delta between timestamps
-            self.dt = self.timetable.collect()[1, c.TC_TIMESTEP] - self.timetable.collect()[0, c.TC_TIMESTEP]
+            self.dt = self.timetable[1, c.TC_TIMESTEP] - self.timetable[0, c.TC_TIMESTEP]
             # Filter the timetable to only include the rows with the current timestamp
-            self.timetable = self.timetable.filter(
-                pl.col(c.TC_TIMESTAMP) == pl.col(c.TC_TIMESTEP))
+            self.timetable = self.timetable.filter(pl.col(c.TC_TIMESTAMP) == pl.col(c.TC_TIMESTEP))
             # Get the current timestamp
-            self.timestamp = self.timetable.collect()[0, c.TC_TIMESTAMP]
+            self.timestamp = self.timetable[0, c.TC_TIMESTAMP]
 
             # Get the agent and other data
             self.agent = kwargs['agent']
@@ -94,15 +93,15 @@ class Rtc(ControllerBase):
             self.targets = self.setpoints.join(self.timetable, on=c.TC_TIMESTAMP, how='semi')
 
             # Raise warning if timeseries exceeds one row
-            if len(self.timeseries.collect()) != 1:
+            if len(self.timeseries) != 1:
                 raise ValueError(f"Timeseries has {len(self.timeseries)} rows. It should only have 1 row for the rtc.")
 
             # Get the market data
             self.market = kwargs[c.TC_MARKET]
             # Get market name
             # Get the market names and types
-            self.market_names = self.timetable.collect().select(c.TC_NAME).unique().to_series().to_list()
-            self.market_types = self.timetable.collect().select(c.TC_MARKET).unique().to_series().to_list()
+            self.market_names = self.timetable.select(c.TC_NAME).unique().to_series().to_list()
+            self.market_types = self.timetable.select(c.TC_MARKET).unique().to_series().to_list()
             # Assign each market name to an energy type
             self.markets = {name: c.TRADED_ENERGY[mtype] for name, mtype in zip(self.market_names, self.market_types)}
             # Get the market results for each market
@@ -110,17 +109,13 @@ class Rtc(ControllerBase):
             for market_type, market in self.market.items():
                 for market_name, data in market.items():
                     # Get transactions table
-                    transactions = data.market_transactions.collect()
-                    # self.market_results[market_name] = db.filter_market_data(transactions, c.TC_ID_AGENT, self.agent.agent_id)  # Runs into an error for which the workaround was installed
+                    transactions = data.market_transactions
                     # Filter for agent ID
                     transactions = transactions.filter(pl.col(c.TC_ID_AGENT) == self.agent.agent_id)
                     # Filter for current timestamp
                     transactions = transactions.filter(pl.col(c.TC_TIMESTEP) == self.timestamp)
                     # Fill NaN values with 0
                     transactions = transactions.fill_null(0)
-                    #if len(transactions) > 0:
-                    #    with pl.Config(set_tbl_rows= 50, set_tbl_cols=20, set_fmt_str_lengths=200):
-                    #        print(transactions)
                     # Get net energy amount for market
                     self.market_results[market_name] = (transactions
                                                         .select(pl.sum(c.TC_ENERGY_IN).cast(pl.Int64)
@@ -165,27 +160,31 @@ class Rtc(ControllerBase):
             self.define_constraints()
             self.define_objective()
 
+            # Print the model
+            # for name, var in self.model.variables.items():
+            #     print(var)
+            # for name, con in self.model.constraints.items():
+            #     print(con)
+            # print(self.model.objective)
+            # exit()
+
         def create_plants(self):
             for plant_name, plant_data in self.plants.items():
 
                 # Get the plant type from the plant data
                 plant_type = plant_data['type']
 
-                # TODO: Take out once hp is implemented
-                if plant_type in ['dhw', 'heat']:
-                    continue
-
                 # Retrieve the timeseries data for the plant
                 cols = [col for col in self.timeseries.columns if col.startswith(plant_name)]
-                timeseries = self.timeseries.select(cols).collect()
+                timeseries = self.timeseries.select(cols)
 
                 # Retrieve the target setpoints for the plant
                 cols = [col for col in self.targets.columns if col.startswith(plant_name)]
-                targets = self.targets.select(cols).collect()
+                targets = self.targets.select(cols)
 
                 # Retrieve the soc data for the plant (if applicable)
                 cols = [col for col in self.socs.columns if col.startswith(plant_name)]
-                socs = self.socs.select(cols).collect()
+                socs = self.socs.select(cols)
 
                 # Get the plant class
                 plant_class = self.available_plants.get(plant_type)
@@ -233,6 +232,10 @@ class Rtc(ControllerBase):
             for plant_name, plant in self.plant_objects.items():
                 plant.define_constraints(self.model)
 
+            # Define constraints for each market
+            for market_name, market in self.market_objects.items():
+                market.define_constraints(self.model)
+
             # Additional constraints for energy balancing, etc.
             self.add_balance_constraints()
 
@@ -250,11 +253,11 @@ class Rtc(ControllerBase):
                 for variable_name, variable in self.model.variables.items():
                     # Add the variable as generation if it is a market variable for the current energy type
                     if (variable_name.startswith(tuple(self.market_objects))
-                        and variable_name.endswith(f'_{energy_type}')):
+                            and variable_name.endswith(f'_{energy_type}')):
                         balance_equations[energy_type] += variable
                     # Add the variable if it is a plant variable for the current energy type
                     elif (variable_name.startswith(tuple(self.plant_objects))
-                          and variable_name.endswith(f'_{energy_type}')):  # TODO: Could be done so it checks for _power since that would save looking at the deviation and target specifically (can be done as else continue)
+                          and variable_name.endswith(f'_{energy_type}')):
                         # Get the component name by splitting the variable name at the underscore
                         component_name = variable_name.split('_', 1)[0]
 
@@ -293,34 +296,36 @@ class Rtc(ControllerBase):
             return self.model
 
         def define_objective(self):
-            # Weights to prioritize components
-            w_bat = 1  # weight for battery
-            w_ev = 2  # weight for electric vehicle
-            w_hp = 3  # weight for heat pump
-            w_bal = 4  # weight for balancing energy
+            # Weights to prioritize components (the higher the weight, the higher the penalty for deviation)
+            weights = {
+                c.P_BATTERY: 1,  # weight for battery
+                c.P_HEAT_STORAGE: 1,  # weight for heat storage
+                c.P_EV: 2,  # weight for electric vehicle
+                c.P_HP: 3,  # weight for heat pump
+                'market': 4  # weight for market energy
+            }
+
             # Initialize the objective function as zero
             objective = self.model.add_variables(name='objective', lower=0, upper=0, integer=True)
 
             # Loop through the model's variables to identify the balancing variables that need to be minimized
             for variable_name, variable in self.model.variables.items():
-                # Balancing deviation
-                if f'_{c.TT_BALANCING}_' in variable_name and '_deviation_' in variable_name:
-                        objective += variable * w_bal
-                # Heat pump deviation
-                elif f'_{c.P_HP}_' in variable_name and '_deviation_' in variable_name:
-                        objective += variable * w_hp
-                # EV deviation
-                elif f'_{c.P_EV}_' in variable_name and '_deviation_' in variable_name:
-                        objective += variable * w_ev
-                # Battery deviation
-                elif f'_{c.P_BATTERY}_' in variable_name and '_deviation_' in variable_name:
-                        objective += variable * w_bat
-                else:
-                    pass
+                # Check if variable_name contains an underscore
+                if "_deviation_" in variable_name:
+                    # Extract component type from variable name using the weights mapping
+                    component_type = next((key for key in weights.keys() if f'_{key}_' in variable_name), None)
+                    # If component type is None assign market weight
+                    component_type = 'market' if component_type is None else component_type
+
+                    # Get the weight for the component type
+                    weight = weights.get(component_type)
+
+                    # Add deviation to objective function
+                    objective += variable * weight
 
             # Set the objective function to the model with the minimize direction
             self.model.add_objective(objective)
-            
+
             return self.model
 
         def run(self):
@@ -335,8 +340,6 @@ class Rtc(ControllerBase):
                     sys.stdout = sys.__stdout__     # re-activate printing
                 case _:
                     raise ValueError(f"Unsupported solver: {solver}")
-
-            # TODO: Make the model silent and not put out any response.
 
             # Check if the solution is optimal
             if status[0] != 'ok':
@@ -361,7 +364,7 @@ class Rtc(ControllerBase):
             # Update socs
             self.socs = self.update_socs(solution)
 
-            # TODO: Update meters
+            # Update meters
             self.meters = self.update_meters(solution)
 
             # Update the agent
@@ -371,10 +374,7 @@ class Rtc(ControllerBase):
 
             return self.agent
 
-        def update_setpoints(self, solution: dict):
-
-            # Make LazyFrames into DataFrames
-            self.setpoints = self.setpoints.collect()
+        def update_setpoints(self, solution: dict) -> pl.DataFrame:
             
             # Set all setpoints to 0
             for col in self.setpoints.columns[1:]:
@@ -390,7 +390,7 @@ class Rtc(ControllerBase):
                         if col.split('_', 1)[0] in beginnings and col.rsplit('_', 1)[-1] in endings]
 
             # Shift index according to timetable time
-            timesteps = [self.timetable.collect()[0, c.TC_TIMESTAMP] + self.dt * t for t in range(len(self.setpoints))]
+            timesteps = [self.timetable[0, c.TC_TIMESTAMP] + self.dt * t for t in range(len(self.setpoints))]
             self.setpoints = self.setpoints.with_columns(pl.Series(timesteps)
                                                          .cast(pl.Datetime(time_unit='ns', time_zone='UTC'))
                                                          .alias(c.TC_TIMESTAMP))
@@ -413,14 +413,9 @@ class Rtc(ControllerBase):
             sel_cols = [self.setpoints.columns[0]] + src_cols
             self.setpoints = self.setpoints.select(sel_cols)
 
-            # Make LazyFrame again
-            self.setpoints = self.setpoints.lazy()
-
             return self.setpoints
 
-        def update_socs(self, solution: dict):
-            # Make LazyFrame into DataFrame
-            self.socs = self.socs.collect()
+        def update_socs(self, solution: dict) -> pl.DataFrame:
 
             # Find row that is to be updated (i.e. the row with the next timestamp)
             row_soc = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timestamp + self.dt)
@@ -467,14 +462,9 @@ class Rtc(ControllerBase):
             self.socs = self.socs.filter(self.socs[c.TC_TIMESTAMP] != self.timestamp + self.dt)
             self.socs = self.socs.merge_sorted(row_soc, key=c.TC_TIMESTAMP)
 
-            # Make LazyFrame again
-            self.socs = self.socs.lazy()
-
             return self.socs
 
-        def update_meters(self, solution: dict):
-            # Make LazyFrame into DataFrame
-            self.meters = self.meters.collect()
+        def update_meters(self, solution: dict) -> pl.DataFrame:
 
             # Find row that is to be updated as well as the previous row (i.e. current and next timestamp)
             row_now = self.meters.filter(self.meters[c.TC_TIMESTAMP] == self.timestamp)
@@ -503,9 +493,6 @@ class Rtc(ControllerBase):
             # Update meters dataframe
             self.meters = self.meters.filter(self.meters[c.TC_TIMESTAMP] != self.timestamp + self.dt)
             self.meters = self.meters.merge_sorted(row_new, key=c.TC_TIMESTAMP)
-
-            # Make LazyFrame again
-            self.meters = self.meters.lazy()
 
             return self.meters
 
