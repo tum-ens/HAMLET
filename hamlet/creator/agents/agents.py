@@ -137,52 +137,52 @@ class Agents:
         from hamlet.creator.agents.producer import Producer
         from hamlet.creator.agents.storage import Storage
         self.types = {
-            'sfh': Sfh,
-            'mfh': Mfh,
-            'ctsp': Ctsp,
-            'industry': Industry,
-            'producer': Producer,
-            'storage': Storage,
+            c.A_SFH: Sfh,
+            c.A_MFH: Mfh,
+            c.A_CTSP: Ctsp,
+            c.A_INDUSTRY: Industry,
+            c.A_PRODUCER: Producer,
+            c.A_STORAGE: Storage,
         }
         # Available types of plants
         self.plants = {
-            'inflexible_load': {
+            c.P_INFLEXIBLE_LOAD: {
             },
-            'flexible_load': {
+            c.P_FLEXIBLE_LOAD: {
             },
-            'heat': {
+            c.P_HEAT: {
                 'func_ts': self.__make_timeseries_heat,
             },
-            'dhw': {
+            c.P_DHW: {
             },
-            'pv': {
+            c.P_PV: {
                 'specs': self.__timeseries_from_specs_pv,
             },
-            'wind': {
+            c.P_WIND: {
                 'specs': self.__timeseries_from_specs_wind,
             },
-            'fixed_gen': {
+            c.P_FIXED_GEN: {
             },
-            'hp': {
+            c.P_HP: {
                 'specs': self.__timeseries_from_specs_hp,
             },
-            'ev': {
+            c.P_EV: {
             },
-            'battery': {
+            c.P_BATTERY: {
             },
-            'psh': {
+            c.P_PSH: {
             },
-            'hydrogen': {
+            c.P_HYDROGEN: {
             },
-            'heat_storage': {
+            c.P_HEAT_STORAGE: {
             },
         }
         # Available types of ctsp (obtained from the input data folder)
         self.ctsp = self.__get_types(
-            path=os.path.join(self.input_path, 'agents', 'ctsp', 'inflexible_load'), idx=0, sep='_')
+            path=os.path.join(self.input_path, 'agents', c.A_CTSP, c.P_INFLEXIBLE_LOAD), idx=0, sep='_')
         # Available types of industry (obtained from the input data folder)
         self.industry = self.__get_types(
-            path=os.path.join(self.input_path, 'agents', 'industry', 'inflexible_load'), idx=0, sep='_')
+            path=os.path.join(self.input_path, 'agents', c.A_INDUSTRY, c.P_INFLEXIBLE_LOAD), idx=0, sep='_')
 
     def create_agents_file_from_config(self, overwrite: bool = False):
         """Creates the Excel file from the config file
@@ -300,7 +300,7 @@ class Agents:
             agent_ids = list()
             for sheet in self.excel.sheet_names:
                 df = self.excel.parse(sheet, index_col=0)
-                agent_ids += df["general/agent_id"].to_list()
+                agent_ids += df[f"{c.K_GENERAL}/agent_id"].to_list()
             # Print the list of agent IDs
             print(agent_ids)
             # Print the non-unique items (IDs)
@@ -365,7 +365,7 @@ class Agents:
             f.create_folder(path)
 
             # Call the internal method to create the necessary data for the agent (e.g. plants, meters, etc.)
-            account["plants"], plants, meters, timeseries, socs, specs, setpoints, fcasts = (
+            account[c.K_PLANTS], plants, meters, timeseries, socs, specs, setpoints, fcasts = (
                 self._create_plants_for_agent(account=account, agent_type=agent_type))
 
             # Organize the created data into a dictionary
@@ -400,13 +400,13 @@ class Agents:
                 - Dictionary with plant specs.
         """
         # Retrieve info from account
-        plants = account["plants"]
+        plants = account[c.K_PLANTS]
 
         # Set time ranges
         # Length of the training period in days
         train_period = self.__find_max_train_period(plants=plants)
         # Length of the forecasting period in seconds
-        fcast_period = account['ems']['fcasts']['horizon']
+        fcast_period = account[c.K_EMS]['fcasts']['horizon']
         # Start of the simulation in UTC
         start = self.setup['time']['start'].replace(tzinfo=datetime.timezone.utc)
         # Start of the forecasting period in UTC
@@ -1045,7 +1045,8 @@ class Agents:
         return file, specs
 
     def __make_timeseries_heat(self, df: pd.DataFrame, plant_dict: dict) -> pd.DataFrame:
-        # TODO: Change it so that it does not change the input values if it is not a pu file that is used (e.g. as it was the problem in the paper when Soner's input got reduced)
+        # TODO: Change it so that it does not change the input values if it is not a pu file that is used
+        #  (e.g. as it was the problem in the paper when Soner's input got reduced)
 
         # Get the goal values that are to be searched for: efficiency, occupants, temperature
         goal = [self.account['general']['parameters']['efficiency'],
@@ -1958,14 +1959,14 @@ class Agents:
             return self.df
 
     @classmethod
-    def get_num_from_grid(cls, df: pd.DataFrame, type: str, col: str = None, unique: str = 'bus') -> int:
+    def get_num_from_grid(cls, df: pd.DataFrame, agent_type: str, col: str = None, unique: str = 'bus') -> int:
         """Returns the number of plants of a specific type in a grid"""
 
         # Assign the column to the column containing '_type' if no column is specified
         col = [col for col in df.columns if '_type' in str(col)][0] if col is None else col
 
-        # Get the number of agents of the specified type
-        num = df[df[col] == type]
+        # Get the number of agents of the specified agent type
+        num = df[df[col] == agent_type]
 
         if unique:
             num = len(num[unique].unique())
@@ -1987,10 +1988,8 @@ class Agents:
         before = search_list[pos - 1]
         after = search_list[pos]
         if after - val < val - before:
-            print('after')
             return after, pos
         else:
-            print('before')
             return before, pos
 
     @staticmethod
@@ -2013,7 +2012,6 @@ class Agents:
             return ids[0]
         else:
             return ids
-
 
 
 # Playground

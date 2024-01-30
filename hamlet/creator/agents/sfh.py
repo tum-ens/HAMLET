@@ -4,15 +4,17 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
-from hamlet.creator.agents.agents import Agents
+from hamlet.creator.agents.agent_base import AgentBase
 import os
 import pandas as pd
 import numpy as np
 from ruamel.yaml.compat import ordereddict
 from pprint import pprint
+import hamlet.constants as c
+from typing import Callable
 
 
-class Sfh(Agents):
+class Sfh(AgentBase):
     """
         Sets up sfh agents. Inherits from Agents class.
 
@@ -22,42 +24,20 @@ class Sfh(Agents):
     def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str, config_root: str):
 
         # Call the init method of the parent class
-        super().__init__(config_path, input_path, scenario_path, config_root)
+        super().__init__(input_path, config, config_path, scenario_path, config_root)
 
         # Define agent type
-        self.type = 'sfh'
+        self.type = c.A_SFH
 
         # Path of the input file
         self.input_path = os.path.join(input_path, 'agents', self.type)
-
-        # Config file
-        self.config = config
-
-        # Grid information (if applicable)
-        self.grid = None
-        self.bus = None  # bus sheet containing only the bus information of the agent type
-        self.load = None  # load sheet containing only the load information of the agent type
-        self.agents = None  # load sheet but limited to all agents, i.e. all inflexible_loads
-        self.sgen = None  # sgen sheet containing only the sgen information of the agent type
-
-        # Creation method
-        self.method = None
-
-        # Number of agents
-        self.num = 0
-
-        # Dataframe containing all information
-        self.df = None
-
-        # Misc
-        self.n_digits = 2  # number of digits values get rounded to in respective value column
 
     def create_df_from_config(self) -> pd.DataFrame:
         """Function to create the dataframe that makes the Excel sheet
         """
 
         # Get the number of agents and set the method
-        self.num = self.config["general"]["number_of"]
+        self.num = self.config[c.K_GENERAL]["number_of"]
         self.method = 'config'
 
         # Create the overall dataframe structure for the worksheet
@@ -120,7 +100,7 @@ class Sfh(Agents):
         self.load = self.grid['load'][self.grid['load']['agent_type'] == self.type]
 
         # The agents are all the buses that have an inflexible load
-        self.agents = self.load[self.load['load_type'] == 'inflexible_load']
+        self.agents = self.load[self.load['load_type'] == c.P_INFLEXIBLE_LOAD]
 
         # Get the rows in the sgen sheet that the owners in the owners column match with the index in the load sheet
         self.sgen = self.grid['sgen'][self.grid['sgen']['owner'].isin(self.load.index)]
@@ -188,93 +168,93 @@ class Sfh(Agents):
         for key, _ in self.config.items():
             cols = self.make_list_from_nested_dict(self.config[key], add_string=key)
             # Adjust the columns from "general"
-            if key == "general":
+            if key == c.K_GENERAL:
                 cols[0] = f"{key}/agent_id"
                 cols[-1] = f"{key}/market_participant"
                 del cols[1]
                 cols.insert(1, f"{key}/name")
                 cols.insert(2, f"{key}/comment")
                 cols.insert(3, f"{key}/bus")
-            # Adjust the columns from "inflexible_load"
-            elif key == "inflexible_load":
+            # Adjust the columns from c.P_INFLEXIBLE_LOAD
+            elif key == c.P_INFLEXIBLE_LOAD:
                 cols[0] = f"{key}/owner"
                 cols[4] = f"{key}/sizing/file"
                 del cols[2]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:4], num=max_num) + cols[4:]
             # Adjust the columns from "flexible_load"
-            elif key == "flexible_load":
+            elif key == c.P_FLEXIBLE_LOAD:
                 cols[0] = f"{key}/owner"
                 cols[4] = f"{key}/sizing/file"
                 del cols[2]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "heat"
-            elif key == "heat":
+            elif key == c.P_HEAT:
                 cols[0] = f"{key}/owner"
                 cols[2] = f"{key}/sizing/demand"
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "dhw"
-            elif key == "dhw":
+            elif key == c.P_DHW:
                 cols[0] = f"{key}/owner"
                 del cols[2]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "pv"
-            elif key == "pv":
+            elif key == c.P_PV:
                 cols[0] = f"{key}/owner"
                 del cols[4]
                 del cols[2]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:7], num=max_num) + cols[7:]
             # Adjust the columns from "wind"
-            elif key == "wind":
+            elif key == c.P_WIND:
                 cols[0] = f"{key}/owner"
                 del cols[4]
                 del cols[2]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "fixed_gen"
-            elif key == "fixed_gen":
+            elif key == c.P_FIXED_GEN:
                 cols[0] = f"{key}/owner"
                 del cols[4]
                 del cols[2]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "hp"
-            elif key == "hp":
+            elif key == c.P_HP:
                 cols[0] = f"{key}/owner"
                 del cols[2]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:4], num=max_num) + cols[4:]
             # Adjust the columns from "ev"
-            elif key == "ev":
+            elif key == c.P_EV:
                 cols[0] = f"{key}/owner"
                 del cols[2]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:11], num=max_num) + cols[11:]
             # Adjust the columns from "battery"
-            elif key == "battery":
+            elif key == c.P_BATTERY:
                 cols[0] = f"{key}/owner"
                 del cols[3]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:8], num=max_num) + cols[8:]
             # Adjust the columns from "heat_storage"
-            elif key == "heat_storage":
+            elif key == c.P_HEAT_STORAGE:
                 cols[0] = f"{key}/owner"
                 del cols[3]
                 del cols[1]
                 max_num = max(max(self.config[key]["num"]), 1)  # ensure at least 1 entrance
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:6], num=max_num) + cols[6:]
             # All columns that do not need to be adjusted
-            elif key in ["ems"]:
+            elif key in [c.K_EMS]:
                 pass
             else:
                 raise NotImplementedError(
                     f"The configuration file contains a key word ('{key}') that has not been configured in "
-                    "the Sfhs class yet. Aborting scenario creation...")
+                    f"the {__class__.__name__} class yet. Aborting scenario creation...")
 
             # Add the columns to the dictionary
             columns[key] = cols
@@ -301,8 +281,9 @@ class Sfh(Agents):
         """
             Fills all general columns
         """
+        # TODO: Change structure such as done in mfh
         # Key in the config file
-        key = "general"
+        key = c.K_GENERAL
 
         # Get the config for the key
         config = self.config[f"{key}"]
@@ -320,40 +301,37 @@ class Sfh(Agents):
 
         # If the method is grid, fill the name, comment and bus columns from grid file
         if self.method == 'config':
-            self.df = self._general_config(key=key)
+            self.df = self._general_config(key=key, config=config)
         elif self.method == 'grid':
-            self.df = self._general_grid(key=key)
+            self.df = self._general_grid(key=key, config=config)
         else:
             raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
                                       f"Aborting scenario creation...")
 
         return self.df
 
-    def _general_config(self, key: str) -> pd.DataFrame:
-        # TODO: In the future this will need to assign a bus from the artificial grid
+    def _general_config(self, key: str, config: ordereddict) -> pd.DataFrame:
+        # Note: In the future this will need to assign a bus from the artificial grid
         return self.df
 
-    def _general_grid(self, key: str) -> pd.DataFrame:
+    def _general_grid(self, key: str, config: ordereddict, **kwargs) -> pd.DataFrame:
         self.df[f"{key}/name"] = list(self.agents["name"])
         self.df[f"{key}/bus"] = list(self.agents["bus"])
 
         return self.df
 
-    def fill_inflexible_load(self, **kwargs) -> pd.DataFrame:
+    def fill_columns(self, key: str, config_method: Callable, grid_method: Callable, **kwargs) -> pd.DataFrame:
         """
-            Fills all inflexible_load columns
+            Fills all columns based on the provided key
         """
-
-        # Key in the config file
-        key = "inflexible_load"
 
         # Get the config for the key
-        config = self.config[f"{key}"]
+        config = self.config[key]
 
         if self.method == 'config':
-            self.df = self._inflexible_load_config(key=key, config=config)
+            self.df = config_method(key=key, config=config)
         elif self.method == 'grid':
-            self.df = self._inflexible_load_grid(key=key, config=config, **kwargs)
+            self.df = grid_method(key=key, config=config, **kwargs)
         else:
             raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
                                       f"Aborting scenario creation...")
@@ -423,18 +401,16 @@ class Sfh(Agents):
 
         return self.df
 
-    def fill_flexible_load(self) -> pd.DataFrame:
+    def _flexible_load_config(self, key: str, config: dict) -> pd.DataFrame:
         """
             Fills all flexible_load columns
         """
-        key = "flexible_load"
-        config = self.config[f"{key}"]
-        max_num = max(config["num"])
 
         # general
         self.df = self.add_general_info_config(key=key)
 
         # sizing
+        max_num = max(config["num"])
         for num in range(max_num):
             # get a list of the agents that own the nth device
             list_owner = np.multiply(np.array(self.df[f"{key}/num"] - (1 + num) >= 0), 1)
@@ -455,27 +431,6 @@ class Sfh(Agents):
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
-
-        return self.df
-
-    def fill_heat(self, **kwargs) -> pd.DataFrame:
-        """
-            Fills all heat columns
-        """
-
-        # Key in the config file
-        key = "heat"
-
-        # Get the config for the key
-        config = self.config[f"{key}"]
-
-        if self.method == 'config':
-            self.df = self._heat_config(key=key, config=config)
-        elif self.method == 'grid':
-            self.df = self._heat_grid(key=key, config=config, **kwargs)
-        else:
-            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
-                                      f"Aborting scenario creation...")
 
         return self.df
 
@@ -509,7 +464,7 @@ class Sfh(Agents):
             # file
             # replace all 'linked' with the file of the inflexible load
             self.df.loc[self.df[f"{key}/sizing/file_{num}"] == 'linked', f"{key}/sizing/file_{num}"] = self.df.loc[
-                self.df[f"{key}/sizing/file_{num}"] == 'linked', f"inflexible_load/sizing/file_0"]
+                self.df[f"{key}/sizing/file_{num}"] == 'linked', f"{c.P_INFLEXIBLE_LOAD}/sizing/file_0"]
             # shorten the file name to the yearly demand and index
             self.df[f"{key}/sizing/file_{num}"] = [
                 "_".join(item.rsplit(".", 1)[0].split("_")[1:3]) if 'csv' in item else item for item in
@@ -562,27 +517,6 @@ class Sfh(Agents):
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
-
-        return self.df
-
-    def fill_dhw(self, **kwargs) -> pd.DataFrame:
-        """
-            Fills all dhw columns
-        """
-
-        # Key in the config file
-        key = "dhw"
-
-        # Get the config for the key
-        config = self.config[f"{key}"]
-
-        if self.method == 'config':
-            self.df = self._dhw_config(key=key, config=config)
-        elif self.method == 'grid':
-            self.df = self._dhw_grid(key=key, config=config, **kwargs)
-        else:
-            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
-                                      f"Aborting scenario creation...")
 
         return self.df
 
@@ -666,27 +600,6 @@ class Sfh(Agents):
 
         return self.df
 
-    def fill_pv(self, **kwargs) -> pd.DataFrame:
-        """
-            Fills all pv columns
-        """
-
-        # Key in the config file
-        key = "pv"
-
-        # Get the config for the key
-        config = self.config[f"{key}"]
-
-        if self.method == 'config':
-            self.df = self._pv_config(key=key, config=config)
-        elif self.method == 'grid':
-            self.df = self._pv_grid(key=key, config=config, **kwargs)
-        else:
-            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
-                                      f"Aborting scenario creation...")
-
-        return self.df
-
     def _pv_config(self, key: str, config: dict) -> pd.DataFrame:
         """adds the inflexible load from the config file"""
 
@@ -708,7 +621,7 @@ class Sfh(Agents):
                                    idx_list=idx_list, appendix=f"_{num}")
             # postprocessing
             # power
-            self.df[f"{key}/sizing/power_{num}"] *= self.df["inflexible_load/sizing/demand_0"] / 1000
+            self.df[f"{key}/sizing/power_{num}"] *= self.df[f"{c.P_INFLEXIBLE_LOAD}/sizing/demand_0"] / 1000
             self.df[f"{key}/sizing/power_{num}"] = self._calc_deviation(idx_list=idx_list,
                                                                         vals=self.df[f"{key}/sizing/power_{num}"],
                                                                         distr=config["sizing"]["power_deviation"],
@@ -804,26 +717,6 @@ class Sfh(Agents):
 
         return self.df
 
-    def fill_wind(self, **kwargs) -> pd.DataFrame:
-        """
-            Fills all wind columns
-        """
-        # Key in the config file
-        key = "wind"
-
-        # Get the config for the key
-        config = self.config[f"{key}"]
-
-        if self.method == 'config':
-            self.df = self._wind_config(key=key, config=config)
-        elif self.method == 'grid':
-            self.df = self._wind_grid(key=key, config=config, **kwargs)
-        else:
-            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
-                                      f"Aborting scenario creation...")
-
-        return self.df
-
     def _wind_config(self, key: str, config: dict) -> pd.DataFrame:
 
         # general
@@ -844,7 +737,7 @@ class Sfh(Agents):
                                    idx_list=idx_list, appendix=f"_{num}")
             # postprocessing
             # power
-            self.df[f"{key}/sizing/power_{num}"] *= self.df["inflexible_load/sizing/demand_0"] / 1000
+            self.df[f"{key}/sizing/power_{num}"] *= self.df[f"{c.P_INFLEXIBLE_LOAD}/sizing/demand_0"] / 1000
             self.df[f"{key}/sizing/power_{num}"] = self._calc_deviation(idx_list=idx_list,
                                                                         vals=self.df[f"{key}/sizing/power_{num}"],
                                                                         distr=config["sizing"]["power_deviation"],
@@ -935,27 +828,6 @@ class Sfh(Agents):
 
         return self.df
 
-    def fill_fixed_gen(self, **kwargs) -> pd.DataFrame:
-        """
-            Fills all fixed_gen columns
-        """
-
-        # Key in the config file
-        key = "fixed_gen"
-
-        # Get the config for the key
-        config = self.config[f"{key}"]
-
-        if self.method == 'config':
-            self.df = self._fixed_gen_config(key=key, config=config)
-        elif self.method == 'grid':
-            self.df = self._fixed_gen_grid(key=key, config=config, **kwargs)
-        else:
-            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
-                                      f"Aborting scenario creation...")
-
-        return self.df
-
     def _fixed_gen_config(self, key: str, config: dict) -> pd.DataFrame:
 
         # general
@@ -976,7 +848,7 @@ class Sfh(Agents):
                                    idx_list=idx_list, appendix=f"_{num}")
             # postprocessing
             # power
-            self.df[f"{key}/sizing/power_{num}"] *= self.df["inflexible_load/sizing/demand_0"] / 1000
+            self.df[f"{key}/sizing/power_{num}"] *= self.df[f"{c.P_INFLEXIBLE_LOAD}/sizing/demand_0"] / 1000
             self.df[f"{key}/sizing/power_{num}"] = self._calc_deviation(idx_list=idx_list,
                                                                         vals=self.df[f"{key}/sizing/power_{num}"],
                                                                         distr=config["sizing"]["power_deviation"],
@@ -1051,27 +923,6 @@ class Sfh(Agents):
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
-
-        return self.df
-
-    def fill_hp(self, **kwargs) -> pd.DataFrame:
-        """
-            Fills all hp columns
-        """
-
-        # Key in the config file
-        key = "hp"
-
-        # Get the config for the key
-        config = self.config[f"{key}"]
-
-        if self.method == 'config':
-            self._hp_config(key=key, config=config)
-        elif self.method == 'grid':
-            self._hp_grid(key=key, config=config, **kwargs)
-        else:
-            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
-                                      f"Aborting scenario creation...")
 
         return self.df
 
@@ -1165,27 +1016,6 @@ class Sfh(Agents):
 
         return self.df
 
-    def fill_ev(self, **kwargs) -> pd.DataFrame:
-        """
-            Fills all ev columns
-        """
-
-        # Key in the config file
-        key = "ev"
-
-        # Get the config for the key
-        config = self.config[f"{key}"]
-
-        if self.method == 'config':
-            self._ev_config(key=key, config=config)
-        elif self.method == 'grid':
-            self._ev_grid(key=key, config=config, **kwargs)
-        else:
-            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
-                                      f"Aborting scenario creation...")
-
-        return self.df
-
     def _ev_config(self, key: str, config: dict) -> pd.DataFrame:
 
         # general
@@ -1268,27 +1098,6 @@ class Sfh(Agents):
 
         return self.df
 
-    def fill_battery(self, **kwargs) -> pd.DataFrame:
-        """
-            Fills all battery columns
-        """
-
-        # Key in the config file
-        key = "battery"
-
-        # Get the config for the key
-        config = self.config[f"{key}"]
-
-        if self.method == 'config':
-            self.df = self._battery_config(key=key, config=config)
-        elif self.method == 'grid':
-            self.df = self._battery_grid(key=key, config=config, **kwargs)
-        else:
-            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
-                                      f"Aborting scenario creation...")
-
-        return self.df
-
     def _battery_config(self, key: str, config: dict) -> pd.DataFrame:
 
         # general
@@ -1309,11 +1118,11 @@ class Sfh(Agents):
                                    appendix=f"_{num}")
             # postprocessing
             # power
-            self.df[f"{key}/sizing/power_{num}"] *= self.df["inflexible_load/sizing/demand_0"] / 1000
+            self.df[f"{key}/sizing/power_{num}"] *= self.df[f"{c.P_INFLEXIBLE_LOAD}/sizing/demand_0"] / 1000
             self.df[f"{key}/sizing/power_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/power_{num}"], n=self.n_digits)
             # capacity
-            self.df[f"{key}/sizing/capacity_{num}"] *= self.df["inflexible_load/sizing/demand_0"] / 1000
+            self.df[f"{key}/sizing/capacity_{num}"] *= self.df[f"{c.P_INFLEXIBLE_LOAD}/sizing/demand_0"] / 1000
             self.df[f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/capacity_{num}"], n=self.n_digits)
 
@@ -1364,27 +1173,6 @@ class Sfh(Agents):
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
-
-        return self.df
-
-    def fill_heat_storage(self, **kwargs) -> pd.DataFrame:
-        """
-            Fills all heat storage columns
-        """
-
-        # Key in the config file
-        key = "heat_storage"
-
-        # Get the config for the key
-        config = self.config[f"{key}"]
-
-        if self.method == 'config':
-            self.df = self._heat_storage_config(key=key, config=config)
-        elif self.method == 'grid':
-            self.df = self._heat_storage_grid(key=key, config=config, **kwargs)
-        else:
-            raise NotImplementedError(f"The method '{self.method}' is not implemented yet. "
-                                      f"Aborting scenario creation...")
 
         return self.df
 
@@ -1464,16 +1252,6 @@ class Sfh(Agents):
 
         return self.df
 
-    def fill_ems(self):
-        """
-            Fills all battery columns
-        """
-        key = "ems"
-        config = self.config[f"{key}"]
-
-        # general
-        self.df = self._add_info_simple(keys=[key], config=config, df=self.df)
-
     def add_general_info_config(self, key: str) -> pd.DataFrame:
 
         # fields that exist for all plants
@@ -1510,7 +1288,7 @@ class Sfh(Agents):
         # inclusive: agents needs to have ALL the listed plants to fulfill requirements
         if method == "inclusive":
             list_num = [1] * self.num
-            plants += ["inflexible_load"]
+            plants += [c.P_INFLEXIBLE_LOAD]
             for device in plants:
                 list_num = [list_num[idx] * self.df[f"{device}/owner"][idx] for idx, _ in enumerate(list_num)]
         # exclusive: agents needs to have ANY of the listed plants to fulfill requirements
@@ -1520,7 +1298,7 @@ class Sfh(Agents):
                 list_num = [list_num[idx] + self.df[f"{device}/owner"][idx] for idx, _ in enumerate(list_num)]
 
             # Make sure that there is either zero or one and that owner has inflexible load
-            list_num = [min(1, list_num[idx] * self.df[f"inflexible_load/owner"][idx]) for idx, _ in
+            list_num = [min(1, list_num[idx] * self.df[f"{c.P_INFLEXIBLE_LOAD}/owner"][idx]) for idx, _ in
                         enumerate(list_num)]
         else:
             raise Warning(f"Method '{method}' unknown.")

@@ -4,14 +4,16 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
-from hamlet.creator.agents.agents import Agents
+from hamlet.creator.agents.agent_base import AgentBase
 import os
 import pandas as pd
 import numpy as np
 from ruamel.yaml.compat import ordereddict
 from pprint import pprint
+import hamlet.constants as c
 
-class Producer(Agents):
+
+class Producer(AgentBase):
     """
         Sets up producer agents. Inherits from Agents class.
 
@@ -21,33 +23,16 @@ class Producer(Agents):
     def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str, config_root: str):
 
         # Call the init method of the parent class
-        super().__init__(config_path, input_path, scenario_path, config_root)
+        super().__init__(input_path, config, config_path, scenario_path, config_root)
 
         # Define agent type
-        self.type = 'producer'
+        self.type = c.A_PRODUCER
 
         # Path of the input file
         self.input_path = os.path.join(input_path, 'agents', self.type)
 
-        # Config file
-        self.config = config
-
-        # Grid information (if applicable)
-        self.grid = None
-        self.bus = None  # bus sheet containing only the bus information of the agent type
-        self.load = None  # load sheet containing only the load information of the agent type
-        self.agents = None  # load sheet but limited to all agents, i.e. all inflexible_loads
-        self.sgen = None  # sgen sheet containing only the sgen information of the agent type
-
-        # Creation method
-        self.method = None
-
         # Number of agents
-        self.num = 0
         self.num_agents = 0  # number of agents (changes depending on which "add_xxx()" function is called)
-
-        # Dataframe containing all information
-        self.df = None
 
         # Index list that is adhered to throughout the creation process to ensure correct order
         self.idx_list = None  # gets created in create_general()
@@ -91,7 +76,7 @@ class Producer(Agents):
         self.load = self.grid['load'][self.grid['load']['agent_type'] == self.type]
 
         # The agents are all the buses that have an inflexible load
-        self.agents = self.load[self.load['load_type'] == 'inflexible_load']
+        self.agents = self.load[self.load['load_type'] == c.P_INFLEXIBLE_LOAD]
 
         # Get the rows in the sgen sheet that the owners in the owners column match with the index in the load sheet
         self.sgen = self.grid['sgen'][self.grid['sgen']['owner'].isin(self.load.index)]
@@ -155,7 +140,7 @@ class Producer(Agents):
                 before = False
 
             # Adjust the columns from "pv"
-            if key == "pv":
+            if key == c.P_PV:
                 self.num += self.config[key]["general"]["number_of"]
                 # Filter all columns that match the key
                 cols = [col for col in cols if key in col]
@@ -165,7 +150,7 @@ class Producer(Agents):
                 max_num = max(self.config[key][key]["num"])
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:7], num=max_num) + cols[7:]
             # Adjust the columns from "wind"
-            elif key == "wind":
+            elif key == c.P_WIND:
                 self.num += self.config[key]["general"]["number_of"]
                 # Filter all columns that match the key
                 cols = [col for col in cols if key in col]
@@ -175,7 +160,7 @@ class Producer(Agents):
                 max_num = max(self.config[key][key]["num"])
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:5], num=max_num) + cols[5:]
             # Adjust the columns from "fixed_gen"
-            elif key == "fixed_gen":
+            elif key == c.P_FIXED_GEN:
                 self.num += self.config[key]["general"]["number_of"]
                 # Filter all columns that match the key
                 cols = [col for col in cols if key in col]
@@ -187,7 +172,7 @@ class Producer(Agents):
             else:
                 raise NotImplementedError(
                     f"The configuration file contains a key word ('{key}') that has not been configured in "
-                    "the Sfhs class yet. Aborting scenario creation...")
+                    f"the {__class__.__name__} class yet. Aborting scenario creation...")
 
             # Update maximum number of batteries
             max_bat = max(max(self.config[key]["battery"]["num"]), max_bat)
@@ -237,7 +222,7 @@ class Producer(Agents):
         """
             Adds all PV producers
         """
-        key = "pv"
+        key = c.P_PV
         self.num_agents = self.config[f"{key}"]["general"]["number_of"]
         self.idx_start = len(self.df)
 
@@ -260,7 +245,7 @@ class Producer(Agents):
         """
             Adds all wind producers
         """
-        key = "wind"
+        key = c.P_WIND
         self.num_agents = self.config[f"{key}"]["general"]["number_of"]
 
         if self.num_agents == 0:
@@ -282,7 +267,7 @@ class Producer(Agents):
         """
             Adds all wind producers
         """
-        key = "fixed_gen"
+        key = c.P_FIXED_GEN
         self.num_agents = self.config[f"{key}"]["general"]["number_of"]
 
         # general
@@ -304,7 +289,7 @@ class Producer(Agents):
         """
             Fills all general columns
         """
-        key = "general"
+        key = c.K_GENERAL
         config = self.config[f"{device}"][f"{key}"]
         self.idx_start = len(self.df)
         self.idx_end = self.idx_start + self.num_agents
@@ -325,15 +310,14 @@ class Producer(Agents):
         """
             Fills all pv columns
         """
-        key = "pv"
+        key = c.P_PV
         config = self.config[f"{device}"][f"{key}"]
 
         # general
         self._add_general_info(key=key, config=config)
 
         # sizing
-        pprint(config)
-        max_num = max(config["num"]) if config['share'] else 0
+        max_num = max(config["num"])
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -371,14 +355,14 @@ class Producer(Agents):
         """
             Fills all wind columns
         """
-        key = "wind"
+        key = c.P_WIND
         config = self.config[f"{device}"][f"{key}"]
 
         # general
         self._add_general_info(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"]) if config['share'] else 0
+        max_num = max(config["num"])
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -413,14 +397,14 @@ class Producer(Agents):
             Fills all fixed_gen columns
         """
 
-        key = "fixed_gen"
+        key = c.P_FIXED_GEN
         config = self.config[f"{device}"][f"{key}"]
 
         # general
         self._add_general_info(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"]) if config['share'] else 0
+        max_num = max(config["num"])
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -454,14 +438,14 @@ class Producer(Agents):
         """
             Fills all battery columns
         """
-        key = "battery"
+        key = c.P_BATTERY
         config = self.config[f"{device}"][f"{key}"]
 
         # general
         self._add_general_info_dependent(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"]) if config['share'] else 0
+        max_num = max(config["num"])
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -488,7 +472,7 @@ class Producer(Agents):
         """
             Fills all battery columns
         """
-        key = "ems"
+        key = c.K_EMS
         config = self.config[f"{device}"][f"{key}"]
 
         # general
@@ -535,7 +519,7 @@ class Producer(Agents):
         for idx, agent_type in enumerate(agent_types):
             # get all agents of given type
             list_type = list(self.df["general/parameters/type"] == agent_type)
-            plants = self.config[f"{key}"]["share_dependent_on"][idx] + ["inflexible_load"]
+            plants = self.config[f"{key}"]["share_dependent_on"][idx]
             # check which agents of that type have the dependent plants
             for device in plants:
                 list_type = [ltype * lowner for ltype, lowner in zip(list_type, self.df[f"{device}/owner"])]

@@ -4,14 +4,15 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
-from hamlet.creator.agents.agents import Agents
+from hamlet.creator.agents.agent_base import AgentBase
 import os
 import pandas as pd
 import numpy as np
 from ruamel.yaml.compat import ordereddict
+import hamlet.constants as c
 
 
-class Storage(Agents):
+class Storage(AgentBase):
     """
         Sets up storage agents. Inherits from Agents class.
 
@@ -21,33 +22,16 @@ class Storage(Agents):
     def __init__(self, input_path: str, config: ordereddict, config_path: str, scenario_path: str, config_root: str):
 
         # Call the init method of the parent class
-        super().__init__(config_path, input_path, scenario_path, config_root)
+        super().__init__(input_path, config, config_path, scenario_path, config_root)
 
         # Define agent type
-        self.type = 'storage'
+        self.type = c.A_STORAGE
 
         # Path of the input file
         self.input_path = os.path.join(input_path, 'agents', self.type)
 
-        # Config file
-        self.config = config
-
-        # Grid information (if applicable)
-        self.grid = None
-        self.bus = None  # bus sheet containing only the bus information of the agent type
-        self.load = None  # load sheet containing only the load information of the agent type
-        self.agents = None  # load sheet but limited to all agents, i.e. all inflexible_loads
-        self.sgen = None  # sgen sheet containing only the sgen information of the agent type
-
-        # Creation method
-        self.method = None
-
         # Number of agents
-        self.num = 0
         self.num_agents = 0  # number of agents (changes depending on which "add_xxx()" function is called)
-
-        # Dataframe containing all information
-        self.df = None
 
         # Index list that is adhered to throughout the creation process to ensure correct order
         self.idx_list = None  # gets created in create_general()
@@ -91,7 +75,7 @@ class Storage(Agents):
         self.load = self.grid['load'][self.grid['load']['agent_type'] == self.type]
 
         # The agents are all the buses that have an inflexible load
-        self.agents = self.load[self.load['load_type'] == 'inflexible_load']
+        self.agents = self.load[self.load['load_type'] == c.P_INFLEXIBLE_LOAD]
 
         # Get the rows in the sgen sheet that the owners in the owners column match with the index in the load sheet
         self.sgen = self.grid['sgen'][self.grid['sgen']['owner'].isin(self.load.index)]
@@ -151,7 +135,7 @@ class Storage(Agents):
                 before = False
 
             # Adjust the columns from "battery"
-            if key == "battery":
+            if key == c.P_BATTERY:
                 self.num += self.config[key]["general"]["number_of"]
                 # Get all columns that match the key
                 cols = [col for col in cols if key in col]
@@ -162,7 +146,7 @@ class Storage(Agents):
                 max_num = max(self.config[key][key]["num"])
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:8], num=max_num) + cols[8:]
             # Adjust the columns from "psh"
-            elif key == "psh":
+            elif key == c.P_PSH:
                 self.num += self.config[key]["general"]["number_of"]
                 # Get all columns that match the key
                 cols = [col for col in cols if key in col]
@@ -173,7 +157,7 @@ class Storage(Agents):
                 max_num = max(self.config[key][key]["num"])
                 cols = cols[:2] + self.repeat_columns(columns=cols[2:8], num=max_num) + cols[8:]
             # Adjust the columns from "hydrogen"
-            elif key == "hydrogen":
+            elif key == c.P_HYDROGEN:
                 self.num += self.config[key]["general"]["number_of"]
                 # Get all columns that match the key
                 cols = [col for col in cols if key in col]
@@ -186,7 +170,7 @@ class Storage(Agents):
             else:
                 raise NotImplementedError(
                     f"The configuration file contains a key word ('{key}') that has not been configured in "
-                    "the class yet. Aborting scenario creation...")
+                    f"the class {__class__.__name__} yet. Aborting scenario creation...")
             # Save columns
             columns[key] = cols
 
@@ -312,7 +296,7 @@ class Storage(Agents):
         self._add_general_info(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"]) if config['share'] else 0
+        max_num = max(config["num"])
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -351,7 +335,7 @@ class Storage(Agents):
         self._add_general_info(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"]) if config['share'] else 0
+        max_num = max(config["num"])
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -391,7 +375,7 @@ class Storage(Agents):
         self._add_general_info(key=key, config=config)
 
         # sizing
-        max_num = max(config["num"]) if config['share'] else 0
+        max_num = max(config["num"])
         for num in range(max_num):
             # index list indicating ownership of device
             idx_list = self._get_idx_list(key=key, num=num, config=config)
@@ -492,7 +476,7 @@ class Storage(Agents):
         for idx, agent_type in enumerate(agent_types):
             # get all agents of given type
             list_type = list(self.df["general/parameters/type"] == agent_type)
-            plants = self.config[f"{key}"]["share_dependent_on"][idx] + ["inflexible_load"]
+            plants = self.config[f"{key}"]["share_dependent_on"][idx]
             # check which agents of that type have the dependent plants
             for device in plants:
                 list_type = [ltype * lowner for ltype, lowner in zip(list_type, self.df[f"{device}/owner"])]
