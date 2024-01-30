@@ -233,8 +233,6 @@ class Forecaster:
 
         self.__prepare_plants_target_data()
 
-        self.__prepare_ev_target_data()
-
         self.__prepare_features()
 
     def __prepare_markets_target_data(self):
@@ -289,30 +287,17 @@ class Forecaster:
         plants_timeseries = self.agentDB.timeseries
 
         # get all related plants except timestamps
-        plants_id = plants_timeseries.columns
-        plants_id.remove(c.TC_TIMESTAMP)
+        plants_cols = plants_timeseries.columns
+        plants_cols.remove(c.TC_TIMESTAMP)
+        # get plants id
+        plants_ids = list(set([col.split('_')[0] for col in plants_cols]))
 
         # get target data
-        for column in plants_id:
-            plant_id = column.split('_')[0]
+        for plant_id in plants_ids:
+            # combine timestamp and all columns for the plant using the plant id
+            columns = [c.TC_TIMESTAMP] + [col for col in plants_cols if col.split('_')[0] == plant_id]
             # assign target data to dict
-            self.train_data[plant_id] = {c.K_TARGET: plants_timeseries.select(c.TC_TIMESTAMP, column)}
-
-    def __prepare_ev_target_data(self):
-        """
-        Prepare target data for EVs.
-
-        Go through the plants and check if there are EVs, For each EV, instead of take only one column for target data,
-        take both 'availability' and 'energy_consumed' as target data.
-
-        """
-        plants_timeseries = self.agentDB.timeseries     # get plants' timeseries
-        # get plants id for EV
-        for plant_id in self.config_dict.keys():
-            if 'type' in self.config_dict[plant_id].keys() and self.config_dict[plant_id]['type'] == c.P_EV:
-                ev_id = plant_id
-                target = plants_timeseries.select(c.TC_TIMESTAMP, ev_id + '_availability', ev_id + '_energy_consumed')
-                self.train_data[ev_id] = {c.K_TARGET: target}
+            self.train_data[plant_id] = {c.K_TARGET: plants_timeseries.select(columns)}
 
     def __prepare_features(self):
         """
@@ -407,9 +392,9 @@ class Forecaster:
         time_zone = dtype.time_zone
 
         # adjust timestamp column to current time and keep the datatype
-        timestamps = timestamps.with_columns(pl.lit(current_ts).alias(c.TC_TIMESTAMP))
-        timestamps = timestamps.with_columns(pl.col(c.TC_TIMESTAMP).dt.cast_time_unit(time_unit))  # change time unit
-        timestamps = timestamps.with_columns(pl.col(c.TC_TIMESTAMP).dt.replace_time_zone(time_zone))  # change time zone
+        timestamps = timestamps.with_columns(pl.lit(current_ts)
+                                             .alias(c.TC_TIMESTAMP)
+                                             .cast(pl.Datetime(time_unit=time_unit, time_zone=time_zone)))
 
         forecasts_list = [timestamps.collect()]     # list which will contain all forecast lazyframes
 

@@ -246,9 +246,9 @@ def calculate_timedelta(target_df, reference_ts, by=c.TC_TIMESTAMP):
     time_zone = dtype.time_zone
 
     # generate a new column with current timestep
-    target_df = target_df.with_columns(pl.lit(reference_ts).alias('current'))
-    target_df = target_df.with_columns(pl.col('current').dt.cast_time_unit(time_unit))  # change time unit
-    target_df = target_df.with_columns(pl.col('current').dt.replace_time_zone(time_zone))   # change time zone
+    target_df = target_df.with_columns(pl.lit(reference_ts)
+                                       .alias('current')
+                                       .cast(pl.Datetime(time_unit=time_unit, time_zone=time_zone)))
 
     # calculate timedelta
     target_df = target_df.with_columns((pl.col('current') - pl.col(by)).alias('timedelta'))

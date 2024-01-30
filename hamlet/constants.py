@@ -24,6 +24,8 @@ E5_TO_FRACTION = 1e-5
 FRACTION_TO_E5 = 1e5
 PERCENT_TO_E5 = 1e-3
 E5_TO_PERCENT = 1e3
+COP_TO_COP100 = 100
+COP100_TO_COP = 1 / 100
 
 # TIME CONSTANTS
 SECONDS_TO_HOURS = 1 / 3600
@@ -246,20 +248,20 @@ A_PRODUCER = 'producer'
 A_STORAGE = 'storage'
 A_AGGREGATOR = 'aggregator'
 
-# PLANTS
-P_INFLEXIBLE_LOAD = 'inflexible_load'
-P_FLEXIBLE_LOAD = 'flexible_load'
+# PLANTS (no underscores allowed in the plant names)
+P_INFLEXIBLE_LOAD = 'inflexible-load'
+P_FLEXIBLE_LOAD = 'flexible-load'
 P_HEAT = 'heat'
 P_DHW = 'dhw'
 P_PV = 'pv'
 P_WIND = 'wind'
-P_FIXED_GEN = 'fixed_gen'
+P_FIXED_GEN = 'fixed-gen'
 P_HP = 'hp'
 P_EV = 'ev'
 P_BATTERY = 'battery'
 P_PSH = 'psh'
 P_HYDROGEN = 'hydrogen'
-P_HEAT_STORAGE = 'heat_storage'
+P_HEAT_STORAGE = 'heat-storage'
 
 # CONTROLLERS
 C_RTC = 'rtc'
@@ -283,7 +285,7 @@ COMP_MAP = {
     # Heat
     P_HEAT: {ET_HEAT: OM_LOAD},
     P_DHW: {ET_HEAT: OM_LOAD},
-    P_HEAT_STORAGE: {ET_ELECTRICITY: OM_STORAGE},
+    P_HEAT_STORAGE: {ET_HEAT: OM_STORAGE},
 
     # Hybrid
     P_HP: {ET_ELECTRICITY: OM_LOAD, ET_HEAT: OM_GENERATION},

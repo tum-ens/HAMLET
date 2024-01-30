@@ -338,9 +338,9 @@ class Database:
 
                     # generate a new column with current timestep and adjust data type
                     column_name = 'new_columns_' + str(new_columns_count)
-                    market = market.with_columns(pl.lit(value).alias(column_name))
-                    market = market.with_columns(pl.col(column_name).dt.cast_time_unit(time_unit))
-                    market = market.with_columns(pl.col(column_name).dt.replace_time_zone(time_zone))
+                    market = market.with_columns(pl.lit(value)
+                                                 .alias(column_name)
+                                                 .cast(pl.Datetime(time_unit=time_unit, time_zone=time_zone)))
 
                     # update new columns count and name
                     new_columns_count += 1
