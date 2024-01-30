@@ -73,11 +73,11 @@ class Rtc(ControllerBase):
             # Get the timetable and filter it to only include the rows with the current timestep
             self.timetable = kwargs[c.TN_TIMETABLE]
             # Get the delta between timestamps
-            self.dt = self.timetable.collect()[1, c.TC_TIMESTEP] - self.timetable.collect()[0, c.TC_TIMESTEP]
+            self.dt = self.timetable[1, c.TC_TIMESTEP] - self.timetable[0, c.TC_TIMESTEP]
             # Filter the timetable to only include the rows with the current timestamp
             self.timetable = self.timetable.filter(pl.col(c.TC_TIMESTAMP) == pl.col(c.TC_TIMESTEP))
             # Get the current timestamp
-            self.timestamp = self.timetable.collect()[0, c.TC_TIMESTAMP]
+            self.timestamp = self.timetable[0, c.TC_TIMESTAMP]
 
             # Get the agent and other data
             self.agent = kwargs['agent']
@@ -93,15 +93,15 @@ class Rtc(ControllerBase):
             self.targets = self.setpoints.join(self.timetable, on=c.TC_TIMESTAMP, how='semi')
 
             # Raise warning if timeseries exceeds one row
-            if len(self.timeseries.collect()) != 1:
+            if len(self.timeseries) != 1:
                 raise ValueError(f"Timeseries has {len(self.timeseries)} rows. It should only have 1 row for the rtc.")
 
             # Get the market data
             self.market = kwargs[c.TC_MARKET]
             # Get market name
             # Get the market names and types
-            self.market_names = self.timetable.collect().select(c.TC_NAME).unique().to_series().to_list()
-            self.market_types = self.timetable.collect().select(c.TC_MARKET).unique().to_series().to_list()
+            self.market_names = self.timetable.select(c.TC_NAME).unique().to_series().to_list()
+            self.market_types = self.timetable.select(c.TC_MARKET).unique().to_series().to_list()
             # Assign each market name to an energy type
             self.markets = {name: c.TRADED_ENERGY[mtype] for name, mtype in zip(self.market_names, self.market_types)}
             # Get the market results for each market
@@ -109,7 +109,7 @@ class Rtc(ControllerBase):
             for market_type, market in self.market.items():
                 for market_name, data in market.items():
                     # Get transactions table
-                    transactions = data.market_transactions.collect()
+                    transactions = data.market_transactions
                     # Filter for agent ID
                     transactions = transactions.filter(pl.col(c.TC_ID_AGENT) == self.agent.agent_id)
                     # Filter for current timestamp
@@ -176,15 +176,15 @@ class Rtc(ControllerBase):
 
                 # Retrieve the timeseries data for the plant
                 cols = [col for col in self.timeseries.columns if col.startswith(plant_name)]
-                timeseries = self.timeseries.select(cols).collect()
+                timeseries = self.timeseries.select(cols)
 
                 # Retrieve the target setpoints for the plant
                 cols = [col for col in self.targets.columns if col.startswith(plant_name)]
-                targets = self.targets.select(cols).collect()
+                targets = self.targets.select(cols)
 
                 # Retrieve the soc data for the plant (if applicable)
                 cols = [col for col in self.socs.columns if col.startswith(plant_name)]
-                socs = self.socs.select(cols).collect()
+                socs = self.socs.select(cols)
 
                 # Get the plant class
                 plant_class = self.available_plants.get(plant_type)
@@ -374,10 +374,7 @@ class Rtc(ControllerBase):
 
             return self.agent
 
-        def update_setpoints(self, solution: dict):
-
-            # Make LazyFrames into DataFrames
-            self.setpoints = self.setpoints.collect()
+        def update_setpoints(self, solution: dict) -> pl.DataFrame:
             
             # Set all setpoints to 0
             for col in self.setpoints.columns[1:]:
@@ -393,7 +390,7 @@ class Rtc(ControllerBase):
                         if col.split('_', 1)[0] in beginnings and col.rsplit('_', 1)[-1] in endings]
 
             # Shift index according to timetable time
-            timesteps = [self.timetable.collect()[0, c.TC_TIMESTAMP] + self.dt * t for t in range(len(self.setpoints))]
+            timesteps = [self.timetable[0, c.TC_TIMESTAMP] + self.dt * t for t in range(len(self.setpoints))]
             self.setpoints = self.setpoints.with_columns(pl.Series(timesteps)
                                                          .cast(pl.Datetime(time_unit='ns', time_zone='UTC'))
                                                          .alias(c.TC_TIMESTAMP))
@@ -416,14 +413,9 @@ class Rtc(ControllerBase):
             sel_cols = [self.setpoints.columns[0]] + src_cols
             self.setpoints = self.setpoints.select(sel_cols)
 
-            # Make LazyFrame again
-            self.setpoints = self.setpoints.lazy()
-
             return self.setpoints
 
-        def update_socs(self, solution: dict):
-            # Make LazyFrame into DataFrame
-            self.socs = self.socs.collect()
+        def update_socs(self, solution: dict) -> pl.DataFrame:
 
             # Find row that is to be updated (i.e. the row with the next timestamp)
             row_soc = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timestamp + self.dt)
@@ -470,14 +462,9 @@ class Rtc(ControllerBase):
             self.socs = self.socs.filter(self.socs[c.TC_TIMESTAMP] != self.timestamp + self.dt)
             self.socs = self.socs.merge_sorted(row_soc, key=c.TC_TIMESTAMP)
 
-            # Make LazyFrame again
-            self.socs = self.socs.lazy()
-
             return self.socs
 
-        def update_meters(self, solution: dict):
-            # Make LazyFrame into DataFrame
-            self.meters = self.meters.collect()
+        def update_meters(self, solution: dict) -> pl.DataFrame:
 
             # Find row that is to be updated as well as the previous row (i.e. current and next timestamp)
             row_now = self.meters.filter(self.meters[c.TC_TIMESTAMP] == self.timestamp)
@@ -506,9 +493,6 @@ class Rtc(ControllerBase):
             # Update meters dataframe
             self.meters = self.meters.filter(self.meters[c.TC_TIMESTAMP] != self.timestamp + self.dt)
             self.meters = self.meters.merge_sorted(row_new, key=c.TC_TIMESTAMP)
-
-            # Make LazyFrame again
-            self.meters = self.meters.lazy()
 
             return self.meters
 

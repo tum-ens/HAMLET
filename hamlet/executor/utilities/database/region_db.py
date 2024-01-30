@@ -81,14 +81,13 @@ class RegionDB:
 
                 # TODO: calculate the new market price, the result should be in this format:
                 # 'new_target' column should contain market price
-                market_price = pl.LazyFrame(schema={c.TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+                market_price = pl.DataFrame(schema={c.TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
                                                     'new_target': pl.Int64})
 
                 for agents in self.agents.values():
                     for agent in agents.values():
                         # print(f'updating local market for agent {agent.agent_id}')
                         old_target = agent.forecaster.train_data[local_market_key][c.K_TARGET]
-                        # print(old_target.collect())
 
                         # get column name of the old target
                         column_name = old_target.columns
@@ -97,8 +96,8 @@ class RegionDB:
                         # print('hi')
 
                         # replace a part of the old target with new target
-                        # NOTICE: adjust lazyframe to dataframe if necessary, polars concat is sometimes tricky
-                        new_target = pl.concat([old_target, market_price], how='diagonal').collect()
+                        # NOTICE: adjust dataframe to dataframe if necessary, polars concat is sometimes tricky
+                        new_target = pl.concat([old_target, market_price], how='diagonal')
                         new_target = new_target.with_columns(pl.when(pl.col('new_target').is_null())
                                                              .then(pl.col(column_name))
                                                              .otherwise(pl.col('new_target')).alias(column_name))
@@ -106,11 +105,9 @@ class RegionDB:
 
                         # delete unnecessary column
                         new_target = new_target.drop('new_target')
-                        # print(new_target)
-                        new_target = new_target.lazy()
 
                         # update forecaster bzw. models
-                        # NOTICE: new_target should be lazyframe now
+                        # NOTICE: new_target should be dataframe now
                         agent.forecaster.update_forecaster(id=local_market_key, dataframe=new_target, target=True)
 
     def __register_all_agents(self):
@@ -130,9 +127,10 @@ class RegionDB:
             if agents:
                 for agent in agents:
                     sub_agents = f.get_all_subdirectories(os.path.join(self.region_path, 'agents', agents_type, agent))
-                    self.agents[agents_type][agent] = AgentDB(path=os.path.join(self.region_path, 'agents', agents_type,
-                                                                                agent), agent_type=agents_type,
-                                                              agent_id=agent)
+                    self.agents[agents_type][agent] = AgentDB(
+                        path=os.path.join(self.region_path, 'agents', agents_type, agent),
+                        agent_type=agents_type,
+                        agent_id=agent)
                     if sub_agents is None:
                         self.agents[agents_type][agent].register_agent()
                     else:

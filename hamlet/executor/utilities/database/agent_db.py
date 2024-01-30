@@ -41,6 +41,7 @@ class AgentDB:
             agent_id (str): the agent id.
         """
 
+        self.forecaster = None
         self.agent_path = path
         self.agent_save = None  # path to save the agent
         self.agent_type = agent_type
@@ -49,12 +50,12 @@ class AgentDB:
         self.account = {}
         self.plants = {}
         self.specs = {}
-        self.meters = pl.LazyFrame()
-        self.socs = pl.LazyFrame()
-        self.timeseries = pl.LazyFrame()
-        self.setpoints = pl.LazyFrame()
-        self.forecasts = pl.LazyFrame()
-        self.bids_offers = pl.LazyFrame()
+        self.meters = pl.DataFrame()
+        self.socs = pl.DataFrame()
+        self.timeseries = pl.DataFrame()
+        self.setpoints = pl.DataFrame()
+        self.forecasts = pl.DataFrame()
+        self.bids_offers = pl.DataFrame()
 
     def register_agent(self) -> None:
         """
@@ -71,11 +72,11 @@ class AgentDB:
         self.account = f.load_file(path=os.path.join(self.agent_path, 'account.json'))
         self.plants = f.load_file(path=os.path.join(self.agent_path, 'plants.json'))
         self.specs = f.load_file(path=os.path.join(self.agent_path, 'specs.json'))
-        self.meters = f.load_file(path=os.path.join(self.agent_path, 'meters.ft'), df='polars')
-        self.timeseries = f.load_file(path=os.path.join(self.agent_path, 'timeseries.ft'), df='polars')
-        self.socs = f.load_file(path=os.path.join(self.agent_path, 'socs.ft'), df='polars')
-        self.setpoints = f.load_file(path=os.path.join(self.agent_path, 'setpoints.ft'), df='polars')
-        self.forecasts = f.load_file(path=os.path.join(self.agent_path, 'forecasts.ft'), df='polars')
+        self.meters = f.load_file(path=os.path.join(self.agent_path, 'meters.ft'), df='polars', method='eager')
+        self.timeseries = f.load_file(path=os.path.join(self.agent_path, 'timeseries.ft'), df='polars', method='eager')
+        self.socs = f.load_file(path=os.path.join(self.agent_path, 'socs.ft'), df='polars', method='eager')
+        self.setpoints = f.load_file(path=os.path.join(self.agent_path, 'setpoints.ft'), df='polars', method='eager')
+        self.forecasts = f.load_file(path=os.path.join(self.agent_path, 'forecasts.ft'), df='polars', method='eager')
 
         # initialize setpoints and forecast
 
@@ -105,11 +106,11 @@ class AgentDB:
         self.agent_save = os.path.abspath(path)
 
         # Save data
-        f.save_file(path=os.path.join(self.agent_save, 'meters.ft'), data=self.meters.collect(), df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'timeseries.ft'), data=self.timeseries.collect(), df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'socs.ft'), data=self.socs.collect(), df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'setpoints.ft'), data=self.setpoints.collect(), df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'forecasts.ft'), data=self.forecasts.collect(), df='polars')
+        f.save_file(path=os.path.join(self.agent_save, 'meters.ft'), data=self.meters, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, 'timeseries.ft'), data=self.timeseries, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, 'socs.ft'), data=self.socs, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, 'setpoints.ft'), data=self.setpoints, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, 'forecasts.ft'), data=self.forecasts, df='polars')
 
         # Data optional to save as there aren't any changes to them (as of now)
         if save_all:

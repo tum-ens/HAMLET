@@ -18,7 +18,7 @@ from hamlet import constants as c
 class AgentBase:
     """Base class for all agents. It provides a default implementation of the run method."""
 
-    def __init__(self, agent_type: str, agent: AgentDB, timetable: pl.LazyFrame, database: Database):
+    def __init__(self, agent_type: str, agent: AgentDB, timetable: pl.DataFrame, database: Database):
 
         # Type of agent
         self.agent_type = agent_type
@@ -59,7 +59,7 @@ class AgentBase:
         """Gets the market data from the database"""
 
         # Get the market data
-        self.market = self.db.get_market_data(region=self.timetable.collect()[c.TC_REGION].head(1).to_list()[0])
+        self.market = self.db.get_market_data(region=self.timetable[c.TC_REGION].head(1).to_list()[0])
 
     def get_grid_data(self):
         """Gets the grid data from the database"""
@@ -101,7 +101,7 @@ class AgentBase:
         market_info = self.agent.account[c.K_EMS][c.K_MARKET]
 
         # Get the markets of the region from the timetable by selecting the unique market types and names
-        unique_types_names = self.timetable.unique(subset=[c.TC_MARKET, c.TC_NAME]).collect()
+        unique_types_names = self.timetable.unique(subset=[c.TC_MARKET, c.TC_NAME])
         market_types = unique_types_names.select(c.TC_MARKET).to_series().to_list()
         market_names = unique_types_names.select(c.TC_NAME).to_series().to_list()
 

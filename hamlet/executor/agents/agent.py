@@ -40,7 +40,7 @@ class Agent:
         Executes the given `Agent` and returns the resulting `AgentDB`.
 
     """
-    def __init__(self, agent_type: str, data: dict, timetable: pl.LazyFrame, database: Database):
+    def __init__(self, agent_type: str, data: dict, timetable: pl.DataFrame, database: Database):
         """
         Parameters
         ----------
@@ -99,7 +99,7 @@ class AgentFactory:
     }
 
     @staticmethod
-    def create_agent(agent_type: str, agent_data: dict, timetable: pl.LazyFrame, database: Database):
+    def create_agent(agent_type: str, agent_data: dict, timetable: pl.DataFrame, database: Database):
         """Create an agent.
 
         Parameters

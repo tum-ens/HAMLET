@@ -267,13 +267,13 @@ def calculate_time_resolution(target_df, by=c.TC_TIMESTAMP):
 
     """
     # randomly choose a value in timestamp column
-    reference_ts = target_df.select(by).collect().sample(n=1).item()
+    reference_ts = target_df.select(by).sample(n=1).item()
 
     # calculate time resolution
     target = calculate_timedelta(target_df=target_df, reference_ts=reference_ts, by=by)
     target = target.filter(pl.col('timedelta') != 0)  # delete the row for the current ts
     target = target.with_columns(abs(pl.col('timedelta')))  # set timedelta to absolute value
-    resolution = target.select(pl.min('timedelta')).collect().item()  # the smallest timedelta is the resolution
+    resolution = target.select(pl.min('timedelta')).item()  # the smallest timedelta is the resolution
 
     # return resolution in seconds
     return resolution.seconds

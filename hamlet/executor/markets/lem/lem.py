@@ -127,7 +127,7 @@ class Lem(MarketBase):
         # TODO: For now practically ignores all the parameters and just clears the market. Needs to change.
 
         # Check if there is anything to clear otherwise return
-        if self.bids_offers.collect().is_empty():
+        if self.bids_offers.is_empty():
             return (self.transactions, self.offers_uncleared, self.bids_uncleared, self.offers_cleared,
                     self.bids_cleared)
 
@@ -149,12 +149,12 @@ class Lem(MarketBase):
         
         # Print statements to check results
         # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=20):
-        #     print(self.bids_cleared.collect())
-        #     print(self.offers_cleared.collect())
-        #     print(self.bids_uncleared.collect())
-        #     print(self.offers_uncleared.collect())
-        #     print(self.transactions.collect())
-        #     print(bids_offers.collect())
+        #     print(self.bids_cleared)
+        #     print(self.offers_cleared)
+        #     print(self.bids_uncleared)
+        #     print(self.offers_uncleared)
+        #     print(self.transactions)
+        #     print(bids_offers)
         #     print(bids_cleared)
         #     print(offers_cleared)
         #     print(bids_uncleared)
@@ -198,10 +198,10 @@ class Lem(MarketBase):
         )
 
         # print(self.bids_offers.columns)
-        # retailer = retailer.collect()
+        # retailer = retailer
         retailer = retailer.select(self.bids_offers.columns)
         # retailer = retailer(schema=self.bids_offers.schema)
-        # bids_offers = self.bids_offers.collect().vstack(retailer)
+        # bids_offers = self.bids_offers.vstack(retailer)
         bids_offers = pl.concat([self.bids_offers, retailer], how='vertical')
 
         # Fill all empty values using ffill
@@ -209,12 +209,12 @@ class Lem(MarketBase):
 
         # Print statements to check results
         #with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=20):
-        #    print(self.bids_offers.collect())
-        #    print(retailer.collect())
-        #    print(bids_offers.collect())
-        #    print(self.bids_offers.collect())
-        #    print(retailer.collect())
-        #    print(bids_offers.collect())
+        #    print(self.bids_offers)
+        #    print(retailer)
+        #    print(bids_offers)
+        #    print(self.bids_offers)
+        #    print(retailer)
+        #    print(bids_offers)
         # exit()
 
         return bids_offers, retailer
@@ -235,8 +235,8 @@ class Lem(MarketBase):
         offers = offers.rename({c.TC_ID_AGENT: c.TC_ID_AGENT_OUT})
 
         # Shuffle the data to avoid bias
-        bids = bids.collect().sample(fraction=1, shuffle=True)
-        offers = offers.collect().sample(fraction=1, shuffle=True)
+        bids = bids.sample(fraction=1, shuffle=True)
+        offers = offers.sample(fraction=1, shuffle=True)
 
         # Sort the bids and offers by price
         bids = bids.sort(c.TC_PRICE_PU_IN, descending=True)
@@ -261,7 +261,7 @@ class Lem(MarketBase):
 
         # Merge bids and offers on the energy_cumsum column
         # TODO: Might need suffixes
-        bids_offers = bids.join(offers, on=C_ENERGY_CUMSUM, how='outer').lazy()
+        bids_offers = bids.join(offers, on=C_ENERGY_CUMSUM, how='outer')
 
         # Sort the bids and offers by the energy_cumsum
         bids_offers = bids_offers.sort(C_ENERGY_CUMSUM, descending=False)  # .fill_null(strategy='backward')
@@ -285,14 +285,14 @@ class Lem(MarketBase):
 
         # Calculate the price and energy of the trades
         trades_cleared = trades_cleared.with_columns(
-            (trades_cleared.select([c.TC_ENERGY_IN, c.TC_ENERGY_OUT]).collect().min(axis=1).alias(c.TC_ENERGY)),
+            (trades_cleared.select([c.TC_ENERGY_IN, c.TC_ENERGY_OUT]).min(axis=1).alias(c.TC_ENERGY)),
         )
         trades_cleared = trades_cleared.with_columns(
             (pl.col(c.TC_PRICE_PU) * pl.col(c.TC_ENERGY)).alias(c.TC_PRICE).cast(pl.Int64),
         )
 
         # Make trades_cleared a dataframe
-        trades_cleared = trades_cleared.collect()
+        trades_cleared = trades_cleared
 
         # Create new dataframe with the uncleared bids and offers
         # Note: this tables includes the trades that were not cleared and the ones that were only partially cleared
@@ -302,7 +302,7 @@ class Lem(MarketBase):
         #     cfg.set_tbl_width_chars(400)
         #     cfg.set_tbl_cols(20)
         #     cfg.set_tbl_rows(20)
-        #     print(bids_offers.collect())
+        #     print(bids_offers)
         #     print(bids)
         #     print(offers)
         #     print(trades_cleared)
@@ -357,7 +357,7 @@ class Lem(MarketBase):
         # Drop the energy and energy_cumsum column
         bids_uncleared = bids_uncleared.drop(c.TC_ENERGY, C_ENERGY_CUMSUM)
         # Drop all rows where the agent id is the same as the one in the retailer table
-        retailer_names = retailer.select(c.TC_ID_AGENT).collect().to_series().to_list()
+        retailer_names = retailer.select(c.TC_ID_AGENT).to_series().to_list()
         bids_uncleared = bids_uncleared.filter(~pl.col(c.TC_ID_AGENT_IN).is_in(retailer_names))
         # Offers
         # First get the sum of the cleared energy by agent id
@@ -418,11 +418,11 @@ class Lem(MarketBase):
             self.transactions = pl.concat([self.transactions, transactions], how='align')
 
         # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=25):
-        #     print(self.bids_cleared.collect())
-        #     print(self.offers_cleared.collect())
-        #     print(self.bids_uncleared.collect())
-        #     print(self.offers_uncleared.collect())
-        #     print(self.transactions.collect())
+        #     print(self.bids_cleared)
+        #     print(self.offers_cleared)
+        #     print(self.bids_uncleared)
+        #     print(self.offers_uncleared)
+        #     print(self.transactions)
         # exit()
 
         # TODO: Reduce/Increase the available energy of the retailer by the amount that was bought/sold to them
@@ -473,10 +473,10 @@ class Lem(MarketBase):
         retailer = self.retailer.filter((pl.col(c.TC_TIMESTAMP) == self.tasks[c.TC_TIMESTEP])
                                         & (pl.col(c.TC_REGION) == self.tasks[c.TC_REGION])
                                         & (pl.col(c.TC_MARKET) == self.tasks[c.TC_MARKET])
-                                        & (pl.col(c.TC_NAME) == self.tasks[c.TC_NAME])).collect().to_dict()
+                                        & (pl.col(c.TC_NAME) == self.tasks[c.TC_NAME])).to_dict()
 
         # Create new trades table that contains only the balancing transactions
-        transactions = pl.concat([bids_uncleared.collect(), offers_uncleared.collect()], how='diagonal').lazy()
+        transactions = pl.concat([bids_uncleared, offers_uncleared], how='diagonal')
             
         # Add temporary columns
         transactions = transactions.with_columns([
@@ -503,7 +503,7 @@ class Lem(MarketBase):
             transactions = transactions.with_columns([
                 (pl.col(c.TC_PRICE_PU_IN) * pl.col(c.TC_ENERGY_IN)).round().alias(c.TC_PRICE_IN).cast(pl.Int64),
                 (pl.col(c.TC_PRICE_PU_OUT) * pl.col(c.TC_ENERGY_OUT)).round().alias(c.TC_PRICE_OUT).cast(pl.Int64),
-            ]).collect().lazy()
+            ])
         except Exception:
             # Set maximum amount of energy to 1e6 for both in and out
             transactions = transactions.with_columns([
@@ -521,7 +521,7 @@ class Lem(MarketBase):
                                          "balancing_price_sell", "balancing_price_buy")
 
         # Add the transactions to the transactions table
-        self.transactions = pl.concat([self.transactions, transactions], how='align').collect().lazy()
+        self.transactions = pl.concat([self.transactions, transactions], how='align')
 
 
         # Delete the rows of the bids and offers
@@ -530,10 +530,10 @@ class Lem(MarketBase):
 
         if flag:
             with pl.Config(set_tbl_width_chars=400, set_tbl_cols=21, set_tbl_rows=20):
-                # print(bids_uncleared.collect())
-                # print(offers_uncleared.collect())
-                print(transactions.collect())
-                # print(self.transactions.collect())
+                # print(bids_uncleared)
+                # print(offers_uncleared)
+                print(transactions)
+                # print(self.transactions)
             raise Warning('Currently used to check what the problem is when the balancing gets too high. '
                           'Can be ignored if not working on it.')
 
@@ -548,7 +548,7 @@ class Lem(MarketBase):
         retailer = self.retailer.filter((pl.col(c.TC_TIMESTAMP) == self.tasks[c.TC_TIMESTEP])
                                         & (pl.col(c.TC_REGION) == self.tasks[c.TC_REGION])
                                         & (pl.col(c.TC_MARKET) == self.tasks[c.TC_MARKET])
-                                        & (pl.col(c.TC_NAME) == self.tasks[c.TC_NAME])).collect()
+                                        & (pl.col(c.TC_NAME) == self.tasks[c.TC_NAME]))
         retailer = retailer.to_dict()
 
         # Copy the transactions table to apply the grid fees
@@ -607,9 +607,9 @@ class Lem(MarketBase):
         self.transactions = pl.concat([self.transactions, grid, levies], how='align')
 
         # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=21, set_tbl_rows=40):
-        #     print(grid.collect())
-        #     print(levies.collect())
-        #     print(self.transactions.collect())
+        #     print(grid)
+        #     print(levies)
+        #     print(self.transactions)
         # exit()
 
         return self.transactions

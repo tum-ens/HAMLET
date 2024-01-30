@@ -77,15 +77,15 @@ class Mpc(ControllerBase):
             self.ems = self.account['ems']
             self.plants = self.agent.plants  # Formerly known as components
             self.setpoints = self.agent.setpoints
-            self.forecasts = self.agent.forecasts.collect()
-            self.socs = self.agent.socs.collect()
+            self.forecasts = self.agent.forecasts
+            self.socs = self.agent.socs
 
             # Get the timetable
             self.timetable = kwargs[c.TN_TIMETABLE]
             # Get the delta between timestamps
-            self.dt = self.timetable.collect()[1, c.TC_TIMESTEP] - self.timetable.collect()[0, c.TC_TIMESTEP]
+            self.dt = self.timetable[1, c.TC_TIMESTEP] - self.timetable[0, c.TC_TIMESTEP]
             # Get the current timestamp
-            self.timestamp = self.timetable.collect()[0, c.TC_TIMESTAMP]
+            self.timestamp = self.timetable[0, c.TC_TIMESTAMP]
             # Get the time horizon
             self.horizon = pd.Timedelta(seconds=self.ems['controller']['mpc']['horizon'])
 
@@ -105,8 +105,8 @@ class Mpc(ControllerBase):
             # Get the market data
             self.market = kwargs[c.TC_MARKET]
             # Get the market names and types
-            self.market_names = self.timetable.collect().select(c.TC_NAME).unique().to_series().to_list()
-            self.market_types = self.timetable.collect().select(c.TC_MARKET).unique().to_series().to_list()
+            self.market_names = self.timetable.select(c.TC_NAME).unique().to_series().to_list()
+            self.market_types = self.timetable.select(c.TC_MARKET).unique().to_series().to_list()
             # Assign each market name to an energy type
             self.markets = {name: c.TRADED_ENERGY[mtype] for name, mtype in zip(self.market_names, self.market_types)}
 
@@ -339,9 +339,6 @@ class Mpc(ControllerBase):
 
         def update_setpoints(self, solution: dict):
 
-            # Make LazyFrame into DataFrame
-            self.setpoints = self.setpoints.collect()
-
             # Get relevant column names
             src_cols = self.__get_src_cols(solution)
 
@@ -375,9 +372,6 @@ class Mpc(ControllerBase):
             #     print(self.model.objective)
             #     print(self.model.solution.to_pandas().to_string())
             #     print(self.setpoints)
-
-            # Make LazyFrame again
-            self.setpoints = self.setpoints.lazy()
 
             return self.setpoints
 

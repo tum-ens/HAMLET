@@ -112,7 +112,7 @@ class Forecaster:
         """
 
         forecasts = {}   # empty dict to store all forecast results
-        current_ts = timetable.select(c.TC_TIMESTAMP).collect().item(0, 0)      # get current timestep from timetable
+        current_ts = timetable.select(c.TC_TIMESTAMP).item(0, 0)      # get current timestep from timetable
 
         # make forecast for each plant and assign results to the empty dict
         for id in self.config_dict.keys():
@@ -365,7 +365,7 @@ class Forecaster:
 
         return forecast
 
-    def __summarize_forecasts_to_df(self, forecasts: dict, current_ts):
+    def __summarize_forecasts_to_df(self, forecasts: dict, current_ts) -> pl.DataFrame:
         """
         Summarize all forecasts from dictionary to one polars lazyframe. All forecasts should have the same length and
         stored as a lazyframe.
@@ -375,7 +375,7 @@ class Forecaster:
             current_ts: Current timestamp for the forecasts.
 
         Returns:
-            forecasts_df: Lazyframe containing the summarized forecast results.
+            forecasts_df: Dataframe containing the summarized forecast results.
 
         """
 
@@ -396,7 +396,7 @@ class Forecaster:
                                              .alias(c.TC_TIMESTAMP)
                                              .cast(pl.Datetime(time_unit=time_unit, time_zone=time_zone)))
 
-        forecasts_list = [timestamps.collect()]     # list which will contain all forecast lazyframes
+        forecasts_list = [timestamps]     # list which will contain all forecast dataframes
 
         for user_id, forecast in forecasts.items():
             # remove time column(s) for all forecasts
@@ -413,9 +413,9 @@ class Forecaster:
                 forecast = forecast.with_columns(pl.col(column).cast(dtype[0]))
 
             # add forecast to the list
-            forecasts_list.append(forecast.collect())
+            forecasts_list.append(forecast)
 
         # summarize everything together
         forecasts_df = pl.concat(forecasts_list, how='horizontal')
 
-        return forecasts_df.lazy()
+        return forecasts_df
