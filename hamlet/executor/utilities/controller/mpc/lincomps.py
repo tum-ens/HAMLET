@@ -11,6 +11,10 @@ from pprint import pprint
 import numpy as np
 import pandas as pd
 import linopy
+import polars.exceptions as pl_e
+from linopy import Model
+
+
 # import numba
 
 
@@ -47,7 +51,7 @@ class LinopyComps:
         return model
 
     def define_heat_variable(self, model: linopy.Model, comp_type: str, lower, upper, direction: str = None,
-                                    integer=False):
+                             integer=False):
         """Creates the heat variable for the component. The direction is either in or out."""
 
         # Set the name of the variable
@@ -61,8 +65,38 @@ class LinopyComps:
 
         return model
 
+    def define_cool_variable(self, model: linopy.Model, comp_type: str, lower, upper, direction: str = None,
+                             integer=False):
+        """Creates the heat variable for the component. The direction is either in or out."""
+
+        # Set the name of the variable
+        if direction:
+            name = f'{self.name}_{comp_type}_{c.ET_COOLING}_{direction}'
+        else:
+            name = f'{self.name}_{comp_type}_{c.ET_COOLING}'
+
+        # Define the variable
+        model.add_variables(name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=integer)
+
+        return model
+
+    def define_h2_variable(self, model: linopy.Model, comp_type: str, lower, upper, direction: str = None,
+                             integer=False):
+        """Creates the heat variable for the component. The direction is either in or out."""
+
+        # Set the name of the variable
+        if direction:
+            name = f'{self.name}_{comp_type}_{c.ET_H2}_{direction}'
+        else:
+            name = f'{self.name}_{comp_type}_{c.ET_H2}'
+
+        # Define the variable
+        model.add_variables(name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=integer)
+
+        return model
+
     def define_storage_variable(self, model: linopy.Model, comp_type: str, lower, upper,
-                                    integer=False):
+                                integer=False):
         """Creates the state-of-charge variable for the component."""
 
         # Set the name
@@ -140,7 +174,6 @@ class Market(LinopyComps):
         model = self.__constraint_cost_revenue(model)
 
         return model
-
 
     def __constraint_operation_mode(self, model):
         """Adds the constraint that energy can either be bought or sold but not both at the same time."""
@@ -363,8 +396,63 @@ class Hp(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        print(self.fcast)
-        self.cop = self.fcast[f'{self.name}_cop'][0]
+        # Note: Currently all heat demand is considered to be covered using the heat data. Dhw is not separately
+        #  modelled as this would be a different energy type. For simplification purposes this is not done yet but
+        #  will be done in the future.
+        self.comp_type = None
+        self.cop_heat = np.array(self.fcast[f'{self.name}_{c.S_COP}_{c.P_HEAT}'] * c.COP100_TO_COP)
+        # self.cop_dhw = list(self.fcast[f'{self.name}_{c.S_COP}_{c.P_DHW}'] * c.COP100_TO_COP)
+
+        # Calculate the available power for heating and dhw
+        # Note: The sizing power is a fallback method to ensure that there is always enough power so that the
+        #  model does not fail.
+        try:
+            self.power_heat = np.array(self.fcast[f'{self.name}_{c.S_POWER}_{c.ET_HEAT}_{c.P_HEAT}'])
+            self.power_heat = np.maximum(self.info['sizing']['power'], self.power_heat)
+        except pl_e.ColumnNotFoundError:
+            self.power_heat = [np.inf] * len(self.timesteps)
+
+        # Calculate the power for electricity
+        try:
+            self.power_electricity = np.array(self.fcast[f'{self.name}_{c.S_POWER}_{c.ET_ELECTRICITY}_{c.P_HEAT}'])
+            self.power_electricity = np.maximum(self.info['sizing']['power'] / self.cop_heat, self.power_electricity)
+            self.power_electricity = np.rint(-self.power_electricity).astype(int)
+        except KeyError:
+            self.power_electricity = [np.inf] * len(self.timesteps)
+
+        self.upper, self.lower = self.power_heat, 0
+
+    def define_variables(self, model, **kwargs):
+        self.comp_type = kwargs['comp_type']
+
+        # Define the heat power variable (positive as it generates heat)
+        model = self.define_heat_variable(model, comp_type=self.comp_type, lower=self.lower, upper=self.upper)
+
+        # Define the electricity power variable (negative as it consumes electricity)
+        model = self.define_electricity_variable(model, comp_type=self.comp_type,
+                                                 lower=self.power_electricity, upper=0)
+
+        return model
+
+    def define_constraints(self, model):
+        # Add constraint that the heat power is the electricity power times the cop
+        model = self.__constraint_cop(model)
+
+        return model
+
+    def __constraint_cop(self, model):
+        """Adds the constraint that the heat power is the electricity power times the cop."""
+
+        # Define the variables
+        var_heat = model.variables[f'{self.name}_{self.comp_type}_{c.ET_HEAT}']
+        var_electricity = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}']
+        cop = pd.Series(self.cop_heat, index=self.timesteps)
+
+        # Define the constraint
+        eq = (var_heat + var_electricity * cop == 0)
+        model.add_constraints(eq, name=f'{self.name}_cop', coords=[self.timesteps])
+
+        return model
 
 
 class Ev(LinopyComps):
@@ -709,7 +797,7 @@ class Ev(LinopyComps):
         return (self.soc + energy_to_target) * np.array(self.availability)
 
 
-class SimpleBattery(LinopyComps):
+class SimpleStorage(LinopyComps):
 
     def __init__(self, name, **kwargs):
 
@@ -721,12 +809,10 @@ class SimpleBattery(LinopyComps):
         self.capacity = self.info['sizing']['capacity']
         self.charging_power = self.info['sizing']['power']
         self.efficiency = self.info['sizing']['efficiency']
-        self.b2g = self.info['sizing']['b2g']
-        self.g2b = self.info['sizing']['g2b']
 
         # Kwargs variables
-        self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
-        self.soc = min(self.capacity, kwargs['socs'][f'{self.name}'][0])  # soc at current timestamp (energy)
+        self.dt = self.info['delta'].total_seconds()  # time delta in seconds
+        self.soc = min(self.capacity, self.info['socs'][f'{self.name}'][0])  # soc at current timestamp (energy)
         self.energy_to_full = self.capacity - self.soc  # energy needed to charge to full
 
         # Define the charging and discharging power limits
@@ -737,10 +823,8 @@ class SimpleBattery(LinopyComps):
         self.comp_type = kwargs['comp_type']
 
         # Define the power variables (need to be positive and negative due to the efficiency)
-        model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=self.lower, upper=0,
-                                                 direction=c.PF_OUT)  # flow out of the home (charging battery)
-        model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=0, upper=self.upper,
-                                                 direction=c.PF_IN)  # flow into the home (discharging battery)
+        model = self._define_power_variables(model)
+
         # Define mode flag that decides whether the battery is charging or discharging
         model = self.define_mode_flag(model, comp_type=self.comp_type)
 
@@ -752,27 +836,56 @@ class SimpleBattery(LinopyComps):
 
         return model
 
-    def define_constraints(self, model):
+    def _define_power_variables(self, model: Model, energy_type: str = c.ET_ELECTRICITY) -> Model:
 
-        # Add constraint that the battery can either charge or discharge but not both at the same time
-        model = self.__constraint_operation_mode(model)
-
-        # TODO: Limit the charging power to the own generation if the battery must not charge from grid
-        model = self.__constraint_power_limits(model)
-
-        # Add constraint that the soc of the battery is that of the previous timestep plus dis-/charging power
-        #   times the efficiency and the time delta
-        model = self.__constraint_soc(model)
+        # Define the power variables depending on the energy type
+        match energy_type:
+            case c.ET_ELECTRICITY:
+                model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=self.lower, upper=0,
+                                                         direction=c.PF_OUT)  # flow out of the home (charging battery)
+                model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=0, upper=self.upper,
+                                                         direction=c.PF_IN)  # flow into the home (discharging battery)
+            case c.ET_HEAT:
+                model = self.define_heat_variable(model, comp_type=self.comp_type, lower=self.lower, upper=0,
+                                                  direction=c.PF_OUT)  # flow out of the home (charging battery)
+                model = self.define_heat_variable(model, comp_type=self.comp_type, lower=0, upper=self.upper,
+                                                  direction=c.PF_IN)  # flow into the home (discharging battery)
+            case c.ET_COOLING:
+                model = self.define_cool_variable(model, comp_type=self.comp_type, lower=self.lower, upper=0,
+                                                        direction=c.PF_OUT)  # flow out of the home (charging battery)
+                model = self.define_cool_variable(model, comp_type=self.comp_type, lower=0, upper=self.upper,
+                                                        direction=c.PF_IN)  # flow into the home (discharging battery)
+            case c.ET_H2:
+                model = self.define_h2_variable(model, comp_type=self.comp_type, lower=self.lower, upper=0,
+                                                direction=c.PF_OUT)
+                model = self.define_h2_variable(model, comp_type=self.comp_type, lower=0, upper=self.upper,
+                                                direction=c.PF_IN)
+            case _:
+                raise NotImplementedError(f'{energy_type} has not been implemented yet for the simple storage system.')
 
         return model
 
-    def __constraint_operation_mode(self, model):
+    def define_constraints(self, model: Model) -> Model:
+
+        # Add constraint that the battery can either charge or discharge but not both at the same time
+        model = self._constraint_operation_mode(model)
+
+        # TODO: Limit the charging power to the own generation if the battery must not charge from grid
+        model = self._constraint_power_limits(model)
+
+        # Add constraint that the soc of the battery is that of the previous timestep plus dis-/charging power
+        #   times the efficiency and the time delta
+        model = self._constraint_soc(model)
+
+        return model
+
+    def _constraint_operation_mode(self, model: Model, energy_type: str = c.ET_ELECTRICITY) -> Model:
         """Adds the constraint that the battery can either charge or discharge but not both at the same time."""
 
         # Define the variables
         mode_var = model.variables[f'{self.name}_{self.comp_type}_mode']  # mode variable
-        var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # charging power
-        var_discharge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # discharging
+        var_charge = model.variables[f'{self.name}_{self.comp_type}_{energy_type}_{c.PF_OUT}']  # charging power
+        var_discharge = model.variables[f'{self.name}_{self.comp_type}_{energy_type}_{c.PF_IN}']  # discharging
 
         # Define the constraint for charging
         # Note: The constraints should look something like: var_discharge >= -max_power * (1 - mode_var)
@@ -786,18 +899,18 @@ class SimpleBattery(LinopyComps):
 
         return model
 
-    def __constraint_power_limits(self, model):
+    def _constraint_power_limits(self, model: Model) -> Model:
         return model
 
-    def __constraint_soc(self, model):
+    def _constraint_soc(self, model: Model, energy_type: str = c.ET_ELECTRICITY) -> Model:
         """Adds the constraint that the soc of the battery is that of the previous timestep plus dis-/charging power"""
 
         # Define the variables
         dt_hours = pd.Series([self.dt * c.SECONDS_TO_HOURS] * len(self.timesteps), index=self.timesteps)  # time in h
         efficiency = pd.Series([self.efficiency] * len(self.timesteps), index=self.timesteps)  # efficiency
         var_soc = model.variables[f'{self.name}_{self.comp_type}_soc']  # soc variable
-        var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # charging power
-        var_discharge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # discharging
+        var_charge = model.variables[f'{self.name}_{self.comp_type}_{energy_type}_{c.PF_OUT}']  # charging power
+        var_discharge = model.variables[f'{self.name}_{self.comp_type}_{energy_type}_{c.PF_IN}']  # discharging
 
         # Define the array that contains all previous socs
         var_soc_init = model.variables[f'{self.name}_{self.comp_type}_soc_init']  # current soc
@@ -820,33 +933,62 @@ class SimpleBattery(LinopyComps):
         return model
 
 
-class Battery(SimpleBattery):
+class Battery(SimpleStorage):
+
+    def __init__(self, name, **kwargs):
+        # Call the parent class constructor
+        super().__init__(name, **kwargs)
+        self.b2g = self.info['sizing']['b2g']
+        self.g2b = self.info['sizing']['g2b']
+
+
+class Psh(SimpleStorage):
 
     def __init__(self, name, **kwargs):
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
 
-class Psh(SimpleBattery):
+class Hydrogen(SimpleStorage):
 
     def __init__(self, name, **kwargs):
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
 
-class Hydrogen(SimpleBattery):
+class HeatStorage(SimpleStorage):
 
     def __init__(self, name, **kwargs):
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
+    def define_variables(self, model, **kwargs) -> Model:
+        self.comp_type = kwargs['comp_type']
 
-class HeatStorage(LinopyComps):
+        # Define the power variables (need to be positive and negative due to the efficiency)
+        model = self._define_power_variables(model, energy_type=c.ET_HEAT)
 
-    def __init__(self, name, **kwargs):
-        # Call the parent class constructor
-        super().__init__(name, **kwargs)
+        # Define mode flag that decides whether the storage is charging or discharging
+        model = self.define_mode_flag(model, comp_type=self.comp_type)
 
-        # Get specific object attributes
-        print(self.fcast)
-        print(self.info)
+        # Define the soc variable
+        model = self.define_storage_variable(model, comp_type=self.comp_type, lower=0, upper=self.capacity)
+
+        # Define the soc variable for the previous timestep (thus the value of self.soc[0]) as needed for constraints
+        model.add_variables(name=f'{self.name}_{self.comp_type}_soc_init', lower=self.soc, upper=self.soc)
+
+        return model
+
+    def define_constraints(self, model: Model) -> Model:
+
+        # Add constraint that the battery can either charge or discharge but not both at the same time
+        model = self._constraint_operation_mode(model, energy_type=c.ET_HEAT)
+
+        # TODO: Limit the charging power to the own generation if the battery must not charge from grid
+        model = self._constraint_power_limits(model)
+
+        # Add constraint that the soc of the battery is that of the previous timestep plus dis-/charging power
+        #   times the efficiency and the time delta
+        model = self._constraint_soc(model, energy_type=c.ET_HEAT)
+
+        return model

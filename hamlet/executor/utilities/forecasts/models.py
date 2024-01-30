@@ -129,6 +129,7 @@ class NaiveModel(ModelBase):
         reference_ts = current_ts - timedelta(days=offset)  # calculate reference time step
         forecast = f.slice_dataframe_between_times(target_df=self.train_data[c.K_TARGET], reference_ts=reference_ts,
                                                    duration=length_to_predict, unit='second')    # predict
+
         return forecast
 
 
@@ -943,12 +944,130 @@ class WeatherModel(ModelBase):
 
         return pl.LazyFrame(power).rename({'power': column_name})
 
+    def __hp_model(self, current_ts, length_to_predict):
+
+        raise NotImplementedError('HP model cannot forecast using weather yet.')
+        # This code was pasted from PV as inspiration.
+        # get pv orientation
+        plant = self.train_data['plant_config']
+        surface_tilt = plant['sizing']['orientation']
+        surface_azimuth = plant['sizing']['angle']
+
+        # get hardware data
+        config = self.train_data['specs']
+        module = pd.Series(config['module'])
+        inverter = pd.Series(config['inverter'])
+
+        # set temperature model
+        temperature_model_parameters = pvlib.temperature.TEMPERATURE_MODEL_PARAMETERS['sapm']['open_rack_glass_glass']
+
+        # generate pv system
+        system = PVSystem(
+            surface_tilt=surface_tilt,
+            surface_azimuth=surface_azimuth,
+            module_parameters=module,
+            inverter_parameters=inverter,
+            temperature_model_parameters=temperature_model_parameters
+        )
+
+        # get location data
+        location = self.train_data['general_config']['location']
+        latitude = location['latitude']
+        longitude = location['longitude']
+        name = location[c.TC_NAME]
+        altitude = location['altitude']
+
+        # get weather data from csv
+        weather = f.slice_dataframe_between_times(target_df=self.train_data[c.K_FEATURES], reference_ts=current_ts,
+                                                  duration=0)
+        weather = weather.with_columns(pl.col(c.TC_TIMESTEP).alias(c.TC_TIMESTAMP))
+        weather = f.slice_dataframe_between_times(target_df=weather, reference_ts=current_ts,
+                                                  duration=length_to_predict)
+        weather = weather.collect().to_pandas()
+
+        # get real dhi data
+        filter_condition = (pl.col(c.TC_TIMESTAMP) == pl.col(c.TC_TIMESTEP))  # take only actual past weather data
+        weather_real = self.train_data[c.K_FEATURES].filter(filter_condition)
+        dhi_real = f.slice_dataframe_between_times(target_df=weather_real, reference_ts=current_ts,
+                                                   duration=length_to_predict).select(c.TC_DHI).collect().to_pandas()
+
+        # replace dhi with real dhi
+        weather[c.TC_DHI] = dhi_real[c.TC_DHI]
+
+        # convert time data to datetime (use utc time overall in pvlib)
+        time = pd.DatetimeIndex(pd.to_datetime(weather[c.TC_TIMESTAMP], unit='s', utc=True))
+        weather.index = time
+        weather.index.name = 'utc_time'
+
+        # adjust temperature data
+        weather.rename(columns={c.TC_TEMPERATURE: 'temp_air'}, inplace=True)  # rename to pvlib format
+        weather['temp_air'] -= 273.15  # convert unit to celsius
+
+        # get solar position
+        # test data find in https://www.suncalc.org/#/48.1364,11.5786,15/2022.02.15/16:21/1/3
+        solpos = pvlib.solarposition.get_solarposition(
+            time=time,
+            latitude=latitude,
+            longitude=longitude,
+            altitude=altitude,
+            temperature=weather['temp_air'],
+            pressure=weather[c.TC_PRESSURE],
+        )
+
+        # calculate dni with solar position
+        weather.loc[:, c.TC_DNI] = (weather[c.TC_GHI] - weather[c.TC_DHI]) / np.cos(solpos['zenith'])
+
+        # get location data and create corresponding pvlib Location object
+        location = Location(
+            latitude,
+            longitude,
+            name=name,
+            altitude=altitude
+        )
+
+        # create calculation model for the given pv system and location
+        mc = pvlib.modelchain.ModelChain(system, location)
+
+        # calculate model under given weather data and get output ac power from it
+        mc.run_model(weather)
+        power = mc.results.ac
+
+        # calculate nominal power
+        nominal_power = module['Impo'] * module['Vmpo']
+
+        # set time index to origin timestamp
+        power.index = weather[c.TC_TIMESTAMP]
+        power.index.name = c.TC_TIMESTAMP
+
+        # rename and round data column
+        power.rename(c.ET_ELECTRICITY, inplace=True)
+        power = power.to_frame()
+
+        # calculate and round power
+        power = power / nominal_power * plant['sizing']['power']
+        power = power.round().astype(int)
+
+        # replace all negative values
+        power[power < 0] = 0
+
+        # get column name
+        plant_column = self.train_data[c.K_TARGET].columns
+        plant_column.remove(c.TC_TIMESTAMP)
+        column_name = plant_column[0]
+
+        return pl.LazyFrame(power).rename({'power': column_name})
+
     def predict(self, current_ts, length_to_predict, **kwargs):
-        # check if predicting pv power or wind power
-        if 'module' in self.train_data['specs'].keys():
+        # check which model is to predicted
+        if self.train_data['specs']['type'] == c.P_PV:
             forecast = self.__pv_model(current_ts, length_to_predict)
-        else:
+        elif self.train_data['specs']['type'] == c.P_WIND:
             forecast = self.__wind_model(current_ts, length_to_predict)
+        elif self.train_data['specs']['type'] == c.P_HP:
+            forecast = self.__hp_model(current_ts, length_to_predict)
+        else:
+            raise KeyError(f'The plant type provided in the specs file is not supported: '
+                           f'{self.train_data["specs"]["type"]}')
 
         return forecast
 

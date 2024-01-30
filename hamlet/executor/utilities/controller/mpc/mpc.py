@@ -19,10 +19,14 @@ from hamlet.executor.utilities.database.database import Database as db
 from hamlet import functions as f
 import sys
 
+AGENT_ID = '2TmZlpWtMbPe28t'
+
 
 class MpcBase:
     def run(self):
         raise NotImplementedError()
+
+
 
 
 class Mpc(ControllerBase):
@@ -88,10 +92,9 @@ class Mpc(ControllerBase):
             # Reduce the forecast to the horizon length
             self.forecasts = self.forecasts.filter((self.timestamp < self.forecasts[c.TC_TIMESTEP])
                                                    & (self.forecasts[c.TC_TIMESTEP] < self.timestamp + self.horizon))
-
             # Get the timesteps and the number of timesteps in the forecast
             self.timesteps = pd.Index(self.forecasts.select(c.TC_TIMESTEP).to_pandas(), name='timesteps')
-            self.n = pd.Index(range(len(self.timesteps)), name='timesteps')
+            self.timesteps = pd.Index(range(len(self.timesteps)), name='timesteps')
             # self.timesteps = self.n_steps  # Use this line if the timesteps are not needed and the index is sufficient
             # Reduce the socs to the current timestamp
             self.socs = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timestamp)
@@ -139,25 +142,18 @@ class Mpc(ControllerBase):
 
             # if self.agent.agent_id == AGENT_ID:
             #     for name, var in self.model.variables.items():
-            #         if 'ev' in name:
-            #             print(name, var)
+            #         if 'heat_storage' in name:
+            #             print(var)
             #     for name, con in self.model.constraints.items():
-            #         if 'uXWPwBK6w61DDsS' in name or 'balance' in name:
-            #             print(name)
-            #             print(con)
-                # print(self.model.objective)
-                # exit()
+            #         print(con)
+            #     print(self.model.objective)
+            #     exit()
 
         def create_plants(self):
             for plant_name, plant_data in self.plants.items():
 
                 # Get the plant type from the plant data
                 plant_type = plant_data['type']
-
-                # "inflexible_load", "heat", "dhw", "pv", "ev", "battery"
-                # TODO: Take out again once hp is implemented
-                if plant_type in ["heat", "dhw"]:
-                    continue
 
                 # Retrieve the forecast data for the plant
                 cols = [col for col in self.forecasts.columns if col.startswith(plant_name)]
@@ -230,14 +226,16 @@ class Mpc(ControllerBase):
             for energy_type in self.energy_types:
                 # Loop through each variable and add it to the balance equation accordingly
                 for variable_name, variable in self.model.variables.items():
-
                     # Add the variable as generation if it is a market variable for the current energy type
-                    if ((variable_name.startswith(tuple(self.market_objects.keys())))
-                          and (energy_type in variable_name)
-                          and (variable_name.endswith(f'_{c.PF_IN}') or variable_name.endswith(f'_{c.PF_OUT}'))):
+                    if ((variable_name.startswith(tuple(self.market_objects)))
+                            and (energy_type in variable_name)
+                            and (variable_name.endswith(f'_{c.PF_IN}') or variable_name.endswith(f'_{c.PF_OUT}'))):
                         balance_equations[energy_type] += variable
                     # Add the variable if it is a plant variable
-                    elif variable_name.startswith(tuple(self.plant_objects.keys())):
+                    elif (variable_name.startswith(tuple(self.plant_objects)))\
+                            and (variable_name.endswith(f'_{energy_type}')
+                                 or variable_name.endswith(f'_{energy_type}_{c.PF_IN}')
+                                 or variable_name.endswith(f'_{energy_type}_{c.PF_OUT}')):
                         # Get the component name by splitting the variable name at the underscore
                         component_name = variable_name.split('_', 1)[0]
 
@@ -311,7 +309,7 @@ class Mpc(ControllerBase):
                     sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
                     solver_options = {'OutputFlag': 0, 'LogToConsole': 0, 'TimeLimit': 2}
                     status = self.model.solve(solver_name='gurobi', **solver_options)
-                    sys.stdout = sys.__stdout__     # re-activate printing
+                    sys.stdout = sys.__stdout__  # re-activate printing
                 case _:
                     raise ValueError(f"Unsupported solver: {solver}")
 
@@ -331,7 +329,6 @@ class Mpc(ControllerBase):
 
             # Obtain the solution values
             solution = {name: sol for name, sol in self.model.solution.items()}
-
             # Update setpoints
             self.setpoints = self.update_setpoints(solution)
 
@@ -345,15 +342,8 @@ class Mpc(ControllerBase):
             # Make LazyFrame into DataFrame
             self.setpoints = self.setpoints.collect()
 
-            # Get relevant column name components (i.e. the plant names and market and balancing)
-            ids = set([col.split('_', 1)[0] for col in solution.keys()
-                              if not col.startswith('objective') and not col.startswith('balance')])
-
-            # Get the relevant columns
-            # Filter for columns that start with one of the ids
-            src_cols = [col for col in solution.keys() for i in ids if i in col]
-            # Filter for columns that contain the energy type
-            src_cols = [col for col in src_cols for e in self.energy_types if e in col]
+            # Get relevant column names
+            src_cols = self.__get_src_cols(solution)
 
             # Change the solution so that the in and out columns are computed as one
             adjusted_solution = {}
@@ -361,7 +351,8 @@ class Mpc(ControllerBase):
                 # Check if the column is an in or out column
                 if col.endswith(f'_{c.PF_IN}'):
                     key = col.rsplit('_', 1)[0]
-                    val = (np.array(solution[col].round()) + np.array(solution[key + f'_{c.PF_OUT}'].round())).astype(int)
+                    val = (np.array(solution[col].round()) + np.array(solution[key + f'_{c.PF_OUT}'].round())).astype(
+                        int)
                 # Skip the out columns as they are already included in the in columns
                 elif col.endswith(f'_{c.PF_OUT}'):
                     continue
@@ -380,8 +371,95 @@ class Mpc(ControllerBase):
             # Update setpoints
             self.setpoints = self.setpoints.update(adjusted_solution, on=c.TC_TIMESTAMP)
 
+            # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=10):
+            #     print(self.model.objective)
+            #     print(self.model.solution.to_pandas().to_string())
+            #     print(self.setpoints)
+
             # Make LazyFrame again
             self.setpoints = self.setpoints.lazy()
 
             return self.setpoints
 
+        def __get_src_cols(self, solution):
+            # Get the relevant columns based on market names, plant names, plants and energy types
+            src_cols = []
+            for idx, sol_var in enumerate(solution.keys()):
+                sol = sol_var
+                # Check if sol starts with a market name
+                if sol.startswith(tuple(self.market_objects.keys())):
+                    # Get the plant it starts with
+                    market = next((market for market in self.market_objects if market in sol))
+                    # Subtract the market from sol
+                    sol = sol.replace(f'{market}_', '')
+                    # Check if sol starts with an energy type
+                    if sol.startswith(tuple(self.energy_types)):
+                        # Set src_cols to one assuming it contains a relevant column
+                        src_cols.append(sol_var)
+                # Check if sol starts with a plant name
+                if sol.startswith(tuple(self.plant_objects.keys())):
+                    # Subtract the name from sol
+                    sol = sol.split('_', 1)[1]
+                    # Check if sol starts with an available plant type
+                    if sol.startswith(tuple(self.available_plants)):
+                        # Subtract the plant from sol
+                        sol = sol.split('_', 1)[1]
+                        # Check if sol starts with an energy type
+                        if sol.startswith(tuple(self.energy_types)):
+                            # Set src_cols to one assuming it contains a relevant column
+                            src_cols.append(sol_var)
+
+            return src_cols
+
+        def __get_src_cols2(self, solution):
+            # Note: Twice as fast but currently not deployed as it does not allow underscores in market or plant names
+            # Pre-compute tuples
+            market_keys = tuple(self.market_objects.keys())
+            plant_keys = tuple(self.plant_objects.keys())
+            energy_types = tuple(self.energy_types)
+            available_plants = tuple(self.available_plants)
+
+            src_cols = []
+            for sol_var in solution.keys():
+                sol = sol_var
+
+                # Market name check
+                if sol.startswith(market_keys):
+                    market, _, remainder = sol.partition('_')
+                    if remainder.startswith(energy_types):
+                        src_cols.append(sol_var)
+                        continue  # Skip to next iteration
+
+                # Plant name check
+                if sol.startswith(plant_keys):
+                    plant, remainder = sol.split('_', 1)
+                    if remainder.startswith(available_plants):
+                        _, energy_type = remainder.split('_', 1)
+                        if energy_type.startswith(energy_types):
+                            src_cols.append(sol_var)
+
+            return src_cols
+
+        def __get_src_cols3(self, solution):
+            # Note: Probably fastest but does also not allow underscores in market or plant names
+            # Convert the keys to sets for faster operations
+            solution_keys = set(solution.keys())
+            market_keys = set(self.market_objects.keys())
+            plant_keys = set(self.plant_objects.keys())
+            energy_types = set(self.energy_types)
+            available_plants = set(self.available_plants)
+
+            # Filter the intersections based on energy types
+            market_intersection = {key for key in solution_keys
+                                   if (any(market in key for market in market_keys)
+                                       and any(energy in key for energy in energy_types))}
+
+            plant_intersection = {key for key in solution_keys
+                                  if (any(plant in key for plant in plant_keys)
+                                      and any(energy in key for energy in energy_types)
+                                      and any(plant in key for plant in available_plants))}
+
+            # Combine the intersections
+            src_cols = list(market_intersection | plant_intersection)
+
+            return src_cols
