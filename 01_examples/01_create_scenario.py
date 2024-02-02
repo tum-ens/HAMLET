@@ -4,14 +4,14 @@ sys.path.append("./")  # Add the current directory to the Python path for execut
 from hamlet import Creator
 
 # Path to the scenario folder (relative or absolute)
-path = "../02_config/example_single_market"
+path = "../02_config/claudio_scenario_pv_60_hp_60_ev_60_summer"
 
 # Create the creator object
 sim = Creator(path=path)
 
 # Create the scenario
-sim.new_scenario_from_configs()
+# sim.new_scenario_from_configs()
 
 # Alternative methods to create the scenario:
-# sim.new_scenario_from_grids()
+sim.new_scenario_from_grids()
 # sim.new_scenario_from_files()

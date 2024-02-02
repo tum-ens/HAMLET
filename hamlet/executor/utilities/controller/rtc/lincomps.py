@@ -273,7 +273,10 @@ class Hp(LinopyComps):
             self.target = kwargs['targets'][f'{self.name}'][0]
         except pl_e.ColumnNotFoundError:
             self.target = kwargs['targets'][f'{self.name}_{c.P_HP}_{c.ET_HEAT}'][0]
-        self.cop_heat = self.ts[f'{self.name}_{c.S_COP}_{c.P_HEAT}'][0] * c.COP100_TO_COP
+        try:
+            self.cop_heat = self.ts[f'{self.name}_{c.S_COP}_{c.P_HEAT}'][0] * c.COP100_TO_COP
+        except pl_e.ColumnNotFoundError:
+            self.cop_heat = self.ts[f'{self.name}_cop'][0]
         # TODO: Model dhw separately (as a different energy type)
         # self.cop_dhw = self.ts[f'{self.name}_{c.S_COP}_{c.P_DHW}'][0] * c.COP100_TO_COP
 
@@ -284,7 +287,10 @@ class Hp(LinopyComps):
             self.power_heat = max(self.info['sizing']['power'],
                                   self.ts[f'{self.name}_{c.S_POWER}_{c.ET_HEAT}_{c.P_HEAT}'][0])
         except pl_e.ColumnNotFoundError:
-            self.power_heat = inf
+            try:
+                self.power_heat = self.info['sizing']['power']
+            except KeyError:
+                self.power_heat = inf
         # self.power_dhw = max(self.info['sizing']['power'],
         #                      self.ts[f'{self.name}_{c.S_POWER}_{c.ET_HEAT}_{c.P_DHW}'][0])
 
@@ -292,7 +298,7 @@ class Hp(LinopyComps):
         try:
             self.power_electricity = int(round(max(self.info['sizing']['power'] / self.cop_heat,
                                                    self.ts[f'{self.name}_{c.S_POWER}_{c.ET_ELECTRICITY}_{c.P_HEAT}'][0])))
-        except KeyError:
+        except pl_e.ColumnNotFoundError:
             self.power_electricity = inf
 
         self.upper, self.lower = self.power_heat, 0

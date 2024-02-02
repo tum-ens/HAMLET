@@ -19,7 +19,7 @@ from hamlet.executor.utilities.database.database import Database as db
 from hamlet import functions as f
 import sys
 
-AGENT_ID = '2TmZlpWtMbPe28t'
+AGENT_ID = '288prNBci5QNMEv'
 
 
 class MpcBase:
@@ -142,7 +142,6 @@ class Mpc(ControllerBase):
 
             # if self.agent.agent_id == AGENT_ID:
             #     for name, var in self.model.variables.items():
-            #         if 'heat_storage' in name:
             #             print(var)
             #     for name, con in self.model.constraints.items():
             #         print(con)
@@ -154,6 +153,9 @@ class Mpc(ControllerBase):
 
                 # Get the plant type from the plant data
                 plant_type = plant_data['type']
+
+                if plant_type in [c.P_EV, c.P_HP, c.P_HEAT_STORAGE, c.P_HEAT]:
+                    continue
 
                 # Retrieve the forecast data for the plant
                 cols = [col for col in self.forecasts.columns if col.startswith(plant_name)]
