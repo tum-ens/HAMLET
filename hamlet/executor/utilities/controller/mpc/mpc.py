@@ -154,9 +154,6 @@ class Mpc(ControllerBase):
                 # Get the plant type from the plant data
                 plant_type = plant_data['type']
 
-                # if plant_type in [c.P_HP, c.P_HEAT_STORAGE, c.P_HEAT]:
-                #     continue
-
                 # Retrieve the forecast data for the plant
                 cols = [col for col in self.forecasts.columns if col.startswith(plant_name)]
                 forecasts = self.forecasts.select(cols)
@@ -378,7 +375,7 @@ class Mpc(ControllerBase):
             # Update setpoints
             self.setpoints = self.setpoints.update(adjusted_solution, on=c.TC_TIMESTAMP)
 
-            # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=10):
+            # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=100):
             #     print(self.model.objective)
             #     print(self.model.solution.to_pandas().to_string())
             #     print(self.setpoints)

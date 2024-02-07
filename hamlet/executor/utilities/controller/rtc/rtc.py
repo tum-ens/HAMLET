@@ -21,8 +21,6 @@ import os
 # warnings.filterwarnings("ignore")
 logging.getLogger('linopy').setLevel(logging.CRITICAL)
 
-AGENT_ID = 'hX9WNkgYiGYcIMJ'
-
 
 class RtcBase:
     def run(self):
@@ -167,9 +165,6 @@ class Rtc(ControllerBase):
 
                 # Get the plant type from the plant data
                 plant_type = plant_data['type']
-
-                # if plant_type in [c.P_HP, c.P_HEAT_STORAGE, c.P_HEAT]:
-                #     continue
 
                 # Retrieve the timeseries data for the plant
                 cols = [col for col in self.timeseries.columns if col.startswith(plant_name)]
