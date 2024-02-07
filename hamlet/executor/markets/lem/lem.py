@@ -58,27 +58,27 @@ class Lem(MarketBase):
 
         # Available actions (see market config)
         self.actions = {
-            'clear': self.__action_clear,
-            'settle': self.__action_settle,
+            c.MA_CLEAR: self.__action_clear,
+            c.MA_SETTLE: self.__action_settle,
         }
 
         # Available clearing types (see market config)
         self.types = {
             None: {},  # no clearing (ponder if even part of it or just, if None, then just a wholesale market)
-            'ex-ante': self.__type__ex_ante,
-            'ex-post': self.__type_ex_post,
+            c.MCT_EX_ANTE: self.__type__ex_ante,
+            c.MCT_EX_POST: self.__type_ex_post,
         }
 
         # Available clearing methods (see market config)
         self.methods = {
-            'pda': self.__method_pda,  # periodic double auction
-            'community': self.__method_community,  # community-based clearing
+            c.MCM_PDA: self.__method_pda,  # periodic double auction
+            c.MCM_COMMUNITY: self.__method_community,  # community-based clearing
         }
 
         # Available pricing methods (see market config)
         self.pricing = {
-            'uniform': self.__pricing_uniform,  # uniform pricing
-            'discriminatory': self.__pricing_discriminatory,  # discriminatory pricing
+            c.MP_UNIFORM: self.__pricing_uniform,  # uniform pricing
+            c.MP_DISCRIMINATORY: self.__pricing_discriminatory,  # discriminatory pricing
         }
 
         # Available coupling methods (see market config)
@@ -87,8 +87,8 @@ class Lem(MarketBase):
         #  In its current form there would be a more functionality in the executor that should be in the creator.
         self.coupling = {
             None: self.__return_data,  # no coupling
-            'above': self.__coupling_above,  # post offers and bids on market above
-            'below': self.__coupling_below,  # post offers and bids on market below
+            c.MC_ABOVE: self.__coupling_above,  # post offers and bids on market above
+            c.MC_BELOW: self.__coupling_below,  # post offers and bids on market below
         }
 
     def execute(self):
@@ -108,14 +108,11 @@ class Lem(MarketBase):
 
         # Execute the actions
         for action in actions:
-            self.actions[action](clearing_type, clearing_method, pricing_method, coupling_method)
+            self.actions[action](clearing_type, clearing_method, pricing_method, coupling_method, actions=actions)
 
         # Couple market
         # Note: This is not part of the actions, but is executed after the actions
         self.__couple_markets(clearing_type, clearing_method, pricing_method, coupling_method)
-                
-        # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=20):
-        #     print(self.transactions.collect())
 
         return self.market
 
@@ -149,78 +146,72 @@ class Lem(MarketBase):
         
         # Print statements to check results
         # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=20):
-        #     print(self.bids_cleared)
-        #     print(self.offers_cleared)
-        #     print(self.bids_uncleared)
-        #     print(self.offers_uncleared)
-        #     print(self.transactions)
         #     print(bids_offers)
+        #     print(bids)
+        #     print(offers)
         #     print(bids_cleared)
+        #     print(self.bids_cleared)
         #     print(offers_cleared)
+        #     print(self.offers_cleared)
         #     print(bids_uncleared)
+        #     print(self.bids_uncleared)
         #     print(offers_uncleared)
+        #     print(self.offers_uncleared)
         #     print(transactions)
+        #     print(self.transactions)
         # exit()
 
         return self.transactions
 
-    def __create_bids_offers(self):
+    def __create_bids_offers(self, include_retailer=True):
         """Creates the bids and offers table from the bids and offers of the agents and the retailers"""
-        # Add bid and offer by the retailers
-        retailer = self.retailer.select(pl.col(c.TC_TIMESTAMP), pl.col(c.TC_REGION), pl.col(c.TC_MARKET),
-                                        pl.col(c.TC_NAME), pl.col('retailer'),
-                                        pl.col('energy_price_sell'), pl.col('energy_price_buy'),
-                                        pl.col('energy_quantity_sell'), pl.col('energy_quantity_buy'))
-        retailer = retailer.with_columns(
-            [
-                pl.col(c.TC_TIMESTAMP).alias(c.TC_TIMESTEP),
-                pl.lit(None).alias(c.TC_ENERGY_TYPE),
-                # TODO: This can be removed once the energy type is added to the retailer table
-            ]
-        )
-        # TODO: Some of those will not need renaming in the future as the retailer table is changed
-        retailer = retailer.rename({'retailer': c.TC_ID_AGENT,
-                                    'energy_price_sell': c.TC_PRICE_PU_IN, 'energy_price_buy': c.TC_PRICE_PU_OUT,
-                                    'energy_quantity_sell': c.TC_ENERGY_IN, 'energy_quantity_buy': c.TC_ENERGY_OUT})
 
-        retailer = retailer.with_columns(
-            [
-                pl.col(c.TC_REGION).cast(pl.Categorical, strict=False),
-                pl.col(c.TC_MARKET).cast(pl.Categorical, strict=False),
-                pl.col(c.TC_NAME).cast(pl.Categorical, strict=False),
-                pl.col(c.TC_ENERGY_TYPE).cast(pl.Categorical, strict=False),
-                pl.col(c.TC_ID_AGENT).cast(pl.Categorical, strict=False),
-                pl.col(c.TC_ENERGY_IN).cast(pl.UInt64, strict=False),
-                pl.col(c.TC_ENERGY_OUT).cast(pl.UInt64, strict=False),
-                pl.col(c.TC_PRICE_PU_IN).cast(pl.Int32, strict=False),
-                pl.col(c.TC_PRICE_PU_OUT).cast(pl.Int32, strict=False),
-            ]
-        )
+        # Check if the retailer should be included
+        if include_retailer:
+            # Add bid and offer by the retailers
+            retailer = self.retailer.select(pl.col(c.TC_TIMESTAMP), pl.col(c.TC_REGION), pl.col(c.TC_MARKET),
+                                            pl.col(c.TC_NAME), pl.col('retailer'),
+                                            pl.col('energy_price_sell'), pl.col('energy_price_buy'),
+                                            pl.col('energy_quantity_sell'), pl.col('energy_quantity_buy'))
+            retailer = retailer.with_columns(
+                [
+                    pl.col(c.TC_TIMESTAMP).alias(c.TC_TIMESTEP),
+                    pl.lit(None).alias(c.TC_ENERGY_TYPE),
+                    # TODO: This can be removed once the energy type is added to the retailer table
+                ]
+            )
+            # TODO: Some of those will not need renaming in the future as the retailer table is changed
+            retailer = retailer.rename({'retailer': c.TC_ID_AGENT,
+                                        'energy_price_sell': c.TC_PRICE_PU_IN, 'energy_price_buy': c.TC_PRICE_PU_OUT,
+                                        'energy_quantity_sell': c.TC_ENERGY_IN, 'energy_quantity_buy': c.TC_ENERGY_OUT})
 
-        # print(self.bids_offers.columns)
-        # retailer = retailer
-        retailer = retailer.select(self.bids_offers.columns)
-        # retailer = retailer(schema=self.bids_offers.schema)
-        # bids_offers = self.bids_offers.vstack(retailer)
-        bids_offers = pl.concat([self.bids_offers, retailer], how='vertical')
+            retailer = retailer.with_columns(
+                [
+                    pl.col(c.TC_REGION).cast(pl.Categorical, strict=False),
+                    pl.col(c.TC_MARKET).cast(pl.Categorical, strict=False),
+                    pl.col(c.TC_NAME).cast(pl.Categorical, strict=False),
+                    pl.col(c.TC_ENERGY_TYPE).cast(pl.Categorical, strict=False),
+                    pl.col(c.TC_ID_AGENT).cast(pl.Categorical, strict=False),
+                    pl.col(c.TC_ENERGY_IN).cast(pl.UInt64, strict=False),
+                    pl.col(c.TC_ENERGY_OUT).cast(pl.UInt64, strict=False),
+                    pl.col(c.TC_PRICE_PU_IN).cast(pl.Int32, strict=False),
+                    pl.col(c.TC_PRICE_PU_OUT).cast(pl.Int32, strict=False),
+                ]
+            )
+
+            retailer = retailer.select(self.bids_offers.columns)
+
+            bids_offers = pl.concat([self.bids_offers, retailer], how='vertical')
+        else:
+            bids_offers = self.bids_offers
+            retailer = pl.DataFrame()
 
         # Fill all empty values using ffill
         bids_offers = bids_offers.fill_null(strategy='forward')
 
-        # Print statements to check results
-        #with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=20):
-        #    print(self.bids_offers)
-        #    print(retailer)
-        #    print(bids_offers)
-        #    print(self.bids_offers)
-        #    print(retailer)
-        #    print(bids_offers)
-        # exit()
-
         return bids_offers, retailer
 
-    @staticmethod
-    def __split_bids_offers(bids_offers):
+    def __split_bids_offers(self, bids_offers, add_cumsum=True):
         """Splits the bids and offers into separate tables"""
         # Split the bids and offers into separate bids and offers tables
         bids = bids_offers.filter(pl.col(c.TC_ENERGY_IN) > 0)
@@ -242,17 +233,14 @@ class Lem(MarketBase):
         bids = bids.sort(c.TC_PRICE_PU_IN, descending=True)
         offers = offers.sort(c.TC_PRICE_PU_OUT, descending=False)
 
-        # Add column that contains the cumsum of the energy
-        bids = bids.with_columns(
-            [
-                pl.col(c.TC_ENERGY_IN).cumsum().alias(C_ENERGY_CUMSUM),
-            ]
-        )
-        offers = offers.with_columns(
-            [
-                pl.col(c.TC_ENERGY_OUT).cumsum().alias(C_ENERGY_CUMSUM),
-            ]
-        )
+        # Add missing columns through concatenation
+        bids = pl.concat([bids, self.bids_cleared], how='diagonal')
+        offers = pl.concat([offers, self.offers_cleared], how='diagonal')
+
+        if add_cumsum:
+            # Add column that contains the cumsum of the energy
+            bids = bids.with_columns(pl.col(c.TC_ENERGY_IN).cumsum().alias(C_ENERGY_CUMSUM))
+            offers = offers.with_columns(pl.col(c.TC_ENERGY_OUT).cumsum().alias(C_ENERGY_CUMSUM))
 
         return bids, offers
 
@@ -260,7 +248,6 @@ class Lem(MarketBase):
         """Clears the bids and offers"""
 
         # Merge bids and offers on the energy_cumsum column
-        # TODO: Might need suffixes
         bids_offers = bids.join(offers, on=C_ENERGY_CUMSUM, how='outer')
 
         # Sort the bids and offers by the energy_cumsum
@@ -280,7 +267,6 @@ class Lem(MarketBase):
         trades_cleared = bids_offers.filter(pl.col(c.TC_PRICE_PU_IN) >= pl.col(c.TC_PRICE_PU_OUT))
 
         # Calculate the pu price of the trades
-        # TODO: The pricing method should be properly handed over to the function to make it static. It does not need self.pricing anymore
         trades_cleared = self.pricing[pricing_method](trades_cleared)
 
         # Calculate the price and energy of the trades
@@ -326,10 +312,10 @@ class Lem(MarketBase):
         offers_cleared = offers_cleared.join(trades_cleared.select(cols), on=c.TC_ID_AGENT_OUT, how='inner')
 
         # Drop the unnecessary columns and rename the relevant ones to create the final tables
-        bids_cleared = bids_cleared.drop(c.TC_ENERGY_IN, c.TC_PRICE_PU_IN, C_ENERGY_CUMSUM)
+        bids_cleared = bids_cleared.drop(c.TC_ENERGY_IN, c.TC_PRICE_PU_IN, c.TC_PRICE_IN, C_ENERGY_CUMSUM)
         bids_cleared = bids_cleared.rename({c.TC_ENERGY: c.TC_ENERGY_IN, c.TC_PRICE_PU: c.TC_PRICE_PU_IN,
                                             c.TC_PRICE: c.TC_PRICE_IN})
-        offers_cleared = offers_cleared.drop(c.TC_ENERGY_OUT, c.TC_PRICE_PU_OUT, C_ENERGY_CUMSUM)
+        offers_cleared = offers_cleared.drop(c.TC_ENERGY_OUT, c.TC_PRICE_PU_OUT, c.TC_PRICE_OUT, C_ENERGY_CUMSUM)
         offers_cleared = offers_cleared.rename({c.TC_ENERGY: c.TC_ENERGY_OUT, c.TC_PRICE_PU: c.TC_PRICE_PU_OUT,
                                                 c.TC_PRICE: c.TC_PRICE_OUT})
 
@@ -407,15 +393,15 @@ class Lem(MarketBase):
 
         # Add the trades to their corresponding tables
         if bids_cleared is not None:
-            self.bids_cleared = pl.concat([self.bids_cleared, bids_cleared], how='align')
+            self.bids_cleared = pl.concat([self.bids_cleared, bids_cleared], how='diagonal')
         if offers_cleared is not None:
-            self.offers_cleared = pl.concat([self.offers_cleared, offers_cleared], how='align')
+            self.offers_cleared = pl.concat([self.offers_cleared, offers_cleared], how='diagonal')
         if bids_uncleared is not None:
-            self.bids_uncleared = pl.concat([self.bids_uncleared, bids_uncleared], how='align')
+            self.bids_uncleared = pl.concat([self.bids_uncleared, bids_uncleared], how='diagonal')
         if offers_uncleared is not None:
-            self.offers_uncleared = pl.concat([self.offers_uncleared, offers_uncleared], how='align')
+            self.offers_uncleared = pl.concat([self.offers_uncleared, offers_uncleared], how='diagonal')
         if transactions is not None:
-            self.transactions = pl.concat([self.transactions, transactions], how='align')
+            self.transactions = pl.concat([self.transactions, transactions], how='diagonal')
 
         # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=25):
         #     print(self.bids_cleared)
@@ -440,6 +426,17 @@ class Lem(MarketBase):
         """Settles the market"""
         # At this point the trades that occured get settled thus balancing energy is determined
         # as well as levies and taxes are applied
+
+        # Get the actions that are to be executed for this timestep
+        all_actions = kwargs['actions']
+
+        # Check if clearing has occurred, otherwise create the correct uncleared bids and offers tables
+        if c.MA_CLEAR not in all_actions and not self.bids_offers.is_empty():
+            # Create the bids and offers table from the bids and offers of the agents and the retailers
+            bids_offers, _ = self.__create_bids_offers(include_retailer=False)
+            # Split the bids and offers into separate bids and offers tables
+            self.bids_uncleared, self.offers_uncleared = self.__split_bids_offers(bids_offers, add_cumsum=False)
+
 
         # Determine balancing energy
         self.transactions, self.bids_uncleared, self.offers_uncleared = self.__determine_balancing_energy()
@@ -514,7 +511,7 @@ class Lem(MarketBase):
                 (pl.col(c.TC_PRICE_PU_IN) * pl.col(c.TC_ENERGY_IN)).round().alias(c.TC_PRICE_IN).cast(pl.Int64),
                 (pl.col(c.TC_PRICE_PU_OUT) * pl.col(c.TC_ENERGY_OUT)).round().alias(c.TC_PRICE_OUT).cast(pl.Int64),
             ])
-            print('Energy had to be limited to 1e6.')
+            print('Energy had to be limited to 1e6. Something needs to be checked. Start with the clearing results.')
             flag = True
         # Drop unnecessary columns
         transactions = transactions.drop(c.TC_ID_AGENT_IN, c.TC_ID_AGENT_OUT,
@@ -630,19 +627,24 @@ class Lem(MarketBase):
         """Clears the market with the community-based clearing method"""
         ...
 
-    def __pricing_uniform(self, trades):
+    @staticmethod
+    def __pricing_uniform(trades):
         """Prices the market with the uniform pricing method, thus everyone gets the same price which is the average
         of the last value of the price_pu_in and price_pu_out"""
 
-        # Price PU column: average of the last value of the price_pu_in and price_pu_out
-        trades = trades.with_columns(
-            ((pl.col(c.TC_PRICE_PU_OUT).tail() + pl.col(c.TC_PRICE_PU_IN).tail()) / 2)
-            .round().cast(pl.Int32).alias(c.TC_PRICE_PU),
-        )
+        # Calculate the uniform pu price
+        uniform_price = (trades.select([
+            pl.col(c.TC_PRICE_PU_OUT).tail(1).sum(),
+            pl.col(c.TC_PRICE_PU_IN).tail(1).sum()
+        ]).sum(axis=1) / 2).round().cast(pl.Int32)[0]
+
+        # Assign the uniform price to the trades
+        trades = trades.with_columns(pl.lit(uniform_price).alias(c.TC_PRICE_PU))
 
         return trades
 
-    def __pricing_discriminatory(self):
+    @staticmethod
+    def __pricing_discriminatory(trades):
         """Prices the market with the discriminatory pricing method"""
         # OLD
         # Calculate discriminative prices if demanded
@@ -650,7 +652,7 @@ class Lem(MarketBase):
         #    positions_cleared.loc[:, db_obj.db_param.PRICE_ENERGY_MARKET_ + type_pricing] = \
         #        ((positions_cleared[db_obj.db_param.PRICE_ENERGY_OFFER] +
         #          positions_cleared[db_obj.db_param.PRICE_ENERGY_BID].iloc[:]) / 2).astype(int)
-        ...
+        raise NotImplementedError('Discriminatory pricing not implemented yet')
 
     def __coupling_above(self):
         """Coupling with the market above"""
