@@ -154,8 +154,8 @@ class Mpc(ControllerBase):
                 # Get the plant type from the plant data
                 plant_type = plant_data['type']
 
-                if plant_type in [c.P_EV, c.P_HP, c.P_HEAT_STORAGE, c.P_HEAT]:
-                    continue
+                # if plant_type in [c.P_HP, c.P_HEAT_STORAGE, c.P_HEAT]:
+                #     continue
 
                 # Retrieve the forecast data for the plant
                 cols = [col for col in self.forecasts.columns if col.startswith(plant_name)]
@@ -320,6 +320,14 @@ class Mpc(ControllerBase):
                 print(f'Exited with status "{status[0]}". \n '
                       f'Infeasibilities for agent {self.agent.agent_id}:')
                 print(self.model.print_infeasibilities())
+
+                print('Model:')
+                for name, var in self.model.variables.items():
+                    print(var)
+                for name, con in self.model.constraints.items():
+                    print(con)
+                print(self.model.objective)
+
                 raise ValueError(f"Optimization failed: {status}")
 
             # Process the solution into control commands and return

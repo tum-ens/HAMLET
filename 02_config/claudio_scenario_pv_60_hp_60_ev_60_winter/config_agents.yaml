@@ -1043,9 +1043,19 @@ sfh:
                                                 #                 in market price range
                                                 # note: does not apply when simulation ex-post markets
 
-      horizon: 86_400                           # market agent trading horizon
+      horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                 # unit: s
+                                                # note: value is randomly chosen from list
                                                 # note: range is limited by the control horizon
+
+      linear:
+        steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                # unit: steps [0, inf)
+                                                # example: timestep=900, steps_to_final=2
+                                                #   -> 1800s before the time is reached the final price is reached
+
+        steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                # unit: steps [0, inf)
 
       fcast:
         local:

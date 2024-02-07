@@ -21,6 +21,8 @@ import os
 # warnings.filterwarnings("ignore")
 logging.getLogger('linopy').setLevel(logging.CRITICAL)
 
+AGENT_ID = 'hX9WNkgYiGYcIMJ'
+
 
 class RtcBase:
     def run(self):
@@ -160,22 +162,14 @@ class Rtc(ControllerBase):
             self.define_constraints()
             self.define_objective()
 
-            # Print the model
-            # for name, var in self.model.variables.items():
-            #     print(var)
-            # for name, con in self.model.constraints.items():
-            #     print(con)
-            # print(self.model.objective)
-            # exit()
-
         def create_plants(self):
             for plant_name, plant_data in self.plants.items():
 
                 # Get the plant type from the plant data
                 plant_type = plant_data['type']
 
-                if plant_type in [c.P_EV, c.P_HP, c.P_HEAT_STORAGE, c.P_HEAT]:
-                    continue
+                # if plant_type in [c.P_HP, c.P_HEAT_STORAGE, c.P_HEAT]:
+                #     continue
 
                 # Retrieve the timeseries data for the plant
                 cols = [col for col in self.timeseries.columns if col.startswith(plant_name)]
@@ -357,6 +351,7 @@ class Rtc(ControllerBase):
                 for name, con in self.model.constraints.items():
                     print(con)
                 print(self.model.objective)
+
                 raise ValueError(f"Optimization failed: {status}")
 
             # Process the solution into control commands and return
@@ -440,7 +435,9 @@ class Rtc(ControllerBase):
 
                 if key:  # Check for matching key
                     # Get power from solution
-                    power = solution[key]
+                    # Note: Since negative power means that the plant takes energy from the grid,
+                    #  we need to multiply the power by -1. Thus the signs are also reversed subsequently.
+                    power = solution[key] * -1
 
                     # Get the column dtype
                     dtype = self.socs[col].dtype
