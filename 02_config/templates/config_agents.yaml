@@ -41,7 +41,7 @@ sfh:
                                                 # unit: 1
 
   ################################ inflexible load ####################################
-  inflexible_load:
+  inflexible-load:
     share: 1                                    # share of prosumers with inflexible loads
                                                 # unit: 1 [0, 1]
       
@@ -70,7 +70,7 @@ sfh:
                                                 #   --> 2000<= 20% <=3000, 3000<= 60% <=5000, 5000<= 20% <=6000   
 
     fcast:
-      method: average                           # forecasting method
+      method: perfect                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -103,13 +103,15 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -117,16 +119,27 @@ sfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
-  flexible_load:
+  flexible-load:
     share: 0                                    # share of prosumers with flexible load
                                                 # unit: 1 [0, 1]
       
@@ -159,7 +172,7 @@ sfh:
                                                 # note: defines the maximum amount of time a load can be shifted to the future
 
     fcast:
-      method: average                           # forecasting method
+      method: rfr                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -192,13 +205,15 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -206,17 +221,28 @@ sfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ heat demand ####################################
   heat:
-    share: 0                                    # share of prosumers with heat
+    share: 1                                    # share of prosumers with heat
                                                 # unit: 1 [0, 1]
                                                 # note: users that do not have plants to cover the demand will be
                                                 #   assigned a generic non-electric supply
@@ -248,7 +274,7 @@ sfh:
                                                 #   - 55: radiator-heating systems
 
     fcast:
-      method: average                           # forecasting method
+      method: naive                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -281,13 +307,15 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -295,9 +323,16 @@ sfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
@@ -355,7 +390,7 @@ sfh:
                                                 # unit: days
 
       average:                                  # average forecasting method parameters
-        offset: 1                               # offset in days to the current day
+        offset: 2                               # offset in days to the current day
                                                 # unit: days
 
         days: 2                                 # number of days to be used for averaging
@@ -369,13 +404,15 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -383,17 +420,28 @@ sfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
-    share: 0.8                                  # share of agents with PV systems
+    share: 0.7                                  # share of agents with PV systems
                                                 # unit: 1 [0, 1]
       
     num: [1]                                    # number of pv systems
@@ -404,7 +452,7 @@ sfh:
       distribution: [0.7, 0.3]                  # distribution of sizing parameters shown below
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
-                                                
+
       power: [1.5, 1.5]                         # relative power
                                                 # unit: Wp/(kWh/a) -> based on first inflexible_load
 
@@ -415,7 +463,7 @@ sfh:
                                                 # options:
                                                 #   - specs: power output is calculated based on a randomly chosen specification
                                                 #            file (.json) and the weather file
-                                                #   - timeseries: power output is based on a randomly chosen time series 
+                                                #   - timeseries: power output is based on a randomly chosen time series
                                                 #                 output file (.csv)
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
@@ -437,7 +485,7 @@ sfh:
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
     fcast:
-      method: average                           # forecasting method
+      method: naive                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -471,13 +519,15 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -485,13 +535,24 @@ sfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -499,7 +560,7 @@ sfh:
   wind:
     share: 0                                    # share of prosumers with wind power plant
                                                 # unit: 1 [0, 1]
-      
+
     num: [1]                                    # number of inflexible loads
                                                 # unit: 1 [1, inf)
                                                 # note: value is randomly chosen from list
@@ -510,7 +571,7 @@ sfh:
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
                                                 # note: to obtain a uniform value this value needs to be [1]
-                                                
+
       power: [0.7, 0.5]                         # relative power
                                                 # unit: W/(kWh/a) -> based on first inflexible_load
 
@@ -521,7 +582,7 @@ sfh:
                                                 # options:
                                                 #   - specs: power output is calculated based on a randomly chosen specification
                                                 #            file (.json) and the weather file
-                                                #   - timeseries: power output is based on a randomly chosen time series 
+                                                #   - timeseries: power output is based on a randomly chosen time series
                                                 #                 output file (.csv)
                                                 #   - "file name": give specific file name (e.g. "wind_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
@@ -529,7 +590,7 @@ sfh:
       controllable: [true, true]                # can the wind inverter be controlled? true or false
 
     fcast:
-      method: average                           # forecasting method
+      method: weather                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -563,13 +624,15 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -577,18 +640,29 @@ sfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
-  
+
   ################################ fixed generator ####################################
-  fixed_gen:
+  fixed-gen:
     share: 0                                    # share of prosumers with fixed power generators
                                                 # unit: 1 [0, 1]
 
@@ -602,16 +676,16 @@ sfh:
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
                                                 # note: to obtain a uniform value this value needs to be [1]
-        
+
       power: [0.1, 0.2]                         # relative power
                                                 # unit: W/(kWh/a) -> based on first inflexible_load
-                                                
+
       power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
                                                 # unit: 1 [0, inf)
 
       file: ["timeseries", "timeseries"]        # file type to calculate the power output
                                                 # options:
-                                                #   - timeseries: power output is based on a randomly chosen time series 
+                                                #   - timeseries: power output is based on a randomly chosen time series
                                                 #                 output file (.csv)
                                                 #   - "file name": give specific file name (e.g. "fixed_gen_1_pu.csv")
 
@@ -651,13 +725,15 @@ sfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -665,26 +741,37 @@ sfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
   ################################ heat pumps (HP) ####################################
   hp:
-    share: 0                                    # share of prosumers with heat pumps
+    share: 1                                    # share of prosumers with heat pumps
                                                 # unit: 1 [0, 1]
-      
+
     num: [1]                                    # number of heat pumps
                                                 # unit: 1 [1, inf)
                                                 # note: value is randomly chosen from list
 
-    sizing: 
+    sizing:
       distribution: [0.2, 0.8]                  # distribution of sizing parameters shown below
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
@@ -694,7 +781,7 @@ sfh:
                                                 # unit: W/(Wh*a)*2000h-> based on first heat
                                                 # note: heat demand is divided by 2000 and multiplied by power value,
                                                 #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
-        
+
       file: ["ground", "air"]                   # type of heat pump
                                                 # options:
                                                 #   - ground: ground-water heat pump
@@ -702,13 +789,85 @@ sfh:
                                                 #   - water: water-water heat pump
                                                 #   - "file name": give specific file name (e.g. "hp_NIBE-F2120-12_air.json")
 
+
+
+    fcast:
+      method: naive                           # forecasting method
+                                                # options:
+                                                #   - perfect:  perfect knowledge of the future
+                                                #   - naive:    today will be the same as last day with offset t
+                                                #   - average:  today will be the same as the average of the last
+                                                #               n days with offset t
+                                                #   - smoothed: prediction value is a moving mean of the future
+                                                #               values with a specified window width
+                                                #   - sarma:    seasonal autoregressive moving average model
+                                                #   - rfr:      random forest regressor
+                                                #   - cnn:      convolutional neural network
+                                                #   - rnn:      recurrent neural network
+                                                #   - arima:    autoregressive integrated moving average model
+                                                #   - weather:  forecast based on weather forecast ("specs" only)
+
+      naive:                                    # naive forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+      average:                                  # average forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+        days: 2                                 # number of days to be used for averaging
+                                                # unit: days
+
+      smoothed:
+        steps: 9                                # number of future time steps to be used for smoothing (T-ts)
+                                                # unit: time steps
+
+      sarma:
+        order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
+                96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rfr:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      arima:
+        order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
   ################################ electric vehicles (EV) ####################################
   ev:
     share: 0.5                                  # share of prosumers with EVs
                                                 # unit: 1 [0, 1]
-      
+
     num: [1, 1, 1, 1, 2]                        # number of EVs
                                                 # unit: 1 [1, inf)
                                                 # value is randomly chosen from list
@@ -718,7 +877,7 @@ sfh:
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
-        
+
       file: ["timeseries", "timeseries", "timeseries"]  # driving profile of the ev
                                                 # options:
                                                 #   - timeseries: random file is chosen
@@ -732,24 +891,24 @@ sfh:
 
       charging_AC: [7.2e3, 1.1e4, 2.2e4]        # EV max charging power at AC chargers
                                                 # unit: W
-    
+
       charging_DC: [5e4, 1e5, 2e5]              # EV max charging power at DC chargers
                                                 # unit: W
-                                                
-      charging_efficiency: [9e4, 9e4, 9e4]      # one way charging efficiency of the vehicle
-                                                # unit: 1e5 (0, 1e5)
 
-      soc: [8e4, 8e4, 8e4]                      # initial state of charge of the battery
-                                                # unit: 1 [0, 1e5]
+      charging_efficiency: [0.9, 0.9, 0.9]      # one way charging efficiency of the vehicle
+                                                # unit: 1 [0, 1]
+
+      soc: [0.8, 0.8, 0.8]                      # initial state of charge of the battery
+                                                # unit: 1 [0, 1]
 
       v2g: [false, false, false]                # vehicle-to-grid possible
-        
+
       v2h: [false, false, false]                # vehicle-to-home possible
-      
+
     charging_scheme:
-      method: "price_sensitive"                 # charging method for the EVs
+      method: min_soc                           # charging method for the EVs
                                                 # options:
-                                                #   - full:            charge at full power as soon as EV 
+                                                #   - full:            charge at full power as soon as EV
                                                 #                      is connected
                                                 #   - price_sensitive: car is only charged when electricity
                                                 #                      price is below given threshold
@@ -763,7 +922,7 @@ sfh:
                                                 # unit: €/kWh (-inf, inf)
 
       min_soc:                                  # minimum SoC charging parameters
-        val: 0.5                                # minimum SoC the EV needs to reach before it leaves again
+        val: 0.8                                # minimum SoC the EV needs to reach before it leaves again
                                                 # unit: 1 [0, 1]
 
       min_soc_time:
@@ -824,8 +983,8 @@ sfh:
                                                 # on the local markets
 
   ################################ heat storage ####################################
-  heat_storage:
-    share: 0                                  # share of agents with heat storage (if share_dependent_on applies)
+  heat-storage:
+    share: 1                                  # share of agents with heat storage (if share_dependent_on applies)
                                                 # unit: 1 [0, 1]
 
     share_dependent_on: ["hp"]                  # does the share of storage depend on the existence of other devices?
@@ -876,20 +1035,29 @@ sfh:
         horizon: 86_400                         # control horizon
                                                 # unit: s
                                                 # note: applies to strategy: mpc
+                                                # cannot exceed forecast horizon
 
     market:                                     # market parameters
-      strategy: [linear]                        # market agent trading strategy
+      strategy: linear                          # market agent trading strategy
                                                 # options:
                                                 #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
-                                                # note: each agent selects a random value off this list
                                                 # note: does not apply when simulation ex-post markets
 
-      horizon: [10_800, 21_600, 32_400, 43_200] # market agent trading horizon
+      horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                 # unit: s
+                                                # note: value is randomly chosen from list
                                                 # note: range is limited by the control horizon
-                                                # note: each agent selects a random value off this list
+
+      linear:
+        steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                # unit: steps [0, inf)
+                                                # example: timestep=900, steps_to_final=2
+                                                #   -> 1800s before the time is reached the final price is reached
+
+        steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                # unit: steps [0, inf)
 
       fcast:
         local:
@@ -914,14 +1082,53 @@ sfh:
             offset: 1                           # offset in days to the current day
                                                 # unit: days
 
-    fcasts:                                     # forecasting settings for all forecasts
-        retraining_period: 86_400               # period after which the forecast model is retrained
-                                                # unit: s
-                                                # note: does not apply when simulation ex-post markets
+        retailer:
+          energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
 
-        update_period: 3_600                    # period after which the forecast model is updated
+          grid:                                 # forecasting method for grid fees
+            local: naive                        # forecasting method for grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+
+            retail: naive                       # forecasting method for retail grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
+          levies: naive                         # forecasting method for levies
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
+
+          balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
+
+    fcasts:                                     # forecasting settings for all forecasts
+        horizon: 86_400                         # forecasting horizon
                                                 # unit: s
-                                                # note: does not apply when simulation ex-post markets
+                                                # note: applies to all forecasts
+
+        retraining: 86_400                      # period after which the forecast model is retrained
+                                                # unit: s
+                                                # note: applies to all forecasts
+
+        update: 3_600                           # period after which the forecast model is updated
+                                                # unit: s
+                                                # note: applies to all forecasts
 
 ##########################################################################################
 ################################ multi family home (MFH) #################################
@@ -974,7 +1181,7 @@ mfh:
                                                 #   should not be applied in can be changed in the created Excel file
 
   ################################ inflexible load (household) ####################################
-  inflexible_load:
+  inflexible-load:
     share: 1                                    # share of prosumers with inflexible loads (in this case used as household
                                                 #   load and therefore should be applied to all MFHs)
                                                 # unit: 1 [0, 1]
@@ -1044,13 +1251,15 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -1058,16 +1267,27 @@ mfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
-  flexible_load:
+  flexible-load:
     share: 1                                    # share of prosumers with flexible load
                                                 # note: share is applied to number of buildings, if building
                                                 #   has device and apartments are independent all apartments
@@ -1140,13 +1360,15 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -1154,13 +1376,24 @@ mfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ heat demand ####################################
   heat:
@@ -1236,13 +1469,15 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -1250,13 +1485,24 @@ mfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ dhw (drinking hot water) ####################################
   dhw:
@@ -1331,13 +1577,15 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -1345,13 +1593,24 @@ mfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
@@ -1445,13 +1704,15 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -1459,13 +1720,24 @@ mfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -1547,13 +1819,15 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -1561,18 +1835,28 @@ mfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
-
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
   ################################ fixed generator ####################################
-  fixed_gen:
+  fixed-gen:
     share: 1                                    # share of prosumers with fixed power generators
                                                 # note: share is applied to number of buildings, if building
                                                 #   has device and apartments are independent all apartments
@@ -1643,13 +1927,15 @@ mfh:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -1657,13 +1943,24 @@ mfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -1753,7 +2050,7 @@ mfh:
       v2h: [false, false, false]                # vehicle-to-home possible
 
     charging_scheme:
-      method: "price_sensitive"                 # charging method for the EVs
+      method: min_soc                           # charging method for the EVs
                                                 # options:
                                                 #   - full:            charge at full power as soon as EV
                                                 #                      is connected
@@ -1841,7 +2138,7 @@ mfh:
                                                 # on the local markets
 
   ################################ heat storage ####################################
-  heat_storage:
+  heat-storage:
     share: 0.8                                  # share of agents with batteries (if share_dependent_on applies)
                                                 # unit: 1 [0, 1]
                                                 # note: agent equals entire MFH
@@ -1899,52 +2196,91 @@ mfh:
         horizon: 86_400                         # control horizon
                                                 # unit: s
                                                 # note: applies to strategy: mpc
+                                                # cannot exceed forecast horizon
 
     market:                                     # market parameters
-      strategy: [linear]                        # market agent trading strategy
+      strategy: linear                          # market agent trading strategy
                                                 # options:
                                                 #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
-                                                # note: each agent selects a random value off this list
                                                 # note: does not apply when simulation ex-post markets
 
-      horizon: [10_800, 21_600, 32_400, 43_200] # market agent trading horizon
+      horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                 # unit: s
+                                                # note: value is randomly chosen from list
                                                 # note: range is limited by the control horizon
-                                                # note: each agent selects a random value off this list
+
+      linear:
+        steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                # unit: steps [0, inf)
+                                                # example: timestep=900, steps_to_final=2
+                                                #   -> 1800s before the time is reached the final price is reached
+
+        steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                # unit: steps [0, inf)
 
       fcast:
-        local:
-          method: naive                         # forecasting method for local market prices
+        local: naive                            # forecasting method for local market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
                                                 # note: does not apply when simulation ex-post markets
 
-          naive:                                # naive forecasting method parameters
-            offset: 1                           # offset in days to the current day
-                                                # unit: days
-
-        wholesale:
-          method: naive                         # forecasting method for wholesale market prices
+        wholesale: naive                        # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
 
-          naive:                                # naive forecasting method parameters
-            offset: 1                           # offset in days to the current day
-                                                # unit: days
+        retailer:
+          energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
+
+          grid:                                 # forecasting method for grid fees
+            local: naive                        # forecasting method for grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+
+            retail: naive                       # forecasting method for retail grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
+          levies: naive                         # forecasting method for levies
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
+
+          balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
 
     fcasts:                                     # forecasting settings for all forecasts
-        retraining_period: 86_400               # period after which the forecast model is retrained
+        horizon: 86_400                         # forecasting horizon
                                                 # unit: s
-                                                # note: does not apply when simulation ex-post markets
+                                                # note: applies to all forecasts
 
-        update_period: 3_600                    # period after which the forecast model is updated
+        retraining: 86_400                      # period after which the forecast model is retrained
                                                 # unit: s
-                                                # note: does not apply when simulation ex-post markets
+                                                # note: applies to all forecasts
+
+        update: 3_600                           # period after which the forecast model is updated
+                                                # unit: s
+                                                # note: applies to all forecasts
 
 ##########################################################################################
 ##################### commerce, trading, services and public (CTSP) ######################
@@ -1986,7 +2322,7 @@ ctsp:
     market_participant_share: 1                 # share of agents that participate in the local markets
 
   ################################ inflexible load ####################################
-  inflexible_load:
+  inflexible-load:
     share: [1, 1]                               # relative share of device per agent type
                                                 # unit: 1
                                                 # IMPORTANT: length of this variable needs to match
@@ -2039,13 +2375,15 @@ ctsp:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -2053,16 +2391,27 @@ ctsp:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
-  flexible_load:
+  flexible-load:
     share: [1, 0]                               # relative share of device per agent type
                                                 # unit: 1
                                                 # IMPORTANT: length of this variable needs to match
@@ -2118,13 +2467,15 @@ ctsp:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -2132,13 +2483,24 @@ ctsp:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ photovoltaics (PV) ####################################
   pv:
@@ -2213,13 +2575,15 @@ ctsp:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -2227,13 +2591,24 @@ ctsp:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -2297,13 +2672,15 @@ ctsp:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -2311,17 +2688,29 @@ ctsp:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
   ################################ fixed generator ####################################
-  fixed_gen:
+  fixed-gen:
     share: [0, 1]                               # share of agents with fixed power generators per type
                                                 # unit: 1 [0, 1]
 
@@ -2376,13 +2765,15 @@ ctsp:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -2390,13 +2781,24 @@ ctsp:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -2431,7 +2833,7 @@ ctsp:
       charging_efficiency: [0.9, 0.9]           # one way charging efficiency of the vehicle
                                                 # unit: 1 [0, 1]
 
-      soc: [0.8, 0.8]                      # initial state of charge of the battery
+      soc: [0.8, 0.8]                           # initial state of charge of the battery
                                                 # unit: 1 [0, 1]
 
       v2g: [false, false]                       # vehicle-to-grid possible
@@ -2439,7 +2841,7 @@ ctsp:
       v2h: [false, false]                       # vehicle-to-home possible
 
     charging_scheme:
-      method: ["full", "price_sensitive"]       # charging method for the respective EVs
+      method: ["full", "min_soc"]               # charging method for the respective EVs
                                                 # options:
                                                 #   - full:            charge at full power as soon as EV
                                                 #                      is connected
@@ -2532,52 +2934,91 @@ ctsp:
         horizon: 86_400                         # control horizon
                                                 # unit: s
                                                 # note: applies to strategy: mpc
+                                                # cannot exceed forecast horizon
 
     market:                                     # market parameters
-      strategy: [linear]                        # market agent trading strategy
+      strategy: linear                          # market agent trading strategy
                                                 # options:
                                                 #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
-                                                # note: each agent selects a random value off this list
                                                 # note: does not apply when simulation ex-post markets
 
-      horizon: [10_800, 21_600, 32_400, 43_200] # market agent trading horizon
+      horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                 # unit: s
+                                                # note: value is randomly chosen from list
                                                 # note: range is limited by the control horizon
-                                                # note: each agent selects a random value off this list
+
+      linear:
+        steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                # unit: steps [0, inf)
+                                                # example: timestep=900, steps_to_final=2
+                                                #   -> 1800s before the time is reached the final price is reached
+
+        steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                # unit: steps [0, inf)
 
       fcast:
-        local:
-          method: naive                         # forecasting method for local market prices
+        local: naive                            # forecasting method for local market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
                                                 # note: does not apply when simulation ex-post markets
 
-          naive:                                # naive forecasting method parameters
-            offset: 1                           # offset in days to the current day
-                                                # unit: days
-
-        wholesale:
-          method: naive                         # forecasting method for wholesale market prices
+        wholesale: naive                        # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
 
-          naive:                                # naive forecasting method parameters
-            offset: 1                           # offset in days to the current day
-                                                # unit: days
+        retailer:
+          energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
+
+          grid:                                 # forecasting method for grid fees
+            local: naive                        # forecasting method for grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+
+            retail: naive                       # forecasting method for retail grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
+          levies: naive                         # forecasting method for levies
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
+
+          balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
 
     fcasts:                                     # forecasting settings for all forecasts
-        retraining_period: 86_400               # period after which the forecast model is retrained
+        horizon: 86_400                         # forecasting horizon
                                                 # unit: s
-                                                # note: does not apply when simulation ex-post markets
+                                                # note: applies to all forecasts
 
-        update_period: 3_600                    # period after which the forecast model is updated
+        retraining: 86_400                      # period after which the forecast model is retrained
                                                 # unit: s
-                                                # note: does not apply when simulation ex-post markets
+                                                # note: applies to all forecasts
+
+        update: 3_600                           # period after which the forecast model is updated
+                                                # unit: s
+                                                # note: applies to all forecasts
 
 ##########################################################################################
 ################################### industry #############################################
@@ -2622,7 +3063,7 @@ industry:
     market_participant_share: 1                 # share of agents that participate in the local markets
 
   ################################ inflexible load ####################################
-  inflexible_load:
+  inflexible-load:
     share: [1, 1]                               # relative share of device per agent type
                                                 # unit: 1
                                                 # IMPORTANT: length of this variable needs to match
@@ -2675,13 +3116,15 @@ industry:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -2689,16 +3132,27 @@ industry:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ flexible load ####################################
-  flexible_load:
+  flexible-load:
     share: [1, 0]                               # relative share of device per agent type
                                                 # unit: 1
                                                 # IMPORTANT: length of this variable needs to match
@@ -2754,13 +3208,15 @@ industry:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -2768,13 +3224,24 @@ industry:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
   ################################ small-scale photovoltaics (PV) ####################################
   pv:
@@ -2849,13 +3316,15 @@ industry:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -2863,13 +3332,24 @@ industry:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
@@ -2934,13 +3414,15 @@ industry:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -2948,18 +3430,29 @@ industry:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
 
   ################################ fixed generator ####################################
-  fixed_gen:
+  fixed-gen:
     share: [1, 0]                               # share of agents with fixed power generators per type
                                                 # unit: 1 [0, 1]
 
@@ -3015,13 +3508,15 @@ industry:
         order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                 96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
       cnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
         days: 3                                # past days that are used to train the neural network
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rnn:
         features: ['temp', 'time']              # used features in weather file to fit the model
@@ -3029,13 +3524,24 @@ industry:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
 
       rfr:
         features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
       arima:
         order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                 # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
 
     quality: local                              # quality that the generated energy should be labelled with on the local markets
 
@@ -3078,7 +3584,7 @@ industry:
       v2h: [false, false]                       # vehicle-to-home possible
 
     charging_scheme:
-      method: ["full", "price_sensitive"]       # charging method for the respective EVs
+      method: ["full", "min_soc"]               # charging method for the respective EVs
                                                 # options:
                                                 #   - full:            charge at full power as soon as EV
                                                 #                      is connected
@@ -3172,52 +3678,91 @@ industry:
         horizon: 86_400                         # control horizon
                                                 # unit: s
                                                 # note: applies to strategy: mpc
+                                                # cannot exceed forecast horizon
 
     market:                                     # market parameters
-      strategy: [linear]                        # market agent trading strategy
+      strategy: linear                          # market agent trading strategy
                                                 # options:
                                                 #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
-                                                # note: each agent selects a random value off this list
                                                 # note: does not apply when simulation ex-post markets
 
-      horizon: [10_800, 21_600, 32_400, 43_200] # market agent trading horizon
+      horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                 # unit: s
+                                                # note: value is randomly chosen from list
                                                 # note: range is limited by the control horizon
-                                                # note: each agent selects a random value off this list
+
+      linear:
+        steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                # unit: steps [0, inf)
+                                                # example: timestep=900, steps_to_final=2
+                                                #   -> 1800s before the time is reached the final price is reached
+
+        steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                # unit: steps [0, inf)
 
       fcast:
-        local:
-          method: naive                         # forecasting method for local market prices
+        local: naive                            # forecasting method for local market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
                                                 # note: does not apply when simulation ex-post markets
 
-          naive:                                # naive forecasting method parameters
-            offset: 1                           # offset in days to the current day
-                                                # unit: days
-
-        wholesale:
-          method: naive                         # forecasting method for wholesale market prices
+        wholesale: naive                        # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
 
-          naive:                                # naive forecasting method parameters
-            offset: 1                           # offset in days to the current day
-                                                # unit: days
+        retailer:
+          energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
+
+          grid:                                 # forecasting method for grid fees
+            local: naive                        # forecasting method for grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+
+            retail: naive                       # forecasting method for retail grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
+          levies: naive                         # forecasting method for levies
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
+
+          balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
 
     fcasts:                                     # forecasting settings for all forecasts
-        retraining_period: 86_400               # period after which the forecast model is retrained
+        horizon: 86_400                         # forecasting horizon
                                                 # unit: s
-                                                # note: does not apply when simulation ex-post markets
+                                                # note: applies to all forecasts
 
-        update_period: 3_600                    # period after which the forecast model is updated
+        retraining: 86_400                      # period after which the forecast model is retrained
                                                 # unit: s
-                                                # note: does not apply when simulation ex-post markets
+                                                # note: applies to all forecasts
+
+        update: 3_600                           # period after which the forecast model is updated
+                                                # unit: s
+                                                # note: applies to all forecasts
 
 ##########################################################################################
 ################################## producer ##############################################
@@ -3311,13 +3856,15 @@ producer:
           order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                   96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
         cnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
           days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
@@ -3325,19 +3872,30 @@ producer:
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rfr:
           features: ['temp', 'time']              # used features in weather file to fit the model
+          days: 3                                 # past days that are used to train the neural network
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                   # differences, and MA parameters to use
+          days: 3                                 # past days that are used to train the arima model
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
       quality: green_local                      # quality that the generated energy should be labelled with on the local markets
       
     ################################ battery ####################################
     battery: 
-      num: [1]                                  # number of batteries
+      num: [1]                                  # number of fixed generators
                                                 # note: value is randomly chosen from list
 
       sizing:                                   # sizing of battery system
@@ -3382,52 +3940,91 @@ producer:
           horizon: 86_400                         # control horizon
                                                   # unit: s
                                                   # note: applies to strategy: mpc
+                                                  # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: [10_800, 21_600, 32_400, 43_200] # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
-          local:
-            method: naive                         # forecasting method for local market prices
+          local: naive                            # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
-
-          wholesale:
-            method: naive                         # forecasting method for wholesale market prices
+          wholesale: naive                        # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
+          retailer:
+            energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
+
+            grid:                                 # forecasting method for grid fees
+              local: naive                        # forecasting method for grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+
+              retail: naive                       # forecasting method for retail grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+            levies: naive                         # forecasting method for levies
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+
+            balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
 
       fcasts:                                     # forecasting settings for all forecasts
-          retraining_period: 86_400               # period after which the forecast model is retrained
+          horizon: 86_400                         # forecasting horizon
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
 
-          update_period: 3_600                    # period after which the forecast model is updated
+          retraining: 86_400                      # period after which the forecast model is retrained
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
+
+          update: 3_600                           # period after which the forecast model is updated
+                                                  # unit: s
+                                                  # note: applies to all forecasts
 
   ################################ large-scale wind generation ####################################
   wind:
@@ -3500,13 +4097,15 @@ producer:
           order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                   96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
         cnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
           days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
@@ -3514,13 +4113,24 @@ producer:
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rfr:
           features: ['temp', 'time']              # used features in weather file to fit the model
+          days: 3                                 # past days that are used to train the neural network
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                   # differences, and MA parameters to use
+          days: 3                                 # past days that are used to train the arima model
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
       quality: green_local                      # quality that the generated energy should be labelled with on the local markets
       
@@ -3569,55 +4179,94 @@ producer:
           horizon: 86_400                         # control horizon
                                                   # unit: s
                                                   # note: applies to strategy: mpc
+                                                  # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: [10_800, 21_600, 32_400, 43_200] # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
-          local:
-            method: naive                         # forecasting method for local market prices
+          local: naive                            # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
-
-          wholesale:
-            method: naive                         # forecasting method for wholesale market prices
+          wholesale: naive                        # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
+          retailer:
+            energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
+
+            grid:                                 # forecasting method for grid fees
+              local: naive                        # forecasting method for grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+
+              retail: naive                       # forecasting method for retail grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+            levies: naive                         # forecasting method for levies
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+
+            balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
 
       fcasts:                                     # forecasting settings for all forecasts
-          retraining_period: 86_400               # period after which the forecast model is retrained
+          horizon: 86_400                         # forecasting horizon
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
 
-          update_period: 3_600                    # period after which the forecast model is updated
+          retraining: 86_400                      # period after which the forecast model is retrained
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
+
+          update: 3_600                           # period after which the forecast model is updated
+                                                  # unit: s
+                                                  # note: applies to all forecasts
 
   ################################ large-scale fixed generation ####################################
-  fixed_gen:
+  fixed-gen:
     ################################ general ####################################
     general:
       number_of: 0                              # number of large-scale wind producers
@@ -3625,7 +4274,7 @@ producer:
       market_participant_share: 1               # share of agents that participate in the local markets
       
     ################################ plant ####################################
-    fixed_gen:
+    fixed-gen:
       num: [1]                                  # number of fixed generators
                                                 # note: value is randomly chosen from list
 
@@ -3684,13 +4333,15 @@ producer:
           order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
                   96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
 
-
         cnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
           days: 3                                # past days that are used to train the neural network
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rnn:
           features: ['temp', 'time']              # used features in weather file to fit the model
@@ -3698,13 +4349,24 @@ producer:
                                                   # unit: days
                                                   # note: weather data for the n previous days needs to be available
                                                   # in weather file
+          epoch: 20                               # number of epochs to fit the neural network model
+          window_length: 20                       # window length of the training data
+                                                  # unit: time steps
 
         rfr:
           features: ['temp', 'time']              # used features in weather file to fit the model
+          days: 3                                 # past days that are used to train the neural network
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
         arima:
           order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
                                                   # differences, and MA parameters to use
+          days: 3                                 # past days that are used to train the arima model
+                                                  # unit: days
+                                                  # note: weather data for the n previous days needs to be available
+                                                  # in weather file
 
       quality: local                            # quality that the generated energy should be labelled with on the local markets
     ################################ battery ####################################
@@ -3752,52 +4414,91 @@ producer:
           horizon: 86_400                         # control horizon
                                                   # unit: s
                                                   # note: applies to strategy: mpc
+                                                  # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: [10_800, 21_600, 32_400, 43_200] # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
-          local:
-            method: naive                         # forecasting method for local market prices
+          local: naive                            # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
-
-          wholesale:
-            method: naive                         # forecasting method for wholesale market prices
+          wholesale: naive                        # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
+          retailer:
+            energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
+
+            grid:                                 # forecasting method for grid fees
+              local: naive                        # forecasting method for grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+
+              retail: naive                       # forecasting method for retail grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+            levies: naive                         # forecasting method for levies
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+
+            balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
 
       fcasts:                                     # forecasting settings for all forecasts
-          retraining_period: 86_400               # period after which the forecast model is retrained
+          horizon: 86_400                         # forecasting horizon
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
 
-          update_period: 3_600                    # period after which the forecast model is updated
+          retraining: 86_400                      # period after which the forecast model is retrained
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
+
+          update: 3_600                           # period after which the forecast model is updated
+                                                  # unit: s
+                                                  # note: applies to all forecasts
 
 ##########################################################################################
 ################################# storage provider #######################################
@@ -3871,52 +4572,91 @@ storage:
           horizon: 86_400                         # control horizon
                                                   # unit: s
                                                   # note: applies to strategy: mpc
+                                                  # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: [10_800, 21_600, 32_400, 43_200] # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
-          local:
-            method: naive                         # forecasting method for local market prices
+          local: naive                            # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
-
-          wholesale:
-            method: naive                         # forecasting method for wholesale market prices
+          wholesale: naive                        # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
+          retailer:
+            energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
+
+            grid:                                 # forecasting method for grid fees
+              local: naive                        # forecasting method for grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+
+              retail: naive                       # forecasting method for retail grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+            levies: naive                         # forecasting method for levies
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+
+            balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
 
       fcasts:                                     # forecasting settings for all forecasts
-          retraining_period: 86_400               # period after which the forecast model is retrained
+          horizon: 86_400                         # forecasting horizon
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
 
-          update_period: 3_600                    # period after which the forecast model is updated
+          retraining: 86_400                      # period after which the forecast model is retrained
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
+
+          update: 3_600                           # period after which the forecast model is updated
+                                                  # unit: s
+                                                  # note: applies to all forecasts
 
   ################################ pumped-storage hydropower (PSH) plant ####################################
   psh:
@@ -3984,52 +4724,91 @@ storage:
           horizon: 86_400                         # control horizon
                                                   # unit: s
                                                   # note: applies to strategy: mpc
+                                                  # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: [10_800, 21_600, 32_400, 43_200] # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
-          local:
-            method: naive                         # forecasting method for local market prices
+          local: naive                            # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
-
-          wholesale:
-            method: naive                         # forecasting method for wholesale market prices
+          wholesale: naive                        # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
+          retailer:
+            energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
+
+            grid:                                 # forecasting method for grid fees
+              local: naive                        # forecasting method for grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+
+              retail: naive                       # forecasting method for retail grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+            levies: naive                         # forecasting method for levies
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+
+            balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
 
       fcasts:                                     # forecasting settings for all forecasts
-          retraining_period: 86_400               # period after which the forecast model is retrained
+          horizon: 86_400                         # forecasting horizon
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
 
-          update_period: 3_600                    # period after which the forecast model is updated
+          retraining: 86_400                      # period after which the forecast model is retrained
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
+
+          update: 3_600                           # period after which the forecast model is updated
+                                                  # unit: s
+                                                  # note: applies to all forecasts
 
   ################################ hydrogen plant ####################################
   hydrogen:
@@ -4097,52 +4876,91 @@ storage:
           horizon: 86_400                         # control horizon
                                                   # unit: s
                                                   # note: applies to strategy: mpc
+                                                  # cannot exceed forecast horizon
 
       market:                                     # market parameters
-        strategy: [linear]                        # market agent trading strategy
+        strategy: linear                          # market agent trading strategy
                                                   # options:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: [10_800, 21_600, 32_400, 43_200] # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
-          local:
-            method: naive                         # forecasting method for local market prices
+          local: naive                            # forecasting method for local market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
                                                   # note: does not apply when simulation ex-post markets
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
-
-          wholesale:
-            method: naive                         # forecasting method for wholesale market prices
+          wholesale: naive                        # forecasting method for wholesale market prices
                                                   # options:
                                                   #   - flat:  no meaningful forecasting, flat price assumed
                                                   #   - naive: expected price same as previous day (initialized flat)
                                                   #   - perfect: perfect foresight of market price
 
-            naive:                                # naive forecasting method parameters
-              offset: 1                           # offset in days to the current day
-                                                  # unit: days
+          retailer:
+            energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
+
+            grid:                                 # forecasting method for grid fees
+              local: naive                        # forecasting method for grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+
+              retail: naive                       # forecasting method for retail grid fees
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+            levies: naive                         # forecasting method for levies
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for selling, second for buying
+
+            balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                  # options:
+                                                  #   - flat:  no meaningful forecasting, flat price assumed
+                                                  #   - naive: expected price same as previous day (initialized flat)
+                                                  #   - perfect: perfect foresight of market price
+                                                  # note: first value is for prices and second for quantities
 
       fcasts:                                     # forecasting settings for all forecasts
-          retraining_period: 86_400               # period after which the forecast model is retrained
+          horizon: 86_400                         # forecasting horizon
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
 
-          update_period: 3_600                    # period after which the forecast model is updated
+          retraining: 86_400                      # period after which the forecast model is retrained
                                                   # unit: s
-                                                  # note: does not apply when simulation ex-post markets
+                                                  # note: applies to all forecasts
+
+          update: 3_600                           # period after which the forecast model is updated
+                                                  # unit: s
+                                                  # note: applies to all forecasts
 
 ########################################################################################################################
 ########################################### aggregators configuration ##################################################

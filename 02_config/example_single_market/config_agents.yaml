@@ -452,7 +452,7 @@ sfh:
       distribution: [0.7, 0.3]                  # distribution of sizing parameters shown below
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
-                                                
+
       power: [1.5, 1.5]                         # relative power
                                                 # unit: Wp/(kWh/a) -> based on first inflexible_load
 
@@ -463,7 +463,7 @@ sfh:
                                                 # options:
                                                 #   - specs: power output is calculated based on a randomly chosen specification
                                                 #            file (.json) and the weather file
-                                                #   - timeseries: power output is based on a randomly chosen time series 
+                                                #   - timeseries: power output is based on a randomly chosen time series
                                                 #                 output file (.csv)
                                                 #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
@@ -485,7 +485,7 @@ sfh:
       controllable: [true , true]               # can the pv inverter be controlled? true or false
 
     fcast:
-      method: weather                           # forecasting method
+      method: naive                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -560,7 +560,7 @@ sfh:
   wind:
     share: 0                                    # share of prosumers with wind power plant
                                                 # unit: 1 [0, 1]
-      
+
     num: [1]                                    # number of inflexible loads
                                                 # unit: 1 [1, inf)
                                                 # note: value is randomly chosen from list
@@ -571,7 +571,7 @@ sfh:
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
                                                 # note: to obtain a uniform value this value needs to be [1]
-                                                
+
       power: [0.7, 0.5]                         # relative power
                                                 # unit: W/(kWh/a) -> based on first inflexible_load
 
@@ -582,7 +582,7 @@ sfh:
                                                 # options:
                                                 #   - specs: power output is calculated based on a randomly chosen specification
                                                 #            file (.json) and the weather file
-                                                #   - timeseries: power output is based on a randomly chosen time series 
+                                                #   - timeseries: power output is based on a randomly chosen time series
                                                 #                 output file (.csv)
                                                 #   - "file name": give specific file name (e.g. "wind_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
@@ -660,7 +660,7 @@ sfh:
                                                 # in weather file
 
     quality: green_local                        # quality that the generated energy should be labelled with on the local markets
-  
+
   ################################ fixed generator ####################################
   fixed-gen:
     share: 0                                    # share of prosumers with fixed power generators
@@ -676,16 +676,16 @@ sfh:
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
                                                 # note: to obtain a uniform value this value needs to be [1]
-        
+
       power: [0.1, 0.2]                         # relative power
                                                 # unit: W/(kWh/a) -> based on first inflexible_load
-                                                
+
       power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
                                                 # unit: 1 [0, inf)
 
       file: ["timeseries", "timeseries"]        # file type to calculate the power output
                                                 # options:
-                                                #   - timeseries: power output is based on a randomly chosen time series 
+                                                #   - timeseries: power output is based on a randomly chosen time series
                                                 #                 output file (.csv)
                                                 #   - "file name": give specific file name (e.g. "fixed_gen_1_pu.csv")
 
@@ -766,12 +766,12 @@ sfh:
   hp:
     share: 1                                    # share of prosumers with heat pumps
                                                 # unit: 1 [0, 1]
-      
+
     num: [1]                                    # number of heat pumps
                                                 # unit: 1 [1, inf)
                                                 # note: value is randomly chosen from list
 
-    sizing: 
+    sizing:
       distribution: [0.2, 0.8]                  # distribution of sizing parameters shown below
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
@@ -781,7 +781,7 @@ sfh:
                                                 # unit: W/(Wh*a)*2000h-> based on first heat
                                                 # note: heat demand is divided by 2000 and multiplied by power value,
                                                 #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
-        
+
       file: ["ground", "air"]                   # type of heat pump
                                                 # options:
                                                 #   - ground: ground-water heat pump
@@ -792,7 +792,7 @@ sfh:
 
 
     fcast:
-      method: perfect                           # forecasting method
+      method: naive                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -867,7 +867,7 @@ sfh:
   ev:
     share: 0.5                                  # share of prosumers with EVs
                                                 # unit: 1 [0, 1]
-      
+
     num: [1, 1, 1, 1, 2]                        # number of EVs
                                                 # unit: 1 [1, inf)
                                                 # value is randomly chosen from list
@@ -877,7 +877,7 @@ sfh:
                                                 # unit: 1 [0, 1]
                                                 # note: number of elements must be identical to other values
                                                 # note: if sum does not equal to 1, it is adjusted accordingly
-        
+
       file: ["timeseries", "timeseries", "timeseries"]  # driving profile of the ev
                                                 # options:
                                                 #   - timeseries: random file is chosen
@@ -891,10 +891,10 @@ sfh:
 
       charging_AC: [7.2e3, 1.1e4, 2.2e4]        # EV max charging power at AC chargers
                                                 # unit: W
-    
+
       charging_DC: [5e4, 1e5, 2e5]              # EV max charging power at DC chargers
                                                 # unit: W
-                                                
+
       charging_efficiency: [0.9, 0.9, 0.9]      # one way charging efficiency of the vehicle
                                                 # unit: 1 [0, 1]
 
@@ -902,13 +902,13 @@ sfh:
                                                 # unit: 1 [0, 1]
 
       v2g: [false, false, false]                # vehicle-to-grid possible
-        
+
       v2h: [false, false, false]                # vehicle-to-home possible
 
     charging_scheme:
       method: min_soc                           # charging method for the EVs
                                                 # options:
-                                                #   - full:            charge at full power as soon as EV 
+                                                #   - full:            charge at full power as soon as EV
                                                 #                      is connected
                                                 #   - price_sensitive: car is only charged when electricity
                                                 #                      price is below given threshold
@@ -922,7 +922,7 @@ sfh:
                                                 # unit: €/kWh (-inf, inf)
 
       min_soc:                                  # minimum SoC charging parameters
-        val: 0.5                                # minimum SoC the EV needs to reach before it leaves again
+        val: 0.8                                # minimum SoC the EV needs to reach before it leaves again
                                                 # unit: 1 [0, 1]
 
       min_soc_time:
@@ -1045,9 +1045,19 @@ sfh:
                                                 #                 in market price range
                                                 # note: does not apply when simulation ex-post markets
 
-      horizon: 86_400                           # market agent trading horizon
+      horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                 # unit: s
+                                                # note: value is randomly chosen from list
                                                 # note: range is limited by the control horizon
+
+      linear:
+        steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                # unit: steps [0, inf)
+                                                # example: timestep=900, steps_to_final=2
+                                                #   -> 1800s before the time is reached the final price is reached
+
+        steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                # unit: steps [0, inf)
 
       fcast:
         local:
@@ -2196,9 +2206,19 @@ mfh:
                                                 #                 in market price range
                                                 # note: does not apply when simulation ex-post markets
 
-      horizon: 86_400                           # market agent trading horizon
+      horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                 # unit: s
+                                                # note: value is randomly chosen from list
                                                 # note: range is limited by the control horizon
+
+      linear:
+        steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                # unit: steps [0, inf)
+                                                # example: timestep=900, steps_to_final=2
+                                                #   -> 1800s before the time is reached the final price is reached
+
+        steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                # unit: steps [0, inf)
 
       fcast:
         local: naive                            # forecasting method for local market prices
@@ -2924,9 +2944,19 @@ ctsp:
                                                 #                 in market price range
                                                 # note: does not apply when simulation ex-post markets
 
-      horizon: 86_400                           # market agent trading horizon
+      horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                 # unit: s
+                                                # note: value is randomly chosen from list
                                                 # note: range is limited by the control horizon
+
+      linear:
+        steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                # unit: steps [0, inf)
+                                                # example: timestep=900, steps_to_final=2
+                                                #   -> 1800s before the time is reached the final price is reached
+
+        steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                # unit: steps [0, inf)
 
       fcast:
         local: naive                            # forecasting method for local market prices
@@ -3658,9 +3688,19 @@ industry:
                                                 #                 in market price range
                                                 # note: does not apply when simulation ex-post markets
 
-      horizon: 86_400                           # market agent trading horizon
+      horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                 # unit: s
+                                                # note: value is randomly chosen from list
                                                 # note: range is limited by the control horizon
+
+      linear:
+        steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                # unit: steps [0, inf)
+                                                # example: timestep=900, steps_to_final=2
+                                                #   -> 1800s before the time is reached the final price is reached
+
+        steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                # unit: steps [0, inf)
 
       fcast:
         local: naive                            # forecasting method for local market prices
@@ -3910,9 +3950,19 @@ producer:
                                                   #                 in market price range
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: 86_400                           # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
           local: naive                            # forecasting method for local market prices
@@ -4137,13 +4187,21 @@ producer:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: 86_400                           # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
           local: naive                            # forecasting method for local market prices
@@ -4364,13 +4422,21 @@ producer:
                                                   #   - linear:     see docs
                                                   #   - zi:         zero intelligence, random bid and offer prices
                                                   #                 in market price range
-                                                  # note: each agent selects a random value off this list
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: 86_400                           # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
-                                                  # note: each agent selects a random value off this list
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
           local: naive                            # forecasting method for local market prices
@@ -4516,9 +4582,19 @@ storage:
                                                   #                 in market price range
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: 86_400                           # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
           local: naive                            # forecasting method for local market prices
@@ -4658,9 +4734,19 @@ storage:
                                                   #                 in market price range
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: 86_400                           # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
           local: naive                            # forecasting method for local market prices
@@ -4800,9 +4886,19 @@ storage:
                                                   #                 in market price range
                                                   # note: does not apply when simulation ex-post markets
 
-        horizon: 86_400                           # market agent trading horizon
+        horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                   # unit: s
+                                                  # note: value is randomly chosen from list
                                                   # note: range is limited by the control horizon
+
+        linear:
+          steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                  # unit: steps [0, inf)
+                                                  # example: timestep=900, steps_to_final=2
+                                                  #   -> 1800s before the time is reached the final price is reached
+
+          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                  # unit: steps [0, inf)
 
         fcast:
           local: naive                            # forecasting method for local market prices
