@@ -178,11 +178,17 @@ class Agents:
             },
         }
         # Available types of ctsp (obtained from the input data folder)
-        self.ctsp = self.__get_types(
-            path=os.path.join(self.input_path, 'agents', c.A_CTSP, c.P_INFLEXIBLE_LOAD), idx=0, sep='_')
+        try:
+            self.ctsp = self.__get_types(
+                path=os.path.join(self.input_path, 'agents', c.A_CTSP, c.P_INFLEXIBLE_LOAD), idx=0, sep='_')
+        except FileNotFoundError:
+            self.ctsp = []
         # Available types of industry (obtained from the input data folder)
-        self.industry = self.__get_types(
-            path=os.path.join(self.input_path, 'agents', c.A_INDUSTRY, c.P_INFLEXIBLE_LOAD), idx=0, sep='_')
+        try:
+            self.industry = self.__get_types(
+                path=os.path.join(self.input_path, 'agents', c.A_INDUSTRY, c.P_INFLEXIBLE_LOAD), idx=0, sep='_')
+        except FileNotFoundError:
+            self.industry = []
 
     def create_agents_file_from_config(self, overwrite: bool = False):
         """Creates the Excel file from the config file
@@ -272,11 +278,11 @@ class Agents:
         else:
             # Attempt to write the dataframes to Excel
             try:
-                writer = pd.ExcelWriter(f"{self.config_path}/agents.xlsx", engine="xlsxwriter")
-                for key, df in dict_agents.items():
-                    if df is not None:
-                        df.to_excel(writer, sheet_name=key)
-                writer.save()
+                with pd.ExcelWriter(f"{self.config_path}/agents.xlsx", engine="xlsxwriter") as writer:
+                    # Loop through the dictionary and write each dataframe to a separate worksheet
+                    for key, df in dict_agents.items():
+                        if df is not None:
+                            df.to_excel(writer, sheet_name=key)
             except PermissionError:
                 # Raise an error if the file is currently open and cannot be accessed
                 raise PermissionError("The file 'agents.xlsx' needs to be closed before running this function.")
@@ -946,7 +952,7 @@ class Agents:
         return values
 
     @staticmethod
-    def __find_max_train_period(plants: dict, keys: str | list[str] = 'days', period: str = 'days') -> pd.Timedelta:
+    def __find_max_train_period(plants: dict, keys: str | list[str] = ('offset', 'days'), period: str = 'days') -> pd.Timedelta:
 
         # Convert keys to a list if it is a string
         if isinstance(keys, str):

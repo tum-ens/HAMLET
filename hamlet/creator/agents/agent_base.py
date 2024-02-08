@@ -410,6 +410,18 @@ class AgentBase(Agents):
         """
         return self.fill_columns(c.P_HEAT_STORAGE, self._heat_storage_config, self._heat_storage_grid, **kwargs)
 
+    def _heat_storage_config(self, key: str, config: ordereddict) -> pd.DataFrame:
+        """
+            Fills all heat_storage columns based on the config file
+        """
+        raise NotImplementedError(f"The method '_heat_storage_config' is not implemented yet for agent {self.type}.")
+
+    def _heat_storage_grid(self, key: str, config: ordereddict, **kwargs) -> pd.DataFrame:
+        """
+            Fills all heat_storage columns based on the grid file
+        """
+        raise NotImplementedError(f"The method '_heat_storage_grid' is not implemented yet for agent {self.type}.")
+
     def fill_ems(self):
         """
             Fills all battery columns
@@ -419,5 +431,8 @@ class AgentBase(Agents):
 
         # general
         self.df = self._add_info_simple(keys=[key], config=config, df=self.df)
+
+        # Change the values where the value should be randomly picked from a list
+        self.df[f'{key}/market/horizon'] = np.random.choice(config['market']['horizon'], size=len(self.df))
 
 
