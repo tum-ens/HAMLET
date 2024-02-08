@@ -417,8 +417,8 @@ class Hp(LinopyComps):
             self.power_electricity = np.array(self.fcast[f'{self.name}_{c.S_POWER}_{c.ET_ELECTRICITY}_{c.P_HEAT}'])
             self.power_electricity = np.maximum(self.info['sizing']['power'] / self.cop_heat, self.power_electricity)
             self.power_electricity = np.rint(-self.power_electricity).astype(int)
-        except KeyError:
-            self.power_electricity = [np.inf] * len(self.timesteps)
+        except (KeyError, pl_e.ColumnNotFoundError):
+            self.power_electricity = [-np.inf] * len(self.timesteps)
 
         self.upper, self.lower = self.power_heat, 0
 

@@ -160,14 +160,6 @@ class Rtc(ControllerBase):
             self.define_constraints()
             self.define_objective()
 
-            # Print the model
-            # for name, var in self.model.variables.items():
-            #     print(var)
-            # for name, con in self.model.constraints.items():
-            #     print(con)
-            # print(self.model.objective)
-            # exit()
-
         def create_plants(self):
             for plant_name, plant_data in self.plants.items():
 
@@ -346,6 +338,15 @@ class Rtc(ControllerBase):
                 print(f'Exited with status "{status[0]}". \n '
                       f'Infeasibilities for agent {self.agent.agent_id}:')
                 print(self.model.print_infeasibilities())
+
+                # Print the model
+                print('Model:')
+                for name, var in self.model.variables.items():
+                    print(var)
+                for name, con in self.model.constraints.items():
+                    print(con)
+                print(self.model.objective)
+
                 raise ValueError(f"Optimization failed: {status}")
 
             # Process the solution into control commands and return
@@ -429,7 +430,9 @@ class Rtc(ControllerBase):
 
                 if key:  # Check for matching key
                     # Get power from solution
-                    power = solution[key]
+                    # Note: Since negative power means that the plant takes energy from the grid,
+                    #  we need to multiply the power by -1. Thus the signs are also reversed subsequently.
+                    power = solution[key] * -1
 
                     # Get the column dtype
                     dtype = self.socs[col].dtype
