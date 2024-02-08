@@ -79,6 +79,26 @@ MT_LH2M = 'lh2m'
 MT_WHOLESALE = 'wholesale'  # might not be needed
 MT_BALANCING = 'balancing'  # might not be needed
 
+# MARKET ACTIONS
+MA_CLEAR = 'clear'
+MA_SETTLE = 'settle'
+
+# MARKET CLEARING TYPES
+MCT_EX_ANTE = 'ex-ante'
+MCT_EX_POST = 'ex-post'
+
+# MARKET CLEARING METHODS
+MCM_PDA = 'pda'
+MCM_COMMUNITY = 'community'
+
+# MARKET PRICING
+MP_UNIFORM = 'uniform'
+MP_DISCRIMINATORY = 'discriminatory'
+
+# MARKET COUPLING
+MC_ABOVE = 'above'
+MC_BELOW = 'below'
+
 # TRADE TYPES
 TT_MARKET = 'market'
 TT_RETAIL = 'retail'
