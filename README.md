@@ -92,9 +92,10 @@ or just to ask about the project.
 markus.doepfert@tum.de  
 Research Associate @ TUM ENS
 
-## References
+[//]: # (## References)
 
-TBD
+[//]: # ()
+[//]: # (TBD)
 
 ## License
 
