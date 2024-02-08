@@ -318,6 +318,7 @@ class Database:
             ```
 
         """
+        # TODO: Make a more performant customized implementation to get the market data in lem (get_bids_offers())
         filters = {}    # filters to be applied
         new_columns_count = 0   # number of new columns added to df
         new_columns = []    # names of new columns added to df
