@@ -28,31 +28,38 @@ import random
 class TradingBase:
 
     def __init__(self, **kwargs):
-        
+
         # Get the kwarguments
         self.kwargs = kwargs
-        
+
         # Get the timetable and timestep
         self.timetable = kwargs['timetable']
         self.dt = self.timetable[1, c.TC_TIMESTEP] - self.timetable[0, c.TC_TIMESTEP]  # in datetime format
         self.dt_hours = self.dt / pd.Timedelta(hours=1)  # in hours
-            
+
         # Get the energy type
         self.energy_type = self.timetable.row(0, named=True)[c.TC_ENERGY_TYPE]
-        
+
         # Get the market data, name, type and transactions
         self.market_data = kwargs['market_data']
         self.market_name = self.market_data.market_name
         self.market_type = self.market_data.market_type
         self.market_transactions = self.market_data.market_transactions
-        
-        # Get the agent data, id and trading horizon
+
+        # Get the agent data, id
         self.agent = kwargs['agent']
         self.agent_id = self.agent.account[c.K_GENERAL]['agent_id']
+
+        # Get the trading horizon and the strategy parameters
         self.trading_horizon = pd.Timedelta(seconds=self.agent.account[c.K_EMS][c.K_MARKET]['horizon'])
-        
+        self.strategy = self.agent.account[c.K_EMS][c.K_MARKET]['strategy']
+        try:
+            self.strategy_params = self.agent.account[c.K_EMS][c.K_MARKET][self.strategy]
+        except KeyError:
+            self.strategy_params = None
+
         # Create the bids and offers table
-        self.bids_offers = pl.LazyFrame(schema=c.TS_BIDS_OFFERS)
+        self.bids_offers = pl.DataFrame(schema=c.TS_BIDS_OFFERS)
 
         # Get the market transactions for the given market and agent for the given time horizon
         self.market_transactions = self.market_transactions.filter((pl.col(c.TC_MARKET) == self.market_type)
@@ -73,7 +80,7 @@ class TradingBase:
         self.setpoints = self.agent.setpoints.select([c.TC_TIMESTAMP, f'{self.market_name}_{self.energy_type}'])
         self.setpoints = self.setpoints.rename({c.TC_TIMESTAMP: c.TC_TIMESTEP})
         self.setpoints = self.setpoints.with_columns((pl.col(f'{self.market_name}_{self.energy_type}') * self.dt_hours).cast(pl.Int32))
-        
+
         # Get the forecast of the prices
         self.forecast = self.agent.forecasts
         # Reduce the table to only include the relevant columns (energy price sell and buy)
@@ -86,25 +93,22 @@ class TradingBase:
     def _preprocess_bids_offers(self):
         # Combine setpoints and market data to know how much energy is needed
         self.market_transactions = self.market_transactions.join(self.setpoints, on=c.TC_TIMESTEP, how='outer')
-        
-        # with pl.Config(tbl_cols=20, fmt_str_lengths=200, tbl_rows=100):
-        #     print(self.market_transactions)
-        
+
         # Fill all empty columns with zero
         self.market_transactions = self.market_transactions.fill_null(0)
-        
+
         # Check if there is a difference between the setpoints and the previous market results
         self.market_transactions = self.market_transactions.with_columns(
             (pl.col(f'{self.market_name}_{self.energy_type}') - pl.col(c.TC_ENERGY)).alias('buy_sell').cast(pl.Int32))
-        
+
         # Split the buy and sell values
         self.market_transactions = self.market_transactions.with_columns(
             [
                 pl.col('buy_sell').apply(lambda x: abs(x) if x > 0 else 0).alias(c.TC_ENERGY_IN).cast(pl.UInt64),
                 pl.col('buy_sell').apply(lambda x: abs(x) if x < 0 else 0).alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
             ]
-        ) 
-        
+        )
+
         # Drop unnecessary columns
         self.market_transactions = self.market_transactions.drop([c.TC_ENERGY, 'buy_sell', f'{self.market_name}_{self.energy_type}'])
 
@@ -151,7 +155,7 @@ class TradingBase:
         # Drop unnecessary columns
         self.bids_offers = self.bids_offers.drop(['within_horizon', 'time_to_trade',
                                                   'energy_price_sell', 'energy_price_buy'])
-        
+
         return self.bids_offers
 
 
@@ -164,36 +168,44 @@ class Linear(TradingBase):
 
     def create_bids_offers(self):
 
+        # Names for the internal columns (will be removed at the end of the function)
+        c_factor = 'multiplication_factor'
+
         # Preprocess the bids and offers table
         self.bids_offers = self._preprocess_bids_offers()
 
-        # with pl.Config(set_tbl_cols=20, set_tbl_rows=20, set_tbl_width_chars=400):
+        # with pl.Config(set_tbl_cols=20, set_tbl_rows=100, set_tbl_width_chars=400):
         #     print(self.bids_offers)
+
+        # Filter out rows that are not within the trading horizon
+        self.bids_offers = self.bids_offers.filter(pl.col('within_horizon') == True)
 
         # Get the length of the table
         len_table = len(self.bids_offers)
 
-        # Add column that contains the number of the row
-        self.bids_offers = self.bids_offers.with_columns(
-            [
-                pl.Series(range(0, len_table)).alias('row_number'),
-            ]
-        )
+        # Add column that contains multiplication factor for the price per unit
+        # Note: This value depends on how many iterations before the maximum price is reached and the inclination of
+        #  the price increase/decrease
+        steps_final = self.strategy_params['steps_to_final']
+        steps_initial = self.strategy_params['steps_from_init']
+        mul_factor = np.linspace(0, len_table, len_table - steps_final - steps_initial)
+        mul_factor = np.concatenate(([0] * steps_final, mul_factor, [len_table] * steps_initial))
+        self.bids_offers = self.bids_offers.with_columns(pl.Series(mul_factor).alias(c_factor))
 
         # Add columns for the price per unit
         self.bids_offers = self.bids_offers.with_columns(
             [
                 (pl.col('energy_price_buy')
-                 + ((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table * pl.col('row_number')))
+                 + ((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table * pl.col(c_factor)))
                 .alias(c.TC_PRICE_PU_IN).round().cast(pl.Int32),
                 (((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table
-                  * (len_table - pl.col('row_number'))) + pl.col('energy_price_buy'))
+                  * (len_table - pl.col(c_factor))) + pl.col('energy_price_buy'))
                 .alias(c.TC_PRICE_PU_OUT).round().cast(pl.Int32),
             ]
         )
 
         # Remove the row number column
-        self.bids_offers = self.bids_offers.drop('row_number')
+        self.bids_offers = self.bids_offers.drop(c_factor)
 
         # Postprocess the bids and offers table
         self.bids_offers = self._postprocess_bids_offers()
