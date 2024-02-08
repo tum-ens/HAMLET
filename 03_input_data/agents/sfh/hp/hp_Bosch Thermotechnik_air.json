@@ -1,0 +1,9 @@
+{ 
+  "type": "hp",
+  "manufacturer": "Bosch Thermotechnik",
+  "model": "Bosch CS7000iAW 13 IRB",
+  "hp_type": "Outdoor Air/Water",
+  "cop_ref": 2.15,
+  "data": "hplib_database.csv",
+  "link": "https://github.com/FZJ-IEK3-VSA/hplib/tree/main"
+}

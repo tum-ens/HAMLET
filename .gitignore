@@ -1,5 +1,9 @@
 .idea
 
+# Folders
+04_scenarios/*
+05_results/*
+
 # C extensions
 *.so
 
@@ -66,7 +70,7 @@ instance/
 .scrapy
 
 # Sphinx documentation
-00 - docs/_build/
+00_docs/_build/
 
 # PyBuilder
 target/
@@ -124,8 +128,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-lem_analysis/monte_carlo/simulations/
 
-lem_analysis/
+**/__pycache__/
+scripts
 
-scripts_case_study_1/
+# for macbook
+**/.DS_Store
+.Rhistory

@@ -1,0 +1,9 @@
+{
+  "type": "hp",
+  "manufacturer": "DAIKIN Europe",
+  "model": "EGSAX06D9W(G) (3PH)",
+  "hp_type": "Brine/Water",
+  "cop_ref": 3.13,
+  "data": "hplib_database.csv",
+  "link": "https://github.com/FZJ-IEK3-VSA/hplib/tree/main"
+}

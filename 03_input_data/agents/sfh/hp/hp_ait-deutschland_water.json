@@ -1,0 +1,9 @@
+{
+  "type": "hp",
+  "manufacturer": "ait-deutschland",
+  "model": "WWC 100H/X",
+  "hp_type": "Water/Water",
+  "cop_ref": 3.52,
+  "data": "hplib_database.csv",
+  "link": "https://github.com/FZJ-IEK3-VSA/hplib/tree/main"
+}
