@@ -272,8 +272,11 @@ class Hp(LinopyComps):
         try:
             self.target = kwargs['targets'][f'{self.name}'][0]
         except pl_e.ColumnNotFoundError:
-            self.target = kwargs['targets'][f'{self.name}_{c.P_HP}_{c.ET_HEAT}'][0]
-        self.cop_heat = self.ts[f'{self.name}_{c.S_COP}_{c.P_HEAT}'][0] * c.COP100_TO_COP
+            self.target = kwargs['targets'][f'{self.name}_{c.P_HP}_{c.ET_ELECTRICITY}'][0]
+        try:
+            self.cop_heat = self.ts[f'{self.name}_{c.S_COP}_{c.P_HEAT}'][0] * c.COP100_TO_COP
+        except pl_e.ColumnNotFoundError:
+            self.cop_heat = self.ts[f'{self.name}_cop'][0]
         # TODO: Model dhw separately (as a different energy type)
         # self.cop_dhw = self.ts[f'{self.name}_{c.S_COP}_{c.P_DHW}'][0] * c.COP100_TO_COP
 
@@ -284,18 +287,21 @@ class Hp(LinopyComps):
             self.power_heat = max(self.info['sizing']['power'],
                                   self.ts[f'{self.name}_{c.S_POWER}_{c.ET_HEAT}_{c.P_HEAT}'][0])
         except pl_e.ColumnNotFoundError:
-            self.power_heat = inf
+            try:
+                self.power_heat = self.info['sizing']['power']
+            except KeyError:
+                self.power_heat = inf
         # self.power_dhw = max(self.info['sizing']['power'],
         #                      self.ts[f'{self.name}_{c.S_POWER}_{c.ET_HEAT}_{c.P_DHW}'][0])
 
         # Calculate the power for electricity
         try:
-            self.power_electricity = int(round(max(self.info['sizing']['power'] / self.cop_heat,
+            self.power_electricity = -int(round(max(self.info['sizing']['power'] / self.cop_heat,
                                                    self.ts[f'{self.name}_{c.S_POWER}_{c.ET_ELECTRICITY}_{c.P_HEAT}'][0])))
-        except KeyError:
-            self.power_electricity = inf
+        except pl_e.ColumnNotFoundError:
+            self.power_electricity = -inf
 
-        self.upper, self.lower = self.power_heat, 0
+        self.upper, self.lower = 0, self.power_electricity
 
     def define_variables(self, model, **kwargs) -> Model:
         self.comp_type = kwargs['comp_type']
@@ -307,7 +313,7 @@ class Hp(LinopyComps):
 
         # Define the electricity power variable (negative as it consumes electricity)
         model = self.define_electricity_variable(model, comp_type=self.comp_type,
-                                                 lower=-self.power_electricity, upper=0)
+                                                 lower=self.power_electricity, upper=0)
 
         # Define the target and deviation variables (refers to the heat power)
         model = self._define_target_and_deviations_variables(model)
@@ -385,22 +391,22 @@ class Ev(LinopyComps):
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
         self.soc = kwargs['socs'][f'{self.name}'][0] - self.energy  # state of charge at timestep (energy)
 
-
+        # Calculate the energy needed to charge to full
         self.energy_to_full = self.capacity - self.soc  # energy needed to charge to full
 
         # Define the charging power variables (depends on availability and v2g)
         if self.availability:
-            # Set upper bound by calculating max charging power according to capacity, soc, efficiency and dt
-            self.upper = int(round(min(self.charging_power,
-                                       self.energy_to_full / self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
-
-            # Set lower bound based on v2g
+            # Set upper bound based on v2g
             if self.v2g:
                 # Set lower bound by calculating max discharging power according to capacity, soc, efficiency and dt
-                self.lower = -int(round(min(self.charging_power,
-                                            self.soc * self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
+                self.upper = int(round(min(self.charging_power,
+                                           self.soc * self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
             else:
-                self.lower = 0
+                self.upper = 0
+
+            # Set lower bound by calculating max charging power according to capacity, soc, efficiency and dt
+            self.lower = -int(round(min(self.charging_power,
+                                        self.energy_to_full / self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
 
         else:
             self.lower, self.upper = 0, 0
@@ -412,16 +418,19 @@ class Ev(LinopyComps):
         model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=self.lower, upper=self.upper)
 
         # Define the target variable
-        model.add_variables(name=f'{self.name}_{self.comp_type}_target',
-                            lower=self.target, upper=self.target, integer=True)
+        model = self._define_target_and_deviations_variables(model)
 
-        # Define the deviation variable for positive and negative deviations
-        # Deviation when more is charged than according to target
-        model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_pos',
-                            lower=0, upper=self.upper - self.target, integer=True)
-        # Deviation when less is discharged than according to target
-        model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_neg',
-                            lower=0, upper=self.target - self.lower, integer=True)
+        # # Define the target variable
+        # model.add_variables(name=f'{self.name}_{self.comp_type}_target',
+        #                     lower=self.target, upper=self.target, integer=True)
+        #
+        # # Define the deviation variable for positive and negative deviations
+        # # Deviation when more is charged than according to target
+        # model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_pos',
+        #                     lower=0, upper=self.upper - self.target, integer=True)
+        # # Deviation when less is discharged than according to target
+        # model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_neg',
+        #                     lower=0, upper=self.target - self.lower, integer=True)
 
         return model
 
@@ -457,9 +466,9 @@ class SimpleStorage(LinopyComps):
 
         # Define the charging and discharging power variables (depend on capacity, soc, efficiency and dt)
         self.upper = int(round(min(self.charging_power,
-                         self.energy_to_full / self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
+                         self.soc * self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
         self.lower = -int(round(min(self.charging_power,
-                          self.soc * self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
+                          self.energy_to_full / self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
 
     def define_variables(self, model, **kwargs) -> Model:
         self.comp_type = kwargs['comp_type']
@@ -489,7 +498,6 @@ class SimpleStorage(LinopyComps):
                 raise NotImplementedError(f'{energy_type} has not been implemented yet for the simple storage system.')
 
         return model
-
 
     def define_constraints(self, model) -> Model:
 

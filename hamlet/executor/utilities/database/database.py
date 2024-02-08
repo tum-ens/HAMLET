@@ -260,7 +260,6 @@ class Database:
                 region_markets[unique_key][c.TN_OFFERS_UNCLEARED] = [market.offers_uncleared]
                 region_markets[unique_key][c.TN_POSITIONS_MATCHED] = [market.positions_matched]
 
-        start = time.perf_counter()
         # Save results to region
         for market, results in region_markets.items():
             # Split market name into market type and market name
@@ -275,13 +274,13 @@ class Database:
                                                  + results[c.TN_BIDS_CLEARED], how='vertical'))
             market_db.set_offers_cleared(pl.concat([market_db.offers_cleared]
                                                    + results[c.TN_OFFERS_CLEARED], how='vertical'))
-            # TODO: Positions matched
+            # Note: Positions matched are not used in the current version
             # market_db.set_positions_matched(pl.concat(results[c.TN_POSITIONS_MATCHED], how='vertical'))
             # Tables that are to be overwritten
             market_db.set_bids_uncleared(pl.concat(results[c.TN_BIDS_UNCLEARED], how='vertical'))
             market_db.set_offers_uncleared(pl.concat(results[c.TN_OFFERS_UNCLEARED], how='vertical'))
-        # print(f'Post markets to region: {time.perf_counter() - start}')
-        # update local market price in forecasters
+
+        # Update local market price in forecasters
         self.__regions[region].update_local_market_in_forecasters()
 
     """static methods"""
@@ -319,6 +318,7 @@ class Database:
             ```
 
         """
+        # TODO: Make a more performant customized implementation to get the market data in lem (get_bids_offers())
         filters = {}    # filters to be applied
         new_columns_count = 0   # number of new columns added to df
         new_columns = []    # names of new columns added to df

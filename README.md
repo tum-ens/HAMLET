@@ -3,23 +3,37 @@ HAMLET
 
 **H**ierarchical **A**gent-based **M**arkets for **L**ocal **E**nergy **T**rading
 
-An open-source tool for the agent-based development and testing of energy market applications at a local level.
-
-IN DEVELOPMENT: Please see the branch "develop" for most recent version.
+An open-source tool for the agent-based development and testing of energy market applications (at a local level).
 
 ## Description
 
-TBD
+Due to the increasing complexity of energy systems, the need for more detailed and realistic models has arisen. 
+Agent-based models are a promising approach to model the behavior of individual actors in energy systems. For this 
+purpose, we developed HAMLET, a modular and extendable open-source toolbox for the development and testing of market 
+designs with a focus on local interactions at the distribution level. HAMLET is designed to be used by researchers 
+to investigate the interactions between market participants and the impact of different market designs on the technical 
+and economic performance of energy systems.
+
+HAMLET was developed with extendability and modularity in mind. Therefore, each functionality can be easily swapped for 
+another to test, for example, other market clearing algorithms, trading strategies, or control strategies. The aim of 
+the tool is to provide a common platform for researchers to develop and test their own market designs and to compare 
+their results with other market designs.
+
+A documentation is currently being developed and will be available soon.
+
+HAMLET was developed and is maintained by the 
+[Chair of Renewable and Sustainable Energy Systems](https://www.epe.ed.tum.de/en/ens/homepage/) of the [Technical
+University of Munich](https://www.tum.de/en/). Version 0.1 (February 2024) was developed as part of the research project 
+[STROM](https://www.epe.ed.tum.de/en/ens/research/projects/current-projects/strom-sp-3/), funded by the Bavarian Ministry of Economic Affairs, 
+Regional Development and Energy.
 
 ## Features
 HAMLET offers...
-* a fully open-source, agent-based local energy market modelling toolbox
+* a fully open-source, agent-based energy market modelling toolbox
 * a modular and extendable design for easy adaptation to your own research questions
-* real-time capabilities for the development and testing of hard- and software
-* a database-agnostic approach that enables the integration of multiple database technologies
 * integrated time-series data for several plant types (household loads, pv, wind, heat pumps, electric vehicles etc...)
-* template functionality for load and generation forecasting, trading strategies, cutting-edge market clearing
-  algorithms designed specifically for LEMs [paper under review] and much more...
+* template functionality for load and generation forecasting, trading strategies, market clearing
+  algorithms and control strategies and much more...
 
 so you only need to adapt the components you want to investigate and/or improve on
 
@@ -67,12 +81,8 @@ If using PyCharm, clone the repository, for example, to `./PyCharmProjects/hamle
     - Navigate to ./PycharmProjects/hamlet/01 - examples
 	- Execute 01_create_scenario.py, followed by 02_execute_scenario.py
     - When the simulation has completed (this may take some time, depending on your system), 
-      analyze the results by executing 03_analyze_scenario.py
-	- Look at the output plots under hamlet/05 - results/example_singlemarket/analysis/
-
-Your installation was successful if you see plots similar to the following:
-
-TBD
+      analyze the results by executing 03_analyze_scenario.py (no analysis available yet)
+	- Look at the output plots under hamlet/05_results/example_singlemarket/analysis/ (once implemented)
 
 ## Contact
 Feel free to contact us if you want to contribute to this project, cooperate on an interesting research question

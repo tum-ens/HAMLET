@@ -325,8 +325,11 @@ class Sfh(AgentBase):
             Fills all columns based on the provided key
         """
 
-        # Get the config for the key
-        config = self.config[key]
+        # Get the config for the key if it exists
+        try:
+            config = self.config[key]
+        except KeyError:
+            return self.df
 
         if self.method == 'config':
             self.df = config_method(key=key, config=config)
@@ -383,11 +386,11 @@ class Sfh(AgentBase):
         # general
         self.df[f"{key}/owner"] = (df['demand'] > 0).astype(int)
         self.df[f"{key}/num"] = self.df[f"{key}/owner"]  # equals owner as only one inflexible load per agent
-        
+
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
             # Get demand from load sheet
-            self.df[f"{key}/sizing/demand_{num}"] = (df['demand'] * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/demand_{num}"] = (round(df['demand'] * 1e6)).astype('Int64')
             # Check if file column is empty and fill it with the closest file if so
             if df['file'].isnull().all():
                 # Pick file that is closest to the demand
@@ -485,7 +488,7 @@ class Sfh(AgentBase):
         from_config_if_empty = kwargs.get('from_config_if_empty', False)
 
         # Drop all rows that do not contain the load type and set the index to the owner
-        df = self.load[self.load['load_type'] == key].set_index('owner', drop=False)
+        df = self.load[self.load['load_type'] == key]
 
         # Check if file contains the plant type (load > 0), if not use the config file to generate it
         if from_config_if_empty and df['load_type'].value_counts().get(key, 0) == 0:
@@ -496,6 +499,9 @@ class Sfh(AgentBase):
         if len(df) == 0:
             self.df[f"{key}/owner"] = 0
             return self.df
+
+        # Set the index to the owner
+        df = df.set_index('owner', drop=False)
 
         # Check if there is more than one plant per agent
         if df.index.duplicated().any():
@@ -511,8 +517,8 @@ class Sfh(AgentBase):
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
             # Get demand from load sheet
-            self.df[f"{key}/sizing/demand_{num}"] = self.df.index.map(df['demand'] * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['heat_file'])
+            self.df[f"{key}/sizing/demand_{num}"] = (self.df.index.map(round(df['demand'] * 1e6))).astype('Int64')
+            self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file_add'])
             self.df[f"{key}/sizing/temperature_{num}"] = self.df.index.map(df['temperature'])
 
         # forecast
@@ -591,7 +597,7 @@ class Sfh(AgentBase):
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
             # Get demand from load sheet
-            self.df[f"{key}/sizing/demand_{num}"] = self.df.index.map(df['demand'] * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/demand_{num}"] = (self.df.index.map(round(df['demand'] * 1e6))).astype('Int64')
             self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['heat_file'])
             self.df[f"{key}/sizing/temperature_{num}"] = self.df.index.map(df['temperature'])
 
@@ -647,13 +653,16 @@ class Sfh(AgentBase):
         # Get all the kwargs
         from_config_if_empty = kwargs.get('from_config_if_empty', False)
 
-        # Check if file contains the plant type (count > 0), if not use the config file to generate it
-        if from_config_if_empty and self.sgen['sgen_type'].value_counts()[key] == 0:
-            self._pv_config(key=key, config=config)
+        # Drop all rows that do not contain the plant type and set the index to the owner
+        try:
+            df = self.sgen[self.sgen['plant_type'] == key] #.set_index('owner', drop=False)
+        except KeyError:
             return self.df
 
-        # Drop all rows that do not contain the plant type and set the index to the owner
-        df = self.sgen[self.sgen['plant_type'] == key].set_index('owner', drop=False)
+        # Check if file contains the plant type (count > 0), if not use the config file to generate it
+        if from_config_if_empty and df['sgen_type'].value_counts()[key] == 0:
+            self._pv_config(key=key, config=config)
+            return self.df
 
         # Check if there are any pv plants, if not set all owners to 0 and return
         if len(df) == 0:
@@ -661,35 +670,40 @@ class Sfh(AgentBase):
             self.df[f"{key}/num"] = 0
             return self.df
 
-        # Check if there is more than one plant per agent
-        if df.index.duplicated().any():
-            raise NotImplementedError(f"More than one {key} per agent is not implemented yet. "
-                                      f"Combine the {key} into one. "
-                                      f"Aborting scenario creation...")
-
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        
-        
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant
 
-        # sizing (all parameters that can be indexed)
-        for num in range(max(self.df[f"{key}/num"])):  # Currently only one pv per agent is supported
+        # Split the dataframe into dataframes with at most one device per owner
+        max_devices = df['owner'].value_counts().max()  # Maximum number of devices for a single owner
+        plant_dfs = []
+        for num in range(max_devices):
+            device_df = df.groupby('owner').nth(num)
+            plant_dfs.append(device_df)
+
+        # sizing
+        # Map each dataframe to the self.df dataframe
+        for num, plant_df in enumerate(plant_dfs):
             # Match the power with the power specified in sgen sheet
-            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(df['power']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/power_{num}"] = self.df.index.map(
+                round(plant_df.set_index('owner')['power'] * 1e6)).astype('Int64')
 
             # Check if file column exists
             if 'file' in df and not df['file'].isnull().all():
                 # Fill rows with values from sgen sheet
-                self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file'])
-                self.df[f"{key}/sizing/orientation_{num}"] = self.df.index.map(df['orientation']).fillna(0)
-                self.df[f"{key}/sizing/angle_{num}"] = self.df.index.map(df['angle']).fillna(0)
+                self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(plant_df.set_index('owner')['file'])
+                self.df[f"{key}/sizing/orientation_{num}"] = self.df.index.map(
+                    plant_df.set_index('owner')['orientation']).fillna(0)
+                self.df[f"{key}/sizing/angle_{num}"] = self.df.index.map(
+                    plant_df.set_index('owner')['angle']).fillna(0)
             # If file column does not exist, check if orientation and angle columns exist and all rows are filled
             elif 'orientation' in df and 'angle' in df \
                     and not df['orientation'].isnull().any() and not df['angle'].isnull().any():
                 # Fill orientation and angle from sgen sheet
-                self.df[f"{key}/sizing/orientation_{num}"] = self.df.index.map(df['orientation'])
-                self.df[f"{key}/sizing/angle_{num}"] = self.df.index.map(df['angle'])
+                self.df[f"{key}/sizing/orientation_{num}"] = self.df.index.map(
+                    plant_df.set_index('owner')['orientation'])
+                self.df[f"{key}/sizing/angle_{num}"] = self.df.index.map(
+                    plant_df.set_index('owner')['angle'])
                 # Pick random specs file (> num as num starts at 0)
                 self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'specs'
                 self.df[f"{key}/sizing/file_{num}"] = self._pick_files(list_type=self.df[f"{key}/sizing/file_{num}"],
@@ -709,7 +723,7 @@ class Sfh(AgentBase):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-        # forecast
+            # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
@@ -768,13 +782,19 @@ class Sfh(AgentBase):
             return self.df
 
         # Drop all rows that do not contain the plant type and set the index to the owner
-        df = self.sgen[self.sgen['plant_type'] == key].set_index('owner', drop=False)
+        try:
+            df = self.sgen[self.sgen['plant_type'] == key] #.set_index('owner', drop=False)
+        except KeyError:
+            return self.df
 
         # Check if there are any pv plants, if not set all owners to 0 and return
         if len(df) == 0:
             self.df[f"{key}/owner"] = 0
             self.df[f"{key}/num"] = 0
             return self.df
+
+        # Set the index to the owner
+        df = df.set_index('owner', drop=False)
 
         # Check if there is more than one plant per agent
         if df.index.duplicated().any():
@@ -785,13 +805,11 @@ class Sfh(AgentBase):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        
-        
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
             # Match the power with the power specified in sgen sheet
-            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(df['power']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(round(df['power'] * 1e6))).astype('Int64')
 
             # Check if file column exists
             if 'file' in df and not df['file'].isnull().all():
@@ -820,8 +838,8 @@ class Sfh(AgentBase):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-        # forecast
-        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
+            # forecast
+        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -879,12 +897,18 @@ class Sfh(AgentBase):
             return self.df
 
         # Drop all rows that do not contain the plant type and set the index to the owner
-        df = self.sgen[self.sgen['plant_type'] == key].set_index('owner', drop=False)
+        try:
+            df = self.sgen[self.sgen['plant_type'] == key] #.set_index('owner', drop=False)
+        except KeyError:
+            return self.df
 
         # Check if there are any pv plants, if not set all owners to 0 and return
         if len(df) == 0:
             self.df[f"{key}/owner"] = 0
             return self.df
+
+        # Set the index to the owner
+        df = df.set_index('owner', drop=False)
 
         # Check if there is more than one plant per agent
         if df.index.duplicated().any():
@@ -895,13 +919,11 @@ class Sfh(AgentBase):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        
-        
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
             # Match the power with the power specified in sgen sheet
-            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(df['power']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(round(df['power'] * 1e6))).astype('Int64')
 
             # Check if file column exists
             if 'file' in df and not df['file'].isnull().all():
@@ -918,8 +940,8 @@ class Sfh(AgentBase):
             # Make all plants controllable
             self.df[f"{key}/sizing/controllable_{num}"] = True
 
-        # forecast
-        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
+            # forecast
+        self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -968,7 +990,7 @@ class Sfh(AgentBase):
         from_config_if_empty = kwargs.get('from_config_if_empty', False)
 
         # Drop all rows that do not contain the load type and set the index to the owner
-        df = self.load[self.load['load_type'] == key].set_index('owner', drop=False)
+        df = self.load[self.load['load_type'] == key]
 
         # Check if file contains the plant type (load > 0), if not use the config file to generate it
         if from_config_if_empty and df['load_type'].value_counts().get(key, 0) == 0:
@@ -980,6 +1002,9 @@ class Sfh(AgentBase):
             self.df[f"{key}/owner"] = 0
             return self.df
 
+        # Set the index to the owner
+        df = df.set_index('owner', drop=False)
+
         # Check if there is more than one plant per agent
         if df.index.duplicated().any():
             raise NotImplementedError(f"More than one {key} per agent is not implemented yet. "
@@ -990,17 +1015,16 @@ class Sfh(AgentBase):
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
             'Int64')  # all agents that have plant type
-        
-        
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
             # Add power of hp
-            self.df[f"{key}/sizing/power_{num}"] = self.df.index.map(df['power'] * 1e6).astype('Int64')
-            # Check if cop_file column exists
-            if 'file' in df and not df['cop_file'].isnull().all():
+            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(round(df['power'] * 1e6))).astype('Int64')
+            # TODO: Needs to be changed to file_add once the correct column name is implemented
+            # Check if heat_file column exists
+            if 'file' in df and not df['file_add'].isnull().all():
                 # Fill rows with values from sgen sheet
-                self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['cop_file'])
+                self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file_add'])
             else:
                 # Add random specs file to all agents that have a plant (> num as num starts at 0)
                 self.df[f"{key}/sizing/file_{num}"].loc[self.df[f"{key}/num"] > num] = 'specs'
@@ -1057,7 +1081,7 @@ class Sfh(AgentBase):
         from_config_if_empty = kwargs.get('from_config_if_empty', False)
 
         # Drop all rows that do not contain the load type and set the index to the owner
-        df = self.load[self.load['load_type'] == key].set_index('owner', drop=False)
+        df = self.load[self.load['load_type'] == key]
 
         # Check if file contains the plant type (load > 0), if not use the config file to generate it
         if from_config_if_empty and df['load_type'].value_counts().get(key, 0) == 0:
@@ -1067,31 +1091,46 @@ class Sfh(AgentBase):
         # Check if there are any ev plants, if not set all owners to 0 and return
         if len(df) == 0:
             self.df[f"{key}/owner"] = 0
+            self.df[f"{key}/num"] = 0
             return self.df
-
-        # Check if there is more than one plant per agent
-        if df.index.duplicated().any():
-            raise NotImplementedError(f"More than one {key} per agent is not implemented yet. "
-                                      f"Combine the {key} into one. "
-                                      f"Aborting scenario creation...")
 
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
-        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype(
-            'Int64')  # all agents that have plant type
+        self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have plant
+
+        # # Reset the index to remove the 'owner' as an index level TODO: Check if index can simply be set later and does not need to be owner before
+        # df_reset = df.reset_index(drop=True)
+
+        # Split the dataframe into dataframes with at most one device per owner
+        max_devices = df['owner'].value_counts().max()  # Maximum number of devices for a single owner
+        plant_dfs = []
+        for num in range(max_devices):
+            device_df = df.groupby('owner').nth(num)
+            plant_dfs.append(device_df)
 
         # sizing
-        for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
-            self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(df['file_add'])
-            self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/charging_home_{num}"] = (self.df.index.map(df['charging_home']) * 1e6).astype(
-                'Int64')
-            self.df[f"{key}/sizing/charging_AC_{num}"] = (self.df.index.map(df['charging_ac']) * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/charging_DC_{num}"] = (self.df.index.map(df['charging_dc']) * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/charging_efficiency_{num}"] = self.df.index.map(df['efficiency'])
-            self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
-            self.df[f"{key}/sizing/v2g_{num}"] = self.df.index.map(df['v2g'])
-            self.df[f"{key}/sizing/v2h_{num}"] = self.df.index.map(df['v2h'])
+        # Map each dataframe to the self.df dataframe
+        for num, plant_df in enumerate(plant_dfs):
+            self.df[f"{key}/sizing/file_{num}"] = self.df.index.map(plant_df.set_index('owner')['file_add'])
+            self.df[f"{key}/sizing/capacity_{num}"] = self.df.index.map(
+                round(plant_df.set_index('owner')['capacity'] * 1e6)).astype('Int64')
+            self.df[f"{key}/sizing/charging_home_{num}"] = self.df.index.map(
+                round(plant_df.set_index('owner')['charging_home'] * 1e6)).astype('Int64')
+            self.df[f"{key}/sizing/charging_AC_{num}"] = self.df.index.map(
+                round(plant_df.set_index('owner')['charging_ac'] * 1e6)).astype('Int64')
+            self.df[f"{key}/sizing/charging_DC_{num}"] = self.df.index.map(
+                round(plant_df.set_index('owner')['charging_dc'] * 1e6)).astype('Int64')
+            self.df[f"{key}/sizing/charging_efficiency_{num}"] = self.df.index.map(
+                plant_df.set_index('owner')['efficiency'])
+            self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(plant_df.set_index('owner')['soc'])
+            self.df[f"{key}/sizing/v2g_{num}"] = self.df.index.map(plant_df.set_index('owner')['v2g'])
+            self.df[f"{key}/sizing/v2h_{num}"] = self.df.index.map(plant_df.set_index('owner')['v2h'])
+
+        # charging scheme
+        self._add_info_simple(keys=[key, "charging_scheme"], config=config["charging_scheme"], df=self.df)
+
+        # forecast
+        self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
         # quality
         self.df[f"{key}/quality"] = config["quality"]
@@ -1142,12 +1181,18 @@ class Sfh(AgentBase):
             return self.df
 
         # Drop all rows that do not contain the plant type and set the index to the owner
-        df = self.sgen[self.sgen['plant_type'] == key].set_index('owner', drop=False)
+        try:
+            df = self.sgen[self.sgen['plant_type'] == key]  # .set_index('owner', drop=False)
+        except KeyError:
+            return self.df
 
         # Check if there are any pv plants, if not set all owners to 0 and return
         if len(df) == 0:
             self.df[f"{key}/owner"] = 0
             return self.df
+
+        # Set the index to the owner
+        df = df.set_index('owner', drop=False)
 
         # Check if there is more than one plant per agent
         if df.index.duplicated().any():
@@ -1158,14 +1203,12 @@ class Sfh(AgentBase):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        
-        
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
             # Match the power with the power specified in sgen sheet
-            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(df['power']) * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(round(df['power'] * 1e6))).astype('Int64')
+            self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(round(df['capacity'] * 1e6))).astype('Int64')
             self.df[f"{key}/sizing/efficiency_{num}"] = self.df.index.map(df['efficiency'])
             self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
             self.df[f"{key}/sizing/g2b_{num}"] = self.df.index.map(df['g2b'])
@@ -1219,13 +1262,19 @@ class Sfh(AgentBase):
             self._battery_config(key=key, config=config)
             return self.df
 
-        # Drop all rows that do not contain the plant type and set the index to the owner
-        df = self.sgen[self.sgen['plant_type'] == key].set_index('owner', drop=False)
+        # Drop all rows that do not contain the plant type
+        try:
+            df = self.sgen[self.sgen['plant_type'] == key]
+        except KeyError:
+            return self.df
 
-        # Check if there are any pv plants, if not set all owners to 0 and return
+        # Check if there are any plants, if not set all owners to 0 and return
         if len(df) == 0:
             self.df[f"{key}/owner"] = 0
             return self.df
+
+        # Set the index to the owner
+        df = df.set_index('owner', drop=False)
 
         # Check if there is more than one plant per agent
         if df.index.duplicated().any():
@@ -1236,14 +1285,12 @@ class Sfh(AgentBase):
         # general
         self.df[f"{key}/num"] = self.df.index.map(df['owner'].value_counts()).fillna(0).astype('Int64')
         self.df[f"{key}/owner"] = (self.df[f"{key}/num"] > 0).fillna(0).astype('Int64')  # all agents that have pv
-        
-        
 
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
             # Match the power with the power specified in sgen sheet
-            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(df['power']) * 1e6).astype('Int64')
-            self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
+            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(round(df['power'] * 1e6))).astype('Int64')
+            self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(round(df['capacity'] * 1e6))).astype('Int64')
             self.df[f"{key}/sizing/efficiency_{num}"] = self.df.index.map(df['efficiency'])
             self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
 

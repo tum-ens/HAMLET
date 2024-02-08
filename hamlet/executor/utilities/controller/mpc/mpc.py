@@ -19,7 +19,7 @@ from hamlet.executor.utilities.database.database import Database as db
 from hamlet import functions as f
 import sys
 
-AGENT_ID = '2TmZlpWtMbPe28t'
+AGENT_ID = '288prNBci5QNMEv'
 
 
 class MpcBase:
@@ -142,7 +142,6 @@ class Mpc(ControllerBase):
 
             # if self.agent.agent_id == AGENT_ID:
             #     for name, var in self.model.variables.items():
-            #         if 'heat_storage' in name:
             #             print(var)
             #     for name, con in self.model.constraints.items():
             #         print(con)
@@ -318,6 +317,14 @@ class Mpc(ControllerBase):
                 print(f'Exited with status "{status[0]}". \n '
                       f'Infeasibilities for agent {self.agent.agent_id}:')
                 print(self.model.print_infeasibilities())
+
+                print('Model:')
+                for name, var in self.model.variables.items():
+                    print(var)
+                for name, con in self.model.constraints.items():
+                    print(con)
+                print(self.model.objective)
+
                 raise ValueError(f"Optimization failed: {status}")
 
             # Process the solution into control commands and return
@@ -368,7 +375,7 @@ class Mpc(ControllerBase):
             # Update setpoints
             self.setpoints = self.setpoints.update(adjusted_solution, on=c.TC_TIMESTAMP)
 
-            # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=10):
+            # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=100):
             #     print(self.model.objective)
             #     print(self.model.solution.to_pandas().to_string())
             #     print(self.setpoints)
