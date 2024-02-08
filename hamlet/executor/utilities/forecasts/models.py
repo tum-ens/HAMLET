@@ -4,6 +4,8 @@ __license__ = ""
 __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
+import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # turn off onednn for tensorflow
 from datetime import timedelta
 import ast
 import polars as pl
