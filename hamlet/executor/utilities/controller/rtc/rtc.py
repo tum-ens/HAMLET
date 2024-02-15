@@ -21,6 +21,8 @@ import os
 # warnings.filterwarnings("ignore")
 logging.getLogger('linopy').setLevel(logging.CRITICAL)
 
+AGENT_ID = '1q5Nid2Bwz2WzxG' # 'HnYxh1u9BEFpWyK'
+
 
 class RtcBase:
     def run(self):
@@ -372,6 +374,18 @@ class Rtc(ControllerBase):
             self.agent.setpoints = self.setpoints
             self.agent.socs = self.socs
             self.agent.meters = self.meters
+
+            # if self.agent.agent_id == AGENT_ID:
+            #     with pl.Config(tbl_rows=100, tbl_cols=100, tbl_width_chars=400):
+            #         # print('Solution:')
+            #         # pprint(solution)
+            #         print('Setpoints:')
+            #         print(self.setpoints)
+            #         # print('Socs:')
+            #         # print(self.socs)
+            #         # print('Meters:')
+            #         # print(self.meters)
+            #     # exit()
 
             return self.agent
 

@@ -19,14 +19,12 @@ from hamlet.executor.utilities.database.database import Database as db
 from hamlet import functions as f
 import sys
 
-AGENT_ID = '288prNBci5QNMEv'
+AGENT_ID = '1q5Nid2Bwz2WzxG' # 'HnYxh1u9BEFpWyK'
 
 
 class MpcBase:
     def run(self):
         raise NotImplementedError()
-
-
 
 
 class Mpc(ControllerBase):
@@ -341,6 +339,12 @@ class Mpc(ControllerBase):
 
             # Update the agent
             self.agent.setpoints = self.setpoints
+
+            # if self.agent.agent_id == AGENT_ID:
+            #     with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=100):
+            #         # print(self.model.objective)
+            #         # print(self.model.solution.to_pandas().to_string())
+            #         print(self.setpoints)
 
             return self.agent
 
