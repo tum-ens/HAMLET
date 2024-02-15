@@ -22,6 +22,7 @@ from pprint import pprint
 
 # Definition of temporary column names
 C_ENERGY_CUMSUM = 'energy_cumsum'
+AGENT_ID = '1q5Nid2Bwz2WzxG'
 
 
 class Lem(MarketBase):
@@ -437,16 +438,11 @@ class Lem(MarketBase):
             # Split the bids and offers into separate bids and offers tables
             self.bids_uncleared, self.offers_uncleared = self.__split_bids_offers(bids_offers, add_cumsum=False)
 
-
         # Determine balancing energy
         self.transactions, self.bids_uncleared, self.offers_uncleared = self.__determine_balancing_energy()
 
         # Apply levies and taxes
         self.transactions = self.__apply_levies_taxes()
-
-        # Update the market database
-        self.__update_database(transactions=self.transactions, bids_uncleared=self.bids_uncleared,
-                               offers_uncleared=self.offers_uncleared)
 
         return self.transactions
 
@@ -520,19 +516,18 @@ class Lem(MarketBase):
         # Add the transactions to the transactions table
         self.transactions = pl.concat([self.transactions, transactions], how='align')
 
-
         # Delete the rows of the bids and offers
         self.bids_uncleared = bids_uncleared.clear()
         self.offers_uncleared = offers_uncleared.clear()
 
         if flag:
-            with pl.Config(set_tbl_width_chars=400, set_tbl_cols=21, set_tbl_rows=20):
+            with pl.Config(set_tbl_width_chars=400, set_tbl_cols=100, set_tbl_rows=100):
                 # print(bids_uncleared)
                 # print(offers_uncleared)
                 print(transactions)
                 # print(self.transactions)
             raise Warning('Currently used to check what the problem is when the balancing gets too high. '
-                          'Can be ignored if not working on it.')
+                          'Can be ignored if not working on it. (Set flag to False)')
 
         return self.transactions, self.bids_uncleared, self.offers_uncleared
 
@@ -603,7 +598,7 @@ class Lem(MarketBase):
         # Add the levies and taxes to the transactions table
         self.transactions = pl.concat([self.transactions, grid, levies], how='align')
 
-        # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=21, set_tbl_rows=40):
+        # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=100, set_tbl_rows=100):
         #     print(grid)
         #     print(levies)
         #     print(self.transactions)
