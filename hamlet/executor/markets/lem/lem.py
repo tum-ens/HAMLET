@@ -150,7 +150,9 @@ class Lem(MarketBase):
             self.__create_market_tables(bids, offers, trades_cleared, trades_uncleared, retailer))
 
         # Update the tables and market database
-        self.__update_database(bids_cleared, offers_cleared, bids_uncleared, offers_uncleared, transactions)
+        self.__update_database(bids_cleared=bids_cleared, offers_cleared=offers_cleared,
+                               bids_uncleared=bids_uncleared, offers_uncleared=offers_uncleared,
+                               transactions=transactions)
         
         # Print statements to check results
         # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=20):
@@ -443,13 +445,21 @@ class Lem(MarketBase):
             # Create the bids and offers table from the bids and offers of the agents and the retailers
             bids_offers, _ = self.__create_bids_offers(include_retailer=False)
             # Split the bids and offers into separate bids and offers tables
-            self.bids_uncleared, self.offers_uncleared = self.__split_bids_offers(bids_offers, add_cumsum=False)
+            bids_uncleared, offers_uncleared = self.__split_bids_offers(bids_offers, add_cumsum=False)
 
         # Determine balancing energy
-        self.transactions, self.bids_uncleared, self.offers_uncleared = self.__determine_balancing_energy()
+        balancing, _, _ = self.__determine_balancing_energy(bids_uncleared, offers_uncleared)
 
         # Apply levies and taxes
-        self.transactions = self.__apply_levies_taxes()
+        grid_levies = self.__apply_grid_levies(balancing)
+
+        # Update the tables and market database
+        transactions = pl.concat([grid_levies, balancing], how='diagonal')
+        with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=25):
+            print(balancing)
+            print(grid_levies)
+            print(transactions)
+        self.__update_database(transactions=transactions)
 
         return self.transactions
 
@@ -460,13 +470,10 @@ class Lem(MarketBase):
         # Executed with the unsettled bids and offers, if any exist and coupling method to be done
         ...
 
-    def __determine_balancing_energy(self):
+    def __determine_balancing_energy(self, bids_uncleared, offers_uncleared):
         """Determines the balancing energy"""
         # TODO: For now this ignores that there is a maximum amount of energy that can be bought/sold by the retailer
         #  which needs to be implemented
-        # Get the uncleared bids and offers
-        bids_uncleared = self.bids_uncleared
-        offers_uncleared = self.offers_uncleared
 
         # Get the retailer offers
         # Note: This currently only works for one retailer
@@ -520,9 +527,6 @@ class Lem(MarketBase):
         transactions = transactions.drop(c.TC_ID_AGENT_IN, c.TC_ID_AGENT_OUT,
                                          "balancing_price_sell", "balancing_price_buy")
 
-        # Add the transactions to the transactions table
-        self.transactions = pl.concat([self.transactions, transactions], how='align')
-
         # Delete the rows of the bids and offers
         self.bids_uncleared = bids_uncleared.clear()
         self.offers_uncleared = offers_uncleared.clear()
@@ -536,9 +540,9 @@ class Lem(MarketBase):
             raise Warning('Currently used to check what the problem is when the balancing gets too high. '
                           'Can be ignored if not working on it. (Set flag to False)')
 
-        return self.transactions, self.bids_uncleared, self.offers_uncleared
+        return transactions, self.bids_uncleared, self.offers_uncleared
 
-    def __apply_levies_taxes(self):
+    def __apply_grid_levies(self, transactions):
         """Applies levies and taxes to the market"""
         # Needs to discriminate between the different types of levies and taxes (wholesale or local)
 
@@ -550,12 +554,10 @@ class Lem(MarketBase):
                                         & (pl.col(c.TC_NAME) == self.tasks[c.TC_NAME]))
         retailer = retailer.to_dict()
 
-        # Concat all transactions for the given timestep
-        transactions = pl.concat([self.transactions, self.transactions_prev], how='vertical')
-
+        # Concat all transactions for the given timestep to calculate the net energy
+        transactions = pl.concat([self.transactions_prev, transactions], how='diagonal')
         # Remove retailer from the transactions (as they are not subject to levies and taxes)
         transactions = transactions.filter(~pl.col(c.TC_ID_AGENT).is_in(retailer["retailer"].to_list()))
-
         # Compute the net energy for each agent and assign it to the according energy column (in or out)
         net_energy = (transactions.groupby(c.TC_ID_AGENT).agg([
             pl.sum(c.TC_ENERGY_IN),
@@ -566,7 +568,6 @@ class Lem(MarketBase):
             (pl.col(c.TC_ENERGY_IN).cast(pl.Int64) - pl.col(c.TC_ENERGY_OUT)
              .cast(pl.Int64)).alias(c.TC_ENERGY).cast(pl.Int64),
         ])
-
         # Assign the value of the net energy to the energy in or out column depending on if it is positive or negative
         net_energy = net_energy.with_columns([
             (pl.when(pl.col(c.TC_ENERGY) > 0).then(pl.col(c.TC_ENERGY)).otherwise(None))
@@ -575,20 +576,16 @@ class Lem(MarketBase):
             .alias(c.TC_ENERGY_OUT).cast(pl.Int64),
         ])
         net_energy = net_energy.drop(c.TC_ENERGY)
-
         # Select only the first row of each agent in transactions
         transactions = transactions.unique(c.TC_ID_AGENT)
-
         # Join the dataframes to have the information about the net energy
         suffix = '_right'
         transactions = transactions.join(net_energy, on=c.TC_ID_AGENT, how='left', suffix=suffix)
-
         # Replace the new energy columns with the old ones
         transactions = transactions.with_columns([
             pl.col(f'{c.TC_ENERGY_IN}{suffix}').alias(c.TC_ENERGY_IN).cast(pl.UInt64),
             pl.col(f'{c.TC_ENERGY_OUT}{suffix}').alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
         ])
-
         # Drop the unnecessary columns to finally have the transactions that are relevant for the grid fees and levies
         transactions = transactions.drop(f'{c.TC_ENERGY_IN}{suffix}', f'{c.TC_ENERGY_OUT}{suffix}')
 
@@ -644,8 +641,8 @@ class Lem(MarketBase):
         # Drop unnecessary columns
         levies = levies.drop("levies_sell", "levies_buy")
 
-        # Add the levies and taxes to the transactions table
-        self.transactions = pl.concat([self.transactions, grid, levies], how='align')
+        # Concat the grids and levies
+        transactions = pl.concat([grid, levies], how='align')
 
         # with pl.Config(set_tbl_width_chars=400, set_tbl_cols=100, set_tbl_rows=100):
         #     print(grid)
@@ -653,7 +650,7 @@ class Lem(MarketBase):
         #     print(self.transactions)
         # exit()
 
-        return self.transactions
+        return transactions
 
     def __type__ex_ante(self):
         """Clears the market ex-ante"""
