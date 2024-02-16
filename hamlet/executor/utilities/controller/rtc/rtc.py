@@ -380,8 +380,9 @@ class Rtc(ControllerBase):
         def update_setpoints(self, solution: dict) -> pl.DataFrame:
             
             # Set all setpoints to 0
-            for col in self.setpoints.columns[1:]:
-                self.setpoints = self.setpoints.with_columns(pl.lit(0).alias(col))
+            self.setpoints = self.setpoints.select([pl.col(self.setpoints.columns[0])] +
+                                                   [pl.lit(0).alias(col) for col in self.setpoints.columns[1:]]
+                                                   )
 
             # Get relevant column name beginnings (i.e. the plant names and market and balancing)
             beginnings = set([col.split('_', 1)[0] for col in solution.keys()
