@@ -105,7 +105,7 @@ class Market(LinopyComps):
 
         # Get specific object attributes
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
-        self.market_power = int(round(kwargs['market_result'] / self.dt * c.SECONDS_TO_HOURS))  # market power in W
+        self.market_power = int(round(kwargs['market_result'] * c.HOURS_TO_SECONDS / self.dt))  # from Wh to W
         self.balancing_power = 10000000000  # TODO: This needs to be changed to the max available balancing power
 
         # Get the energy type
