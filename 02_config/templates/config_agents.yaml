@@ -482,7 +482,7 @@ sfh:
                                                 # unit: º [0, 90]
                                                 # note: if file is not set to "specs", this parameter is ignored
 
-      controllable: [true , true]               # can the pv inverter be controlled? true or false
+      controllable: [false, false]               # can the pv inverter be controlled? true or false
 
     fcast:
       method: naive                           # forecasting method
@@ -587,7 +587,7 @@ sfh:
                                                 #   - "file name": give specific file name (e.g. "wind_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
 
-      controllable: [true, true]                # can the wind inverter be controlled? true or false
+      controllable: [false, false]                # can the wind inverter be controlled? true or false
 
     fcast:
       method: weather                           # forecasting method
@@ -1667,7 +1667,7 @@ mfh:
                                                 # unit: º [0, 90]
                                                 # note: if file is not set to "specs", this parameter is ignored
 
-      controllable: [true , true]               # can the pv inverter be controlled? true or false
+      controllable: [false, false]               # can the pv inverter be controlled? true or false
 
     fcast:
       method: average                           # forecasting method
@@ -1782,7 +1782,7 @@ mfh:
                                                 #   - "file name": give specific file name (e.g. "wind_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
 
-      controllable: [true, true]                # can the wind inverter be controlled? true or false
+      controllable: [false, false]                # can the wind inverter be controlled? true or false
 
     fcast:
       method: average                           # forecasting method
@@ -2538,7 +2538,7 @@ ctsp:
                                                 # unit: º [0, 90]
                                                 # note: if file is not set to "specs", this parameter is ignored
 
-      controllable: [true , true]               # can the pv inverter be controlled? true or false
+      controllable: [false, false]               # can the pv inverter be controlled? true or false
 
     fcast:
       method: average                           # forecasting method
@@ -2635,7 +2635,7 @@ ctsp:
                                                 #   - "file name": give specific file name (e.g. "wind_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
 
-      controllable: [true, true]                # can the wind inverter be controlled? true or false
+      controllable: [false, false]                # can the wind inverter be controlled? true or false
 
     fcast:
       method: average                           # forecasting method
@@ -2729,7 +2729,7 @@ ctsp:
                                                 #                 output file (.csv)
                                                 #   - "file name": give specific file name (e.g. "fixed_gen_1_pu.csv")
 
-      controllable: [true, true]                # can the generator be controlled? (can power be decreased?)
+      controllable: [false, false]                # can the generator be controlled? (can power be decreased?)
 
     fcast:
       method: average                           # forecasting method
@@ -3279,7 +3279,7 @@ industry:
                                                 # unit: º [0, 90]
                                                 # note: if file is not set to "specs", this parameter is ignored
 
-      controllable: [true , true]               # can the pv inverter be controlled? true or false
+      controllable: [false, false]               # can the pv inverter be controlled? true or false
 
     fcast:
       method: average                           # forecasting method
@@ -3377,7 +3377,7 @@ industry:
                                                 #   - "file name": give specific file name (e.g. "wind_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
 
-      controllable: [true, true]                # can the wind inverter be controlled? true or false
+      controllable: [false, false]                # can the wind inverter be controlled? true or false
 
     fcast:
       method: average                           # forecasting method
@@ -3472,7 +3472,7 @@ industry:
                                                 #                 output file (.csv)
                                                 #   - "file name": give specific file name (e.g. "fixed_gen_1_pu.csv")
 
-      controllable: [true, true]                # can the generator be controlled? (can power be decreased?)
+      controllable: [false, false]                # can the generator be controlled? (can power be decreased?)
 
     fcast:
       method: average                           # forecasting method
@@ -3819,7 +3819,7 @@ producer:
                                                 # note: if file is not set to "specs", this parameter is ignored
 
 
-        controllable: [true , true, true]       # can the pv inverter be controlled? true or false
+        controllable: [false, false, false]       # can the pv inverter be controlled? true or false
 
       fcast:
         method: average                           # forecasting method
@@ -4060,7 +4060,7 @@ producer:
                                                 #   - "file name": give specific file name (e.g. "wind_1_pu.csv")
                                                 # note: csv files are for timeseries and json files are for specifications
 
-        controllable: [true, true]              # can the wind inverter be controlled? true or false
+        controllable: [false, false]              # can the wind inverter be controlled? true or false
 
       fcast:
         method: average                           # forecasting method
@@ -4297,7 +4297,7 @@ producer:
                                                 #                 output file (.csv)
                                                 #   - "file name": give specific file name (e.g. "fixed_gen_1_pu.csv")
 
-        controllable: [true, true]              # can the generator be controlled? (can power be decreased?)
+        controllable: [false, false]              # can the generator be controlled? (can power be decreased?)
 
       fcast:
         method: average                           # forecasting method

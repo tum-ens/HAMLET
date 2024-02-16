@@ -375,18 +375,6 @@ class Rtc(ControllerBase):
             self.agent.socs = self.socs
             self.agent.meters = self.meters
 
-            # if self.agent.agent_id == AGENT_ID:
-            #     with pl.Config(tbl_rows=100, tbl_cols=100, tbl_width_chars=400):
-            #         # print('Solution:')
-            #         # pprint(solution)
-            #         print('Setpoints:')
-            #         print(self.setpoints)
-            #         # print('Socs:')
-            #         # print(self.socs)
-            #         # print('Meters:')
-            #         # print(self.meters)
-            #     # exit()
-
             return self.agent
 
         def update_setpoints(self, solution: dict) -> pl.DataFrame:

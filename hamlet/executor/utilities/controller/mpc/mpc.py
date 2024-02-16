@@ -138,14 +138,6 @@ class Mpc(ControllerBase):
             self.define_constraints()
             self.define_objective()
 
-            # if self.agent.agent_id == AGENT_ID:
-            #     for name, var in self.model.variables.items():
-            #             print(var)
-            #     for name, con in self.model.constraints.items():
-            #         print(con)
-            #     print(self.model.objective)
-            #     exit()
-
         def create_plants(self):
             for plant_name, plant_data in self.plants.items():
 
@@ -339,12 +331,6 @@ class Mpc(ControllerBase):
 
             # Update the agent
             self.agent.setpoints = self.setpoints
-
-            # if self.agent.agent_id == AGENT_ID:
-            #     with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=100):
-            #         # print(self.model.objective)
-            #         # print(self.model.solution.to_pandas().to_string())
-            #         print(self.setpoints)
 
             return self.agent
 
