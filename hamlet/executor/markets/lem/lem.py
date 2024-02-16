@@ -54,6 +54,13 @@ class Lem(MarketBase):
         self.offers_uncleared = self.market.offers_uncleared.clear()
         self.transactions = self.market.market_transactions.clear()
 
+        # Get the previous transactions for the given timestep when the action is 'settle'
+        if c.MA_SETTLE in self.tasks[c.TC_ACTIONS]:
+            self.transactions_prev = (self.market.market_transactions
+                                      .filter(pl.col(c.TC_TIMESTEP) == self.tasks[c.TC_TIMESTEP]))
+        else:
+            self.transactions_prev = None
+
         # Get the retailer offers
         self.retailer = self.market.retailer.filter(pl.col(c.TC_TIMESTAMP) == self.tasks[c.TC_TIMESTEP])
 
@@ -543,8 +550,50 @@ class Lem(MarketBase):
                                         & (pl.col(c.TC_NAME) == self.tasks[c.TC_NAME]))
         retailer = retailer.to_dict()
 
+        # Concat all transactions for the given timestep
+        transactions = pl.concat([self.transactions, self.transactions_prev], how='vertical')
+
+        # Remove retailer from the transactions (as they are not subject to levies and taxes)
+        transactions = transactions.filter(~pl.col(c.TC_ID_AGENT).is_in(retailer["retailer"].to_list()))
+
+        # Compute the net energy for each agent and assign it to the according energy column (in or out)
+        net_energy = (transactions.groupby(c.TC_ID_AGENT).agg([
+            pl.sum(c.TC_ENERGY_IN),
+            pl.sum(c.TC_ENERGY_OUT),
+        ]))
+        net_energy = net_energy.fill_null(0)
+        net_energy = net_energy.with_columns([
+            (pl.col(c.TC_ENERGY_IN).cast(pl.Int64) - pl.col(c.TC_ENERGY_OUT)
+             .cast(pl.Int64)).alias(c.TC_ENERGY).cast(pl.Int64),
+        ])
+
+        # Assign the value of the net energy to the energy in or out column depending on if it is positive or negative
+        net_energy = net_energy.with_columns([
+            (pl.when(pl.col(c.TC_ENERGY) > 0).then(pl.col(c.TC_ENERGY)).otherwise(None))
+            .alias(c.TC_ENERGY_IN).cast(pl.Int64),
+            (pl.when(pl.col(c.TC_ENERGY) < 0).then(pl.col(c.TC_ENERGY)).otherwise(None))
+            .alias(c.TC_ENERGY_OUT).cast(pl.Int64),
+        ])
+        net_energy = net_energy.drop(c.TC_ENERGY)
+
+        # Select only the first row of each agent in transactions
+        transactions = transactions.unique(c.TC_ID_AGENT)
+
+        # Join the dataframes to have the information about the net energy
+        suffix = '_right'
+        transactions = transactions.join(net_energy, on=c.TC_ID_AGENT, how='left', suffix=suffix)
+
+        # Replace the new energy columns with the old ones
+        transactions = transactions.with_columns([
+            pl.col(f'{c.TC_ENERGY_IN}{suffix}').alias(c.TC_ENERGY_IN).cast(pl.UInt64),
+            pl.col(f'{c.TC_ENERGY_OUT}{suffix}').alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
+        ])
+
+        # Drop the unnecessary columns to finally have the transactions that are relevant for the grid fees and levies
+        transactions = transactions.drop(f'{c.TC_ENERGY_IN}{suffix}', f'{c.TC_ENERGY_OUT}{suffix}')
+
         # Copy the transactions table to apply the grid fees
-        grid = self.transactions.clone()
+        grid = transactions.clone()
         # Add temporary columns
         grid = grid.with_columns([
             pl.lit(retailer["grid_local_sell"].alias("grid_market_sell")),
@@ -571,7 +620,7 @@ class Lem(MarketBase):
         grid = grid.drop("grid_market_sell", "grid_market_buy")
 
         # Copy the transactions table to apply the levies
-        levies = self.transactions.clone()
+        levies = transactions.clone()
         # Add temporary columns
         levies = levies.with_columns([
             pl.lit(retailer["levies_price_sell"].alias("levies_sell")),
