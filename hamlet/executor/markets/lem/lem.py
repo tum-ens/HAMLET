@@ -455,10 +455,6 @@ class Lem(MarketBase):
 
         # Update the tables and market database
         transactions = pl.concat([grid_levies, balancing], how='diagonal')
-        with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=25):
-            print(balancing)
-            print(grid_levies)
-            print(transactions)
         self.__update_database(transactions=transactions)
 
         return self.transactions
@@ -504,25 +500,11 @@ class Lem(MarketBase):
             pl.lit(0).alias(c.TC_QUALITY).cast(pl.UInt8),  # TODO: Take out once quality is included in the table
         ])
         # Calculate the total price
-        # TODO: Check mpc and rtc to see why this needs to be in there.
-        flag = False
-        try:
-            transactions = transactions.with_columns([
-                (pl.col(c.TC_PRICE_PU_IN) * pl.col(c.TC_ENERGY_IN)).round().alias(c.TC_PRICE_IN).cast(pl.Int64),
-                (pl.col(c.TC_PRICE_PU_OUT) * pl.col(c.TC_ENERGY_OUT)).round().alias(c.TC_PRICE_OUT).cast(pl.Int64),
-            ])
-        except Exception:
-            # Set maximum amount of energy to 1e6 for both in and out
-            transactions = transactions.with_columns([
-                (pl.when(pl.col(c.TC_ENERGY_IN) > 1e6).then(1e6).otherwise(pl.col(c.TC_ENERGY_IN)).alias(c.TC_ENERGY_IN).cast(pl.UInt64)),
-                 (pl.when(pl.col(c.TC_ENERGY_OUT) > 1e6).then(1e6).otherwise(pl.col(c.TC_ENERGY_OUT)).alias(c.TC_ENERGY_OUT).cast(pl.UInt64)),
-            ])
-            transactions = transactions.with_columns([
-                (pl.col(c.TC_PRICE_PU_IN) * pl.col(c.TC_ENERGY_IN)).round().alias(c.TC_PRICE_IN).cast(pl.Int64),
-                (pl.col(c.TC_PRICE_PU_OUT) * pl.col(c.TC_ENERGY_OUT)).round().alias(c.TC_PRICE_OUT).cast(pl.Int64),
-            ])
-            print('Energy had to be limited to 1e6. Something needs to be checked. Start with the clearing results.')
-            flag = True
+        transactions = transactions.with_columns([
+            (pl.col(c.TC_PRICE_PU_IN) * pl.col(c.TC_ENERGY_IN)).round().alias(c.TC_PRICE_IN).cast(pl.Int64),
+            (pl.col(c.TC_PRICE_PU_OUT) * pl.col(c.TC_ENERGY_OUT)).round().alias(c.TC_PRICE_OUT).cast(pl.Int64),
+        ])
+
         # Drop unnecessary columns
         transactions = transactions.drop(c.TC_ID_AGENT_IN, c.TC_ID_AGENT_OUT,
                                          "balancing_price_sell", "balancing_price_buy")
@@ -530,15 +512,6 @@ class Lem(MarketBase):
         # Delete the rows of the bids and offers
         self.bids_uncleared = bids_uncleared.clear()
         self.offers_uncleared = offers_uncleared.clear()
-
-        if flag:
-            with pl.Config(set_tbl_width_chars=400, set_tbl_cols=100, set_tbl_rows=100):
-                # print(bids_uncleared)
-                # print(offers_uncleared)
-                print(transactions)
-                # print(self.transactions)
-            raise Warning('Currently used to check what the problem is when the balancing gets too high. '
-                          'Can be ignored if not working on it. (Set flag to False)')
 
         return transactions, self.bids_uncleared, self.offers_uncleared
 

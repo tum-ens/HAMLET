@@ -73,6 +73,9 @@ class Market:
 
         result = self.market.execute()
 
+        # Delete the data attribute to avoid memory issues
+        del self.data
+
         return result
 
 
