@@ -19,14 +19,12 @@ from hamlet.executor.utilities.database.database import Database as db
 from hamlet import functions as f
 import sys
 
-AGENT_ID = '288prNBci5QNMEv'
+AGENT_ID = '1q5Nid2Bwz2WzxG' # 'HnYxh1u9BEFpWyK'
 
 
 class MpcBase:
     def run(self):
         raise NotImplementedError()
-
-
 
 
 class Mpc(ControllerBase):
@@ -139,14 +137,6 @@ class Mpc(ControllerBase):
             self.define_variables()
             self.define_constraints()
             self.define_objective()
-
-            # if self.agent.agent_id == AGENT_ID:
-            #     for name, var in self.model.variables.items():
-            #             print(var)
-            #     for name, con in self.model.constraints.items():
-            #         print(con)
-            #     print(self.model.objective)
-            #     exit()
 
         def create_plants(self):
             for plant_name, plant_data in self.plants.items():
