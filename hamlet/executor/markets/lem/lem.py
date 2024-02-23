@@ -446,6 +446,9 @@ class Lem(MarketBase):
             bids_offers, _ = self.__create_bids_offers(include_retailer=False)
             # Split the bids and offers into separate bids and offers tables
             bids_uncleared, offers_uncleared = self.__split_bids_offers(bids_offers, add_cumsum=False)
+        else:
+            bids_uncleared = self.bids_uncleared
+            offers_uncleared = self.offers_uncleared
 
         # Determine balancing energy
         balancing, _, _ = self.__determine_balancing_energy(bids_uncleared, offers_uncleared)
