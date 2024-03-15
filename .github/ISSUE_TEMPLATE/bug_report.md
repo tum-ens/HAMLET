@@ -1,63 +1,38 @@
-# Issue Template
-
-## Choose a template that best describes your issue
-
-- [ ] Bug Report
-- [ ] Feature Request
-- [ ] Documentation Issue
-- [ ] Other (Please specify): 
+---
+name: Bug report
+about: Create a report to help us improve
+title: ''
+labels: ''
+assignees: ''
 
 ---
 
-## For Bug Reports
+**Describe the bug**
+A clear and concise description of what the bug is.
 
-### Title
-Keep it short and descriptive.
+**To Reproduce**
+Steps to reproduce the behavior:
+1. Go to '...'
+2. Click on '....'
+3. Scroll down to '....'
+4. See error
 
-### Summary
-A brief description of the issue.
+**Expected behavior**
+A clear and concise description of what you expected to happen.
 
-### Steps to Reproduce
-1. Step one
-2. Step two
-3. ...
+**Screenshots**
+If applicable, add screenshots to help explain your problem.
 
-### Expected Behavior
-Describe what you expected to happen.
+**Desktop (please complete the following information):**
+ - OS: [e.g. iOS]
+ - Browser [e.g. chrome, safari]
+ - Version [e.g. 22]
 
-### Actual Behavior
-Describe what actually happened. Include screenshots, error messages, and logs if possible.
+**Smartphone (please complete the following information):**
+ - Device: [e.g. iPhone6]
+ - OS: [e.g. iOS8.1]
+ - Browser [e.g. stock browser, safari]
+ - Version [e.g. 22]
 
-### Environment
-- OS:
-- Version of the project:
-- Other relevant software versions:
-
----
-
-## For Feature Requests
-
-### Title
-Keep it short and descriptive.
-
-### Summary
-A brief description of the feature.
-
-### Motivation
-Explain why this feature is necessary or what problem it solves.
-
-### Possible Solutions
-If you have ideas on how to implement this feature, list them here.
-
-### Additional Context
-Add any other context or screenshots about the feature request here.
-
----
-
-## General Guidelines
-
-- Please search the existing issues before creating a new one to ensure the issue has not already been reported.
-- Be as detailed as possible to help us understand and address the issue faster.
-- For any other inquiries, specify your request and provide all necessary context.
-
-Thank you for contributing to HAMLET!
+**Additional context**
+Add any other context about the problem here.
