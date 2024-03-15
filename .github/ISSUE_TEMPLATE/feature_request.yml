@@ -9,6 +9,26 @@ body:
       label: Description
       description: >
         Describe the feature or enhancement and explain why it should be implemented.
-        Include a code example if applicable.
+        Include a code example if applicable. Link to problems if it relates.
     validations:
       required: true
+      
+body:
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: >
+        Describe any alternative solutions or features you have considered.
+    validations:
+      required: false
+      
+body:
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional information
+      description: >
+        Add any other context or screenshots about the feature request here.
+    validations:
+      required: false
