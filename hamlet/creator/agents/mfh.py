@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 from ruamel.yaml.compat import ordereddict
 import hamlet.constants as c
+import random
 
 
 class Mfh(AgentBase):
@@ -932,8 +933,8 @@ class Mfh(AgentBase):
                 self.df[f"{key}/sizing/orientation_{num}"] = 0
                 self.df[f"{key}/sizing/angle_{num}"] = 0
 
-            # Make all plants controllable
-            self.df[f"{key}/sizing/controllable_{num}"] = True
+            # Pick random value from the config file for controllability
+            self.df[f"{key}/sizing/controllable_{num}"] = random.choice(config["sizing"]["controllable"])
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
@@ -1052,8 +1053,8 @@ class Mfh(AgentBase):
                 # Assign standard height since they do not matter if no file is specified
                 # self.df[f"{key}/sizing/height_{num}"] = 0
 
-            # Make all plants controllable
-            self.df[f"{key}/sizing/controllable_{num}"] = True
+            # Pick random value from the config file for controllability
+            self.df[f"{key}/sizing/controllable_{num}"] = random.choice(config["sizing"]["controllable"])
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
@@ -1163,8 +1164,8 @@ class Mfh(AgentBase):
                                                                        device=f"{key}",
                                                                        input_path=os.path.join(self.input_path, key))
 
-            # Make all plants controllable
-            self.df[f"{key}/sizing/controllable_{num}"] = True
+            # Pick random value from the config file for controllability
+            self.df[f"{key}/sizing/controllable_{num}"] = random.choice(config["sizing"]["controllable"])
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
