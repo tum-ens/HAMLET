@@ -476,14 +476,15 @@ class Rtc(ControllerBase):
             row_now = self.meters.filter(self.meters[c.TC_TIMESTAMP] == self.timestamp)
             row_new = self.meters.filter(self.meters[c.TC_TIMESTAMP] == self.timestamp + self.dt)
 
+            # Create strings for energy types
+            energy_endings = tuple(f'_{et}' for et in self.energy_types)
+
             # Update meters
             for col in self.meters.columns[1:]:
                 # Extract power from variable values
-                key = next((key for key in solution
-                            if key.startswith(col) and (key.endswith('_power') or key.endswith('_heat'))),
-                           None)
+                key = next((key for key in solution if key.startswith(col) and key.endswith(energy_endings)), None)
 
-                if key:  # Check for matching key
+                if key:  # Check for matching keys
                     # Calculate energy from power
                     delta_energy = solution[key] * self.dt.total_seconds() * c.SECONDS_TO_HOURS
 
@@ -494,7 +495,7 @@ class Rtc(ControllerBase):
                     meter_now = row_now[col]
 
                     # Update meter value in row new
-                    row_new = row_new.with_columns(pl.lit(meter_now + round(delta_energy)).cast(dtype).alias(col))
+                    row_new = row_new.with_columns(pl.lit(meter_now + round(delta_energy)).cast(dtype).alias(key))
 
             # Update meters dataframe
             self.meters = self.meters.filter(self.meters[c.TC_TIMESTAMP] != self.timestamp + self.dt)
