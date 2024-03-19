@@ -483,13 +483,10 @@ class Agents:
                 plants_ids += [plant_id]
 
                 # Add meter data
-                energy_types = c.COMP_MAP[plant].keys()
-                for key in energy_types:
-                    col_id = f'{plant_id}_{plant}_{key}'
-                    meters[col_id] = self.__init_vals(df=meters)
+                meters[plant_id] = self.__init_vals(df=meters)  # TODO: Ponder if rows need to be added here
 
                 # Add setpoints
-                setpoints[plant_id] = self.__init_vals(df=setpoints)
+                setpoints[plant_id] = self.__init_vals(df=setpoints)  # TODO: Ponder if rows need to be added here
 
                 # Add and process additional plant information
                 plant_dict.update(info)

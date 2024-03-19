@@ -476,13 +476,12 @@ class Rtc(ControllerBase):
             row_now = self.meters.filter(self.meters[c.TC_TIMESTAMP] == self.timestamp)
             row_new = self.meters.filter(self.meters[c.TC_TIMESTAMP] == self.timestamp + self.dt)
 
-            # Create strings for energy types
-            energy_endings = tuple(f'_{et}' for et in self.energy_types)
-
             # Update meters
             for col in self.meters.columns[1:]:
                 # Extract power from variable values
-                key = next((key for key in solution if key.startswith(col) and key.endswith(energy_endings)), None)
+                key = next((key for key in solution
+                            if key.startswith(col) and (key.endswith('_power') or key.endswith('_heat'))),
+                           None)
 
                 if key:  # Check for matching key
                     # Calculate energy from power
