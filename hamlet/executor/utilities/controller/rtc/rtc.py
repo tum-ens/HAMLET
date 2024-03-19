@@ -484,7 +484,7 @@ class Rtc(ControllerBase):
                 # Extract power from variable values
                 key = next((key for key in solution if key.startswith(col) and key.endswith(energy_endings)), None)
 
-                if key:  # Check for matching keys
+                if key:  # Check for matching key
                     # Calculate energy from power
                     delta_energy = solution[key] * self.dt.total_seconds() * c.SECONDS_TO_HOURS
 
