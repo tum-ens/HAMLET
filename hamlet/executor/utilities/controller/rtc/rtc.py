@@ -495,7 +495,7 @@ class Rtc(ControllerBase):
                     meter_now = row_now[col]
 
                     # Update meter value in row new
-                    row_new = row_new.with_columns(pl.lit(meter_now + round(delta_energy)).cast(dtype).alias(key))
+                    row_new = row_new.with_columns(pl.lit(meter_now + round(delta_energy)).cast(dtype).alias(col))
 
             # Update meters dataframe
             self.meters = self.meters.filter(self.meters[c.TC_TIMESTAMP] != self.timestamp + self.dt)
