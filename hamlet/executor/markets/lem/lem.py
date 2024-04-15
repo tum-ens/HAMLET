@@ -439,6 +439,9 @@ class Lem(MarketBase):
 
         # Get the actions that are to be executed for this timestep
         all_actions = kwargs['actions']
+        if self.tasks['timestamp'].hour == 5:
+            infhdj = 5
+
 
         # Check if clearing has occurred, otherwise create the correct uncleared bids and offers tables
         if c.MA_CLEAR not in all_actions and not self.bids_offers.is_empty():
@@ -446,6 +449,9 @@ class Lem(MarketBase):
             bids_offers, _ = self.__create_bids_offers(include_retailer=False)
             # Split the bids and offers into separate bids and offers tables
             bids_uncleared, offers_uncleared = self.__split_bids_offers(bids_offers, add_cumsum=False)
+        else:
+            bids_uncleared = self.bids_uncleared
+            offers_uncleared = self.offers_uncleared
 
         # Determine balancing energy
         balancing, _, _ = self.__determine_balancing_energy(bids_uncleared, offers_uncleared)
@@ -545,7 +551,7 @@ class Lem(MarketBase):
         net_energy = net_energy.with_columns([
             (pl.when(pl.col(c.TC_ENERGY) > 0).then(pl.col(c.TC_ENERGY)).otherwise(None))
             .alias(c.TC_ENERGY_IN).cast(pl.Int64),
-            (pl.when(pl.col(c.TC_ENERGY) < 0).then(pl.col(c.TC_ENERGY)).otherwise(None))
+            (pl.when(pl.col(c.TC_ENERGY) < 0).then(abs(pl.col(c.TC_ENERGY))).otherwise(None))
             .alias(c.TC_ENERGY_OUT).cast(pl.Int64),
         ])
         net_energy = net_energy.drop(c.TC_ENERGY)
@@ -554,6 +560,7 @@ class Lem(MarketBase):
         # Join the dataframes to have the information about the net energy
         suffix = '_right'
         transactions = transactions.join(net_energy, on=c.TC_ID_AGENT, how='left', suffix=suffix)
+
         # Replace the new energy columns with the old ones
         transactions = transactions.with_columns([
             pl.col(f'{c.TC_ENERGY_IN}{suffix}').alias(c.TC_ENERGY_IN).cast(pl.UInt64),
