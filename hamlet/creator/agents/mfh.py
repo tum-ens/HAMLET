@@ -302,6 +302,7 @@ class Mfh(AgentBase):
         cols.insert(1, f"{key}/name")
         cols.insert(2, f"{key}/comment")
         cols.insert(3, f"{key}/bus")
+        cols.insert(4, f"{key}/aggregated_by")
         return cols
 
     def _structure_inflexible_load(self, key, cols):

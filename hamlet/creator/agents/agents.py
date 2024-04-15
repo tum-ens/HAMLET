@@ -32,6 +32,8 @@ import warnings
 import re
 from hamlet import functions as f
 from hamlet import constants as c
+from pathlib import Path
+import ast
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -136,6 +138,7 @@ class Agents:
         from hamlet.creator.agents.industry import Industry
         from hamlet.creator.agents.producer import Producer
         from hamlet.creator.agents.storage import Storage
+        from hamlet.creator.agents.aggregator import Aggregator
         self.types = {
             c.A_SFH: Sfh,
             c.A_MFH: Mfh,
@@ -143,6 +146,7 @@ class Agents:
             c.A_INDUSTRY: Industry,
             c.A_PRODUCER: Producer,
             c.A_STORAGE: Storage,
+            c.A_AGGREGATOR: Aggregator,
         }
         # Available types of plants
         self.plants = {
@@ -211,7 +215,7 @@ class Agents:
                                          config_root=self.config_root, )
 
                 # Create a dataframe from the config and store it in the dictionary
-                dict_agents[key] = agents.create_df_from_config()
+                dict_agents[key] = agents.create_df_from_config(dict_agents=dict_agents)
             else:
                 # Raise an error if an unsupported agent type is encountered
                 raise KeyError(f"Agent type '{key}' is not available.")
@@ -263,12 +267,26 @@ class Agents:
         # Create dataframes for each type of agent using their specific class
         for key, _ in self.config.items():
             if key in self.types:
-                dict_agents[key] = self.types[key](config=self.config[key],
-                                                   input_path=self.input_path,
-                                                   config_path=self.config_path,
-                                                   scenario_path=self.scenario_path,
-                                                   config_root=self.config_root). \
-                    create_df_from_grid(grid=dict_grids, fill_from_config=fill_from_config).reset_index(drop=True)
+
+                if key == c.A_AGGREGATOR:
+
+                    agents = self.types[c.A_AGGREGATOR](input_path=self.input_path,
+                                                        config=self.config[key],
+                                                        config_path=self.config_path,
+                                                        scenario_path=self.scenario_path,
+                                                        config_root=self.config_root, )
+
+                    # Create a dataframe from the config and store it in the dictionary
+                    dict_agents[c.A_AGGREGATOR] = agents.create_df_from_config(dict_agents=dict_agents)
+
+                else:
+
+                    dict_agents[key] = self.types[key](config=self.config[key],
+                                                       input_path=self.input_path,
+                                                       config_path=self.config_path,
+                                                       scenario_path=self.scenario_path,
+                                                       config_root=self.config_root). \
+                        create_df_from_grid(grid=dict_grids, fill_from_config=fill_from_config).reset_index(drop=True)
             else:
                 raise Warning(f'Agent type {key} not available. Check self.types for the available types.')
 
@@ -314,6 +332,8 @@ class Agents:
             # Raise an error as this functionality is not yet implemented
             raise NotImplementedError('Not yet implemented...')
 
+        agents_account_data = {}
+
         # Loop through the sheets in the Excel file to create agents
         for sheet in self.excel.sheet_names:
             # Load the dataframe from the sheet
@@ -322,8 +342,11 @@ class Agents:
             # Convert the dataframe to a dictionary of agents
             self.agents = self.create_agents_dict_from_file(df=df)
 
+            # save the dataframes for every agent_type
+            agents_account_data[sheet] = copy.deepcopy(self.agents)
+
             # Create folders and files for each agent based on the agent dictionary
-            self.create_agents_from_dict(agents=self.agents, agent_type=sheet)
+            self.create_agents_from_dict(agents=self.agents, agent_type=sheet, agents_account_data=agents_account_data)
 
     def create_agents_dict_from_file(self, df: pd.DataFrame) -> dict:
         """
@@ -349,7 +372,7 @@ class Agents:
 
         return accounts
 
-    def create_agents_from_dict(self, agents: dict, agent_type: str):
+    def create_agents_from_dict(self, agents: dict, agent_type: str, agents_account_data: dict):
         """
         Creates agent folders and files from a given dictionary for a specific agent type.
 
@@ -370,9 +393,16 @@ class Agents:
             # Create a folder for the current agent
             f.create_folder(path)
 
-            # Call the internal method to create the necessary data for the agent (e.g. plants, meters, etc.)
-            account[c.K_PLANTS], plants, meters, timeseries, socs, specs, setpoints, fcasts = (
-                self._create_plants_for_agent(account=account, agent_type=agent_type))
+            if agent_type == c.A_AGGREGATOR:
+                # Call the internal method to create the necessary data for the aggregator (e.g. plants, meters, etc.)
+                account["plants"], plants, meters, timeseries, socs, specs, setpoints, fcasts = (
+                    self._create_plants_for_aggregator(account=account, agent_type=agent_type, agents_account_data=agents_account_data))
+
+            else:
+
+                # Call the internal method to create the necessary data for the agent (e.g. plants, meters, etc.)
+                account[c.K_PLANTS], plants, meters, timeseries, socs, specs, setpoints, fcasts = (
+                    self._create_plants_for_agent(account=account, agent_type=agent_type))
 
             # Organize the created data into a dictionary
             data = {
@@ -483,7 +513,10 @@ class Agents:
                 plants_ids += [plant_id]
 
                 # Add meter data
-                meters[plant_id] = self.__init_vals(df=meters)  # TODO: Ponder if rows need to be added here
+                energy_types = c.COMP_MAP[plant].keys()
+                for key in energy_types:
+                    col_id = f'{plant_id}_{plant}_{key}'
+                    meters[col_id] = self.__init_vals(df=meters)
 
                 # Add setpoints
                 setpoints[plant_id] = self.__init_vals(df=setpoints)  # TODO: Ponder if rows need to be added here
@@ -524,6 +557,172 @@ class Agents:
         forecasts = pd.DataFrame(columns=timeseries.columns, index=forecasts.index)
 
         return plants_ids, plants_dict, meters, timeseries, socs, specs_plants, setpoints, forecasts
+
+
+    def _create_plants_for_aggregator(self, account: dict, agent_type: str, agents_account_data: dict) -> Tuple:
+        """Creates the plants for the aggregator, including plant IDs, meters, time series, state of charges (SOCs), and specs.
+
+        Args:
+            plants (dict): Dictionary containing information about the plants.
+            agent_type (str): Type of agent for which the plants are being created.
+
+        Returns:
+            tuple: Contains the following information:
+                - Plant IDs
+                - Dictionary with plant information
+                - DataFrame with meter values
+                - DataFrame with time series for each plant
+                - DataFrame with SOCs
+                - Dictionary with plant specs.
+
+        """
+        # Set time ranges
+        # Length of the training period in days
+
+        train_period = datetime.timedelta(days=0)
+
+        for agent_type in agents_account_data:
+            for agent_id, account_agent in agents_account_data[agent_type].items():
+                if agent_id in ast.literal_eval(account['general']['aggregated_agents']):
+                    plants = account_agent["plants"]
+                    train_period_agent = self.__find_max_train_period(plants=plants)
+                    train_period = max(train_period, train_period_agent)
+
+        #train_period = self.__find_max_train_period(plants=plants)
+        # Length of the forecasting period in seconds
+        fcast_period = account['ems']['fcasts']['horizon']
+        # Start of the simulation in UTC
+        start = self.setup['time']['start'].replace(tzinfo=datetime.timezone.utc)
+        # Start of the forecasting period in UTC
+        start_fcast_train = start - train_period
+        # End of the simulation in UTC (one day added to ensure no foreward forecasting issues)
+        end = start + datetime.timedelta(days=self.setup['time']['duration'] + 1)
+        # End of the first forecasting period in UTC
+        end_fcast_period = start + datetime.timedelta(seconds=fcast_period)
+        # Time range for the simulation
+        timerange = pd.date_range(start=start, end=end, freq=f"{int(self.setup['time']['timestep'])}S")[:-1]
+        # Time range for the forecasting training period
+        timerange_fcast_train = pd.date_range(start=start_fcast_train, end=end,
+                                              freq=f"{int(self.setup['time']['timestep'])}S")[:-1]
+        # Time range for the first forecasting period (first simulation period)
+        timerange_fcast_period = pd.date_range(start=start, end=end_fcast_period,
+                                               freq=f"{int(self.setup['time']['timestep'])}S")[:-1]
+        # Initialize data structures
+        # Time series of each plant
+        timeseries = pd.DataFrame(index=timerange_fcast_train)
+        timeseries.index.name = c.TC_TIMESTAMP
+        # Meter values
+        meters = pd.DataFrame(index=timerange)
+        meters.index.name = c.TC_TIMESTAMP
+        # SOCs
+        socs = pd.DataFrame(index=timerange)
+        socs.index.name = c.TC_TIMESTAMP
+        # Setpoints
+        setpoints = pd.DataFrame(index=timerange_fcast_period)
+        setpoints.index.name = c.TC_TIMESTAMP
+        # Forecasts
+        forecasts = pd.DataFrame(index=timerange_fcast_period)
+        forecasts.index.name = c.TC_TIMESTAMP
+
+
+        # All plant information
+        plants_dict = {}
+        # Plant IDs
+        plants_ids = []
+        # Plant specs
+        specs_plants = {}
+
+        # loop over all aggregated agents
+        for agent in ast.literal_eval(account['general']['aggregated_agents']):
+
+            # Specify the directory path
+            path_to_base_directory = os.path.join(self.scenario_path, 'agents')
+            base_directory = Path(path_to_base_directory)
+
+            # Specify the target folder name
+            target_folder_name = agent
+
+            # Initialize variables to store file contents
+            account_data = plants_data = meters_data = timeseries_data = socs_data = specs_data = setpoints_data = forecasts_data = None
+
+            # Search for the target folder within the base directory
+            for root, dirs, files in os.walk(base_directory):
+                if target_folder_name in dirs:
+                    target_folder_path = Path(root) / target_folder_name
+                    break
+            else:
+                print(f"Target folder '{target_folder_name}' not found in '{base_directory}'")
+                target_folder_path = None
+
+            # If the target folder is found, open and store the contents of each specified file
+            if target_folder_path:
+
+                # load existing data
+                account_data = f.load_file(path=os.path.join(target_folder_path, 'account.json'))
+                plants_data = f.load_file(path=os.path.join(target_folder_path, 'plants.json'))
+                specs_data = f.load_file(path=os.path.join(target_folder_path, 'specs.json'))
+                meters_data = f.load_file(path=os.path.join(target_folder_path, 'meters.ft'), df='pandas')
+                timeseries_data = f.load_file(path=os.path.join(target_folder_path, 'timeseries.ft'), df='pandas')
+                socs_data = f.load_file(path=os.path.join(target_folder_path, 'socs.ft'), df='pandas')
+                setpoints_data = f.load_file(path=os.path.join(target_folder_path, 'setpoints.ft'), df='pandas')
+
+                # Add plant_ids
+                plants_ids.extend(account_data["plants"])
+
+                # Add plants
+                if plants_data:
+                    for plant in plants_data:
+                        plants_dict[plant] = plants_data[plant]
+
+                # Add meter data
+                try:
+                    for plant in meters_data.columns:
+                        if plant != 'timestamp':
+                            meters_data = meters_data.set_index(meters.index)
+                            meters[plant] = meters_data[plant]  # TODO: Ponder if rows need to be added here
+
+                except KeyError:
+                    pass
+
+                # Add setpoints
+                try:
+                    for plant in setpoints_data.columns:
+                        if plant != 'timestamp':
+                            setpoints_data = setpoints_data.set_index(setpoints.index)
+                            setpoints[plant] = setpoints_data[plant] # TODO: Ponder if rows need to be added here
+                except KeyError:
+                    pass
+
+                # Add specs
+                if specs_data:
+                    for plant in specs_data:
+                        specs_plants[plant] = specs_data[plant]
+
+                # Add state of scos if applicable
+                try:
+                    for plant in socs_data.columns:
+                        if plant != 'timestamp':
+                            socs_data = socs_data.set_index(socs.index)
+                            socs.loc[:, plant] = socs_data[plant]
+
+                except KeyError:
+                    pass
+
+                # Add state of timeseries if applicable
+                try:
+                    for plant in timeseries_data.columns:
+                        if plant != 'timestamp':
+                            timeseries_data = timeseries_data.set_index(timeseries.index)
+                            timeseries[plant] = timeseries_data[plant]
+
+                except KeyError:
+                    pass
+
+        # Add forecast columns
+        forecasts = pd.DataFrame(columns=timeseries.columns, index=forecasts.index)
+
+        return plants_ids, plants_dict, meters, timeseries, socs, specs_plants, setpoints, forecasts
+
 
     @staticmethod
     def _create_agent(path: str, data: dict) -> None:
@@ -1044,6 +1243,9 @@ class Agents:
             file.name = f'{plant_id}_{file.name}'
         else:
             file.columns = [f'{plant_id}_{col}' for col in file.columns]
+
+        file = file.round().astype(int)
+        file = file.astype(float)
 
         # Resample the time series data to ensure all rows are filled
         file = self._resample_timeseries(timeseries=file, delta=delta)
@@ -2013,6 +2215,20 @@ class Agents:
         ids = []
         for _ in range(n):
             ids.append("".join(random.choices(string.ascii_letters + string.digits, k=length)))
+
+        if len(ids) == 1:
+            return ids[0]
+        else:
+            return ids
+
+    @staticmethod
+    def _gen_new_ids_sfh(n: int = 1, length: int = 15) -> Union[str, list[str]]:
+        """creates random ID"""
+        ids = []
+        idx = 0
+        for _ in range(n):
+            ids.append("sfh_" + str(idx))
+            idx = idx + 1
 
         if len(ids) == 1:
             return ids[0]

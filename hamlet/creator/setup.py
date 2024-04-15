@@ -548,9 +548,9 @@ class Creator:
             None
         """
 
-        # Create main folder if it does not exist
+        # Create main folder if does not exist
         if not os.path.exists(path):
-            os.makedirs(path)
+            os.mkdir(path)
 
         # Loop through the subfolders and create them
         self.__loop_through_dict(subfolders, path=path, func=self.__create_folder, delete=delete)
