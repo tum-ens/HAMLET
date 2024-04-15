@@ -172,6 +172,40 @@ class RegionDB:
 
         for agents_type, agents in self.agents.items():
             for agent_id, agentDB in agents.items():
+
+                if isinstance(agentDB.account["general"]["aggregated_by"], str):
+                    # get the aggregator
+                    aggregator = agentDB.account["general"]["aggregated_by"]
+
+                    # iterate over all agents/results
+                    for agents_type_aggregated, agents_aggregated in self.agents.items():
+                        for agent_id_aggregated, agentDB_aggregated in agents_aggregated.items():
+
+                            # check if the agent is the aggregator
+                            if agent_id_aggregated == aggregator:
+
+                                # update meters
+                                agentDB.meters = agentDB.meters.update(agentDB_aggregated.meters)
+
+                                # update socs
+                                agentDB.socs = agentDB.socs.update(agentDB_aggregated.socs)
+
+                                # update setpoints
+                                agentDB.setpoints = agentDB.setpoints.update(agentDB_aggregated.setpoints)
+
+                                # update forecasts
+                                agentDB.forecasts = agentDB.forecasts.update(agentDB_aggregated.forecasts)
+
+                                ## update forecasts_all
+                                #if hasattr(agentDB, 'forecasts_all'):
+                                #    agentDB.forecasts_all = agentDB.forecasts_all.update(agentDB_aggregated.forecasts_all)
+                                #else:
+                                #    agentDB.forecasts_all = agentDB_aggregated.forecasts_all
+
+                                # update timeseries
+                                agentDB.timeseries = agentDB.timeseries.update(agentDB_aggregated.timeseries)
+
+
                 # Path to save results to
                 path = os.path.join(self.region_save, 'agents', agents_type, agent_id)
 

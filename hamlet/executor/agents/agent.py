@@ -16,6 +16,7 @@ from hamlet.executor.agents.ctsp.ctsp import Ctsp
 from hamlet.executor.agents.industry.industry import Industry
 from hamlet.executor.agents.producer.producer import Producer
 from hamlet.executor.agents.storage.storage import Storage
+from hamlet.executor.agents.aggregator.aggregator import Aggregator
 import hamlet.constants as c
 
 
@@ -96,6 +97,7 @@ class AgentFactory:
         c.A_INDUSTRY: Industry,
         c.A_PRODUCER: Producer,
         c.A_STORAGE: Storage,
+        c.A_AGGREGATOR: Aggregator,
     }
 
     @staticmethod

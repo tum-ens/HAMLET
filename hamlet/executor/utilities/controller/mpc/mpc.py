@@ -295,10 +295,10 @@ class Mpc(ControllerBase):
             solver = 'gurobi'  # Note: Currently overwriting other solvers as only gurobi is available
             match solver:
                 case 'gurobi':
-                    sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
-                    solver_options = {'OutputFlag': 0, 'LogToConsole': 0, 'TimeLimit': 2}
+                    #sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
+                    solver_options = {'OutputFlag': 1, 'LogToConsole': 1, 'TimeLimit': 60}
                     status = self.model.solve(solver_name='gurobi', **solver_options)
-                    sys.stdout = sys.__stdout__  # re-activate printing
+                    #sys.stdout = sys.__stdout__  # re-activate printing
                 case _:
                     raise ValueError(f"Unsupported solver: {solver}")
 

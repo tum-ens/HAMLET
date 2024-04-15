@@ -168,7 +168,8 @@ class Database:
 
         for agents in self.__regions[region].agents.values():
             for agent_id, agentDB in agents.items():
-                bids_offers[agent_id] = agentDB.bids_offers
+                if not isinstance(agentDB.account["general"]["aggregated_by"], str):
+                    bids_offers[agent_id] = agentDB.bids_offers
 
         # combine tables
         bids_offers_table = pl.concat(bids_offers.values(), how='vertical')

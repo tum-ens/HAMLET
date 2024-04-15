@@ -44,14 +44,16 @@ class AgentBase:
         # Get the grid data from the database
         self.get_grid_data()
 
-        # Get forecasts
-        self.get_forecasts()
+        if not isinstance(self.agent.account["general"]["aggregated_by"], str):
 
-        # Set controllers
-        self.set_controllers()
+            # Get forecasts
+            self.get_forecasts()
 
-        # Create bids and offers based on trading strategy
-        self.create_bids_offers()
+            # Set controllers
+            self.set_controllers()
+
+            # Create bids and offers based on trading strategy
+            self.create_bids_offers()
 
         return self.agent
 
