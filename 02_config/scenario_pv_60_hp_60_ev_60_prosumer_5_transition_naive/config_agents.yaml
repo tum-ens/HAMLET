@@ -1,0 +1,1342 @@
+########################################################################################################################
+############################################# agents configuration #####################################################
+########################################################################################################################
+
+##########################################################################################
+################################ single family home (SFH) ################################
+##########################################################################################
+sfh:
+  ################################ general ################################
+  general:
+    number_of: 10                               # number of single family homes to simulate
+     
+    parameters:                                 # basic parameters of SFHs
+      distribution: [0.5, 0.5]                  # relative distribution of household types
+                                                # unit: 1
+                                                # note: to obtain a uniform value this value needs to be [1]
+
+      occupants: [3, 4]                         # number of occupants
+                                                # unit: 1
+        
+      area: [100, 130]                          # average living area
+                                                # unit: m²
+
+      floors: [2, 2]                            # number of floors
+                                                # unit: 1
+
+      height: [2.6, 2.6]                        # ceiling height
+                                                # unit: m
+
+      efficiency: [55, 150]                     # heating efficiency of building
+                                                # unit: kWh/(m²*a)
+                                                # recommendations: (based on categorization by German Credit Institute
+                                                #   for Reconstruction KfW and German Energy Agency dena)
+                                                #   - 40: high efficiency for new or renovated buildings
+                                                #   - 70: standard efficiency for new or renovated buildings
+                                                #   - 100: high efficiency for existing non-renovated buildings
+                                                #   - 150: average efficiency for existing non-renovated buildings
+                                                #   - 200: low efficiency for existing non-renovated buildings
+                                                
+    market_participant_share: 1                 # share of agents that participate in the local markets
+                                                # unit: 1
+
+  ################################ inflexible load ####################################
+  inflexible-load:
+    share: 1                                    # share of prosumers with inflexible loads
+                                                # unit: 1 [0, 1]
+      
+    num: [1]                                    # number of inflexible loads
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+
+    sizing:
+      distribution: [0.2, 0.6, 0.2]             # relative distribution of sizing parameters
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+                                                # note: to obtain a uniform value this value needs to be [1]
+
+      demand: [2.5e6, 4e6, 5.5e6]               # yearly demand
+                                                # unit: Wh/a
+                                                
+      demand_deviation: [5e5, 1e6, 5e5]         # absolute random positive/negative deviation from demand
+                                                # unit: Wh/a
+                                                # example:
+                                                #   distribution: [0.2, 0.6, 0.2]
+                                                #   demand:       [2.5e6, 4e6, 5.5e6]   --> [2500, 4000, 5500] kWh/a
+                                                #   deviation:    [5e5, 1e6, 5e5]       --> [ 500, 1000,  500] kWh/a
+                                                #   --> 2000<= 20% <=3000, 3000<= 60% <=5000, 5000<= 20% <=6000   
+
+    fcast:
+      method: naive                           # forecasting method
+                                                # options:
+                                                #   - perfect:  perfect knowledge of the future
+                                                #   - naive:    today will be the same as last day with offset t
+                                                #   - average:  today will be the same as the average of the last
+                                                #               n days with offset t
+                                                #   - smoothed: prediction value is a moving mean of the future
+                                                #               values with a specified window width
+                                                #   - sarma:    seasonal autoregressive moving average model
+                                                #   - rfr:      random forest regressor
+                                                #   - cnn:      convolutional neural network
+                                                #   - rnn:      recurrent neural network
+                                                #   - arima:    autoregressive integrated moving average model
+
+      naive:                                    # naive forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+      average:                                  # average forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+        days: 2                                 # number of days to be used for averaging
+                                                # unit: days
+
+      smoothed:
+        steps: 9                                # number of future time steps to be used for smoothing (T-ts)
+                                                # unit: time steps
+
+      sarma:
+        order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
+                96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rfr:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      arima:
+        order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+  ################################ flexible load ####################################
+  flexible-load:
+    share: 0                                    # share of prosumers with flexible load
+                                                # unit: 1 [0, 1]
+
+    num: [1]                                    # number of flexible loads
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+                                                # note: some agents can have more than one flexible load with
+                                                #   differing time ranges
+
+    sizing:
+      distribution: [0.4, 0.4, 0.2]             # relative distribution of flexible loads
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+                                                # note: to obtain a uniform value this value needs to be [1]
+
+      demand: [2.5e6, 4e6, 5.5e6]               # yearly demand
+                                                # unit: Wh/a
+
+      demand_deviation: [5e5, 1e6, 5e5]         # absolute deviation  of the respective demand value
+                                                # unit: Wh/a
+                                                # example:
+                                                #   distribution: [0.2, 0.6, 0.2]
+                                                #   demand:       [2.5e6, 4e6, 5.5e6]   --> [2500, 4000, 5500] kWh/a
+                                                #   deviation:    [5e5, 1e6, 5e5]       --> [ 500, 1000,  500] kWh/a
+                                                #   --> 2000<= 20% <=3000, 3000<= 60% <=5000, 5000<= 20% <=6000
+
+      time_offset: [6, 12, 24]                  # temporal offset of each point in time
+                                                # unit: h
+                                                # note: defines the maximum amount of time a load can be shifted to the future
+
+    fcast:
+      method: rfr                           # forecasting method
+                                                # options:
+                                                #   - perfect:  perfect knowledge of the future
+                                                #   - naive:    today will be the same as last day with offset t
+                                                #   - average:  today will be the same as the average of the last
+                                                #               n days with offset t
+                                                #   - smoothed: prediction value is a moving mean of the future
+                                                #               values with a specified window width
+                                                #   - sarma:    seasonal autoregressive moving average model
+                                                #   - rfr:      random forest regressor
+                                                #   - cnn:      convolutional neural network
+                                                #   - rnn:      recurrent neural network
+                                                #   - arima:    autoregressive integrated moving average model
+
+      naive:                                    # naive forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+      average:                                  # average forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+        days: 2                                 # number of days to be used for averaging
+                                                # unit: days
+
+      smoothed:
+        steps: 9                                # number of future time steps to be used for smoothing (T-ts)
+                                                # unit: time steps
+
+      sarma:
+        order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
+                96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rfr:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      arima:
+        order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+  ################################ heat demand ####################################
+  heat:
+    share: 1                                    # share of prosumers with heat
+                                                # unit: 1 [0, 1]
+                                                # note: users that do not have plants to cover the demand will be
+                                                #   assigned a generic non-electric supply
+
+    num: [1]                                    # number of heat loads
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+
+    sizing:
+      distribution: [0.3, 0.4, 0.3]             # relative distribution of heat loads
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+                                                # note: to obtain a uniform value this value needs to be [1]
+
+      file: ['linked', 'linked', 'pu']      # file to be used for heat demand
+                                                # options:
+                                                #   - linked:     linked to the respective building
+                                                #   - pu:         random pu timeseries file
+                                                #   - TODO: 5r1c: 5r1c model (https://github.com/architecture-building-systems/RC_BuildingSimulator)
+                                                #   - TODO: 2r2c: 2r2c model (https://buildingenergygeeks.org/a-simple-rc-model-python.html#case-study)
+                                                # note: if file is set to linked, the heat demand file is linked to
+                                                #   the respective inflexible electricity demand and number of occupants
+
+      temperature: [35, 55, 55]                 # supply temperature of heating system
+                                                # unit: °C
+                                                # recommendations:
+                                                #   - 35: floor-heating systems
+                                                #   - 55: radiator-heating systems
+
+    fcast:
+      method: naive                           # forecasting method
+                                                # options:
+                                                #   - perfect:  perfect knowledge of the future
+                                                #   - naive:    today will be the same as last day with offset t
+                                                #   - average:  today will be the same as the average of the last
+                                                #               n days with offset t
+                                                #   - smoothed: prediction value is a moving mean of the future
+                                                #               values with a specified window width
+                                                #   - sarma:    seasonal autoregressive moving average model
+                                                #   - rfr:      random forest regressor
+                                                #   - cnn:      convolutional neural network
+                                                #   - rnn:      recurrent neural network
+                                                #   - arima:    autoregressive integrated moving average model
+
+      naive:                                    # naive forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+      average:                                  # average forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+        days: 2                                 # number of days to be used for averaging
+                                                # unit: days
+
+      smoothed:
+        steps: 9                                # number of future time steps to be used for smoothing (T-ts)
+                                                # unit: time steps
+
+      sarma:
+        order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
+                96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rfr:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      arima:
+        order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
+
+  ################################ dhw (drinking hot water) ####################################
+  dhw:
+    share: 0                                    # share of prosumers with dhw
+                                                # unit: 1 [0, 1]
+                                                # note: users that do not have plants to cover the demand will be
+                                                #   assigned a generic non-electric supply
+
+    num: [1]                                    # number of dhw loads
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+
+    sizing:
+      distribution: [0.3, 0.4, 0.3]             # relative distribution of dhw loads
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+                                                # note: to obtain a uniform value this value needs to be [1]
+
+      demand: [6e5, 7e5, 8e5]                   # yearly demand per person
+                                                # unit: Wh/(a*person)
+                                                # note: average value for Germany is 600-800 kWh/a/person
+
+      file: ['pu', 'pu', 'pu']                  # file to be used for dhw demand
+                                                # options:
+                                                #   - TODO: linked: linked to the respective building (not yet implemented)
+                                                #   - pu:     random pu timeseries file
+                                                # note: if file is set to linked, the dhw demand file is linked to
+                                                #   the respective inflexible electricity demand and number of occupants
+
+      temperature: [55, 55, 55]                 # supply temperature of dhw
+                                                # unit: °C
+
+    fcast:
+      method: average                           # forecasting method
+                                                # options:
+                                                #   - perfect:  perfect knowledge of the future
+                                                #   - naive:    today will be the same as last day with offset t
+                                                #   - average:  today will be the same as the average of the last
+                                                #               n days with offset t
+                                                #   - smoothed: prediction value is a moving mean of the future
+                                                #               values with a specified window width
+                                                #   - sarma:    seasonal autoregressive moving average model
+                                                #   - rfr:      random forest regressor
+                                                #   - cnn:      convolutional neural network
+                                                #   - rnn:      recurrent neural network
+                                                #   - arima:    autoregressive integrated moving average model
+
+      naive:                                    # naive forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+      average:                                  # average forecasting method parameters
+        offset: 2                               # offset in days to the current day
+                                                # unit: days
+
+        days: 2                                 # number of days to be used for averaging
+                                                # unit: days
+
+      smoothed:
+        steps: 9                                # number of future time steps to be used for smoothing (T-ts)
+                                                # unit: time steps
+
+      sarma:
+        order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
+                96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rfr:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      arima:
+        order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+  ################################ small-scale photovoltaics (PV) ####################################
+  pv:
+    share: 0.7                                  # share of agents with PV systems
+                                                # unit: 1 [0, 1]
+      
+    num: [1]                                    # number of pv systems
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+
+    sizing:                                     # sizing of PV plant
+      distribution: [0.7, 0.3]                  # distribution of sizing parameters shown below
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+                                                
+      power: [1.5, 1.5]                         # relative power
+                                                # unit: Wp/(kWh/a) -> based on first inflexible_load
+
+      power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
+                                                # unit: 1 [0, inf)
+
+      file: ["specs", "specs"]        # file type to calculate the power output
+                                                # options:
+                                                #   - specs: power output is calculated based on a randomly chosen specification
+                                                #            file (.json) and the weather file
+                                                #   - timeseries: power output is based on a randomly chosen time series 
+                                                #                 output file (.csv)
+                                                #   - "file name": give specific file name (e.g. "pv_1_pu.csv")
+                                                # note: csv files are for timeseries and json files are for specifications
+
+      orientation: [0, -20]                     # respective orientation of the PV system
+                                                # unit: º [-180, 180]
+                                                # orientation convention:
+                                                #   - south:   0º
+                                                #   - west:   90º
+                                                #   - east:  -90º
+                                                #   - north: 180º
+                                                # note: if file is not set to "specs", this parameter is ignored
+
+
+      angle: [40, 50]                           # installation angle of the installed system
+                                                # unit: º [0, 90]
+                                                # note: if file is not set to "specs", this parameter is ignored
+
+      controllable: [false , false]               # can the pv inverter be controlled? true or false
+
+    fcast:
+      method: naive                           # forecasting method
+                                                # options:
+                                                #   - perfect:  perfect knowledge of the future
+                                                #   - naive:    today will be the same as last day with offset t
+                                                #   - average:  today will be the same as the average of the last
+                                                #               n days with offset t
+                                                #   - smoothed: prediction value is a moving mean of the future
+                                                #               values with a specified window width
+                                                #   - sarma:    seasonal autoregressive moving average model
+                                                #   - rfr:      random forest regressor
+                                                #   - cnn:      convolutional neural network
+                                                #   - rnn:      recurrent neural network
+                                                #   - arima:    autoregressive integrated moving average model
+                                                #   - weather:  forecast based on weather forecast ("specs" only)
+
+      naive:                                    # naive forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+      average:                                  # average forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+        days: 2                                 # number of days to be used for averaging
+                                                # unit: days
+
+      smoothed:
+        steps: 9                                # number of future time steps to be used for smoothing (T-ts)
+                                                # unit: time steps
+
+      sarma:
+        order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
+                96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rfr:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      arima:
+        order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+    quality: green_local                        # quality that the generated energy should be labelled with on the local markets
+
+  ################################ small-scale wind ####################################
+  wind:
+    share: 0                                    # share of prosumers with wind power plant
+                                                # unit: 1 [0, 1]
+
+    num: [1]                                    # number of inflexible loads
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+
+    sizing:                                     # sizing of wind power plant
+      distribution: [0.7, 0.3]                  # relative distribution of sizing parameters
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+                                                # note: to obtain a uniform value this value needs to be [1]
+
+      power: [0.7, 0.5]                         # relative power
+                                                # unit: W/(kWh/a) -> based on first inflexible_load
+
+      power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
+                                                # unit: 1 [0, inf)
+
+      file: ["specs", "specs"]                  # file type to calculate the power output
+                                                # options:
+                                                #   - specs: power output is calculated based on a randomly chosen specification
+                                                #            file (.json) and the weather file
+                                                #   - timeseries: power output is based on a randomly chosen time series
+                                                #                 output file (.csv)
+                                                #   - "file name": give specific file name (e.g. "wind_1_pu.csv")
+                                                # note: csv files are for timeseries and json files are for specifications
+
+      controllable: [true, true]                # can the wind inverter be controlled? true or false
+
+    fcast:
+      method: weather                           # forecasting method
+                                                # options:
+                                                #   - perfect:  perfect knowledge of the future
+                                                #   - naive:    today will be the same as last day with offset t
+                                                #   - average:  today will be the same as the average of the last
+                                                #               n days with offset t
+                                                #   - smoothed: prediction value is a moving mean of the future
+                                                #               values with a specified window width
+                                                #   - sarma:    seasonal autoregressive moving average model
+                                                #   - rfr:      random forest regressor
+                                                #   - cnn:      convolutional neural network
+                                                #   - rnn:      recurrent neural network
+                                                #   - arima:    autoregressive integrated moving average model
+                                                #   - weather:  forecast based on weather forecast ("specs" only)
+
+      naive:                                    # naive forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+      average:                                  # average forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+        days: 2                                 # number of days to be used for averaging
+                                                # unit: days
+
+      smoothed:
+        steps: 9                                # number of future time steps to be used for smoothing (T-ts)
+                                                # unit: time steps
+
+      sarma:
+        order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
+                96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rfr:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      arima:
+        order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+    quality: green_local                        # quality that the generated energy should be labelled with on the local markets
+
+  ################################ fixed generator ####################################
+  fixed-gen:
+    share: 0                                    # share of prosumers with fixed power generators
+                                                # unit: 1 [0, 1]
+
+    num: [1]                                    # number of fixed generators
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+
+    sizing:
+      distribution: [0.5, 0.5]                  # relative distribution of sizing parameters
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+                                                # note: to obtain a uniform value this value needs to be [1]
+
+      power: [0.1, 0.2]                         # relative power
+                                                # unit: W/(kWh/a) -> based on first inflexible_load
+
+      power_deviation: [0.2, 0.2]               # relative random positive/negative deviation from power
+                                                # unit: 1 [0, inf)
+
+      file: ["timeseries", "timeseries"]        # file type to calculate the power output
+                                                # options:
+                                                #   - timeseries: power output is based on a randomly chosen time series
+                                                #                 output file (.csv)
+                                                #   - "file name": give specific file name (e.g. "fixed_gen_1_pu.csv")
+
+      controllable: [false, false]              # can the generator be controlled? (can power be decreased?)
+
+    fcast:
+      method: average                           # forecasting method
+                                                # options:
+                                                #   - perfect:  perfect knowledge of the future
+                                                #   - naive:    today will be the same as last day with offset t
+                                                #   - average:  today will be the same as the average of the last
+                                                #               n days with offset t
+                                                #   - smoothed: prediction value is a moving mean of the future
+                                                #               values with a specified window width
+                                                #   - sarma:    seasonal autoregressive moving average model
+                                                #   - rfr:      random forest regressor
+                                                #   - cnn:      convolutional neural network
+                                                #   - rnn:      recurrent neural network
+                                                #   - arima:    autoregressive integrated moving average model
+
+      naive:                                    # naive forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+      average:                                  # average forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+        days: 2                                 # number of days to be used for averaging
+                                                # unit: days
+
+      smoothed:
+        steps: 9                                # number of future time steps to be used for smoothing (T-ts)
+                                                # unit: time steps
+
+      sarma:
+        order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
+                96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rfr:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      arima:
+        order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+    quality: local                              # quality that the generated energy should be labelled with on the local markets
+
+  ################################ heat pumps (HP) ####################################
+  hp:
+    share: 1                                    # share of prosumers with heat pumps
+                                                # unit: 1 [0, 1]
+      
+    num: [1]                                    # number of heat pumps
+                                                # unit: 1 [1, inf)
+                                                # note: value is randomly chosen from list
+
+    sizing: 
+      distribution: [0.2, 0.8]                  # distribution of sizing parameters shown below
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+
+      power: [1, 1]                             # relative power
+                                                # unit: W/(Wh*a)*2000h-> based on first heat
+                                                # note: heat demand is divided by 2000 and multiplied by power value,
+                                                #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
+        
+      file: ["ground", "air"]                   # type of heat pump
+                                                # options:
+                                                #   - ground: ground-water heat pump
+                                                #   - air: air-water heat pump
+                                                #   - water: water-water heat pump
+                                                #   - "file name": give specific file name (e.g. "hp_NIBE-F2120-12_air.json")
+
+
+
+    fcast:
+      method: naive                           # forecasting method
+                                                # options:
+                                                #   - perfect:  perfect knowledge of the future
+                                                #   - naive:    today will be the same as last day with offset t
+                                                #   - average:  today will be the same as the average of the last
+                                                #               n days with offset t
+                                                #   - smoothed: prediction value is a moving mean of the future
+                                                #               values with a specified window width
+                                                #   - sarma:    seasonal autoregressive moving average model
+                                                #   - rfr:      random forest regressor
+                                                #   - cnn:      convolutional neural network
+                                                #   - rnn:      recurrent neural network
+                                                #   - arima:    autoregressive integrated moving average model
+                                                #   - weather:  forecast based on weather forecast ("specs" only)
+
+      naive:                                    # naive forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+      average:                                  # average forecasting method parameters
+        offset: 1                               # offset in days to the current day
+                                                # unit: days
+
+        days: 2                                 # number of days to be used for averaging
+                                                # unit: days
+
+      smoothed:
+        steps: 9                                # number of future time steps to be used for smoothing (T-ts)
+                                                # unit: time steps
+
+      sarma:
+        order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
+                96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
+
+      cnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rnn:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+        epoch: 20                               # number of epochs to fit the neural network model
+        window_length: 20                       # window length of the training data
+                                                # unit: time steps
+
+      rfr:
+        features: ['temp', 'time']              # used features in weather file to fit the model
+        days: 3                                 # past days that are used to train the neural network
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+      arima:
+        order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
+                                                # differences, and MA parameters to use
+        days: 3                                 # past days that are used to train the arima model
+                                                # unit: days
+                                                # note: weather data for the n previous days needs to be available
+                                                # in weather file
+
+    quality: local                              # quality that the generated energy should be labelled with on the local markets
+
+  ################################ electric vehicles (EV) ####################################
+  ev:
+    share: 0.5                                  # share of prosumers with EVs
+                                                # unit: 1 [0, 1]
+      
+    num: [1, 1, 1, 1, 2]                        # number of EVs
+                                                # unit: 1 [1, inf)
+                                                # value is randomly chosen from list
+
+    sizing:                                     # sizing of EVs
+      distribution: [0.3, 0.3, 0.2]             # distribution of sizing parameters shown below
+                                                # unit: 1 [0, 1]
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+        
+      file: ["timeseries", "timeseries", "timeseries"]  # driving profile of the ev
+                                                # options:
+                                                #   - timeseries: random file is chosen
+                                                #   - "file name": give specific file name (e.g. "ev_2.csv")
+
+      capacity: [5e4, 7.5e4, 1e5]               # EV battery size
+                                                # unit: Wh
+
+      charging_home: [7.2e3, 7.2e3, 1.1e4]      # EV max charging power at home
+                                                # unit: W
+
+      charging_AC: [7.2e3, 1.1e4, 2.2e4]        # EV max charging power at AC chargers
+                                                # unit: W
+    
+      charging_DC: [5e4, 1e5, 2e5]              # EV max charging power at DC chargers
+                                                # unit: W
+                                                
+      charging_efficiency: [0.9, 0.9, 0.9]      # one way charging efficiency of the vehicle
+                                                # unit: 1 [0, 1]
+
+      soc: [0.8, 0.8, 0.8]                      # initial state of charge of the battery
+                                                # unit: 1 [0, 1]
+
+      v2g: [false, false, false]                # vehicle-to-grid possible
+        
+      v2h: [false, false, false]                # vehicle-to-home possible
+
+    charging_scheme:
+      method: min_soc                           # charging method for the EVs
+                                                # options:
+                                                #   - full:            charge at full power as soon as EV 
+                                                #                      is connected
+                                                #   - price_sensitive: car is only charged when electricity
+                                                #                      price is below given threshold
+                                                #   - min_soc:         car will be charged to minimum
+                                                #                      state-of-charge while at home
+                                                #   - min_soc_time:    reach certain state-of-charge until
+                                                #                      given time each day
+
+      price_sensitive:                          # price sensitive charging parameters
+        threshold: 0.05                         # threshold price
+                                                # unit: €/kWh (-inf, inf)
+
+      min_soc:                                  # minimum SoC charging parameters
+        val: 0.8                                # minimum SoC the EV needs to reach before it leaves again
+                                                # unit: 1 [0, 1]
+
+      min_soc_time:
+        val: 0.8                                # minimum SoC the EV needs to reach before certain time of day
+                                                # unit: 1 [0, 1]
+                                                # note: applies to method: min_soc_time
+
+        time: 8.5                               # time of day that EV needs to have reached specified SoC
+                                                # unit: h [0, 24)
+                                                # note: applies to method: min_soc_time
+
+    fcast:
+      method: arrival                           # EV availability forecasting technique
+                                                # options:
+                                                #   - perfect: perfect knowledge of the future
+                                                #   - arrival: perfect knowledge of the current
+                                                #              availability cycle once the vehicle arrives
+                                                #   - rfr:     random forest regressor
+
+      rfr:
+        features: ['time']                      # used features in weather file to fit the model
+
+    quality: local                              # quality that generated energy (V2G) should be labelled with on the local markets
+
+  ################################ batteries ####################################
+  battery:
+    share: 0.8                                  # share of agents with batteries (if share_dependent_on applies)
+                                                # unit: 1 [0, 1]
+
+    share_dependent_on: ["pv"]                  # does the share of batteries depend on the existence of other devices?
+                                                # options: all devices listed in the agent category [e.g. pv, wind]
+                                                # note: if list contains more than one value, an agent needs to have
+                                                #       all listed devices
+
+    num: [1]                                    # number of inflexible loads
+                                                # note: value is randomly chosen from list
+
+    sizing:                                     # sizing of battery system
+      distribution: [1]                         # distribution of sizing parameters shown below
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+
+      power: [1]                                # relative power
+                                                # unit: W/(kWh/a) --> based on first inflexible_load
+
+      capacity: [1]                             # relative capacity
+                                                # unit: Wh/(kWh/a) --> based on first inflexible_load
+
+      efficiency: [0.95]                        # one way charging efficiency of the battery
+
+      soc: [0.1]                                # initial soc of the battery (0-1)
+
+      g2b: [false]                              # can the battery charge from the grid?
+
+      b2g: [false]                              # can the battery feed into the grid?
+
+    quality: local                              # quality that the sold energy should be labelled with
+                                                # on the local markets
+
+  ################################ heat storage ####################################
+  heat-storage:
+    share: 1                                  # share of agents with heat storage (if share_dependent_on applies)
+                                                # unit: 1 [0, 1]
+
+    share_dependent_on: ["hp"]                  # does the share of storage depend on the existence of other devices?
+                                                # options: all devices listed in the agent category [e.g. pv, wind]
+                                                # note: if list contains more than one value, an agent needs to have
+                                                #   one of the listed devices
+
+    num: [1]                                    # number of devices
+                                                # note: value is randomly chosen from list
+
+    sizing:                                     # sizing of battery system
+      distribution: [1]                         # distribution of sizing parameters shown below
+                                                # note: number of elements must be identical to other values
+                                                # note: if sum does not equal to 1, it is adjusted accordingly
+
+      power: [1]                                # relative power
+                                                # unit: W/(Wh*a)*2000h-> based on first heat
+                                                # note: heat demand is divided by 2000 and multiplied by power value,
+                                                #   e.g. 20 MWh/a heat demand equals 10 kW with power factor of 1
+
+      capacity: [2]                             # relative storage capacity
+                                                # unit: Wh/(Wh*a)*2000h-> based on first heat
+
+      efficiency: [0.95]                        # charging and discharging efficiency
+
+      soc: [0.5]                                # initial soc
+
+    quality: local                              # quality that the sold energy should be labelled with
+                                                # on the local markets
+
+  ################################ energy management system (EMS) ################################
+  ems:
+    controller:                                 # controller parameters
+      rtc:                                      # real time controller parameters (acts only at last possible timestep)
+        method: linopy                          # options:
+                                                #   - None:       no rtc is used to correct behavior in last timestep
+                                                #   - rule-based: production is maxed out, EVs charge immediately
+                                                #                 at max power, HP and CHP run cyclically
+                                                #                 to fill storage
+                                                #   - linopy:     linopy optimization problem is solved
+
+      mpc:                                      # model predictive controller parameters (acts into the future)
+        method: linopy                          # options:
+                                                #   - None:       no mpc is used to forecast and plan operation
+                                                #   - linopy:     linopy optimization problem is solved to forecast and
+                                                #                 plan operation
+
+        horizon: 86_400                         # control horizon
+                                                # unit: s
+                                                # note: applies to strategy: mpc
+                                                # cannot exceed forecast horizon
+
+    market:                                     # market parameters
+      strategy: linear                          # market agent trading strategy
+                                                # options:
+                                                #   - linear:     see docs
+                                                #   - zi:         zero intelligence, random bid and offer prices
+                                                #                 in market price range
+                                                # note: does not apply when simulation ex-post markets
+
+      horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
+                                                # unit: s
+                                                # note: value is randomly chosen from list
+                                                # note: range is limited by the control horizon
+
+      linear:
+        steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                # unit: steps [0, inf)
+                                                # example: timestep=900, steps_to_final=2
+                                                #   -> 1800s before the time is reached the final price is reached
+
+        steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                # unit: steps [0, inf)
+
+      fcast:
+        local:
+          method: naive                         # forecasting method for local market prices
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                # note: does not apply when simulation ex-post markets
+
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
+
+        wholesale:
+          method: naive                         # forecasting method for wholesale market prices
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+
+          naive:                                # naive forecasting method parameters
+            offset: 1                           # offset in days to the current day
+                                                # unit: days
+
+        retailer:
+          energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
+
+          grid:                                 # forecasting method for grid fees
+            local: naive                        # forecasting method for grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+
+            retail: naive                       # forecasting method for retail grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
+          levies: naive                         # forecasting method for levies
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
+
+          balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
+
+    fcasts:                                     # forecasting settings for all forecasts
+        horizon: 86_400                         # forecasting horizon
+                                                # unit: s
+                                                # note: applies to all forecasts
+
+        retraining: 86_400                      # period after which the forecast model is retrained
+                                                # unit: s
+                                                # note: applies to all forecasts
+
+        update: 3_600                           # period after which the forecast model is updated
+                                                # unit: s
+                                                # note: applies to all forecasts
+
+########################################################################################################################
+########################################### aggregators configuration ##################################################
+########################################################################################################################
+# TODO: Not available yet
+
+aggregator:
+
+  #general:
+
+    #active: true                               # Aggregator class active?
+
+
+  types:                                        # for every specific aggregator this section needs to contain the specifications
+                                                # under the aggregators type.
+
+      ################################ aggreg0001 ####################################
+      aggreg0001:                                   # agent type
+
+        general:
+          number_of_type :  1                       # number of aggregators for this type
+
+          aggregation_method: [ "manual" ]
+                                                    # aggregation method
+                                                    # options:
+                                                    #   - manual:
+                                                    #   - clustering:
+
+          market_participant_share: 1                 # share of agents that participate in the local markets
+                                                      # unit: 1
+
+        ################################ manual group settings ####################################
+        manual_represented_group:
+
+          agent_types: ["sfh"]             # types of agents that are represented by the aggregator
+                                                  # options:
+                                                  # - sfh
+                                                  # - mfh
+                                                  # - storage
+                                                  # - ctsp
+
+          agent_devices: ["pv"]
+
+                                                  # devices that the agent must have to be represented by the aggregator
+                                                  # options:
+                                                  # - 'inflexible_load'
+                                                  # - 'flexible_load'
+                                                  # - 'heat'
+                                                  # - 'dhw'
+                                                  # - 'pv'
+                                                  # - 'wind'
+                                                  # - 'fixed_gen'
+                                                  # - 'hp'
+                                                  # - 'ev'
+                                                  # - 'battery'
+                                                  # - 'psh'
+                                                  # - 'hydrogen'
+                                                  # - 'heat_storage'
+
+
+          devices_inclusive: "exclusive"          # inclusive: agents needs to have ALL the listed plants to fulfill requirements
+                                                  # exclusive: agents needs to have ANY of the listed plants to fulfill requirements
+
+          share: 0.2                             # share of the specified group that is represented by the aggregators of this type
+
+        ################################ clustering group settings ####################################
+        clustering_represented_group:
+
+          agent_types: ["sfh", "mfh"]             # types of agents that are represented by the aggregator
+                                                  # options:
+                                                  # - sfh
+                                                  # - mfh
+                                                  # - storage
+                                                  # - ctsp
+
+          #agent_devices: ["inflexible_load", "pv", "wind", "dhw", "heat", "ev", "battery"]
+
+                                                  # devices that the agent must have to be represented by the aggregator
+                                                  # options:
+                                                  # - 'inflexible_load'
+                                                  # - 'flexible_load'
+                                                  # - 'heat'
+                                                  # - 'dhw'
+                                                  # - 'pv'
+                                                  # - 'wind'
+                                                  # - 'fixed_gen'
+                                                  # - 'hp'
+                                                  # - 'ev'
+                                                  # - 'battery'
+                                                  # - 'psh'
+                                                  # - 'hydrogen'
+                                                  # - 'heat_storage'
+
+
+          #devices_inclusive: "exclusive"          # inclusive: agents needs to have ALL the listed plants to fulfill requirements
+                                                  # exclusive: agents needs to have ANY of the listed plants to fulfill requirements
+
+          #share: 0.1                             # share of the specified group that is represented by the aggregators of this type
+
+        ################################ energy management system (EMS) ################################
+        ems:
+          controller:                                 # controller parameters
+            rtc:                                      # real time controller parameters (acts only at last possible timestep)
+              method: linopy                          # options:
+                                                      #   - None:       no rtc is used to correct behavior in last timestep
+                                                      #   - rule-based: production is maxed out, EVs charge immediately
+                                                      #                 at max power, HP and CHP run cyclically
+                                                      #                 to fill storage
+                                                      #   - linopy:     linopy optimization problem is solved
+
+            mpc:                                      # model predictive controller parameters (acts into the future)
+              method: linopy                          # options:
+                                                      #   - None:       no mpc is used to forecast and plan operation
+                                                      #   - linopy:     linopy optimization problem is solved to forecast and
+                                                      #                 plan operation
+
+              horizon: 86_400                         # control horizon
+                                                      # unit: s
+                                                      # note: applies to strategy: mpc
+                                                      # cannot exceed forecast horizon
+
+          market:                                     # market parameters
+            strategy: linear                          # market agent trading strategy
+                                                      # options:
+                                                      #   - linear:     see docs
+                                                      #   - zi:         zero intelligence, random bid and offer prices
+                                                      #                 in market price range
+                                                      # note: does not apply when simulation ex-post markets
+
+            horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
+                                                      # unit: s
+                                                      # note: value is randomly chosen from list
+                                                      # note: range is limited by the control horizon
+
+            linear:
+              steps_to_final: 1                       # steps the final price is reached before the time is reached
+                                                      # unit: steps [0, inf)
+                                                      # example: timestep=900, steps_to_final=2
+                                                      #   -> 1800s before the time is reached the final price is reached
+
+              steps_from_init: 0                      # steps the initial price is kept before the linear change starts
+                                                      # unit: steps [0, inf)
+
+            fcast:
+              local:
+                method: naive                         # forecasting method for local market prices
+                                                      # options:
+                                                      #   - flat:  no meaningful forecasting, flat price assumed
+                                                      #   - naive: expected price same as previous day (initialized flat)
+                                                      # note: does not apply when simulation ex-post markets
+
+                naive:                                # naive forecasting method parameters
+                  offset: 1                           # offset in days to the current day
+                                                      # unit: days
+
+              wholesale:
+                method: naive                         # forecasting method for wholesale market prices
+                                                      # options:
+                                                      #   - flat:  no meaningful forecasting, flat price assumed
+                                                      #   - naive: expected price same as previous day (initialized flat)
+                                                      #   - perfect: perfect foresight of market price
+
+                naive:                                # naive forecasting method parameters
+                  offset: 1                           # offset in days to the current day
+                                                      # unit: days
+
+              retailer:
+                energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
+                                                      # options:
+                                                      #   - flat:  no meaningful forecasting, flat price assumed
+                                                      #   - naive: expected price same as previous day (initialized flat)
+                                                      #   - perfect: perfect foresight of market price
+                                                      # note: first value is for prices and second for quantities
+
+                grid:                                 # forecasting method for grid fees
+                  local: naive                        # forecasting method for grid fees
+                                                      # options:
+                                                      #   - flat:  no meaningful forecasting, flat price assumed
+                                                      #   - naive: expected price same as previous day (initialized flat)
+                                                      #   - perfect: perfect foresight of market price
+
+                  retail: naive                       # forecasting method for retail grid fees
+                                                      # options:
+                                                      #   - flat:  no meaningful forecasting, flat price assumed
+                                                      #   - naive: expected price same as previous day (initialized flat)
+                                                      #   - perfect: perfect foresight of market price
+                                                      # note: first value is for selling, second for buying
+                levies: naive                         # forecasting method for levies
+                                                      # options:
+                                                      #   - flat:  no meaningful forecasting, flat price assumed
+                                                      #   - naive: expected price same as previous day (initialized flat)
+                                                      #   - perfect: perfect foresight of market price
+                                                      # note: first value is for selling, second for buying
+
+                balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
+                                                      # options:
+                                                      #   - flat:  no meaningful forecasting, flat price assumed
+                                                      #   - naive: expected price same as previous day (initialized flat)
+                                                      #   - perfect: perfect foresight of market price
+                                                      # note: first value is for prices and second for quantities
+
+          fcasts:                                     # forecasting settings for all forecasts
+              horizon: 86_400                         # forecasting horizon
+                                                      # unit: s
+                                                      # note: applies to all forecasts
+
+              retraining: 86_400                      # period after which the forecast model is retrained
+                                                      # unit: s
+                                                      # note: applies to all forecasts
+
+              update: 3_600                           # period after which the forecast model is updated
+                                                      # unit: s
+                                                      # note: applies to all forecasts
