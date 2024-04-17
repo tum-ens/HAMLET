@@ -1,0 +1,46 @@
+########################################################################################################################
+############################################## setup configuration #####################################################
+########################################################################################################################
+
+time:                                     # time settings
+  start: 2019-11-14T00:00:00+01:00        # start of simulation in unix time with timezone information
+                                          # format (ISO 8601): %Y-%m-%dT%H:%M:%S%z (YYYY-MM-DDTHH:MM:SS+HH:MM)
+
+  duration: 2                           # duration of the simulation
+                                          # unit: days
+
+  timestep: 900                           # minimum timestep of the simulation
+                                          # unit: seconds
+
+location:                                 # location of the simulation
+  latitude: 49.71754                      # latitude
+                                          # unit: degrees
+
+  longitude: 11.05877                     # longitude
+                                          # unit: degrees
+
+  name: Forchheim                            # name of the location
+                                          # note: used for naming the results
+
+  altitude: 266                           # altitude
+                                          # unit: meters
+
+  weather: weather.ft                     # weather file to be used for the location
+                                          # file types: csv, ft
+
+paths:                                    # paths relevant for the simulation
+  input: ../03_input_data               # path that contains the input data
+                                          # note: relative to the lemlab repository
+
+  scenarios: ../04_scenarios            # path that contains the scenario setup
+                                          # note: relative to the lemlab repository
+
+  results: ../05_results                # path that contains the scenario results
+                                          # note: relative to the lemlab repository
+
+modeling:                                 # modeling settings
+  solver: gurobi                          # solver for the simulation
+                                          # options (preferably MIQP capable):
+                                          #   - gurobi: recommended
+                                          #   - cplex
+                                          #   - glpk: possible with limitations; see documentation for more info
