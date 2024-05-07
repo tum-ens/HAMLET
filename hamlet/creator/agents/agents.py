@@ -472,11 +472,12 @@ class Agents:
             except ValueError:
                 continue
 
-            # Add general information to the plant dictionary
-            plant_dict["type"] = plant
-
-            # Process each device individually (agent can have more than one of each type)
+            # Process each device individually
             for num_plant in range(num_plants):
+
+                # Add plant type
+                plant_dict["type"] = plant
+
                 # Generate and store plant ID
                 plant_id = self._gen_new_ids()
                 plant_dict["id"] = plant_id
@@ -492,7 +493,7 @@ class Agents:
                 setpoints[plant_id] = self.__init_vals(df=setpoints)
 
                 # Add and process additional plant information
-                plant_dict.update(info)
+                plant_dict.update(copy.deepcopy(info))
                 plant_dict = self.__clean_indexed_info(data=plant_dict, key='sizing', index=num_plant)
 
                 # Add time series if applicable
@@ -519,9 +520,8 @@ class Agents:
 
                 # Add plant information to the main dictionary
                 plants_dict[plant_id] = plant_dict
-
-            # Reset for the next entry
-            plant_dict = {}
+                # Reset for the next entry
+                plant_dict = {}
 
         # Add forecast columns
         forecasts = pd.DataFrame(columns=timeseries.columns, index=forecasts.index)
