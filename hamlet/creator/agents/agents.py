@@ -510,7 +510,8 @@ class Agents:
                 # Add state of charge (SOC) if applicable
                 try:
                     socs[plant_id] = self.__init_vals(df=socs,
-                                                      vals=round(info["sizing"]["soc"] * info["sizing"]["capacity"]))
+                                                      vals=round(plant_dict["sizing"]["soc"]
+                                                                 * plant_dict["sizing"]["capacity"]))
                 except KeyError:
                     pass
 
