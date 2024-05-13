@@ -548,7 +548,7 @@ class Lem(MarketBase):
         net_energy = net_energy.with_columns([
             (pl.when(pl.col(c.TC_ENERGY) > 0).then(pl.col(c.TC_ENERGY)).otherwise(None))
             .alias(c.TC_ENERGY_IN).cast(pl.Int64),
-            (pl.when(pl.col(c.TC_ENERGY) < 0).then(pl.col(c.TC_ENERGY)).otherwise(None))
+            (pl.when(pl.col(c.TC_ENERGY) < 0).then(pl.col(c.TC_ENERGY).abs()).otherwise(None))
             .alias(c.TC_ENERGY_OUT).cast(pl.Int64),
         ])
         net_energy = net_energy.drop(c.TC_ENERGY)
