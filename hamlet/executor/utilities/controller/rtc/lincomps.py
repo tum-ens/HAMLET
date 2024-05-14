@@ -33,35 +33,35 @@ class LinopyComps:
     def define_constraints(model):
         return model
 
-    def define_electricity_variable(self, model, comp_type, lower, upper) -> Model:
+    def define_electricity_variable(self, model, comp_type, lower, upper, integer=True) -> Model:
         # Define the power variable
-        model.add_variables(name=f'{self.name}_{comp_type}_{c.ET_ELECTRICITY}', lower=lower, upper=upper)
+        model.add_variables(name=f'{self.name}_{comp_type}_{c.ET_ELECTRICITY}', lower=lower, upper=upper, integer=integer)
 
         return model
 
-    def define_heat_variable(self, model, comp_type, lower, upper, load_target=None) -> Model:
+    def define_heat_variable(self, model, comp_type, lower, upper, load_target=None, integer=True) -> Model:
         # Define the power variable
         if load_target is None:
             name = f'{self.name}_{comp_type}_{c.ET_HEAT}'
         else:
             name = f'{self.name}_{comp_type}_{c.ET_HEAT}_{load_target}'
-        model.add_variables(name=name, lower=lower, upper=upper)
+        model.add_variables(name=name, lower=lower, upper=upper, integer=integer)
 
         return model
 
-    def define_cool_variable(self, model, comp_type, lower, upper, load_target=None) -> Model:
+    def define_cool_variable(self, model, comp_type, lower, upper, load_target=None, integer=True) -> Model:
         # Define the power variable
         if load_target is None:
             name = f'{self.name}_{comp_type}_{c.ET_COOLING}'
         else:
             name = f'{self.name}_{comp_type}_{c.ET_COOLING}_{load_target}'
-        model.add_variables(name=name, lower=lower, upper=upper)
+        model.add_variables(name=name, lower=lower, upper=upper, integer=integer)
 
         return model
 
-    def define_h2_variable(self, model, comp_type, lower, upper) -> Model:
+    def define_h2_variable(self, model, comp_type, lower, upper, integer=True) -> Model:
         # Define the power variable
-        model.add_variables(name=f'{self.name}_{comp_type}_{c.ET_H2}', lower=lower, upper=upper)
+        model.add_variables(name=f'{self.name}_{comp_type}_{c.ET_H2}', lower=lower, upper=upper, integer=integer)
 
         return model
 
@@ -74,10 +74,10 @@ class LinopyComps:
         # Define the deviation variable for positive and negative deviations
         # Deviation when more is charged than according to target
         model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_pos',
-                            lower=0, upper=self.upper - self.target, integer=True)
+                            lower=0, upper=max(0, self.upper - self.target), integer=True)
         # Deviation when less is discharged than according to target
         model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_neg',
-                            lower=0, upper=self.target - self.lower, integer=True)
+                            lower=0, upper=max(0, self.target - self.lower), integer=True)
 
         return model
 

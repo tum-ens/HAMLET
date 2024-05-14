@@ -337,9 +337,9 @@ class Rtc(ControllerBase):
 
             # Check if the solution is optimal
             if status[0] != 'ok':
-                print(f'Exited with status "{status[0]}". \n '
-                      f'Infeasibilities for agent {self.agent.agent_id}:')
-                print(self.model.print_infeasibilities())
+                print(f'Exited with status "{status[0]}". \n'
+                      f'Infeasibilities for agent {self.agent.agent_id}: \n'
+                      f'{self.model.print_infeasibilities()}')
 
                 # Print the model
                 print('Model:')
@@ -407,7 +407,7 @@ class Rtc(ControllerBase):
                     # Add column to dataframe with 0 values
                     self.setpoints = self.setpoints.with_columns(pl.lit(0).alias(src_col))
                 # Assign setpoint value to first row
-                self.setpoints[0, src_col] = solution[src_col]
+                self.setpoints[0, src_col] = round(solution[src_col])
 
             # Sum the respective market columns into one column
             # (Will be deprecated once the balancing variable is taken out of the equations)
