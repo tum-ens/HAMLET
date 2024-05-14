@@ -69,21 +69,15 @@ class LinopyComps:
 
     def _define_target_and_deviations_variables(self, model):
         model.add_variables(name=f'{self.name}_{self.comp_type}_target',
-                            lower=self.target, upper=self.target)
+                            lower=self.target, upper=self.target, integer=True)
 
         # Define the deviation variable for positive and negative deviations
         # Deviation when more is charged than according to target
-        name = f'{self.name}_{self.comp_type}_deviation_pos'
-        if self.target <= self.upper:
-            model.add_variables(name=name, lower=0, upper=max(0, self.upper - self.target))
-        else:
-            raise Warning(f'Target value ({self.target}) is higher than upper limit ({self.upper}) for {name}.')
+        model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_pos',
+                            lower=0, upper=max(0, self.upper - self.target), integer=True)
         # Deviation when less is discharged than according to target
-        name = f'{self.name}_{self.comp_type}_deviation_neg'
-        if self.target >= self.lower:
-            model.add_variables(name=name, lower=0, upper=max(0, self.target - self.lower))
-        else:
-            raise Warning(f'Target value ({self.target}) is lower than lower limit ({self.lower}) for {name}.')
+        model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_neg',
+                            lower=0, upper=max(0, self.target - self.lower), integer=True)
 
         return model
 
@@ -309,9 +303,6 @@ class Hp(LinopyComps):
 
         self.upper, self.lower = 0, self.power_electricity
 
-        # Ensure that target never exceeds the limits
-        self.target = max(min(self.target, self.upper), self.lower)
-
     def define_variables(self, model, **kwargs) -> Model:
         self.comp_type = kwargs['comp_type']
 
@@ -420,9 +411,6 @@ class Ev(LinopyComps):
         else:
             self.lower, self.upper = 0, 0
 
-        # Ensure that target never exceeds the limits
-        self.target = max(min(self.target, self.upper), self.lower)
-
     def define_variables(self, model, **kwargs):
         self.comp_type = kwargs['comp_type']
 
@@ -518,10 +506,6 @@ class SimpleStorage(LinopyComps):
 
         return model
 
-    def _limit_target(self):
-        # Ensure that target never exceeds the limits
-        return max(min(self.target, self.upper), self.lower)
-
 
 class Battery(SimpleStorage):
 
@@ -535,9 +519,6 @@ class Battery(SimpleStorage):
         self.b2g = self.info['sizing']['b2g']
         self.g2b = self.info['sizing']['g2b']
 
-        # Ensure that target never exceeds the limits
-        self.target = self._limit_target()
-
 
 class Psh(SimpleStorage):
 
@@ -549,9 +530,6 @@ class Psh(SimpleStorage):
         if self.target is None:
             self.target = kwargs['targets'][f'{self.name}_{c.P_PSH}_{c.ET_ELECTRICITY}'][0]
 
-        # Ensure that target never exceeds the limits
-        self.target = self._limit_target()
-
 
 class Hydrogen(SimpleStorage):
 
@@ -562,9 +540,6 @@ class Hydrogen(SimpleStorage):
 
         if self.target is None:
             self.target = kwargs['targets'][f'{self.name}_{c.P_HYDROGEN}_{c.ET_H2}'][0]
-
-        # Ensure that target never exceeds the limits
-        self.target = self._limit_target()
 
     def define_variables(self, model, **kwargs) -> Model:
         self.comp_type = kwargs['comp_type']
@@ -595,9 +570,6 @@ class HeatStorage(SimpleStorage):
 
         if self.target is None:
             self.target = kwargs['targets'][f'{self.name}_{c.P_HEAT_STORAGE}_{c.ET_HEAT}'][0]
-
-        # Ensure that target never exceeds the limits
-        self.target = self._limit_target()
 
     def define_variables(self, model, **kwargs) -> Model:
         self.comp_type = kwargs['comp_type']
