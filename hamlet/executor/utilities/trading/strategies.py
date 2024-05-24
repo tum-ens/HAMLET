@@ -109,22 +109,17 @@ class TradingBase:
             ]
         )
 
-        try:
-            # Fill all empty values in left timestep with those of the right timestep
-            self.market_transactions = self.market_transactions.with_columns(
-                [
-                    pl.col(c.TC_TIMESTEP).fill_null(pl.col(f'{c.TC_TIMESTEP}_right'))
-                ]
-            )
-            # Drop unnecessary columns
-            self.market_transactions = self.market_transactions.drop([c.TC_ENERGY, 'buy_sell',
-                                                                      f'{self.market_name}_{self.energy_type}',
-                                                                      f'{c.TC_TIMESTEP}_right'])
-        except pl.exceptions.ColumnNotFoundError:
-            # Drop unnecessary columns
-            self.market_transactions = self.market_transactions.drop([c.TC_ENERGY, 'buy_sell',
-                                                                      f'{self.market_name}_{self.energy_type}'])
+        # Fill all empty values in left timestep with those of the right timestep
+        self.market_transactions = self.market_transactions.with_columns(
+            [
+                pl.col(c.TC_TIMESTEP).fill_null(pl.col(f'{c.TC_TIMESTEP}_right'))
+            ]
+        )
 
+        # Drop unnecessary columns
+        self.market_transactions = self.market_transactions.drop([c.TC_ENERGY, 'buy_sell',
+                                                                  f'{self.market_name}_{self.energy_type}',
+                                                                  f'{c.TC_TIMESTEP}_right'])
 
         # Create the dataframe for the bids and offers
         self.bids_offers = self.timetable.select([c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME,
@@ -251,11 +246,11 @@ class Zi(TradingBase):
                 (((pl.col('energy_price_sell') - pl.col('energy_price_buy'))
                   * pl.Series([random.random() for _ in range(len_table)]))
                  + pl.col('energy_price_buy'))
-                .alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
+                .alias(c.TC_PRICE_PU_IN),
                 (((pl.col('energy_price_sell') - pl.col('energy_price_buy'))
                   * pl.Series([random.random() for _ in range(len_table)]))
                  + pl.col('energy_price_buy'))
-                .alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
+                .alias(c.TC_PRICE_PU_OUT),
             ]
         )
 
@@ -266,35 +261,3 @@ class Zi(TradingBase):
         self.agent.bids_offers = self.bids_offers
 
         return self.agent
-
-
-class Retailer(TradingBase):
-    """This class implements the retailer trading strategy.
-    It means that the agent will always pay the price of the retailer for buying and selling, respectively."""
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def create_bids_offers(self):
-        # Preprocess the bids and offers table
-        self.bids_offers = self._preprocess_bids_offers()
-
-        # Get the length of the table
-        len_table = len(self.bids_offers)
-
-        # Add columns for the price per unit
-        self.bids_offers = self.bids_offers.with_columns(
-            [
-                pl.col('energy_price_buy').alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
-                pl.col('energy_price_sell').alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
-            ]
-        )
-
-        # Postprocess the bids and offers table
-        self.bids_offers = self._postprocess_bids_offers()
-
-        # Update agent information
-        self.agent.bids_offers = self.bids_offers
-
-        return self.agent
-
