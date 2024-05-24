@@ -414,7 +414,7 @@ class Agents:
         # Length of the forecasting period in seconds
         fcast_period = account[c.K_EMS]['fcasts']['horizon']
         # Start of the simulation in UTC
-        start = self.setup['time']['start'].replace(tzinfo=datetime.timezone.utc)
+        start = datetime.datetime.fromisoformat(str(self.setup['time']['start'])).astimezone(datetime.timezone.utc)
         # Start of the forecasting period in UTC
         start_fcast_train = start - train_period
         # End of the simulation in UTC (one day added to ensure no foreward forecasting issues)
