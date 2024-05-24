@@ -4,7 +4,6 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
-import numpy as np
 import pandas as pd
 from hamlet.creator.markets.markets import Markets
 import os
@@ -15,22 +14,6 @@ import datetime
 import time
 import shutil
 import hamlet.constants as c
-
-TIMETABLE_COLUMNS = [c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE, c.TC_ACTIONS]
-
-TIMETABLE_FORMAT = {
-    c.TC_TIMESTAMP: 'datetime64[ns, UTC]',
-    c.TC_TIMESTEP: 'datetime64[ns, UTC]',
-    c.TC_REGION: 'category',
-    c.TC_MARKET: 'category',
-    c.TC_NAME: 'category',
-    c.TC_ENERGY_TYPE: 'category',
-    c.TC_ACTIONS: 'category',
-    c.TC_CLEARING_TYPE: 'category',
-    c.TC_CLEARING_METHOD: 'category',
-    c.TC_CLEARING_PRICING: 'category',
-    c.TC_COUPLING: 'category',
-}
 
 
 class Lem(Markets):
@@ -48,16 +31,17 @@ class Lem(Markets):
 
         # Available types of clearing
         self.clearing_types = {
-            c.MCT_EX_ANTE: {
+            'ex-ante': {
                 'timetable': self._create_timetable_ex_ante,
             },
-            c.MCT_EX_POST: {
-                'timetable': self._create_timetable_ex_post,
-                'settling': self._create_settling_ex_post,
-            },
+            # 'ex-post': {
+            #     'timetable': self._create_timetable_ex_post(),
+            #     'settling': self._create_settling_ex_post(),
+            # },
         }
 
     def create_market_from_config(self):
+
         # Create timetable
         timetable = self._create_timetable()
 
@@ -65,6 +49,7 @@ class Lem(Markets):
 
     def _create_timetable(self) -> pd.DataFrame:
         """Create timetable for the market"""
+
         # Call the respective function depending on the clearing type to create the timetable
         if self.market['clearing']['type'] in self.clearing_types:
             return self.clearing_types[self.market['clearing']['type']]['timetable']()
@@ -79,45 +64,29 @@ class Lem(Markets):
         timing = clearing['timing']
 
         # Get start and end time of the market simulation
-        start = self._calculate_start_time(timing['start'])
-        end = self._calculate_end_time(start)
-
-        # Create timetable template
-        timetable = pd.DataFrame(columns=TIMETABLE_COLUMNS)
-
-        # Add action information
-        timetable = self._add_actions(timetable, start, end, timing)
-
-        # Add market information
-        timetable = self._add_market_information(timetable)
-
-        # Add clearing information
-        timetable = self._add_clearing_information(timetable, clearing)
-
-        # Add final information
-        timetable = self._finalize_timetable(timetable, clearing)
-
-        return timetable
-
-    def _calculate_start_time(self, start):
-        if not isinstance(start, timestamp.TimeStamp):
-            start = self.setup['time']['start'] + pd.Timedelta(start, unit='seconds')
-        return datetime.datetime.fromisoformat(str(start)).astimezone(datetime.timezone.utc)
-
-    def _calculate_end_time(self, start):
+        # start is either a timestamp or a timedelta
+        start = timing['start'] if type(timing['start']) == timestamp.TimeStamp \
+            else self.setup['time']['start'] + pd.Timedelta(timing['start'], unit='seconds')
+        start = datetime.datetime.fromisoformat(str(start)).astimezone(datetime.timezone.utc)  # convert to UTC
+        # end is the end of the simulation
+        # Make sure that fractions are properly read
         if isinstance(self.setup['time']['duration'], str):
             numerator, denominator = map(int, self.setup['time']['duration'].split('/'))
             self.setup['time']['duration'] = numerator / denominator
-        return start + pd.Timedelta(self.setup['time']['duration'], unit='days')
+        end = start + pd.Timedelta(self.setup['time']['duration'], unit='days')
 
-    def _add_actions(self, timetable, start, end, timing):
-
-        # Create a list that will contain the timestamps
-        list_of_timestamps = []
+        # Create timetable template and main template
+        tt = pd.DataFrame(columns=[c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE,
+                                   c.TC_ACTIONS])
+        timetable = tt.copy()  # main template that will contain all timetables created in the following loop
+        # tt['timestamp'] = pd.date_range(start=start, end=end, freq=f'{timing["frequency"]}S')
 
         # Loop over all time steps (each market opening)
         time_opening = start
         while time_opening < end:
+            # Create timetable for entire clearing period
+            tt_opening = tt.copy()
+
             # Set the time frequency to the opening time
             time_frequency = time_opening
 
@@ -129,13 +98,12 @@ class Lem(Markets):
                 # Last time step is the last time step of the market horizon
                 end_opening = time_opening + pd.Timedelta(timing['horizon'][1], unit='seconds')
             else:
-                raise ValueError(
-                    f'Frequency ({timing["frequency"]}) must be smaller than opening ({timing["opening"]})')
+                raise ValueError(f'Frequency ({timing["frequency"]}) must be smaller than opening ({timing["opening"]})')
 
             # Loop over each frequency time step
             while time_frequency < end_opening:
                 # Create timetable for each frequency time step
-                tt_frequency = timetable.copy()
+                tt_frequency = tt.copy()
 
                 # Add the time steps where actions are to be executed
                 # Starting time is either the current time or the first timestamp of the horizon
@@ -149,6 +117,7 @@ class Lem(Markets):
                 # Add timestamp (at which time are all actions to be executed)
                 tt_frequency[c.TC_TIMESTAMP] = time_frequency
 
+                # Begin: Add actions
                 # Note: the actions depends on the timing parameters
                 # Note: actions are separated by a comma (e.g. 'clear,settle')
                 # Advice: The creation of the correct task sequence took several days due to its complexity. Do not be
@@ -178,98 +147,55 @@ class Lem(Markets):
                 elif timing['settling'] == 'periodic':
                     # Set all time steps to be settled once first value (i.e. any value) becomes True
                     if any(tt_frequency[c.TC_TIMESTEP] - tt_frequency[c.TC_TIMESTAMP] < pd.Timedelta(timing['closing'],
-                                                                                                     unit='seconds')):
+                                                                                           unit='seconds')):
                         tt_frequency['action'] = 'settle'
                 else:
                     raise ValueError(f'Closing type "{timing["closing"]}" not available')
 
+                # End: Add actions
+
                 # Add to timetable of opening
-                list_of_timestamps.append(tt_frequency)
+                tt_opening = pd.concat([tt_opening, tt_frequency], ignore_index=True)
+
 
                 # Add time until the next frequency time step
                 time_frequency += pd.Timedelta(timing['frequency'], unit='seconds')
 
+            # Append to main timetable
+            timetable = pd.concat([timetable, tt_opening], ignore_index=True)
+
             # Add time until the next opening of market
             time_opening += pd.Timedelta(timing['opening'], unit='seconds')
 
-        # Combine all frequency time steps
-        timetable = pd.concat([timetable] + list_of_timestamps, ignore_index=True)
-
-        # Check if every timestep has a settling action when timestamp and timestep match
-        timetable = self._ensure_settlement(timetable, end)
-
-        return timetable
-
-    @staticmethod
-    def _ensure_settlement(timetable, end):
-        """Check if every timestep has a settling action when timestamp and timestep match"""
-        # Find all unique times from timestamp and timestep
-        times = np.concatenate((timetable[c.TC_TIMESTAMP].unique(), timetable[c.TC_TIMESTEP].unique()), axis=0)
-        times = pd.Series(np.unique(times))
-        # Loop over all unique times
-        list_of_missing_timesteps = []
-        for timestamp in times:
-            # Skip if timestamp is outside the simulation time
-            if timestamp >= end:
-                continue
-            # Check if there is a row that has the same timestamp and timestep
-            if ((timetable[c.TC_TIMESTAMP] == timestamp) & (timetable[c.TC_TIMESTEP] == timestamp)).any():
-                # Check if it has 'settle' as action
-                actions = timetable.loc[((timetable[c.TC_TIMESTAMP] == timestamp)
-                                                  & (timetable[c.TC_TIMESTEP] == timestamp)), 'action'].values[0]
-                if 'settle' not in actions:
-                    # If not, add 'settle' action
-                    timetable.loc[((timetable[c.TC_TIMESTAMP] == timestamp) & (timetable[c.TC_TIMESTEP] == timestamp))
-                                  , 'action'] += ',settle'
-            else:
-                # Append the missing timestep with 'settle' action
-                row = timetable.iloc[0].copy()
-                row[c.TC_TIMESTAMP] = timestamp
-                row[c.TC_TIMESTEP] = timestamp
-                row['action'] = 'settle'
-                list_of_missing_timesteps.append(row)
-
-        # Concat with the original timetable if there are new rows
-        if len(list_of_missing_timesteps) > 0:
-            df_missing_timesteps = pd.DataFrame(list_of_missing_timesteps)
-            timetable = pd.concat([timetable, df_missing_timesteps], ignore_index=True)
-
-        return timetable
-
-    def _add_market_information(self, timetable):
         # Add market type and name
         timetable[c.TC_REGION] = self.region
         timetable[c.TC_MARKET] = self.market_type
         timetable[c.TC_NAME] = self.name
         timetable[c.TC_ENERGY_TYPE] = self.energy_type
 
-        return timetable
-
-    def _add_clearing_information(self,timetable, clearing):
         # Add remaining clearing information
         timetable[c.TC_CLEARING_TYPE] = clearing['type']
         timetable[c.TC_CLEARING_METHOD] = clearing['method']
         timetable[c.TC_CLEARING_PRICING] = clearing['pricing']
+        timetable[c.TC_COUPLING] = clearing['coupling']
 
-        # Add coupling information
-        timetable = self._add_coupling_information(timetable, clearing['coupling'])
-
-        return timetable
-
-    def _add_coupling_information(self, timetable, coupling):
-        """Adds the coupling information to the timetable"""
-        # Add coupling information
-        timetable[c.TC_COUPLING] = coupling
-
-        return timetable
-
-    @staticmethod
-    def _finalize_timetable(timetable, clearing):
         # Sort timetable by timestamp and timestep
         timetable.sort_values(by=[c.TC_TIMESTAMP, c.TC_TIMESTEP], inplace=True)
 
         # Change dtypes for all columns
-        timetable = timetable.astype(TIMETABLE_FORMAT)
+        timetable = timetable.astype({
+            c.TC_TIMESTAMP: 'datetime64[ns, UTC]',
+            c.TC_TIMESTEP: 'datetime64[ns, UTC]',
+            c.TC_REGION: 'category',
+            c.TC_MARKET: 'category',
+            c.TC_NAME: 'category',
+            c.TC_ENERGY_TYPE: 'category',
+            c.TC_ACTIONS: 'category',
+            c.TC_CLEARING_TYPE: 'category',
+            c.TC_CLEARING_METHOD: 'category',
+            c.TC_CLEARING_PRICING: 'category',
+            c.TC_COUPLING: 'category',
+        })
 
         return timetable
 
@@ -313,12 +239,6 @@ class Lem(Markets):
             prices = self._add_columns(df=prices, component=key, config=info)
 
         return prices
-
-    def _create_timetable_ex_post(self):
-        raise NotImplementedError(f'Ex-post clearing not available yet.')
-
-    def _create_settling_ex_post(self):
-        raise NotImplementedError(f'Ex-post settling not available yet.')
 
     def _add_columns(self, df, component, config):
         """Add columns for each cost component"""
