@@ -109,8 +109,17 @@ class TradingBase:
             ]
         )
 
+        # Fill all empty values in left timestep with those of the right timestep
+        self.market_transactions = self.market_transactions.with_columns(
+            [
+                pl.col(c.TC_TIMESTEP).fill_null(pl.col(f'{c.TC_TIMESTEP}_right'))
+            ]
+        )
+
         # Drop unnecessary columns
-        self.market_transactions = self.market_transactions.drop([c.TC_ENERGY, 'buy_sell', f'{self.market_name}_{self.energy_type}'])
+        self.market_transactions = self.market_transactions.drop([c.TC_ENERGY, 'buy_sell',
+                                                                  f'{self.market_name}_{self.energy_type}',
+                                                                  f'{c.TC_TIMESTEP}_right'])
 
         # Create the dataframe for the bids and offers
         self.bids_offers = self.timetable.select([c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME,
