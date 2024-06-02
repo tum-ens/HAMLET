@@ -133,6 +133,7 @@ class Lem(MarketBase):
 
         # Check if there is anything to clear otherwise return
         if self.bids_offers.is_empty():
+            self.__update_database()
             return (self.transactions, self.offers_uncleared, self.bids_uncleared, self.offers_cleared,
                     self.bids_cleared)
 
