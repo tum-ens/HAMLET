@@ -67,14 +67,13 @@ class Lem(Markets):
         # start is either a timestamp or a timedelta
         start = timing['start'] if type(timing['start']) == timestamp.TimeStamp \
             else self.setup['time']['start'] + pd.Timedelta(timing['start'], unit='seconds')
-        start = start.replace(tzinfo=datetime.timezone.utc)  # needed to obtain correct time zone
+        start = datetime.datetime.fromisoformat(str(start)).astimezone(datetime.timezone.utc)  # convert to UTC
         # end is the end of the simulation
         # Make sure that fractions are properly read
         if isinstance(self.setup['time']['duration'], str):
             numerator, denominator = map(int, self.setup['time']['duration'].split('/'))
             self.setup['time']['duration'] = numerator / denominator
-        end = self.setup['time']['start'] + pd.Timedelta(self.setup['time']['duration'], unit='days')
-        end = end.replace(tzinfo=datetime.timezone.utc)  # needed to obtain correct time zone
+        end = start + pd.Timedelta(self.setup['time']['duration'], unit='days')
 
         # Create timetable template and main template
         tt = pd.DataFrame(columns=[c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE,

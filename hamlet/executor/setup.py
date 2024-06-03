@@ -30,6 +30,8 @@ from hamlet.executor.utilities.database.database import Database
 import hamlet.constants as c
 # pl.enable_string_cache(True)
 from copy import copy
+import warnings
+warnings.filterwarnings("ignore")
 
 # TODO: Considerations
 # - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator_backup and should be continued for consistency

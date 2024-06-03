@@ -163,6 +163,9 @@ class Rtc(ControllerBase):
             self.define_objective()
 
         def create_plants(self):
+            """
+            Create the plant objects for the optimization problem
+            """
             for plant_name, plant_data in self.plants.items():
 
                 # Get the plant type from the plant data
@@ -192,7 +195,9 @@ class Rtc(ControllerBase):
             return self.plant_objects
 
         def create_markets(self):
-            """"""
+            """
+            Create the market objects for the optimization problem
+            """
 
             # Define variables from the market results and a balancing variable for each energy type
             for market in self.markets:

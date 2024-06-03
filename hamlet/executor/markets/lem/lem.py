@@ -350,8 +350,8 @@ class Lem(MarketBase):
         )
         # Drop the rows where the energy is smaller or equal to 0
         bids_uncleared = bids_uncleared.filter(pl.col(c.TC_ENERGY_IN) > 0)
-        # Drop the energy and energy_cumsum column
-        bids_uncleared = bids_uncleared.drop(c.TC_ENERGY, C_ENERGY_CUMSUM)
+        # Drop the energy, agent_in_right and energy_cumsum column
+        bids_uncleared = bids_uncleared.drop([c.TC_ENERGY, C_ENERGY_CUMSUM, f'{c.TC_ID_AGENT_IN}_right'])
         # Drop all rows where the agent id is the same as the one in the retailer table
         retailer_names = retailer.select(c.TC_ID_AGENT).to_series().to_list()
         bids_uncleared = bids_uncleared.filter(~pl.col(c.TC_ID_AGENT_IN).is_in(retailer_names))
@@ -370,8 +370,8 @@ class Lem(MarketBase):
         )
         # Drop the rows where the energy is smaller or equal to 0
         offers_uncleared = offers_uncleared.filter(pl.col(c.TC_ENERGY_OUT) > 0)
-        # Drop the energy and energy_cumsum column
-        offers_uncleared = offers_uncleared.drop(c.TC_ENERGY, C_ENERGY_CUMSUM)
+        # Drop the energy, agent_in_right and energy_cumsum column
+        offers_uncleared = offers_uncleared.drop([c.TC_ENERGY, C_ENERGY_CUMSUM, f'{c.TC_ID_AGENT_OUT}_right'])
         # Drop all rows where the agent id is the same as the one in the retailer table
         offers_uncleared = offers_uncleared.filter(~pl.col(c.TC_ID_AGENT_OUT).is_in(retailer_names))
 
@@ -563,7 +563,7 @@ class Lem(MarketBase):
             pl.col(f'{c.TC_ENERGY_OUT}{suffix}').alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
         ])
         # Drop the unnecessary columns to finally have the transactions that are relevant for the grid fees and levies
-        transactions = transactions.drop(f'{c.TC_ENERGY_IN}{suffix}', f'{c.TC_ENERGY_OUT}{suffix}')
+        transactions = transactions.drop([f'{c.TC_ENERGY_IN}{suffix}', f'{c.TC_ENERGY_OUT}{suffix}'])
 
         # Copy the transactions table to apply the grid fees
         grid = transactions.clone()
