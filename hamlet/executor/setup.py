@@ -311,10 +311,9 @@ class Executor:
         self.database.post_markets_to_region(region=tasks[c.TC_REGION], markets=results)
 
     def __execute_grids(self):
-
+        # # Pass info to grids class and execute its tasks
+        # Grid().execute()
         return
-        # Pass info to grids class and execute its tasks
-        Grid().execute()
 
     def __prepare_scenario(self):
         """Prepares the scenario"""

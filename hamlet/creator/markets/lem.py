@@ -31,13 +31,13 @@ class Lem(Markets):
 
         # Available types of clearing
         self.clearing_types = {
-            'ex-ante': {
+            c.MCT_EX_ANTE: {
                 'timetable': self._create_timetable_ex_ante,
             },
-            # 'ex-post': {
-            #     'timetable': self._create_timetable_ex_post(),
-            #     'settling': self._create_settling_ex_post(),
-            # },
+            c.MCT_EX_POST: {
+                'timetable': self._create_timetable_ex_post,
+                'settling': self._create_settling_ex_post,
+            },
         }
 
     def create_market_from_config(self):
@@ -240,6 +240,12 @@ class Lem(Markets):
 
         return prices
 
+    def _create_timetable_ex_post(self):
+        raise NotImplementedError(f'Ex-post clearing not available yet.')
+
+    def _create_settling_ex_post(self):
+        raise NotImplementedError(f'Ex-post settling not available yet.')
+
     def _add_columns(self, df, component, config):
         """Add columns for each cost component"""
 
@@ -277,3 +283,4 @@ class Lem(Markets):
         df = df.join(file.set_index('timestamp'), on='timestamp', how='left')
 
         return df
+

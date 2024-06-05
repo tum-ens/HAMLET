@@ -1040,9 +1040,13 @@ sfh:
     market:                                     # market parameters
       strategy: linear                          # market agent trading strategy
                                                 # options:
-                                                #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
+                                                #   - linear:     trading strategy based on linear price change the
+                                                #                 closer it gets to the market settlement
+                                                #   - retailer:   agent offers energy at the retailer prices, i.e. buys
+                                                #                 at the retailer sell price and sells at the retailer
+                                                #                 buy price (default strategy when there is no clearing)
                                                 # note: does not apply when simulation ex-post markets
 
       horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
@@ -2201,9 +2205,13 @@ mfh:
     market:                                     # market parameters
       strategy: linear                          # market agent trading strategy
                                                 # options:
-                                                #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
+                                                #   - linear:     trading strategy based on linear price change the
+                                                #                 closer it gets to the market settlement
+                                                #   - retailer:   agent offers energy at the retailer prices, i.e. buys
+                                                #                 at the retailer sell price and sells at the retailer
+                                                #                 buy price (default strategy when there is no clearing)
                                                 # note: does not apply when simulation ex-post markets
 
       horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
@@ -2939,9 +2947,13 @@ ctsp:
     market:                                     # market parameters
       strategy: linear                          # market agent trading strategy
                                                 # options:
-                                                #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
+                                                #   - linear:     trading strategy based on linear price change the
+                                                #                 closer it gets to the market settlement
+                                                #   - retailer:   agent offers energy at the retailer prices, i.e. buys
+                                                #                 at the retailer sell price and sells at the retailer
+                                                #                 buy price (default strategy when there is no clearing)
                                                 # note: does not apply when simulation ex-post markets
 
       horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
@@ -3683,9 +3695,13 @@ industry:
     market:                                     # market parameters
       strategy: linear                          # market agent trading strategy
                                                 # options:
-                                                #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
+                                                #   - linear:     trading strategy based on linear price change the
+                                                #                 closer it gets to the market settlement
+                                                #   - retailer:   agent offers energy at the retailer prices, i.e. buys
+                                                #                 at the retailer sell price and sells at the retailer
+                                                #                 buy price (default strategy when there is no clearing)
                                                 # note: does not apply when simulation ex-post markets
 
       horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
@@ -3922,109 +3938,113 @@ producer:
                                                 # note: if charge_from_grid is True it is always set to "local"
     ################################ energy management system (EMS) ################################
     ems:
-      controller:                                 # controller parameters
-        rtc:                                      # real time controller parameters (acts only at last possible timestep)
-          method: linopy                          # options:
-                                                  #   - None:       no rtc is used to correct behavior in last timestep
-                                                  #   - rule-based: production is maxed out, EVs charge immediately
-                                                  #                 at max power, HP and CHP run cyclically
-                                                  #                 to fill storage
-                                                  #   - linopy:     linopy optimization problem is solved
+      controller:                               # controller parameters
+        rtc:                                    # real time controller parameters (acts only at last possible timestep)
+          method: linopy                        # options:
+                                                #   - None:       no rtc is used to correct behavior in last timestep
+                                                #   - rule-based: production is maxed out, EVs charge immediately
+                                                #                 at max power, HP and CHP run cyclically
+                                                #                 to fill storage
+                                                #   - linopy:     linopy optimization problem is solved
 
-        mpc:                                      # model predictive controller parameters (acts into the future)
-          method: linopy                          # options:
-                                                  #   - None:       no mpc is used to forecast and plan operation
-                                                  #   - linopy:     linopy optimization problem is solved to forecast and
-                                                  #                 plan operation
+        mpc:                                    # model predictive controller parameters (acts into the future)
+          method: linopy                        # options:
+                                                #   - None:       no mpc is used to forecast and plan operation
+                                                #   - linopy:     linopy optimization problem is solved to forecast and
+                                                #                 plan operation
 
-          horizon: 86_400                         # control horizon
-                                                  # unit: s
-                                                  # note: applies to strategy: mpc
-                                                  # cannot exceed forecast horizon
+          horizon: 86_400                       # control horizon
+                                                # unit: s
+                                                # note: applies to strategy: mpc
+                                                # cannot exceed forecast horizon
 
-      market:                                     # market parameters
-        strategy: linear                          # market agent trading strategy
-                                                  # options:
-                                                  #   - linear:     see docs
-                                                  #   - zi:         zero intelligence, random bid and offer prices
-                                                  #                 in market price range
+      market:                                   # market parameters
+        strategy: linear                        # market agent trading strategy
+                                                # options:
+                                                #   - zi:         zero intelligence, random bid and offer prices
+                                                #                 in market price range
+                                                #   - linear:     trading strategy based on linear price change the
+                                                #                 closer it gets to the market settlement
+                                                #   - retailer:   agent offers energy at the retailer prices, i.e. buys
+                                                #                 at the retailer sell price and sells at the retailer
+                                                #                 buy price (default strategy when there is no clearing)
                                                   # note: does not apply when simulation ex-post markets
 
         horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
-                                                  # unit: s
-                                                  # note: value is randomly chosen from list
-                                                  # note: range is limited by the control horizon
+                                                # unit: s
+                                                # note: value is randomly chosen from list
+                                                # note: range is limited by the control horizon
 
         linear:
-          steps_to_final: 1                       # steps the final price is reached before the time is reached
-                                                  # unit: steps [0, inf)
-                                                  # example: timestep=900, steps_to_final=2
-                                                  #   -> 1800s before the time is reached the final price is reached
+          steps_to_final: 1                     # steps the final price is reached before the time is reached
+                                                # unit: steps [0, inf)
+                                                # example: timestep=900, steps_to_final=2
+                                                #   -> 1800s before the time is reached the final price is reached
 
-          steps_from_init: 0                      # steps the initial price is kept before the linear change starts
-                                                  # unit: steps [0, inf)
+          steps_from_init: 0                    # steps the initial price is kept before the linear change starts
+                                                # unit: steps [0, inf)
 
         fcast:
-          local: naive                            # forecasting method for local market prices
-                                                  # options:
-                                                  #   - flat:  no meaningful forecasting, flat price assumed
-                                                  #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
-                                                  # note: does not apply when simulation ex-post markets
+          local: naive                          # forecasting method for local market prices
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: does not apply when simulation ex-post markets
 
-          wholesale: naive                        # forecasting method for wholesale market prices
-                                                  # options:
-                                                  #   - flat:  no meaningful forecasting, flat price assumed
-                                                  #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
+          wholesale: naive                      # forecasting method for wholesale market prices
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
 
           retailer:
-            energy: ['naive', 'naive']            # forecasting method for retailer market prices and quantities
-                                                  # options:
-                                                  #   - flat:  no meaningful forecasting, flat price assumed
-                                                  #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
-                                                  # note: first value is for prices and second for quantities
+            energy: ['naive', 'naive']          # forecasting method for retailer market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
 
-            grid:                                 # forecasting method for grid fees
-              local: naive                        # forecasting method for grid fees
-                                                  # options:
-                                                  #   - flat:  no meaningful forecasting, flat price assumed
-                                                  #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
+            grid:                               # forecasting method for grid fees
+              local: naive                      # forecasting method for grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
 
-              retail: naive                       # forecasting method for retail grid fees
-                                                  # options:
-                                                  #   - flat:  no meaningful forecasting, flat price assumed
-                                                  #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
-                                                  # note: first value is for selling, second for buying
+              retail: naive                     # forecasting method for retail grid fees
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
             levies: naive                         # forecasting method for levies
-                                                  # options:
-                                                  #   - flat:  no meaningful forecasting, flat price assumed
-                                                  #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
-                                                  # note: first value is for selling, second for buying
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for selling, second for buying
 
-            balancing: ['naive', 'naive']         # forecasting method for balancing market prices and quantities
-                                                  # options:
-                                                  #   - flat:  no meaningful forecasting, flat price assumed
-                                                  #   - naive: expected price same as previous day (initialized flat)
-                                                  #   - perfect: perfect foresight of market price
-                                                  # note: first value is for prices and second for quantities
+            balancing: ['naive', 'naive']       # forecasting method for balancing market prices and quantities
+                                                # options:
+                                                #   - flat:  no meaningful forecasting, flat price assumed
+                                                #   - naive: expected price same as previous day (initialized flat)
+                                                #   - perfect: perfect foresight of market price
+                                                # note: first value is for prices and second for quantities
 
-      fcasts:                                     # forecasting settings for all forecasts
-          horizon: 86_400                         # forecasting horizon
-                                                  # unit: s
-                                                  # note: applies to all forecasts
+      fcasts:                                   # forecasting settings for all forecasts
+          horizon: 86_400                       # forecasting horizon
+                                                # unit: s
+                                                # note: applies to all forecasts
 
-          retraining: 86_400                      # period after which the forecast model is retrained
-                                                  # unit: s
-                                                  # note: applies to all forecasts
+          retraining: 86_400                    # period after which the forecast model is retrained
+                                                # unit: s
+                                                # note: applies to all forecasts
 
-          update: 3_600                           # period after which the forecast model is updated
-                                                  # unit: s
-                                                  # note: applies to all forecasts
+          update: 3_600                         # period after which the forecast model is updated
+                                                # unit: s
+                                                # note: applies to all forecasts
 
   ################################ large-scale wind generation ####################################
   wind:
@@ -4184,9 +4204,13 @@ producer:
       market:                                     # market parameters
         strategy: linear                          # market agent trading strategy
                                                   # options:
-                                                  #   - linear:     see docs
-                                                  #   - zi:         zero intelligence, random bid and offer prices
-                                                  #                 in market price range
+                                                #   - zi:         zero intelligence, random bid and offer prices
+                                                #                 in market price range
+                                                #   - linear:     trading strategy based on linear price change the
+                                                #                 closer it gets to the market settlement
+                                                #   - retailer:   agent offers energy at the retailer prices, i.e. buys
+                                                #                 at the retailer sell price and sells at the retailer
+                                                #                 buy price (default strategy when there is no clearing)
                                                   # note: does not apply when simulation ex-post markets
 
         horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
@@ -4419,9 +4443,13 @@ producer:
       market:                                     # market parameters
         strategy: linear                          # market agent trading strategy
                                                   # options:
-                                                  #   - linear:     see docs
-                                                  #   - zi:         zero intelligence, random bid and offer prices
-                                                  #                 in market price range
+                                                #   - zi:         zero intelligence, random bid and offer prices
+                                                #                 in market price range
+                                                #   - linear:     trading strategy based on linear price change the
+                                                #                 closer it gets to the market settlement
+                                                #   - retailer:   agent offers energy at the retailer prices, i.e. buys
+                                                #                 at the retailer sell price and sells at the retailer
+                                                #                 buy price (default strategy when there is no clearing)
                                                   # note: does not apply when simulation ex-post markets
 
         horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
@@ -4577,9 +4605,13 @@ storage:
       market:                                     # market parameters
         strategy: linear                          # market agent trading strategy
                                                   # options:
-                                                  #   - linear:     see docs
-                                                  #   - zi:         zero intelligence, random bid and offer prices
-                                                  #                 in market price range
+                                                #   - zi:         zero intelligence, random bid and offer prices
+                                                #                 in market price range
+                                                #   - linear:     trading strategy based on linear price change the
+                                                #                 closer it gets to the market settlement
+                                                #   - retailer:   agent offers energy at the retailer prices, i.e. buys
+                                                #                 at the retailer sell price and sells at the retailer
+                                                #                 buy price (default strategy when there is no clearing)
                                                   # note: does not apply when simulation ex-post markets
 
         horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
@@ -4729,9 +4761,13 @@ storage:
       market:                                     # market parameters
         strategy: linear                          # market agent trading strategy
                                                   # options:
-                                                  #   - linear:     see docs
-                                                  #   - zi:         zero intelligence, random bid and offer prices
-                                                  #                 in market price range
+                                                #   - zi:         zero intelligence, random bid and offer prices
+                                                #                 in market price range
+                                                #   - linear:     trading strategy based on linear price change the
+                                                #                 closer it gets to the market settlement
+                                                #   - retailer:   agent offers energy at the retailer prices, i.e. buys
+                                                #                 at the retailer sell price and sells at the retailer
+                                                #                 buy price (default strategy when there is no clearing)
                                                   # note: does not apply when simulation ex-post markets
 
         horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
@@ -4881,9 +4917,13 @@ storage:
       market:                                     # market parameters
         strategy: linear                          # market agent trading strategy
                                                   # options:
-                                                  #   - linear:     see docs
-                                                  #   - zi:         zero intelligence, random bid and offer prices
-                                                  #                 in market price range
+                                                #   - zi:         zero intelligence, random bid and offer prices
+                                                #                 in market price range
+                                                #   - linear:     trading strategy based on linear price change the
+                                                #                 closer it gets to the market settlement
+                                                #   - retailer:   agent offers energy at the retailer prices, i.e. buys
+                                                #                 at the retailer sell price and sells at the retailer
+                                                #                 buy price (default strategy when there is no clearing)
                                                   # note: does not apply when simulation ex-post markets
 
         horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
@@ -4965,7 +5005,7 @@ storage:
 ########################################################################################################################
 ########################################### aggregators configuration ##################################################
 ########################################################################################################################
-# TODO: Not available yet
+# Not available yet
 
 #aggregator:
 #
