@@ -73,11 +73,17 @@ class LinopyComps:
 
         # Define the deviation variable for positive and negative deviations
         # Deviation when more is charged than according to target
-        model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_pos',
-                            lower=0, upper=max(0, self.upper - self.target), integer=True)
+        name = f'{self.name}_{self.comp_type}_deviation_pos'
+        if self.target <= self.upper:
+            model.add_variables(name=name, lower=0, upper=max(0, self.upper - self.target))
+        else:
+            raise Warning(f'Target value ({self.target}) is higher than upper limit ({self.upper}) for {name}.')
         # Deviation when less is discharged than according to target
-        model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_neg',
-                            lower=0, upper=max(0, self.target - self.lower), integer=True)
+        name = f'{self.name}_{self.comp_type}_deviation_neg'
+        if self.target >= self.lower:
+            model.add_variables(name=name, lower=0, upper=max(0, self.target - self.lower))
+        else:
+            raise Warning(f'Target value ({self.target}) is lower than lower limit ({self.lower}) for {name}.')
 
         return model
 
