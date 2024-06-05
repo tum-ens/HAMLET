@@ -18,6 +18,7 @@ class MarketDB:
         self.market_type = market_type
         self.market_name = name
         self.market_path = market_path
+        self.market_config = f.load_file(path=os.path.join(market_path, 'config.json'))
         self.market_save = None  # path to save the market
         self.retailer_path = retailer_path
         self.market_transactions = pl.DataFrame()
