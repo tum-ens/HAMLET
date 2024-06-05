@@ -357,3 +357,4 @@ class Lem(Markets):
         df = df.join(file.set_index('timestamp'), on='timestamp', how='left')
 
         return df
+
