@@ -167,6 +167,8 @@ class Executor:
         """Cleans up the scenario after execution"""
         self.database.save_database(os.path.dirname(self.path_results))
 
+        self.pbar.set_description('Simulation finished: ')
+
     def pause(self):
         """Pauses the simulation"""
         raise NotImplementedError("Pause functionality not implemented yet")
