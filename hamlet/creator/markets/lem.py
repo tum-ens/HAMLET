@@ -58,10 +58,7 @@ class Lem(Markets):
         }
 
     def create_market_from_config(self):
-        # Create timetable
-        timetable = self._create_timetable()
-
-        return timetable
+        return self._create_timetable()
 
     def _create_timetable(self) -> pd.DataFrame:
         """Create timetable for the market"""
@@ -94,8 +91,8 @@ class Lem(Markets):
         # Add clearing information
         timetable = self._add_clearing_information(timetable, clearing)
 
-        # Add final information
-        timetable = self._finalize_timetable(timetable, clearing)
+        # Change dtypes for all columns
+        timetable = timetable.astype(TIMETABLE_FORMAT)
 
         return timetable
 
@@ -256,20 +253,39 @@ class Lem(Markets):
 
         return timetable
 
-    def _add_coupling_information(self, timetable, coupling):
-        """Adds the coupling information to the timetable"""
-        # Add coupling information
-        timetable[c.TC_COUPLING] = coupling
-
-        return timetable
-
     @staticmethod
-    def _finalize_timetable(timetable, clearing):
+    def _add_coupling_information(timetable, coupling):
+        """Adds the coupling information to the timetable"""
+
         # Sort timetable by timestamp and timestep
         timetable.sort_values(by=[c.TC_TIMESTAMP, c.TC_TIMESTEP], inplace=True)
 
-        # Change dtypes for all columns
-        timetable = timetable.astype(TIMETABLE_FORMAT)
+        # Check if coupling is not None
+        if coupling == 'None' or coupling is None or coupling is np.nan:
+            timetable[c.TC_COUPLING] = None
+            return timetable
+
+        # Split the coupling information
+        direction, method = coupling.split('_')
+
+        # Check if the direction is valid
+        if direction not in c.MC_LIST:
+            raise ValueError(f'Coupling direction "{direction}" not available')
+
+        # Check if the method is valid
+        if method not in c.MC_METHODS:
+            raise ValueError(f'Coupling method "{method}" not available')
+
+        if method == c.MC_CONTINUOUS:
+            # Set the coupling information
+            timetable[c.TC_COUPLING] = direction
+        elif method == c.MC_LAST:
+            # Find the last time step of each timestamp where the action column contains 'clear'
+            last_clear = timetable.loc[timetable['action'].str.contains('clear'), [c.TC_TIMESTAMP, c.TC_TIMESTEP]] \
+                .groupby(c.TC_TIMESTEP).last().reset_index()
+            last_clear[c.TC_COUPLING] = direction
+            # Set the coupling information
+            timetable = timetable.merge(last_clear, on=[c.TC_TIMESTAMP, c.TC_TIMESTEP], how='left')
 
         return timetable
 
