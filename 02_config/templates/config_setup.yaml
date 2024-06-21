@@ -13,14 +13,14 @@ time:                                     # time settings
                                           # unit: seconds
 
 location:                                 # location of the simulation
+  name: Munich                            # name of the location
+                                          # note: used for naming the results
+
   latitude: 48.137154                     # latitude
                                           # unit: degrees
 
   longitude: 11.576124                    # longitude
                                           # unit: degrees
-
-  name: Munich                            # name of the location
-                                          # note: used for naming the results
 
   altitude: 520                           # altitude
                                           # unit: meters
@@ -42,5 +42,3 @@ modeling:                                 # modeling settings
   solver: gurobi                          # solver for the simulation
                                           # options (preferably MIQP capable):
                                           #   - gurobi: recommended
-                                          #   - cplex
-                                          #   - glpk: possible with limitations; see documentation for more info
