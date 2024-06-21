@@ -137,6 +137,9 @@ class Lem(Markets):
                 # Create timetable for each frequency time step
                 tt_frequency = timetable.copy()
 
+                # Add timestamp (at which time are all actions to be executed)
+                tt_frequency[c.TC_TIMESTAMP] = time_frequency
+
                 # Add the time steps where actions are to be executed
                 # Starting time is either the current time or the first timestamp of the horizon
                 start_frequency = max(time_opening + pd.Timedelta(timing['horizon'][0], unit='seconds'), time_frequency)
