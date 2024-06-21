@@ -88,6 +88,7 @@ MCT_EX_ANTE = 'ex-ante'
 MCT_EX_POST = 'ex-post'
 
 # MARKET CLEARING METHODS
+MCM_NONE = 'None'
 MCM_PDA = 'pda'
 MCM_COMMUNITY = 'community'
 
@@ -191,7 +192,7 @@ TC_GHI = 'ghi'
 TC_DHI = 'dhi'
 TC_DNI = 'dni'
 
-# SCHEMAS
+# TABLE SCHEMAS
 # Note: The schemas are used to define the data types of the columns in the tables and are taken from tables.xlsx
 TS_MARKET_TRANSACTIONS = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
                           TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
@@ -286,6 +287,11 @@ P_HEAT_STORAGE = 'heat-storage'
 # CONTROLLERS
 C_RTC = 'rtc'
 C_MPC = 'mpc'
+
+# MARKET TRADING STRATEGIES
+MTS_ZI = 'zi'
+MTS_LINEAR = 'linear'
+MTS_RETAILER = 'retailer'
 
 # COMPONENT MAPPING
 # Note: Key states which type of plant is addressed and the value states which type of operation it has for the given

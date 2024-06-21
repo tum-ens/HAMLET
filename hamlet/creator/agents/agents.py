@@ -414,7 +414,7 @@ class Agents:
         # Length of the forecasting period in seconds
         fcast_period = account[c.K_EMS]['fcasts']['horizon']
         # Start of the simulation in UTC
-        start = self.setup['time']['start'].replace(tzinfo=datetime.timezone.utc)
+        start = datetime.datetime.fromisoformat(str(self.setup['time']['start'])).astimezone(datetime.timezone.utc)
         # Start of the forecasting period in UTC
         start_fcast_train = start - train_period
         # End of the simulation in UTC (one day added to ensure no foreward forecasting issues)
@@ -472,11 +472,12 @@ class Agents:
             except ValueError:
                 continue
 
-            # Add general information to the plant dictionary
-            plant_dict["type"] = plant
-
-            # Process each device individually (agent can have more than one of each type)
+            # Process each device individually
             for num_plant in range(num_plants):
+
+                # Add plant type
+                plant_dict["type"] = plant
+
                 # Generate and store plant ID
                 plant_id = self._gen_new_ids()
                 plant_dict["id"] = plant_id
@@ -492,7 +493,7 @@ class Agents:
                 setpoints[plant_id] = self.__init_vals(df=setpoints)
 
                 # Add and process additional plant information
-                plant_dict.update(info)
+                plant_dict.update(copy.deepcopy(info))
                 plant_dict = self.__clean_indexed_info(data=plant_dict, key='sizing', index=num_plant)
 
                 # Add time series if applicable
@@ -509,7 +510,8 @@ class Agents:
                 # Add state of charge (SOC) if applicable
                 try:
                     socs[plant_id] = self.__init_vals(df=socs,
-                                                      vals=round(info["sizing"]["soc"] * info["sizing"]["capacity"]))
+                                                      vals=round(plant_dict["sizing"]["soc"]
+                                                                 * plant_dict["sizing"]["capacity"]))
                 except KeyError:
                     pass
 
@@ -519,9 +521,8 @@ class Agents:
 
                 # Add plant information to the main dictionary
                 plants_dict[plant_id] = plant_dict
-
-            # Reset for the next entry
-            plant_dict = {}
+                # Reset for the next entry
+                plant_dict = {}
 
         # Add forecast columns
         forecasts = pd.DataFrame(columns=timeseries.columns, index=forecasts.index)

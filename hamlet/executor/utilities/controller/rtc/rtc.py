@@ -163,6 +163,9 @@ class Rtc(ControllerBase):
             self.define_objective()
 
         def create_plants(self):
+            """
+            Create the plant objects for the optimization problem
+            """
             for plant_name, plant_data in self.plants.items():
 
                 # Get the plant type from the plant data
@@ -192,7 +195,9 @@ class Rtc(ControllerBase):
             return self.plant_objects
 
         def create_markets(self):
-            """"""
+            """
+            Create the market objects for the optimization problem
+            """
 
             # Define variables from the market results and a balancing variable for each energy type
             for market in self.markets:
@@ -337,9 +342,9 @@ class Rtc(ControllerBase):
 
             # Check if the solution is optimal
             if status[0] != 'ok':
-                print(f'Exited with status "{status[0]}". \n '
-                      f'Infeasibilities for agent {self.agent.agent_id}:')
-                print(self.model.print_infeasibilities())
+                print(f'Exited with status "{status[0]}". \n'
+                      f'Infeasibilities for agent {self.agent.agent_id}: \n'
+                      f'{self.model.print_infeasibilities()}')
 
                 # Print the model
                 print('Model:')
@@ -407,7 +412,7 @@ class Rtc(ControllerBase):
                     # Add column to dataframe with 0 values
                     self.setpoints = self.setpoints.with_columns(pl.lit(0).alias(src_col))
                 # Assign setpoint value to first row
-                self.setpoints[0, src_col] = solution[src_col]
+                self.setpoints[0, src_col] = round(solution[src_col])
 
             # Sum the respective market columns into one column
             # (Will be deprecated once the balancing variable is taken out of the equations)

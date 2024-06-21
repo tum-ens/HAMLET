@@ -1040,9 +1040,13 @@ sfh:
     market:                                     # market parameters
       strategy: linear                          # market agent trading strategy
                                                 # options:
-                                                #   - linear:     see docs
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
+                                                #   - linear:     trading strategy based on linear price change the
+                                                #                 closer it gets to the market settlement
+                                                #   - retailer:   agent offers energy at the retailer prices, i.e. buys
+                                                #                 at the retailer sell price and sells at the retailer
+                                                #                 buy price (default strategy when there is no clearing)
                                                 # note: does not apply when simulation ex-post markets
 
       horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
