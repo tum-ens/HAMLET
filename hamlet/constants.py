@@ -13,6 +13,22 @@ K_SETPOINTS = 'setpoints'
 K_TARGET = 'target'  # relevant for forecast train data
 K_FEATURES = 'features'  # relevant for forecast train data
 
+# KEYS FOR SETUP
+KS_TIME = 'time'
+KS_LOCATION = 'location'
+KS_PATHS = 'paths'
+KS_SIMULATION = 'modeling'
+
+# KEYS FOR MARKET CONFIGURATION
+KM_ACTIVE = 'active'
+KM_TYPE = 'type'
+KM_CLEARING = 'clearing'
+KM_METHOD = 'method'
+KM_PRICING = 'pricing'
+KM_COUPLING = 'coupling'
+KM_TIMING = 'timing'
+KM_RETAILERS = 'retailers'
+
 # UNIT CONSTANTS
 WH_TO_MWH = 1e-6
 MWH_TO_WH = 1e6
@@ -70,6 +86,26 @@ S_PRICE_PU = 'price_pu'
 S_SOC = 'soc'
 S_COP = 'COP100'
 
+# SETUP TIME
+ST_START = 'start'
+ST_DURATION = 'duration'
+ST_TIMESTEP = 'timestep'
+
+# SETUP LOCATION
+SL_NAME = 'name'
+SL_LATITUDE = 'latitude'
+SL_LONGITUDE = 'longitude'
+SL_ALTITUDE = 'altitude'
+SL_WEATHER = 'weather'
+
+# SETUP PATHS
+SP_INPUT = 'input'
+SP_SCENARIOS = 'scenarios'
+SP_RESULTS = 'results'
+
+# SETUP SIMULATION
+SS_SOLVER = 'solver'
+
 # MARKET TYPES
 MT_LEM = 'lem'
 MT_LFM = 'lfm'
@@ -103,6 +139,19 @@ MC_LIST = [MC_ABOVE, MC_BELOW]
 MC_CONTINUOUS = 'c'
 MC_LAST = 'l'
 MC_METHODS = [MC_CONTINUOUS, MC_LAST]
+
+# MARKET TIMING
+MT_START = 'start'
+MT_OPENING = 'opening'
+MT_HORIZON = 'horizon'
+MT_DURATION = 'duration'
+MT_FREQUENCY = 'frequency'
+MT_CLOSING = 'closing'
+MT_SETTLING = 'settling'
+
+# MARKET TIMING SETTLING
+MTS_CONTINUOUS = 'continuous'
+MTS_PERIODIC = 'periodic'
 
 # TRADE TYPES
 TT_MARKET = 'market'
@@ -149,6 +198,7 @@ TC_MARKET = 'market'
 TC_NAME = 'name'
 TC_ENERGY_TYPE = 'energy_type'
 TC_ACTIONS = 'action'  # TODO: Change to actions
+TC_CLEARING = 'clearing'
 TC_CLEARING_TYPE = 'type'  # TODO: Change to clearing_type
 TC_CLEARING_METHOD = 'method'  # TODO: Change to clearing_method
 TC_CLEARING_PRICING = 'pricing'  # TODO: Change to clearing_pricing

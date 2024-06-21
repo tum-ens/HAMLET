@@ -4,16 +4,12 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
+import datetime
+import os
 import numpy as np
 import pandas as pd
+from ruamel.yaml import timestamp
 from hamlet.creator.markets.markets import Markets
-import os
-import pandas as pd
-from ruamel.yaml import YAML, timestamp
-import json
-import datetime
-import time
-import shutil
 import hamlet.constants as c
 
 TIMETABLE_COLUMNS = [c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE, c.TC_ACTIONS]
@@ -40,20 +36,20 @@ class Lem(Markets):
         super().__init__(config_path, input_path, scenario_path, config_root)
 
         self.market = market
-        self.market_type = 'lem'
-        self.name = name if name else f'{self.market["clearing"]["type"]}' \
-                                      f'_{self.market["clearing"]["method"]}' \
-                                      f'_{self.market["clearing"]["pricing"]}'
+        self.market_type = c.MT_LEM
+        self.name = name if name else f'{self.market[c.KM_CLEARING][c.KM_TYPE]}' \
+                                      f'_{self.market[c.KM_CLEARING][c.KM_METHOD]}' \
+                                      f'_{self.market[c.KM_CLEARING][c.KM_PRICING]}'
         self.energy_type = c.TRADED_ENERGY.get(self.market_type)
 
         # Available types of clearing
         self.clearing_types = {
             c.MCT_EX_ANTE: {
-                'timetable': self._create_timetable_ex_ante,
+                c.TN_TIMETABLE: self._create_timetable_ex_ante,
             },
             c.MCT_EX_POST: {
-                'timetable': self._create_timetable_ex_post,
-                'settling': self._create_settling_ex_post,
+                c.TN_TIMETABLE: self._create_timetable_ex_post,
+                c.MT_SETTLING: self._create_settling_ex_post,
             },
         }
 
@@ -63,20 +59,20 @@ class Lem(Markets):
     def _create_timetable(self) -> pd.DataFrame:
         """Create timetable for the market"""
         # Call the respective function depending on the clearing type to create the timetable
-        if self.market['clearing']['type'] in self.clearing_types:
-            return self.clearing_types[self.market['clearing']['type']]['timetable']()
+        if self.market[c.KM_CLEARING][c.KM_TYPE] in self.clearing_types:
+            return self.clearing_types[self.market[c.KM_CLEARING][c.KM_TYPE]][c.TN_TIMETABLE]()
         else:
-            raise ValueError(f'Clearing type "{self.market["clearing"]["type"]}" not available')
+            raise ValueError(f'Clearing type "{self.market[c.KM_CLEARING][c.KM_TYPE]}" not available')
 
     def _create_timetable_ex_ante(self) -> pd.DataFrame:
         """Create timetable for ex-ante clearing"""
 
         # Get clearing and timing
-        clearing = self.market['clearing']
-        timing = clearing['timing']
+        clearing = self.market[c.KM_CLEARING]
+        timing = clearing[c.KM_TIMING]
 
         # Get start and end time of the market simulation
-        start = self._calculate_start_time(timing['start'])
+        start = self._calculate_start_time(timing[c.MT_START])
         end = self._calculate_end_time(start)
 
         # Create timetable template
@@ -98,14 +94,14 @@ class Lem(Markets):
 
     def _calculate_start_time(self, start):
         if not isinstance(start, timestamp.TimeStamp):
-            start = self.setup['time']['start'] + pd.Timedelta(start, unit='seconds')
+            start = self.setup[c.KS_TIME][c.ST_START] + pd.Timedelta(start, unit='seconds')
         return datetime.datetime.fromisoformat(str(start)).astimezone(datetime.timezone.utc)
 
     def _calculate_end_time(self, start):
-        if isinstance(self.setup['time']['duration'], str):
-            numerator, denominator = map(int, self.setup['time']['duration'].split('/'))
-            self.setup['time']['duration'] = numerator / denominator
-        return start + pd.Timedelta(self.setup['time']['duration'], unit='days')
+        if isinstance(self.setup[c.KS_TIME][c.ST_DURATION], str):
+            numerator, denominator = map(int, self.setup[c.KS_TIME][c.ST_DURATION].split('/'))
+            self.setup[c.KS_TIME][c.ST_DURATION] = numerator / denominator
+        return start + pd.Timedelta(self.setup[c.KS_TIME][c.ST_DURATION], unit='days')
 
     def _add_actions(self, timetable, start, end, timing):
 
@@ -119,15 +115,15 @@ class Lem(Markets):
             time_frequency = time_opening
 
             # The duration of time_frequency depends on the frequency and opening of the market
-            if timing['frequency'] == timing['opening']:
+            if timing[c.MT_FREQUENCY] == timing[c.MT_OPENING]:
                 # Last time step is the last time step before the next market opening
-                end_opening = time_opening + pd.Timedelta(timing['opening'], unit='seconds')
-            elif timing['frequency'] < timing['opening']:
+                end_opening = time_opening + pd.Timedelta(timing[c.MT_OPENING], unit='seconds')
+            elif timing[c.MT_FREQUENCY] < timing[c.MT_OPENING]:
                 # Last time step is the last time step of the market horizon
-                end_opening = time_opening + pd.Timedelta(timing['horizon'][1], unit='seconds')
+                end_opening = time_opening + pd.Timedelta(timing[c.MT_HORIZON][1], unit='seconds')
             else:
                 raise ValueError(
-                    f'Frequency ({timing["frequency"]}) must be smaller than opening ({timing["opening"]})')
+                    f'Frequency ({timing["frequency"]}) must be smaller than opening ({timing[c.MT_OPENING]})')
 
             # Loop over each frequency time step
             while time_frequency < end_opening:
@@ -136,11 +132,12 @@ class Lem(Markets):
 
                 # Add the time steps where actions are to be executed
                 # Starting time is either the current time or the first timestamp of the horizon
-                start_frequency = max(time_opening + pd.Timedelta(timing['horizon'][0], unit='seconds'), time_frequency)
+                start_frequency = max(time_opening + pd.Timedelta(timing[c.MT_HORIZON][0], unit='seconds'), 
+                                      time_frequency)
                 tt_frequency[c.TC_TIMESTEP] = pd.date_range(
                     start=start_frequency,
-                    end=time_opening + pd.Timedelta(timing['horizon'][1], unit='seconds'),
-                    freq=f'{timing["duration"]}S',
+                    end=time_opening + pd.Timedelta(timing[c.MT_HORIZON][1], unit='seconds'),
+                    freq=f'{timing[c.MT_DURATION]}S',
                     inclusive='left')  # 'left' as the end time step is not included
 
                 # Add timestamp (at which time are all actions to be executed)
@@ -154,40 +151,40 @@ class Lem(Markets):
 
                 # At first, it is assumed that all markets are to be cleared (corrections are done subsequently
                 # depending on the parameter 'closing')
-                tt_frequency['action'] = 'clear'
+                tt_frequency[c.TC_ACTIONS] = c.MA_CLEAR
 
                 # Check for time steps that are also to be settled
-                if timing['settling'] == 'continuous':
+                if timing[c.MT_SETTLING] == c.MTS_CONTINUOUS:
                     # Settle all time steps whose settling time is smaller/equal to current time (frequency)
-                    tt_frequency.loc[tt_frequency[c.TC_TIMESTEP] <= time_frequency, 'action'] += ',settle'
-                elif timing['settling'] == 'periodic':
+                    tt_frequency.loc[tt_frequency[c.TC_TIMESTEP] <= time_frequency, c.TC_ACTIONS] += f',{c.MA_SETTLE}'
+                elif timing[c.MT_SETTLING] == c.MTS_PERIODIC:
                     # Settle all time steps once the time frequency plus closing is greater/equal than the time step
                     if any(tt_frequency[c.TC_TIMESTEP]
                            <= time_frequency + pd.Timedelta(timing['closing'], unit='seconds')):
-                        tt_frequency['action'] += ',settle'
+                        tt_frequency[c.TC_ACTIONS] += f',{c.MA_SETTLE}'
 
                 # Check for time steps that are only to be settled (no clearing)
                 # Check if the closing time is to be applied continously 'c' or for the entire period/horizon 'p'
-                if timing['settling'] == 'continuous':
+                if timing[c.MT_SETTLING] == c.MTS_CONTINUOUS:
                     # Get all time steps whose closing time is before the current timestamp
                     tt_frequency.loc[tt_frequency[c.TC_TIMESTEP] - tt_frequency[c.TC_TIMESTAMP]
-                                     < pd.Timedelta(timing['closing'], unit='seconds'), 'action'] = 'settle'
-                elif timing['settling'] == 'periodic':
+                                     < pd.Timedelta(timing[c.MT_CLOSING], unit='seconds'), c.TC_ACTIONS] = c.MA_SETTLE
+                elif timing[c.MT_SETTLING] == c.MTS_PERIODIC:
                     # Set all time steps to be settled once first value (i.e. any value) becomes True
-                    if any(tt_frequency[c.TC_TIMESTEP] - tt_frequency[c.TC_TIMESTAMP] < pd.Timedelta(timing['closing'],
-                                                                                                     unit='seconds')):
-                        tt_frequency['action'] = 'settle'
+                    if any(tt_frequency[c.TC_TIMESTEP] - tt_frequency[c.TC_TIMESTAMP] 
+                           < pd.Timedelta(timing[c.MT_CLOSING], unit='seconds')):
+                        tt_frequency[c.TC_ACTIONS] = c.MA_SETTLE
                 else:
-                    raise ValueError(f'Closing type "{timing["closing"]}" not available')
+                    raise ValueError(f'Closing type "{timing[c.MT_CLOSING]}" not available')
 
                 # Add to timetable of opening
                 list_of_timestamps.append(tt_frequency)
 
                 # Add time until the next frequency time step
-                time_frequency += pd.Timedelta(timing['frequency'], unit='seconds')
+                time_frequency += pd.Timedelta(timing[c.MT_FREQUENCY], unit='seconds')
 
             # Add time until the next opening of market
-            time_opening += pd.Timedelta(timing['opening'], unit='seconds')
+            time_opening += pd.Timedelta(timing[c.MT_OPENING], unit='seconds')
 
         # Combine all frequency time steps
         timetable = pd.concat([timetable] + list_of_timestamps, ignore_index=True)
@@ -244,12 +241,12 @@ class Lem(Markets):
 
     def _add_clearing_information(self,timetable, clearing):
         # Add remaining clearing information
-        timetable[c.TC_CLEARING_TYPE] = clearing['type']
-        timetable[c.TC_CLEARING_METHOD] = clearing['method']
-        timetable[c.TC_CLEARING_PRICING] = clearing['pricing']
+        timetable[c.TC_CLEARING_TYPE] = clearing[c.KM_TYPE]
+        timetable[c.TC_CLEARING_METHOD] = clearing[c.KM_METHOD]
+        timetable[c.TC_CLEARING_PRICING] = clearing[c.KM_PRICING]
 
         # Add coupling information
-        timetable = self._add_coupling_information(timetable, clearing['coupling'])
+        timetable = self._add_coupling_information(timetable, clearing[c.KM_COUPLING])
 
         return timetable
 
@@ -281,7 +278,7 @@ class Lem(Markets):
             timetable[c.TC_COUPLING] = direction
         elif method == c.MC_LAST:
             # Find the last time step of each timestamp where the action column contains 'clear'
-            last_clear = timetable.loc[timetable['action'].str.contains('clear'), [c.TC_TIMESTAMP, c.TC_TIMESTEP]] \
+            last_clear = timetable.loc[timetable[c.TC_ACTIONS].str.contains('clear'), [c.TC_TIMESTAMP, c.TC_TIMESTEP]] \
                 .groupby(c.TC_TIMESTEP).last().reset_index()
             last_clear[c.TC_COUPLING] = direction
             # Set the coupling information
@@ -298,7 +295,7 @@ class Lem(Markets):
         dict_retailers = {}
 
         # Create retailers
-        for retailer, config in self.market['pricing'].items():
+        for retailer, config in self.market[c.KM_PRICING].items():
             dict_retailers[retailer] = self._create_retailer(name=retailer, config=config, timetable=timetable)
 
         return dict_retailers[retailer]
@@ -370,6 +367,6 @@ class Lem(Markets):
         file = pd.read_csv(os.path.join(self.input_path, 'retailers', self.market_type, config['file']))
 
         # Add price information from file
-        df = df.join(file.set_index('timestamp'), on='timestamp', how='left')
+        df = df.join(file.set_index(c.TC_TIMESTAMP), on=c.TC_TIMESTAMP, how='left')
 
         return df
