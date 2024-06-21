@@ -81,8 +81,6 @@ class AgentBase:
         # Loop through the ems controllers
         for controller, params in ems['controller'].items():
             # Skip if method is None
-            # TODO: Check if this needs to be changed since it might be that the method is None but still something
-            #  needs to be done for the tables.
             if params['method'] is None:
                 continue
 
@@ -91,6 +89,9 @@ class AgentBase:
 
             # Run the controller
             self.agent = controller.run(agent=self.agent, timetable=self.timetable, market=self.market)
+
+        # TODO: Check if this needs to be changed since it might be that the method is None but still something
+        #  needs to be done for the tables. Probably needs to implement a sanity check function
 
         return self.agent
 
@@ -101,15 +102,23 @@ class AgentBase:
         market_info = self.agent.account[c.K_EMS][c.K_MARKET]
 
         # Get the markets of the region from the timetable by selecting the unique market types and names
-        unique_types_names = self.timetable.unique(subset=[c.TC_MARKET, c.TC_NAME])
-        market_types = unique_types_names.select(c.TC_MARKET).to_series().to_list()
-        market_names = unique_types_names.select(c.TC_NAME).to_series().to_list()
+        unique_values = self.timetable.unique(subset=[c.TC_MARKET, c.TC_NAME, c.TC_CLEARING_METHOD])
+        market_types = unique_values.select(c.TC_MARKET).to_series().to_list()
+        market_names = unique_values.select(c.TC_NAME).to_series().to_list()
+        market_clearing_methods = unique_values.select(c.TC_CLEARING_METHOD).to_series().to_list()
 
         # Loop through the markets
-        for m_type, m_name in zip(market_types, market_names):
-            # Get the strategy
-            strategy = Trading(strategy=market_info['strategy'], timetable=self.timetable,
-                               market=m_name, market_data=self.market[m_type][m_name], agent=self.agent).create_instance()
+        for m_type, m_name, m_method in zip(market_types, market_names, market_clearing_methods):
+
+            # Check if there is a market clearing, if not do not apply the strategy but use the default strategy
+            if m_method.capitalize() == 'None' or m_method is None:
+                # Get the strategy
+                strategy = (Trading(timetable=self.timetable, market=m_name, market_data=self.market[m_type][m_name],
+                                    agent=self.agent).create_instance())
+            else:
+                strategy = (Trading(strategy=market_info['strategy'], timetable=self.timetable,
+                                    market=m_name, market_data=self.market[m_type][m_name], agent=self.agent)
+                            .create_instance())
 
             # Create bids and offers
             self.agent = strategy.create_bids_offers()

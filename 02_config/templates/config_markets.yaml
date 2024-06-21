@@ -16,24 +16,23 @@ lem_continuous:                       # name of the market (must be unique in it
   clearing:
     type: ex-ante                     # type of market clearing
                                       # options:
-                                      #   - ex-ante: market clearing is done before the delivery period
-                                      #   - TODO ex-post: market clearing is done after the delivery period
-                                      #   - None: no market clearing is done (all energy is purchased from retailer)
+                                      #   - ex-ante: market clearing is done before the settlement
+                                      #   - ex-post: market clearing is done after the settlement (to be implemented)
 
     method: pda                       # method of market clearing
                                       # options:
-                                      #   - pda: periodic double auction
-                                      #   - community: community clearing
-                                      # note: for further information about the method options see the documentation
+                                      #   - None: energy can only be sold to and bought from the retailer
+                                      #           (practically no local market exists)
+                                      #   - pda (ex-ante): periodic double auction
+                                      #   - community (ex-post): community clearing  (to be implemented)
 
     pricing: uniform                  # pricing method of the market clearing
                                       # options:
                                       #   - uniform (ex-ante): all participants pay the same price
-                                      #   - discriminatory (ex-ante): each participant pays a different price
-                                      #   - standard (ex-post): see details in the ex-post folder
-                                      # note: for further information about the pricing options see the documentation
+                                      #   - discriminatory (ex-ante): each participant pays a different price (to be implemented)
+                                      #   - standard (ex-post): see details in the ex-post folder (to be implemented)
 
-    coupling: above_l                 # method of coupling market regions (are uncleared positions posted elsewhere?)
+    coupling: None                    # method of coupling market regions (are uncleared positions posted elsewhere?)
                                       # options:
                                       #   - None: unsettled bids are not offered at other markets, i.e. bids get feed-in tariff and offers pay retail wholesale price
                                       #   - above_c: unsettled bids are continuously offered at higher market levels (if possible)

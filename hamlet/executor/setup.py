@@ -30,6 +30,8 @@ from hamlet.executor.utilities.database.database import Database
 import hamlet.constants as c
 # pl.enable_string_cache(True)
 from copy import copy
+import warnings
+warnings.filterwarnings("ignore")
 
 # TODO: Considerations
 # - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator_backup and should be continued for consistency
@@ -164,6 +166,8 @@ class Executor:
     def cleanup(self):
         """Cleans up the scenario after execution"""
         self.database.save_database(os.path.dirname(self.path_results))
+
+        self.pbar.set_description('Simulation finished: ')
 
     def pause(self):
         """Pauses the simulation"""
@@ -309,10 +313,9 @@ class Executor:
         self.database.post_markets_to_region(region=tasks[c.TC_REGION], markets=results)
 
     def __execute_grids(self):
-
+        # # Pass info to grids class and execute its tasks
+        # Grid().execute()
         return
-        # Pass info to grids class and execute its tasks
-        Grid().execute()
 
     def __prepare_scenario(self):
         """Prepares the scenario"""
