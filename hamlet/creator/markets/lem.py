@@ -4,6 +4,7 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
+import numpy as np
 import pandas as pd
 from hamlet.creator.markets.markets import Markets
 import os
@@ -18,18 +19,19 @@ import hamlet.constants as c
 TIMETABLE_COLUMNS = [c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE, c.TC_ACTIONS]
 
 TIMETABLE_FORMAT = {
-            c.TC_TIMESTAMP: 'datetime64[ns, UTC]',
-            c.TC_TIMESTEP: 'datetime64[ns, UTC]',
-            c.TC_REGION: 'category',
-            c.TC_MARKET: 'category',
-            c.TC_NAME: 'category',
-            c.TC_ENERGY_TYPE: 'category',
-            c.TC_ACTIONS: 'category',
-            c.TC_CLEARING_TYPE: 'category',
-            c.TC_CLEARING_METHOD: 'category',
-            c.TC_CLEARING_PRICING: 'category',
-            c.TC_COUPLING: 'category',
+    c.TC_TIMESTAMP: 'datetime64[ns, UTC]',
+    c.TC_TIMESTEP: 'datetime64[ns, UTC]',
+    c.TC_REGION: 'category',
+    c.TC_MARKET: 'category',
+    c.TC_NAME: 'category',
+    c.TC_ENERGY_TYPE: 'category',
+    c.TC_ACTIONS: 'category',
+    c.TC_CLEARING_TYPE: 'category',
+    c.TC_CLEARING_METHOD: 'category',
+    c.TC_CLEARING_PRICING: 'category',
+    c.TC_COUPLING: 'category',
 }
+
 
 class Lem(Markets):
 
@@ -127,15 +129,13 @@ class Lem(Markets):
                 # Last time step is the last time step of the market horizon
                 end_opening = time_opening + pd.Timedelta(timing['horizon'][1], unit='seconds')
             else:
-                raise ValueError(f'Frequency ({timing["frequency"]}) must be smaller than opening ({timing["opening"]})')
+                raise ValueError(
+                    f'Frequency ({timing["frequency"]}) must be smaller than opening ({timing["opening"]})')
 
             # Loop over each frequency time step
             while time_frequency < end_opening:
                 # Create timetable for each frequency time step
                 tt_frequency = timetable.copy()
-
-                # Add timestamp (at which time are all actions to be executed)
-                tt_frequency[c.TC_TIMESTAMP] = time_frequency
 
                 # Add the time steps where actions are to be executed
                 # Starting time is either the current time or the first timestamp of the horizon
@@ -145,6 +145,9 @@ class Lem(Markets):
                     end=time_opening + pd.Timedelta(timing['horizon'][1], unit='seconds'),
                     freq=f'{timing["duration"]}S',
                     inclusive='left')  # 'left' as the end time step is not included
+
+                # Add timestamp (at which time are all actions to be executed)
+                tt_frequency[c.TC_TIMESTAMP] = time_frequency
 
                 # Note: the actions depends on the timing parameters
                 # Note: actions are separated by a comma (e.g. 'clear,settle')
@@ -192,6 +195,45 @@ class Lem(Markets):
         # Combine all frequency time steps
         timetable = pd.concat([timetable] + list_of_timestamps, ignore_index=True)
 
+        # Check if every timestep has a settling action when timestamp and timestep match
+        timetable = self._ensure_settlement(timetable, end)
+
+        return timetable
+
+    @staticmethod
+    def _ensure_settlement(timetable, end):
+        """Check if every timestep has a settling action when timestamp and timestep match"""
+        # Find all unique times from timestamp and timestep
+        times = np.concatenate((timetable[c.TC_TIMESTAMP].unique(), timetable[c.TC_TIMESTEP].unique()), axis=0)
+        times = pd.Series(np.unique(times))
+        # Loop over all unique times
+        list_of_missing_timesteps = []
+        for timestamp in times:
+            # Skip if timestamp is outside the simulation time
+            if timestamp >= end:
+                continue
+            # Check if there is a row that has the same timestamp and timestep
+            if ((timetable[c.TC_TIMESTAMP] == timestamp) & (timetable[c.TC_TIMESTEP] == timestamp)).any():
+                # Check if it has 'settle' as action
+                actions = timetable.loc[((timetable[c.TC_TIMESTAMP] == timestamp)
+                                                  & (timetable[c.TC_TIMESTEP] == timestamp)), 'action'].values[0]
+                if 'settle' not in actions:
+                    # If not, add 'settle' action
+                    timetable.loc[((timetable[c.TC_TIMESTAMP] == timestamp) & (timetable[c.TC_TIMESTEP] == timestamp))
+                                  , 'action'] += ',settle'
+            else:
+                # Append the missing timestep with 'settle' action
+                row = timetable.iloc[0].copy()
+                row[c.TC_TIMESTAMP] = timestamp
+                row[c.TC_TIMESTEP] = timestamp
+                row['action'] = 'settle'
+                list_of_missing_timesteps.append(row)
+
+        # Concat with the original timetable if there are new rows
+        if len(list_of_missing_timesteps) > 0:
+            df_missing_timesteps = pd.DataFrame(list_of_missing_timesteps)
+            timetable = pd.concat([timetable, df_missing_timesteps], ignore_index=True)
+
         return timetable
 
     def _add_market_information(self, timetable):
@@ -203,13 +245,21 @@ class Lem(Markets):
 
         return timetable
 
-    @staticmethod
-    def _add_clearing_information(timetable, clearing):
+    def _add_clearing_information(self,timetable, clearing):
         # Add remaining clearing information
         timetable[c.TC_CLEARING_TYPE] = clearing['type']
         timetable[c.TC_CLEARING_METHOD] = clearing['method']
         timetable[c.TC_CLEARING_PRICING] = clearing['pricing']
-        timetable[c.TC_COUPLING] = clearing['coupling']
+
+        # Add coupling information
+        timetable = self._add_coupling_information(timetable, clearing['coupling'])
+
+        return timetable
+
+    def _add_coupling_information(self, timetable, coupling):
+        """Adds the coupling information to the timetable"""
+        # Add coupling information
+        timetable[c.TC_COUPLING] = coupling
 
         return timetable
 
@@ -307,4 +357,3 @@ class Lem(Markets):
         df = df.join(file.set_index('timestamp'), on='timestamp', how='left')
 
         return df
-
