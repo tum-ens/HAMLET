@@ -455,6 +455,11 @@ class Lem(MarketBase):
         )
         # Drop the rows where the energy is smaller or equal to 0
         bids_uncleared = bids_uncleared.filter(pl.col(c.TC_ENERGY_IN) > 0)
+        # Cast the energy column to UInt64 and quality is UInt8
+        bids_uncleared = bids_uncleared.with_columns(
+            pl.col(c.TC_ENERGY_IN).cast(pl.UInt64),
+            pl.col(c.TC_QUALITY).cast(pl.UInt8),
+        )
         # Drop the energy, agent_in_right and energy_cumsum column
         try:
             bids_uncleared = bids_uncleared.drop([c.TC_ENERGY, C_ENERGY_CUMSUM, f'{c.TC_ID_AGENT_IN}_right'])
@@ -478,6 +483,11 @@ class Lem(MarketBase):
         )
         # Drop the rows where the energy is smaller or equal to 0
         offers_uncleared = offers_uncleared.filter(pl.col(c.TC_ENERGY_OUT) > 0)
+        # Cast the energy column to UInt64 and quality is UInt8
+        offers_uncleared = offers_uncleared.with_columns(
+            pl.col(c.TC_ENERGY_OUT).cast(pl.UInt64),
+            pl.col(c.TC_QUALITY).cast(pl.UInt8),
+        )
         # Drop the energy, agent_in_right and energy_cumsum column
         try:
             offers_uncleared = offers_uncleared.drop([c.TC_ENERGY, C_ENERGY_CUMSUM, f'{c.TC_ID_AGENT_OUT}_right'])
