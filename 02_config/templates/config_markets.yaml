@@ -72,7 +72,7 @@ lem_continuous:                       # name of the market (must be unique in it
       settling: 'continuous'          # at which time steps is the market settled?
                                       # options:
                                       #   - continuous: market is settled at every first time step once horizon is passed
-                                      #   - period: market is settled for the entire period
+                                      #   - periodic: market is settled for the entire period
 
   pricing:                            # pricing of each retailer
                                       # note: currently only one retailer is possible
@@ -238,7 +238,7 @@ lem_intraday:                         # type and name of the market "type_name" 
       settling: 'continuous'          # at which time steps is the market settled?
                                       # options:
                                       #   - continuous: market is settled at every first time step once horizon is passed
-                                      #   - period: market is settled for the entire period
+                                      #   - periodic: market is settled for the entire period
 
   pricing:                            # pricing of each retailer
                                       # note: currently only one retailer is possible
@@ -334,28 +334,6 @@ lem_intraday:                         # type and name of the market "type_name" 
         file:                         # file balancing settings
           file: balancing_1.csv       # file containing the balancing energy prices for each time step
                                       # note: columns need to match the names of the parameters in the 'fixed' section
-
-  types:
-    qualities: {0: na,
-                1: local,
-                2: green_local
-               }
-
-    positions: {0: offer,
-                1: bid,
-               }
-
-    transactions: {0: energy,
-                   1: balancing,
-                   2: levy,
-                  }
-
-    meter: {0: plant submeter,
-            1: virtual plant submeter,
-            2: dividing meter,
-            3: virtual dividing meter,
-            4: grid meter,
-            5: virtual grid meter }
 
 lem_day-ahead:                        # type and name of the market "type_name" (must be unique)
                                       # note: markets with the same suffix can trade among each other if specified
@@ -518,28 +496,6 @@ lem_day-ahead:                        # type and name of the market "type_name" 
         file:                         # file balancing settings
           file: balancing_1.csv       # file containing the balancing energy prices for each time step
                                       # note: columns need to match the names of the parameters in the 'fixed' section
-
-  types:
-    qualities: {0: na,
-                1: local,
-                2: green_local
-               }
-
-    positions: {0: offer,
-                1: bid,
-               }
-
-    transactions: {0: energy,
-                   1: balancing,
-                   2: levy,
-                  }
-
-    meter: {0: plant submeter,
-            1: virtual plant submeter,
-            2: dividing meter,
-            3: virtual dividing meter,
-            4: grid meter,
-            5: virtual grid meter }
 
 lfm:                                  # type and name of the market "type_name" (must be unique)
   active: False                       # is the market active?

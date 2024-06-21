@@ -72,7 +72,7 @@ lem_continuous:                       # name of the market (must be unique in it
       settling: 'continuous'          # at which time steps is the market settled?
                                       # options:
                                       #   - continuous: market is settled at every first time step once horizon is passed
-                                      #   - period: market is settled for the entire period
+                                      #   - periodic: market is settled for the entire period
 
   pricing:                            # pricing of each retailer
                                       # note: currently only one retailer is possible
