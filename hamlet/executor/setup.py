@@ -137,6 +137,9 @@ class Executor:
                 # update progress bar description
                 self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for region ' + region_str + ': ')
 
+                print(region)
+                exit()
+
                 # Execute the agents and market in parallel or sequentially
                 if self.pool:
                     # Execute the agents for this market
@@ -301,6 +304,9 @@ class Executor:
             # Create an instance of the Market class and execute its tasks
             results.append(Market(data=market, tasks=tasks, database=self.database).execute())
 
+        # TODO: Ensure that all results are returned in the correct way (probably use a list of dictionaries)
+        print('Make sure that the results get returned for each region since the energy results need to be added for each region.')
+
         # counter = 0
         # for result in results:
         #     with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=100):
@@ -325,10 +331,16 @@ class Executor:
         self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'config_setup.yaml'))
 
         # Load timetable
+        # TODO: Fix polars issue
+        print('Check issue with timetable. Why does polars not load it?')
+        print(pd.read_feather(os.path.join(self.path_scenario, 'general', 'timetable.ft')).head(100).to_string())
+        exit()
         self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),
                                      df='polars', method='eager')
 
         # Load scenario structure
+        # TODO: Create structure
+        print('Structure needs to become bi-directional. Consider creating it here or in creator')
         self.structure = self.general['structure']
 
         # Set the results path

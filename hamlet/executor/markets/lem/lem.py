@@ -53,6 +53,8 @@ class Lem(MarketBase):
         self.bids_uncleared = self.market.bids_uncleared.clear()
         self.offers_uncleared = self.market.offers_uncleared.clear()
         self.transactions = self.market.market_transactions.clear()
+        print('Add another column to the transactions table "traded_on" that shows where the energy is coming from. \n'
+              'This is needed for all the subsequent calculations and considerations.')
 
         # Get the previous transactions for the given timestep when the action is 'settle'
         if c.MA_SETTLE in self.tasks[c.TC_ACTIONS]:
@@ -90,9 +92,8 @@ class Lem(MarketBase):
         }
 
         # Available coupling methods (see market config)
-        # Note: This probably means that the upper market draws the offers and bids from the lower market (ponder)
-        # TODO: This needs to change. The creator will either have a value or not there and the market just executes.
-        #  In its current form there would be a more functionality in the executor that should be in the creator.
+        # TODO: Change coupling structure accordingly
+        print('Adjust coupling methods. Maybe for now it will only be coupled upwards to keep it simple.')
         self.coupling = {
             None: self.__return_data,  # no coupling
             c.MC_ABOVE: self.__coupling_above,  # post offers and bids on market above
@@ -310,6 +311,12 @@ class Lem(MarketBase):
 
     def __create_bids_offers(self, include_retailer=True):
         """Creates the bids and offers table from the bids and offers of the agents and the retailers"""
+
+        # TODO: Add bids, offers from other markets
+        print('The bids and offers of other markets need to be added. \n'
+              'Not quite clear yet if this will be done via push or pull.\n'
+              'Probably function needs another parameter to avoid having to do this all the time.\n'
+              'Also subtract/add fees as discussed before since it is different.')
 
         # Check if the retailer should be included
         if include_retailer:
@@ -539,7 +546,9 @@ class Lem(MarketBase):
 
     def __couple_markets(self, clearing_type, clearing_method, pricing_method, coupling_method, **kwargs):
         """Couple the market"""
-        ...
+        print('Couple markets by taking the uncleared bids and offers. \n'
+              'Bids stay unchanged (other market fees will be subtracted there).\n'
+              'Offers are have fees added since these costs incur for other users.')
 
     def __determine_balancing_energy(self, bids_uncleared, offers_uncleared):
         """Determines the balancing energy"""

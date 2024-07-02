@@ -233,6 +233,9 @@ class Database:
         # Dict to store all markets in the region
         region_markets = {}
 
+        # TODO: Separate results by region
+        print('Make sure that the results are separated by region')
+
         # Seperator
         item_separator = '----------------------------------------'
 
