@@ -399,7 +399,7 @@ class Creator:
         general = {}
 
         # Define the structure of the simulation by flattening the scenario structure
-        general['structure'] = self.flatten_dict(self.scenario_structure)
+        general = self.__create_structure(general)  #self.flatten_dict(self.scenario_structure)
 
         # Save the general dictionary as a JSON file in the scenario's 'general' directory
         self._save_file(os.path.join(self.path_scenarios, self.name, 'general', 'general.json'), general)
@@ -745,21 +745,112 @@ class Creator:
         else:
             raise ValueError(f'File type "{file_type}" not supported')
 
-    def flatten_dict(self, nested_dict, parent_key='', sep=os.sep):
+    def __flatten_dict_with_path(self, d, parent_key='', sep=os.sep):
         """
-        Recursively flatten a nested dictionary and return a new dictionary
-        with the keys as strings indicating their full position in the original
-        dictionary.
+        Flattens a nested dictionary into a single-level dictionary with keys as paths.
+
+        This method takes a nested dictionary and returns a new dictionary where each key
+        is a string that represents the path to the corresponding value in the original dictionary.
+        The path is constructed by concatenating the keys from the root to the leaf, separated by
+        the specified separator.
+
+        Args:
+            d (dict): The nested dictionary to flatten.
+            parent_key (str, optional): The base path for keys in the flattened dictionary. Defaults to ''.
+            sep (str, optional): The separator used to join keys into a path. Defaults to os.sep.
+
+        Returns:
+            dict: A flattened dictionary with keys representing paths to values.
         """
         items = []
-        for k, v in nested_dict.items():
+        for k, v in d.items():
             new_key = parent_key + sep + k if parent_key else k
             if isinstance(v, dict):
                 name = new_key.rsplit(os.sep, 1)[-1]
                 items.append((name, new_key))
-                items.extend(self.flatten_dict(v, new_key, sep=sep).items())
+                items.extend(self.__flatten_dict_with_path(v, new_key, sep=sep).items())
             else:
                 name = new_key.rsplit(os.sep, 1)[-1]
                 items.append((name, new_key))
         return dict(items)
+
+    def __structure_down(self, d):
+        """
+        Creates a hierarchical structure of the keys in a nested dictionary.
+
+        This method recursively traverses a nested dictionary and constructs a new dictionary
+        where each key maps to its nested structure represented as a dictionary. If a key maps
+        to a non-dictionary value, it is represented as None in the resulting structure.
+
+        Args:
+            d (dict): The nested dictionary to process.
+
+        Returns:
+            dict: A dictionary representing the hierarchical structure of the input dictionary.
+        """
+        struct = {}
+
+        for key, value in d.items():
+            if isinstance(value, dict) and value:
+                struct[key] = self.__structure_down(value)
+            else:
+                struct[key] = None
+
+        return struct
+
+    def __structure_up(self, d, ancestors: dict = None):
+        """
+        Inverts the hierarchical structure of a nested dictionary.
+
+        This method recursively traverses a nested dictionary and constructs a new dictionary
+        where each key maps to its ancestors in the original dictionary. The ancestors are
+        represented as a nested dictionary where each key is a step in the path from the root
+        to the current key.
+
+        Args:
+            d (dict): The nested dictionary to invert.
+            ancestors (dict, optional): The current ancestor path. Defaults to None.
+
+        Returns:
+            dict: A dictionary representing the inverted structure of the input dictionary.
+        """
+        struct = {}
+
+        for key, value in d.items():
+            # Create the current path by including all ancestors
+            struct[key] = ancestors
+
+            # Recursively invert the child dictionary, if any
+            if isinstance(value, dict) and value:
+                ancestors = {key: ancestors}
+                child_inverted = self.__structure_up(value, ancestors)
+                struct.update(child_inverted)
+
+        return struct
+
+    def __create_structure(self, general):
+        """
+        Enhances the 'general' dictionary with the structure of the scenario.
+
+        This method adds three keys to the 'general' dictionary: 'structure', 'struct_down', and 'struct_up',
+        each representing the scenario structure in different formats. 'structure' is a flattened view of the
+        scenario structure with paths as keys. 'struct_down' represents the hierarchical structure of the scenario
+        from top to bottom, and 'struct_up' represents the structure from bottom to top, showing the path to reach
+        each node from the root.
+
+        Args:
+            general (dict): The dictionary to be enhanced with the scenario structure.
+
+        Returns:
+            dict: The enhanced 'general' dictionary containing the scenario structure.
+        """
+
+        # Flatten the scenario structure and add it to the 'general' dictionary
+        general['structure'] = self.__flatten_dict_with_path(self.scenario_structure)
+        # Add the hierarchical structure of the scenario from top to bottom
+        general['struct_down'] = self.__structure_down(self.scenario_structure)
+        # Add the hierarchical structure of the scenario from bottom to top
+        general['struct_up'] = self.__structure_up(self.scenario_structure)
+
+        return general
 
