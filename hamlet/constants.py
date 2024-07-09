@@ -133,9 +133,9 @@ MP_UNIFORM = 'uniform'
 MP_DISCRIMINATORY = 'discriminatory'
 
 # MARKET COUPLING
-MC_ABOVE = 'above'
-MC_BELOW = 'below'
-MC_LIST = [MC_ABOVE, MC_BELOW]
+MC_UP = 'up'
+MC_DOWN = 'down'
+MC_LIST = [MC_UP, MC_DOWN]
 MC_CONTINUOUS = 'c'
 MC_LAST = 'l'
 MC_METHODS = [MC_CONTINUOUS, MC_LAST]
