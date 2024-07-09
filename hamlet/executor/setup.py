@@ -4,42 +4,34 @@ __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
+import concurrent.futures
+from copy import copy
+import json
+import multiprocessing as mp
 import os
 import sys
-from tqdm import tqdm
 import shutil
 import time
-import warnings
-import multiprocessing as mp
-import pandas as pd
-from ruamel.yaml import YAML
-from pprint import pprint
-import json
-import polars as pl
-pl.enable_string_cache()
-from hamlet import functions as f
-# from numba import njit, jit
-import pandapower as pp
-import concurrent.futures
 from typing import Callable
+import warnings
+
 from datetime import datetime
+import pandapower as pp
+import pandas as pd
+import polars as pl
+from pprint import pprint
+from ruamel.yaml import YAML
+from tqdm import tqdm
+
+from hamlet import functions as f
+import hamlet.constants as c
 from hamlet.executor.agents.agent import Agent
 from hamlet.executor.markets.market import Market
 from hamlet.executor.grids.grid import Grid
 from hamlet.executor.utilities.database.database import Database
-import hamlet.constants as c
-# pl.enable_string_cache(True)
-from copy import copy
-import warnings
-warnings.filterwarnings("ignore")
 
-# TODO: Considerations
-# - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator_backup and should be continued for consistency
-# - Possible packages for multiprocessing: multiprocessing, joblib, threading (can actually be useful when using not just pure python)
-# - Decrease file size wherever possible (define data types, shorten file lengths, etc.) -> this needs to occur in the scenario creation
-# - Load all files into the RAM and not read/save as in lemlab to increase performance
-# - Use polars instead of pandas to increase performance --> finding: polars is faster as long as lazy evaluation is used. Otherwise pandas 2.0 can keep up well (depending on use case)
-# - Always check if numba can help improve performance
+pl.enable_string_cache()
+warnings.filterwarnings("ignore")
 
 
 class Executor:
@@ -69,7 +61,9 @@ class Executor:
         self.database = Database(self.path_scenario)
 
         # Scenario structure
-        self.structure = {}  # TODO: this will need to contain more information than just the path. Also: above and below markets to know where to look for the data
+        self.structure = {}
+        self.coupling = None
+        self.region_order = None
 
         # Number of workers for parallelization
         self.num_workers = num_workers
@@ -129,16 +123,18 @@ class Executor:
             # get current timestamp as string item for progress bar
             timestamp_str = str(timestamp.select(c.TC_TIMESTAMP).sample(n=1).item())
 
+            # Get the regions for the current timestamp
+            regions = timestamp.select(c.TC_REGION).unique().to_series().to_list()
+            regions = {region: df for region, df in zip(regions, timestamp.partition_by(c.TC_REGION))}
+
+            # Order the regions
+            regions = self.__sort_regions_by_order(regions)
+
             # Iterate over timestamp by region
-            for region in timestamp.partition_by(c.TC_REGION):
-                # get current region as string item for progress bar
-                region_str = str(region.select(c.TC_REGION).sample(n=1).item())
+            for region_str, region in regions.items():
 
                 # update progress bar description
                 self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for region ' + region_str + ': ')
-
-                print(region)
-                exit()
 
                 # Execute the agents and market in parallel or sequentially
                 if self.pool:
@@ -337,9 +333,17 @@ class Executor:
                                                     df='pandas'))
 
         # Load scenario structure
-        # TODO: Create structure
-        print('Structure needs to become bi-directional. Consider creating it here or in creator')
-        self.structure = self.general['structure']
+        if isinstance(self.general, dict):
+            self.structure = self.general.get('structure', {})
+        else:
+            raise TypeError("Expected 'general' to be a dictionary")
+
+        # Check if there is coupling by getting the first non-null value in the coupling column
+        self.coupling = self.timetable.select(c.TC_COUPLING).drop_nulls().head(1).item()
+
+        # Set region order based on coupling
+        if self.coupling:
+            self.region_order = self.__create_region_order()
 
         # Set the results path
         self.path_results = os.path.join(self.config['paths']['results'], self.name)
@@ -373,3 +377,27 @@ class Executor:
             warnings.warn(f"Target time is in the past: {timestamp} vs. {current_datetime}")
 
         return
+
+    def __create_region_order(self):
+
+        # Get hierarchy level based on structure by splitting the path and counting the number of elements
+        hierarchy_level = {key: len(value.split(os.sep)) for key, value in self.structure.items()}
+
+        # Sort keys by level
+        match self.coupling:
+            case c.MC_UP:
+                region_order = [key for key, _ in sorted(hierarchy_level.items(), key=lambda x: x[1], reverse=True)]
+            case c.MC_DOWN:
+                region_order = [key for key, _ in sorted(hierarchy_level.items(), key=lambda x: x[1])]
+            case None:
+                region_order = None
+            case _:
+                raise ValueError(f"Unknown coupling type: {self.coupling}")
+
+        return region_order
+
+    def __sort_regions_by_order(self, regions):
+        if self.coupling and self.region_order:
+            return {key: regions[key] for key in self.region_order if key in regions}
+        else:
+            return regions
