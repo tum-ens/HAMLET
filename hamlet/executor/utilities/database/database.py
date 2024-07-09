@@ -405,8 +405,10 @@ class Database:
                                                                   'weather.ft'), df='polars', method='eager')
         self.__general['retailer'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'retailer.ft'),
                                                  df='polars', method='eager')
-        self.__general['tasks'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
-                                                  df='polars', method='eager')
+        # self.__general['tasks'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
+        #                                           df='polars', method='eager')  # replaced due to bug in polars
+        self.timetable = pl.from_pandas(f.load_file(os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
+                                                    df='pandas'))
         self.__general['general'] = f.load_file(path=os.path.join(self.__scenario_path, 'config', 'config_setup.yaml'))
 
     def __register_all_regions(self, structure):
