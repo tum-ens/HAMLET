@@ -16,7 +16,7 @@ from ruamel.yaml import YAML
 from pprint import pprint
 import json
 import polars as pl
-pl.enable_string_cache(True)
+pl.enable_string_cache()
 from hamlet import functions as f
 # from numba import njit, jit
 import pandapower as pp
@@ -330,13 +330,11 @@ class Executor:
         self.general = f.load_file(os.path.join(self.path_scenario, 'general', 'general.json'))
         self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'config_setup.yaml'))
 
-        # Load timetable
-        # TODO: Fix polars issue
-        print('Check issue with timetable. Why does polars not load it?')
-        print(pd.read_feather(os.path.join(self.path_scenario, 'general', 'timetable.ft')).head(100).to_string())
-        exit()
-        self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),
-                                     df='polars', method='eager')
+        # Load timetable (has to be done using pandas since polars has a bug -> check if fixed in future versions)
+        # self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),
+        #                              df='polars', method='eager')
+        self.timetable = pl.from_pandas(f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),
+                                                    df='pandas'))
 
         # Load scenario structure
         # TODO: Create structure
