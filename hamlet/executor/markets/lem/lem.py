@@ -96,8 +96,8 @@ class Lem(MarketBase):
         print('Adjust coupling methods. Maybe for now it will only be coupled upwards to keep it simple.')
         self.coupling = {
             None: self.__return_data,  # no coupling
-            c.MC_ABOVE: self.__coupling_above,  # post offers and bids on market above
-            c.MC_BELOW: self.__coupling_below,  # post offers and bids on market below
+            c.MC_UP: self.__coupling_up,  # post offers and bids on market above (bottom-up)
+            c.MC_DOWN: self.__coupling_down,  # post offers and bids on market below (top-down)
         }
 
     def execute(self):
@@ -771,11 +771,11 @@ class Lem(MarketBase):
         #          positions_cleared[db_obj.db_param.PRICE_ENERGY_BID].iloc[:]) / 2).astype(int)
         raise NotImplementedError('Discriminatory pricing not implemented yet')
 
-    def __coupling_above(self):
+    def __coupling_up(self):
         """Coupling with the market above"""
         raise NotImplementedError('Market coupling not implemented yet')
 
-    def __coupling_below(self):
+    def __coupling_down(self):
         """Coupling with the market below"""
         raise NotImplementedError('Market coupling not implemented yet')
 
