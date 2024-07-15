@@ -321,6 +321,7 @@ class Lem(MarketBase):
             retailer = retailer.with_columns(
                 [
                     pl.col(c.TC_TIMESTAMP).alias(c.TC_TIMESTEP),
+                    pl.lit(self.bids_offers.select(pl.first(c.TC_TIMESTAMP))).alias(c.TC_TIMESTAMP),
                     pl.lit(None).alias(c.TC_ENERGY_TYPE),
                     # TODO: This can be removed once the energy type is added to the retailer table
                 ]
@@ -332,6 +333,8 @@ class Lem(MarketBase):
 
             retailer = retailer.with_columns(
                 [
+                    pl.col(c.TC_TIMESTAMP).cast(pl.Datetime(time_unit='ns', time_zone='UTC'), strict=False),
+                    pl.col(c.TC_TIMESTEP).cast(pl.Datetime(time_unit='ns', time_zone='UTC'), strict=False),
                     pl.col(c.TC_REGION).cast(pl.Categorical, strict=False),
                     pl.col(c.TC_MARKET).cast(pl.Categorical, strict=False),
                     pl.col(c.TC_NAME).cast(pl.Categorical, strict=False),
