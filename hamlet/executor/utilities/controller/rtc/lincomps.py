@@ -398,7 +398,8 @@ class Ev(LinopyComps):
 
         # Kwargs variables
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
-        self.soc = kwargs['socs'][f'{self.name}'][0] - self.energy  # state of charge at timestep (energy)
+        self.soc = max(0, kwargs['socs'][f'{self.name}'][0] - self.energy)  # state of charge at timestep (energy);
+        # must be greater than 0, overconsumption is assumed to be compensated elsewhere
 
         # Calculate the energy needed to charge to full
         self.energy_to_full = self.capacity - self.soc  # energy needed to charge to full
