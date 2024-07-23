@@ -19,6 +19,7 @@ class RegionDB:
     def __init__(self, path):
 
         self.region_path = path
+        self.region_name = os.path.basename(path)
         self.region_save = None  # path to save the region
         self.agents = {}
         self.markets = {}
@@ -154,7 +155,9 @@ class RegionDB:
             self.markets[markets_type] = {}
             markets = f.get_all_subdirectories(os.path.join(self.region_path, 'markets', markets_type))
             for market in markets:
-                self.markets[markets_type][market] = MarketDB(market_type=markets_type, name=market,
+                self.markets[markets_type][market] = MarketDB(market_type=markets_type,
+                                                              name=market,
+                                                              region=self.region_name,
                                                               market_path=os.path.join(self.region_path, 'markets',
                                                                                        markets_type, market),
                                                               retailer_path=os.path.join(self.region_path, 'retailers',

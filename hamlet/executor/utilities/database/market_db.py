@@ -14,9 +14,10 @@ class MarketDB:
     """Database contains all the information for markets.
     Should only be connected with Database class, no connection with main Executor."""
 
-    def __init__(self, market_type, name, market_path, retailer_path):
+    def __init__(self, market_type, name, region, market_path, retailer_path):
         self.market_type = market_type
         self.market_name = name
+        self.market_region = region
         self.market_path = market_path
         self.market_config = f.load_file(path=os.path.join(market_path, 'config.json'))
         self.market_save = None  # path to save the market
