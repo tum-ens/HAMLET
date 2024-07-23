@@ -96,7 +96,6 @@ class Executor:
         """
 
         # Get number of logical processors (for parallelization)
-        # TODO: Benchmark with different numbers of workers
         if not self.num_workers:
             self.num_workers = os.cpu_count() - 1  # logical processors (threads) - 1
             # self.num_workers = mp.cpu_count() - 1  # physical processors - 1
@@ -104,7 +103,6 @@ class Executor:
 
         # Setup up the thread pool for parallelization
         if self.num_workers > 1:
-            # TODO: Benchmark with ProcessPoolExecutor
             self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=self.num_workers)
 
         # Loop through the timetable and execute the tasks for each market for each timestamp
@@ -123,33 +121,35 @@ class Executor:
             # get current timestamp as string item for progress bar
             timestamp_str = str(timestamp.select(c.TC_TIMESTAMP).sample(n=1).item())
 
-            # Get the regions for the current timestamp
-            regions = timestamp.select(c.TC_REGION).unique().to_series().to_list()
-            regions = {region: df for region, df in zip(regions, timestamp.partition_by(c.TC_REGION))}
+            # Split the table by region and create a dictionary with the regions as keys
+            regions = timestamp.partition_by(c.TC_REGION, as_dict=True)
+
+            # Ensure correct dtype of region column (polars bug)
+            regions = {key: value.with_columns(value[c.TC_REGION].cast(pl.Categorical)) for key, value in regions.items()}
 
             # Order the regions
             regions = self.__sort_regions_by_order(regions)
 
             # Iterate over timestamp by region
-            for region_str, region in regions.items():
+            for region, tasklist in regions.items():
 
                 # update progress bar description
-                self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for region ' + region_str + ': ')
+                self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for region ' + region + ': ')
 
                 # Execute the agents and market in parallel or sequentially
                 if self.pool:
                     # Execute the agents for this market
-                    self.__execute_agents_parallel(tasklist=region)
+                    self.__execute_agents_parallel(tasklist=tasklist)
 
                     # Execute the market
                     # TODO: Replace this with a parallel execution once it works
-                    self.__execute_markets(tasklist=region)
+                    self.__execute_markets(tasklist=tasklist)
                 else:
                     # Execute the agents for this market
-                    self.__execute_agents(tasklist=region)
+                    self.__execute_agents(tasklist=tasklist)
 
                     # Execute the market
-                    self.__execute_markets(tasklist=region)
+                    self.__execute_markets(tasklist=tasklist)
 
             # Calculate the grids for the current timestamp (calculated together as they are connected)
             self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid: ')
