@@ -17,7 +17,6 @@ from hamlet.executor.markets.lh2m.lh2m import Lh2m
 import hamlet.constants as c
 
 
-
 class Market:
     """
     Initializes a Market instance.
