@@ -159,7 +159,7 @@ class TradingBase:
 
         return self.bids_offers
 
-    def _postprocess_bids_offers(self):
+    def _postprocess_bids_offers(self, enforce_dtypes=False):
 
         # Filter out rows that are not within the trading horizon
         self.bids_offers = self.bids_offers.filter(pl.col('within_horizon') == True)
@@ -169,6 +169,12 @@ class TradingBase:
         # Drop unnecessary columns
         self.bids_offers = self.bids_offers.drop(['within_horizon', 'time_to_trade',
                                                   'energy_price_sell', 'energy_price_buy'])
+
+        # Enforce dtypes
+        if enforce_dtypes:
+            self.bids_offers = self.bids_offers.with_columns([self.bids_offers[col].cast(dtype)
+                                                              for col, dtype in c.TS_BIDS_OFFERS.items()
+                                                              if col in self.bids_offers.columns])
 
         return self.bids_offers
 
@@ -187,9 +193,6 @@ class Linear(TradingBase):
 
         # Preprocess the bids and offers table
         self.bids_offers = self._preprocess_bids_offers()
-
-        # with pl.Config(set_tbl_cols=20, set_tbl_rows=100, set_tbl_width_chars=400):
-        #     print(self.bids_offers)
 
         # Filter out rows that are not within the trading horizon
         self.bids_offers = self.bids_offers.filter(pl.col('within_horizon') == True)
