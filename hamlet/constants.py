@@ -204,6 +204,7 @@ TC_CLEARING_METHOD = 'method'  # TODO: Change to clearing_method
 TC_CLEARING_PRICING = 'pricing'  # TODO: Change to clearing_pricing
 TC_COUPLING = 'coupling'
 TC_TYPE_TRANSACTION = 'type_transaction'
+TC_TRADED_ON = 'traded_on'
 TC_ID_AGENT = 'id_agent'
 TC_ID_AGENT_IN = 'id_agent_in'
 TC_ID_AGENT_OUT = 'id_agent_out'
@@ -246,6 +247,9 @@ TC_GHI = 'ghi'
 TC_DHI = 'dhi'
 TC_DNI = 'dni'
 
+# TABLE COLUMN CONNECTORS (used to combine contents of different columns)
+TCC_CONNECTOR = ' -> '
+
 # TABLE SCHEMAS
 # Note: The schemas are used to define the data types of the columns in the tables and are taken from tables.xlsx
 TS_MARKET_TRANSACTIONS = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
@@ -255,6 +259,7 @@ TS_MARKET_TRANSACTIONS = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='U
                           TC_NAME: pl.Categorical,
                           TC_ENERGY_TYPE: pl.Categorical,
                           TC_TYPE_TRANSACTION: pl.Categorical,
+                          TC_TRADED_ON: pl.Categorical,
                           TC_ID_AGENT: pl.Categorical,
                           TC_ENERGY_IN: pl.UInt64,
                           TC_ENERGY_OUT: pl.UInt64,
