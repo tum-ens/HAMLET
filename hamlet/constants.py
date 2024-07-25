@@ -76,7 +76,7 @@ MT_LFM = 'lfm'
 MT_LHM = 'lhm'
 MT_LCM = 'lcm'
 MT_LH2M = 'lh2m'
-MT_WHOLESALE = 'wholesale'  # might not be needed
+MT_RETAIL = 'retail'  # might not be needed
 MT_BALANCING = 'balancing'  # might not be needed
 
 # MARKET ACTIONS
@@ -100,9 +100,14 @@ MP_DISCRIMINATORY = 'discriminatory'
 MC_ABOVE = 'above'
 MC_BELOW = 'below'
 
+# MARKET COMMODITY TYPES
+MCT_ENERGY = 'energy'
+
 # TRADE TYPES
 TT_MARKET = 'market'
 TT_RETAIL = 'retail'
+TT_ENERGY = 'energy'
+TT_POWER = 'power'
 TT_GRID = 'grid'
 TT_LEVIES = 'levies'
 TT_BALANCING = 'balancing'
@@ -143,7 +148,7 @@ TC_TIMESTEP = 'timestep'
 TC_REGION = 'region'
 TC_MARKET = 'market'
 TC_NAME = 'name'
-TC_ENERGY_TYPE = 'energy_type'
+TC_TYPE_ENERGY = 'type_energy'
 TC_ACTIONS = 'action'  # TODO: Change to actions
 TC_CLEARING_TYPE = 'type'  # TODO: Change to clearing_type
 TC_CLEARING_METHOD = 'method'  # TODO: Change to clearing_method
@@ -151,25 +156,26 @@ TC_CLEARING_PRICING = 'pricing'  # TODO: Change to clearing_pricing
 TC_COUPLING = 'coupling'
 TC_TYPE_TRANSACTION = 'type_transaction'
 TC_ID_AGENT = 'id_agent'
-TC_ID_AGENT_IN = 'id_agent_in'
-TC_ID_AGENT_OUT = 'id_agent_out'
+TC_ID_AGENT_IN = f'{TC_ID_AGENT}_{PF_IN}'
+TC_ID_AGENT_OUT = f'{TC_ID_AGENT}_{PF_OUT}'
 TC_ID_METER = 'id_meter'
 TC_ENERGY = 'energy'
-TC_ENERGY_IN = 'energy_in'
-TC_ENERGY_OUT = 'energy_out'
-TC_ENERGY_USED = 'energy_used'
+TC_ENERGY_IN = f'{TC_ENERGY}_{PF_IN}'
+TC_ENERGY_OUT = f'{TC_ENERGY}_{PF_OUT}'
+TC_ENERGY_USED = f'{TC_ID_AGENT}_used'
 TC_PRICE_PU = 'price_pu'
-TC_PRICE_PU_IN = 'price_pu_in'
-TC_PRICE_PU_OUT = 'price_pu_out'
+TC_PRICE_PU_IN = f'{TC_PRICE_PU}_{PF_IN}'
+TC_PRICE_PU_OUT = f'{TC_PRICE_PU}_{PF_OUT}'
 TC_PRICE = 'price'
-TC_PRICE_IN = 'price_in'
-TC_PRICE_OUT = 'price_out'
+TC_PRICE_IN = f'{TC_PRICE}_{PF_IN}'
+TC_PRICE_OUT = f'{TC_PRICE}_{PF_OUT}'
 TC_POWER = 'power'
-TC_POWER_IN = 'power_in'
-TC_POWER_OUT = 'power_out'
+TC_POWER_IN = f'{TC_POWER}_{PF_IN}'
+TC_POWER_OUT = f'{TC_POWER}_{PF_OUT}'
 TC_BALANCE_ACCOUNT = 'balance_account'
 TC_QUALITY = 'quality'
 TC_SHARE_QUALITY = 'share_quality'
+TC_QUANTITY = 'quantity'
 TC_TYPE_METER = 'type_meter'
 TC_TYPE_PLANTS = 'type_plants'
 TC_SOC = 'soc'
@@ -199,7 +205,7 @@ TS_MARKET_TRANSACTIONS = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='U
                           TC_REGION: pl.Categorical,
                           TC_MARKET: pl.Categorical,
                           TC_NAME: pl.Categorical,
-                          TC_ENERGY_TYPE: pl.Categorical,
+                          TC_TYPE_ENERGY: pl.Categorical,
                           TC_TYPE_TRANSACTION: pl.Categorical,
                           TC_ID_AGENT: pl.Categorical,
                           TC_ENERGY_IN: pl.UInt64,
@@ -214,7 +220,7 @@ TS_BIDS_OFFERS = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
                   TC_REGION: pl.Categorical,
                   TC_MARKET: pl.Categorical,
                   TC_NAME: pl.Categorical,
-                  TC_ENERGY_TYPE: pl.Categorical,
+                  TC_TYPE_ENERGY: pl.Categorical,
                   TC_ID_AGENT: pl.Categorical,
                   TC_ENERGY_IN: pl.UInt64,
                   TC_ENERGY_OUT: pl.UInt64,
@@ -228,7 +234,7 @@ TS_BIDS_CLEARED = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
                    TC_REGION: pl.Categorical,
                    TC_MARKET: pl.Categorical,
                    TC_NAME: pl.Categorical,
-                   TC_ENERGY_TYPE: pl.Categorical,
+                   TC_TYPE_ENERGY: pl.Categorical,
                    TC_ID_AGENT_IN: pl.Categorical,
                    TC_ENERGY_IN: pl.UInt64,
                    TC_PRICE_PU_IN: pl.Int32,
@@ -240,7 +246,7 @@ TS_OFFERS_CLEARED = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
                      TC_REGION: pl.Categorical,
                      TC_MARKET: pl.Categorical,
                      TC_NAME: pl.Categorical,
-                     TC_ENERGY_TYPE: pl.Categorical,
+                     TC_TYPE_ENERGY: pl.Categorical,
                      TC_ID_AGENT_OUT: pl.Categorical,
                      TC_ENERGY_OUT: pl.UInt64,
                      TC_PRICE_PU_OUT: pl.Int32,
@@ -252,7 +258,7 @@ TS_POSITIONS_MATCHED = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC
                         TC_REGION: pl.Categorical,
                         TC_MARKET: pl.Categorical,
                         TC_NAME: pl.Categorical,
-                        TC_ENERGY_TYPE: pl.Categorical,
+                        TC_TYPE_ENERGY: pl.Categorical,
                         TC_ID_AGENT_IN: pl.Categorical,
                         TC_ID_AGENT_OUT: pl.Categorical,
                         TC_ENERGY: pl.UInt64,
