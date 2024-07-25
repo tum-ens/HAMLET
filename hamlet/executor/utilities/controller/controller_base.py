@@ -4,7 +4,7 @@ __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
-# Used to ensure a consistent design of all markets
+# Used to ensure a consistent design of all controllers
 
 
 class ControllerBase:
