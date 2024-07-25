@@ -237,10 +237,10 @@ class Lem(MarketBase):
         transactions, _, _ = self.__determine_balancing_energy(bids_uncleared, offers_uncleared)
 
         # Apply levies and taxes
-        grid_levies = self.__apply_grid_levies(transactions)
+        grid, levies = self.__apply_grid_levies(transactions)
 
         # Update the tables and market database
-        transactions = pl.concat([grid_levies, transactions], how='diagonal')
+        transactions = pl.concat([grid, levies, transactions], how='diagonal')
 
         self.__update_database(transactions=transactions)
 
@@ -313,29 +313,35 @@ class Lem(MarketBase):
 
         # Check if the retailer should be included
         if include_retailer:
+            # Find all columns that are relevant for energy
+            energy_cols = [col for col in self.retailer.columns if col.startswith(c.TT_ENERGY)]
             # Add bid and offer by the retailers
-            retailer = self.retailer.select(pl.col(c.TC_TIMESTAMP), pl.col(c.TC_REGION), pl.col(c.TC_MARKET),
-                                            pl.col(c.TC_NAME), pl.col('retailer'),
-                                            pl.col('energy_price_sell'), pl.col('energy_price_buy'),
-                                            pl.col('energy_quantity_sell'), pl.col('energy_quantity_buy'))
+            retailer = self.retailer.select(pl.col(c.TC_TIMESTAMP),
+                                            pl.col(c.TC_REGION),
+                                            pl.col(c.TC_MARKET),
+                                            pl.col(c.TC_NAME),
+                                            pl.col(c.TC_ID_AGENT),
+                                            pl.col(c.TC_TYPE_ENERGY),
+                                            *[pl.col(col) for col in energy_cols])
+            # Add timestep column
             retailer = retailer.with_columns(
                 [
                     pl.col(c.TC_TIMESTAMP).alias(c.TC_TIMESTEP),
-                    pl.lit(None).alias(c.TC_ENERGY_TYPE),
-                    # TODO: This can be removed once the energy type is added to the retailer table
                 ]
             )
-            # TODO: Some of those will not need renaming in the future as the retailer table is changed
-            retailer = retailer.rename({'retailer': c.TC_ID_AGENT,
-                                        'energy_price_sell': c.TC_PRICE_PU_IN, 'energy_price_buy': c.TC_PRICE_PU_OUT,
-                                        'energy_quantity_sell': c.TC_ENERGY_IN, 'energy_quantity_buy': c.TC_ENERGY_OUT})
+            # Remove starting 'energy' from all columns
+            retailer = retailer.rename({col: col.split('_', 1)[1] for col in energy_cols})
 
+            # Change price columns to price pu columns
+            retailer = retailer.rename({c.TC_PRICE_IN: c.TC_PRICE_PU_IN, c.TC_PRICE_OUT: c.TC_PRICE_PU_OUT,})
+
+            # Select only the relevant columns
+            retailer = retailer.select(self.bids_offers.columns)
+
+            # Cast the columns to the correct types
+            # TODO: Create a general function that enforces dtypes (e.g. from a schema)
             retailer = retailer.with_columns(
                 [
-                    pl.col(c.TC_REGION).cast(pl.Categorical, strict=False),
-                    pl.col(c.TC_MARKET).cast(pl.Categorical, strict=False),
-                    pl.col(c.TC_NAME).cast(pl.Categorical, strict=False),
-                    pl.col(c.TC_ENERGY_TYPE).cast(pl.Categorical, strict=False),
                     pl.col(c.TC_ID_AGENT).cast(pl.Categorical, strict=False),
                     pl.col(c.TC_ENERGY_IN).cast(pl.UInt64, strict=False),
                     pl.col(c.TC_ENERGY_OUT).cast(pl.UInt64, strict=False),
@@ -344,8 +350,7 @@ class Lem(MarketBase):
                 ]
             )
 
-            retailer = retailer.select(self.bids_offers.columns)
-
+            # Add the retailer to the bids and offers
             bids_offers = pl.concat([self.bids_offers, retailer], how='vertical')
         else:
             bids_offers = self.bids_offers
@@ -555,23 +560,20 @@ class Lem(MarketBase):
         # Create new trades table that contains only the balancing transactions
         transactions = pl.concat([bids_uncleared, offers_uncleared], how='diagonal')
             
-        # Add temporary columns
+        # Add price pu column information from the retailer
         transactions = transactions.with_columns([
-            pl.lit(retailer["balancing_price_sell"].alias("balancing_price_sell")),
-            pl.lit(retailer["balancing_price_buy"].alias("balancing_price_buy")),
+            pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_IN}'].alias(c.TC_PRICE_PU_OUT)).cast(pl.Int32),
+            pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_OUT}'].alias(c.TC_PRICE_PU_IN)).cast(pl.Int32),
         ])
         # Add missing columns
         transactions = transactions.with_columns([
             # ID agent
             pl.when(pl.col(c.TC_ID_AGENT_IN).is_not_null())
             .then(pl.col(c.TC_ID_AGENT_IN)).otherwise(pl.col(c.TC_ID_AGENT_OUT)).alias(c.TC_ID_AGENT),
-            # Energy pu prices
-            pl.when(pl.col(c.TC_ENERGY_IN).is_not_null()).then(pl.col("balancing_price_buy")).alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
-            pl.when(pl.col(c.TC_ENERGY_OUT).is_not_null()).then(pl.col("balancing_price_sell")).alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
             # Trade type
             pl.lit(c.TT_BALANCING).alias(c.TC_TYPE_TRANSACTION).cast(pl.Categorical),
             # Quality
-            pl.lit(0).alias(c.TC_QUALITY).cast(pl.UInt8),  # TODO: Take out once quality is included in the table
+            pl.lit(0).alias(c.TC_QUALITY).cast(pl.UInt8),  # TODO: Take out once quality is excluded
         ])
         # Calculate the total price
         transactions = transactions.with_columns([
@@ -580,8 +582,7 @@ class Lem(MarketBase):
         ])
 
         # Drop unnecessary columns
-        transactions = transactions.drop(c.TC_ID_AGENT_IN, c.TC_ID_AGENT_OUT,
-                                         "balancing_price_sell", "balancing_price_buy")
+        transactions = transactions.drop(c.TC_ID_AGENT_IN, c.TC_ID_AGENT_OUT)
 
         # Delete the rows of the bids and offers
         self.bids_uncleared = bids_uncleared.clear()
@@ -604,7 +605,7 @@ class Lem(MarketBase):
         # Concat all transactions for the given timestep to calculate the net energy
         transactions = pl.concat([self.transactions_prev, transactions], how='diagonal')
         # Remove retailer from the transactions (as they are not subject to levies and taxes)
-        transactions = transactions.filter(~pl.col(c.TC_ID_AGENT).is_in(retailer["retailer"].to_list()))
+        transactions = transactions.filter(~pl.col(c.TC_ID_AGENT).is_in(retailer[c.TC_ID_AGENT].to_list()))
         # Compute the net energy for each agent and assign it to the according energy column (in or out)
         net_energy = (transactions.groupby(c.TC_ID_AGENT).agg([
             pl.sum(c.TC_ENERGY_IN),
@@ -640,17 +641,17 @@ class Lem(MarketBase):
         grid = transactions.clone()
         # Add temporary columns
         grid = grid.with_columns([
-            pl.lit(retailer["grid_local_sell"].alias("grid_market_sell")),
-            pl.lit(retailer["grid_local_buy"].alias("grid_market_buy")),
-            # pl.lit(retailer["grid_retail_sell"].alias("grid_retail_sell")),  # TODO: Add this once clearing differentiates between wholesale and local
-            # pl.lit(retailer["grid_retail_buy"].alias("grid_retail_buy")),
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'].alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_OUT}')),
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'].alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_IN}')),
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_OUT}'].alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_OUT}')),  # TODO: Add this once clearing differentiates between wholesale and local
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}'].alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_IN}')),
         ])
         # Adjust the price columns
         grid = grid.with_columns([
             # Energy pu prices  # TODO: Differentiate further between wholesale and local and balancing
-            pl.when(pl.col(c.TC_ENERGY_IN).is_not_null()).then(pl.col("grid_market_buy"))
+            pl.when(pl.col(c.TC_ENERGY_IN).is_not_null()).then(pl.col(f'{c.TT_MARKET}_{c.TC_PRICE_PU_IN}'))
             .otherwise(None).alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
-            pl.when(pl.col(c.TC_ENERGY_OUT).is_not_null()).then(pl.col("grid_market_sell"))
+            pl.when(pl.col(c.TC_ENERGY_OUT).is_not_null()).then(pl.col(f'{c.TT_MARKET}_{c.TC_PRICE_PU_OUT}'))
             .otherwise(None).alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
             # Trade type
             pl.lit(c.TT_GRID).alias(c.TC_TYPE_TRANSACTION).cast(pl.Categorical),
@@ -661,22 +662,16 @@ class Lem(MarketBase):
             (pl.col(c.TC_PRICE_PU_OUT) * pl.col(c.TC_ENERGY_OUT)).alias(c.TC_PRICE_OUT).cast(pl.Int64),
         ])
         # Drop unnecessary columns
-        grid = grid.drop("grid_market_sell", "grid_market_buy")
+        grid = grid.drop(f'{c.TT_MARKET}_{c.TC_PRICE_PU_OUT}', f'{c.TT_MARKET}_{c.TC_PRICE_PU_IN}',
+                         f'{c.TT_RETAIL}_{c.TC_PRICE_PU_OUT}', f'{c.TT_RETAIL}_{c.TC_PRICE_PU_IN}')
 
         # Copy the transactions table to apply the levies
         levies = transactions.clone()
-        # Add temporary columns
-        levies = levies.with_columns([
-            pl.lit(retailer["levies_price_sell"].alias("levies_sell")),
-            pl.lit(retailer["levies_price_buy"].alias("levies_buy")),
-        ])
-        # Adjust the price columns
+        # Adjust the price and trade type columns
         levies = levies.with_columns([
             # Energy pu prices
-            pl.when(pl.col(c.TC_ENERGY_IN).is_not_null()).then(pl.col("levies_buy"))
-            .otherwise(None).alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
-            pl.when(pl.col(c.TC_ENERGY_OUT).is_not_null()).then(pl.col("levies_sell"))
-            .otherwise(None).alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
+            pl.lit(retailer[f'{c.TT_LEVIES}_{c.TC_PRICE_OUT}'].alias(c.TC_PRICE_PU_OUT)).cast(pl.Int32),
+            pl.lit(retailer[f'{c.TT_LEVIES}_{c.TC_PRICE_IN}'].alias(c.TC_PRICE_PU_IN)).cast(pl.Int32),
             # Trade type
             pl.lit(c.TT_LEVIES).alias(c.TC_TYPE_TRANSACTION).cast(pl.Categorical),
         ])
@@ -685,13 +680,8 @@ class Lem(MarketBase):
             (pl.col(c.TC_PRICE_PU_IN) * pl.col(c.TC_ENERGY_IN)).alias(c.TC_PRICE_IN).cast(pl.Int64),
             (pl.col(c.TC_PRICE_PU_OUT) * pl.col(c.TC_ENERGY_OUT)).alias(c.TC_PRICE_OUT).cast(pl.Int64),
         ])
-        # Drop unnecessary columns
-        levies = levies.drop("levies_sell", "levies_buy")
 
-        # Concat the grids and levies
-        transactions = pl.concat([grid, levies], how='align')
-
-        return transactions
+        return grid, levies
 
     def __method_pda(self, bids, offers, pricing_method):
         """Clears the market with the periodic double auction method"""
