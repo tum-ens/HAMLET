@@ -1,6 +1,7 @@
 .idea
 
 # Folders
+03_input_data_grid/*
 04_scenarios/*
 05_results/*
 
