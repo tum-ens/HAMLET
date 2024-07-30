@@ -1,11 +1,15 @@
-import os
-import shutil
-import time
 import json
+import os
+import random
+import shutil
+import string
+import time
+
 import pandas as pd
 import polars as pl
 from ruamel.yaml import YAML
 from typing import Callable
+
 import hamlet.constants as c
 
 # Contains all functions that are shared among the classes and used universally
@@ -322,3 +326,30 @@ def slice_dataframe_between_times(target_df, reference_ts, duration: int, unit='
     sliced_df = sliced_df.drop('timedelta')     # delete unnecessary column
 
     return sliced_df
+
+
+def gen_ids(n: int = 1, length: int = 15, prefix: str = '', suffix: str = '') -> list[str] | str:
+    """
+    Generate random unique IDs with optional prefix and suffix.
+
+    This function generates a specified number of unique random IDs, each of a given length.
+    Optionally, a prefix and/or suffix can be added to each ID.
+
+    Args:
+        n (int): The number of IDs to generate. Defaults to 1.
+        length (int): The length of the random part of each ID. Defaults to 15.
+        prefix (str): A prefix string to add to the start of each ID. Defaults to an empty string.
+        suffix (str): A suffix string to add to the end of each ID. Defaults to an empty string.
+
+    Returns:
+        list[str] | str: A list of generated IDs if n > 1, otherwise a single ID as a string.
+    """
+    id_set = set()
+    total_length = length - len(prefix) - len(suffix)
+
+    while len(id_set) < n:
+        new_id = ''.join(random.choices(string.ascii_letters + string.digits, k=total_length))
+        id_set.add(prefix + new_id + suffix)
+
+    ids = list(id_set)
+    return ids[0] if n == 1 else ids
