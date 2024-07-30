@@ -328,27 +328,29 @@ def slice_dataframe_between_times(target_df, reference_ts, duration: int, unit='
     return sliced_df
 
 
-def gen_ids(n: int = 1, length: int = 15, prefix: str = '', suffix: str = '') -> list[str] | str:
+def gen_ids(n: int = 1, length: int = 15, prefix: str = '', suffix: str = '', only_integers: bool = False) \
+        -> list[str] | str:
     """
-    Generate random unique IDs with optional prefix and suffix.
+    Generate random unique IDs with optional prefix, suffix, and integer-only option.
 
     This function generates a specified number of unique random IDs, each of a given length.
-    Optionally, a prefix and/or suffix can be added to each ID.
+    Optionally, a prefix and/or suffix can be added to each ID. IDs can be made of only integers if desired.
 
     Args:
         n (int): The number of IDs to generate. Defaults to 1.
         length (int): The length of the random part of each ID. Defaults to 15.
         prefix (str): A prefix string to add to the start of each ID. Defaults to an empty string.
         suffix (str): A suffix string to add to the end of each ID. Defaults to an empty string.
+        only_integers (bool): If True, the IDs will consist only of integers. Defaults to False.
 
     Returns:
         list[str] | str: A list of generated IDs if n > 1, otherwise a single ID as a string.
     """
     id_set = set()
-    total_length = length - len(prefix) - len(suffix)
+    characters = string.digits if only_integers else string.ascii_letters + string.digits
 
     while len(id_set) < n:
-        new_id = ''.join(random.choices(string.ascii_letters + string.digits, k=total_length))
+        new_id = ''.join(random.choices(characters, k=length))
         id_set.add(prefix + new_id + suffix)
 
     ids = list(id_set)
