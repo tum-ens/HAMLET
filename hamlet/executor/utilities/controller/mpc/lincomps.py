@@ -941,6 +941,31 @@ class Battery(SimpleStorage):
         self.b2g = self.info['sizing']['b2g']
         self.g2b = self.info['sizing']['g2b']
 
+    def define_constraints(self, model: Model) -> Model:
+        model = super().define_constraints(model)
+
+        # Add constraint that the battery can only charge from the grid if the b2g flag is set to true
+        model = self._constraint_b2g(model)
+
+        return model
+
+    def _constraint_b2g(self, model: Model) -> Model:
+        """Adds the constraint that the battery can only charge from the grid if the b2g flag is set to true."""
+
+        # Define the variables
+        markets = self.info['markets']
+
+        # Define the constraint if b2g is disabled
+        if not self.b2g:
+            for market, energy in markets.items():
+                if energy == c.ET_ELECTRICITY:  # Only electricity markets are considered
+                    equation_disable_b2g = (model.variables[f'{self.name}_{self.comp_type}_mode'] -
+                                            model.variables[f'{market}_mode'] <= 0)
+                    model.add_constraints(equation_disable_b2g, name=f'{self.name}_b2g_{market}',
+                                          coords=[self.timesteps])
+
+        return model
+
 
 class Psh(SimpleStorage):
 
