@@ -254,18 +254,18 @@ class Lem(MarketBase):
         """Clears the market with no clearing method, i.e. only the retailer acts as trading partner"""
 
         # Merge bids and offers on the energy_cumsum column
-        bids_offers = bids.join(offers, on=C_ENERGY_CUMSUM, how='outer')
+        bids_offers = pl.concat([bids, offers], how='diagonal')
 
         # Sort the bids and offers by the energy_cumsum
         bids_offers = bids_offers.sort(C_ENERGY_CUMSUM, descending=False)
 
-        # Remove all columns that end on _right
-        double_cols = [col for col in bids_offers.columns if col.endswith('_right')]
-        for col in double_cols:
-            orig_col = col.rsplit('_', 1)[0]
-            bids_offers = bids_offers.with_columns(pl.coalesce([orig_col, col]).alias(orig_col))
-        bids_offers = bids_offers.drop(double_cols)
-
+        # Fill the NaN values with the retailer
+        bids_offers = bids_offers.with_columns([
+            pl.when(pl.col(c.TC_ID_AGENT_IN).is_not_null()).then(pl.col(c.TC_ID_AGENT_IN))
+            .otherwise(pl.lit('retailer')).alias(c.TC_ID_AGENT_IN),
+            pl.when(pl.col(c.TC_ID_AGENT_OUT).is_not_null()).then(pl.col(c.TC_ID_AGENT_OUT))
+            .otherwise(pl.lit('retailer')).alias(c.TC_ID_AGENT_OUT),
+        ])
 
         # Create bids and offers table where retailer is the only trading partner
         # Note: This currently works only for one retailer named 'retailer' in the future it needs to first obtain the
@@ -277,6 +277,10 @@ class Lem(MarketBase):
         bids = bids.fill_null(strategy='backward')
         offers = offers.fill_null(strategy='backward')
 
+        # Filter rows that have the same agent id in the in and out column (cannot trade with themselves)
+        bids = bids.filter(pl.col(c.TC_ID_AGENT_IN) != pl.col(c.TC_ID_AGENT_OUT))
+        offers = offers.filter(pl.col(c.TC_ID_AGENT_IN) != pl.col(c.TC_ID_AGENT_OUT))
+
         # Clear bids and offers
         bids_cleared = bids.filter(pl.col(c.TC_PRICE_PU_IN) >= pl.col(c.TC_PRICE_PU_OUT))
         offers_cleared = offers.filter(pl.col(c.TC_PRICE_PU_IN) >= pl.col(c.TC_PRICE_PU_OUT))
@@ -287,7 +291,6 @@ class Lem(MarketBase):
 
         # Create new dataframe with the cleared bids and offers
         trades_cleared = pl.concat([bids_cleared, offers_cleared], how='vertical')
-
 
         # Calculate the price and energy of the trades
         trades_cleared = trades_cleared.with_columns(
