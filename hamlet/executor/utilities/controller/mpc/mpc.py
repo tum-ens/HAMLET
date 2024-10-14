@@ -95,7 +95,7 @@ class Mpc(ControllerBase):
             self.timesteps = pd.Index(range(len(self.timesteps)), name='timesteps')
             # self.timesteps = self.n_steps  # Use this line if the timesteps are not needed and the index is sufficient
             # Reduce the socs to the current timestamp
-            self.socs = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timestamp)
+            self.socs = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timestamp + self.dt)
 
             # Get the market types
             # TODO: Still needs to be done and then adjusted in the market objects (right now the names are simply
