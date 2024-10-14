@@ -181,7 +181,7 @@ class Rtc(ControllerBase):
 
                 # Retrieve the soc data for the plant (if applicable)
                 cols = [col for col in self.socs.columns if col.startswith(plant_name)]
-                socs = self.socs.select(cols)
+                socs = self.socs.filter(pl.col(c.TC_TIMESTAMP) == self.timestamp).select(cols)
 
                 # Get the plant class
                 plant_class = self.available_plants.get(plant_type)
