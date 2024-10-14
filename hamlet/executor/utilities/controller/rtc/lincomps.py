@@ -33,13 +33,13 @@ class LinopyComps:
     def define_constraints(model):
         return model
 
-    def define_electricity_variable(self, model, comp_type, lower, upper, integer=True) -> Model:
+    def define_electricity_variable(self, model, comp_type, lower, upper, integer=False) -> Model:
         # Define the power variable
         model.add_variables(name=f'{self.name}_{comp_type}_{c.ET_ELECTRICITY}', lower=lower, upper=upper, integer=integer)
 
         return model
 
-    def define_heat_variable(self, model, comp_type, lower, upper, load_target=None, integer=True) -> Model:
+    def define_heat_variable(self, model, comp_type, lower, upper, load_target=None, integer=False) -> Model:
         # Define the power variable
         if load_target is None:
             name = f'{self.name}_{comp_type}_{c.ET_HEAT}'
@@ -49,7 +49,7 @@ class LinopyComps:
 
         return model
 
-    def define_cool_variable(self, model, comp_type, lower, upper, load_target=None, integer=True) -> Model:
+    def define_cool_variable(self, model, comp_type, lower, upper, load_target=None, integer=False) -> Model:
         # Define the power variable
         if load_target is None:
             name = f'{self.name}_{comp_type}_{c.ET_COOLING}'
@@ -59,7 +59,7 @@ class LinopyComps:
 
         return model
 
-    def define_h2_variable(self, model, comp_type, lower, upper, integer=True) -> Model:
+    def define_h2_variable(self, model, comp_type, lower, upper, integer=False) -> Model:
         # Define the power variable
         model.add_variables(name=f'{self.name}_{comp_type}_{c.ET_H2}', lower=lower, upper=upper, integer=integer)
 
@@ -398,7 +398,8 @@ class Ev(LinopyComps):
 
         # Kwargs variables
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
-        self.soc = kwargs['socs'][f'{self.name}'][0] - self.energy  # state of charge at timestep (energy)
+        self.soc = max(0, kwargs['socs'][f'{self.name}'][0] - self.energy)  # state of charge at timestep (energy);
+        # must be greater than 0, overconsumption is assumed to be compensated elsewhere
 
         # Calculate the energy needed to charge to full
         self.energy_to_full = self.capacity - self.soc  # energy needed to charge to full

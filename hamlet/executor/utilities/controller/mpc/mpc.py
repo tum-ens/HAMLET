@@ -95,7 +95,7 @@ class Mpc(ControllerBase):
             self.timesteps = pd.Index(range(len(self.timesteps)), name='timesteps')
             # self.timesteps = self.n_steps  # Use this line if the timesteps are not needed and the index is sufficient
             # Reduce the socs to the current timestamp
-            self.socs = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timestamp)
+            self.socs = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timestamp + self.dt)
 
             # Get the market types
             # TODO: Still needs to be done and then adjusted in the market objects (right now the names are simply
@@ -125,18 +125,31 @@ class Mpc(ControllerBase):
                 c.P_HEAT_STORAGE: lincomps.HeatStorage,
             }
 
-            # Create the plant objects
-            self.plant_objects = {}
-            self.create_plants()
-
             # Create the market objects
             self.market_objects = {}
             self.create_markets()
+
+            # Create the plant objects
+            self.plant_objects = {}
+            self.create_plants()
 
             # Define the model
             self.define_variables()
             self.define_constraints()
             self.define_objective()
+
+        def create_markets(self):
+            """"""
+
+            # Define variables from the market results and a balancing variable for each energy type
+            for market in self.markets:
+                # Create market object
+                self.market_objects[f'{market}'] = lincomps.Market(name=market,
+                                                                   forecasts=self.forecasts,
+                                                                   timesteps=self.timesteps,
+                                                                   delta=self.dt)
+
+            return self.market_objects
 
         def create_plants(self):
             for plant_name, plant_data in self.plants.items():
@@ -163,22 +176,10 @@ class Mpc(ControllerBase):
                                                              **plant_data,
                                                              socs=socs,
                                                              delta=self.dt,
-                                                             timesteps=self.timesteps)
+                                                             timesteps=self.timesteps,
+                                                             markets=self.markets)
 
             return self.plant_objects
-
-        def create_markets(self):
-            """"""
-
-            # Define variables from the market results and a balancing variable for each energy type
-            for market in self.markets:
-                # Create market object
-                self.market_objects[f'{market}'] = lincomps.Market(name=market,
-                                                                   forecasts=self.forecasts,
-                                                                   timesteps=self.timesteps,
-                                                                   delta=self.dt)
-
-            return self.market_objects
 
         def define_variables(self):
             # Define variables for each plant
