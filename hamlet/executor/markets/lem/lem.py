@@ -697,6 +697,10 @@ class Lem(MarketBase):
         # Concat the grids and levies
         transactions = pl.concat([grid, levies], how='align')
 
+        # Set the timestamp column to the current timestamp
+        transactions = transactions.with_columns(pl.lit(self.tasks[c.TC_TIMESTAMP]).alias(c.TC_TIMESTAMP)
+                                                 .cast(pl.Datetime(time_unit='ns', time_zone='UTC')))
+
         return transactions
 
     def __method_pda(self, bids, offers, pricing_method):
