@@ -5,7 +5,9 @@ __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
 import os
+
 import polars as pl
+
 from hamlet import constants as c
 from hamlet import functions as f
 
@@ -38,6 +40,27 @@ class MarketDB:
         self.offers_cleared = pl.DataFrame(schema=c.TS_OFFERS_CLEARED)
         self.offers_uncleared = pl.DataFrame(schema=c.TS_OFFERS_UNCLEARED)
         self.positions_matched = pl.DataFrame(schema=c.TS_POSITIONS_MATCHED)
+
+    def load_market_from_files(self, market_transactions_only=True):
+        """Load market market data from files"""
+        self.retailer = f.load_file(path=os.path.join(self.retailer_path, 'retailer.ft'), df='polars', method='eager')
+        files = [('market_transactions.csv', c.TS_MARKET_TRANSACTIONS), ('bids_cleared.ft', c.TS_BIDS_CLEARED),
+                 ('bids_uncleared.ft', c.TS_BIDS_UNCLEARED), ('offers_cleared.ft', c.TS_OFFERS_CLEARED),
+                 ('offers_uncleared.ft', c.TS_OFFERS_UNCLEARED)]
+        for file_name, schema in files:
+            # Skip other files except market transactions
+            if market_transactions_only and not file_name.startswith('market_transactions'):
+                continue
+            if os.path.exists(os.path.join(self.market_path, file_name)):
+                # load file
+                df: pl.DataFrame = f.load_file(path=os.path.join(self.market_path, file_name), df='polars',
+                                               method='eager', parse_dates=True)
+                # cast dataframe to the given schema
+                df = df.cast(schema)
+                # get database name
+                attr_name = file_name.rsplit('.', 1)[0]
+                # update class attribute with dataframe
+                setattr(self, attr_name, df)
 
     def save_market(self, path, save_all: bool = False):
         """Save market data to given path."""

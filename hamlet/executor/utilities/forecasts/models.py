@@ -6,6 +6,7 @@ __email__ = "jiahe.chu@tum.de"
 
 import os
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # turn off onednn for tensorflow
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # silence tensorflow logs
 from datetime import timedelta
 import ast
 import polars as pl

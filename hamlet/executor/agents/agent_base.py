@@ -8,17 +8,17 @@ __email__ = "markus.doepfert@tum.de"
 
 # Imports
 import polars as pl
+
+from hamlet import constants as c
 from hamlet.executor.utilities.controller.controller import Controller
-from hamlet.executor.utilities.database.database import Database
 from hamlet.executor.utilities.database.agent_db import AgentDB
 from hamlet.executor.utilities.trading.trading import Trading
-from hamlet import constants as c
 
 
 class AgentBase:
     """Base class for all agents. It provides a default implementation of the run method."""
 
-    def __init__(self, agent_type: str, agent: AgentDB, timetable: pl.DataFrame, database: Database):
+    def __init__(self, agent_type: str, agent: AgentDB, timetable: pl.DataFrame, market: dict):
 
         # Type of agent
         self.agent_type = agent_type
@@ -29,18 +29,11 @@ class AgentBase:
         # Timetable
         self.timetable = timetable  # part of tasks for one timestep
 
-        # Database
-        self.db = database
-
         # Market data
-        self.market = None
+        self.market = market
 
     def execute(self):
         """Executes the agent"""
-
-        # Get the market data from the database
-        self.get_market_data()
-
         # Get the grid data from the database
         self.get_grid_data()
 
@@ -54,12 +47,6 @@ class AgentBase:
         self.create_bids_offers()
 
         return self.agent
-
-    def get_market_data(self):
-        """Gets the market data from the database"""
-
-        # Get the market data
-        self.market = self.db.get_market_data(region=self.timetable[c.TC_REGION].head(1).to_list()[0])
 
     def get_grid_data(self):
         """Gets the grid data from the database"""

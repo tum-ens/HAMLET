@@ -5,20 +5,12 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 # Imports
-import os
-import pandas as pd
 import polars as pl
-import numpy as np
-import time
-import logging
-import traceback
-from datetime import datetime
+
 import hamlet.constants as c
-from hamlet.executor.utilities.database.market_db import MarketDB
-from hamlet.executor.utilities.database.region_db import RegionDB
-from hamlet.executor.utilities.database.database import Database
 from hamlet.executor.markets.market_base import MarketBase
-from pprint import pprint
+from hamlet.executor.utilities.database.database import Database
+from hamlet.executor.utilities.database.market_db import MarketDB
 
 # Definition of temporary column names
 C_ENERGY_CUMSUM = 'energy_cumsum'
@@ -271,7 +263,8 @@ class Lem(MarketBase):
         # Note: This currently works only for one retailer named 'retailer' in the future it needs to first obtain the
         #  names of the retailers and exclude them instead
         bids = bids_offers.filter((pl.col(c.TC_ID_AGENT_IN) != 'retailer') | (pl.col(c.TC_ID_AGENT_OUT) == 'retailer'))
-        offers = bids_offers.filter((pl.col(c.TC_ID_AGENT_IN) == 'retailer') | (pl.col(c.TC_ID_AGENT_OUT) != 'retailer'))
+        offers = bids_offers.filter(
+            (pl.col(c.TC_ID_AGENT_IN) == 'retailer') | (pl.col(c.TC_ID_AGENT_OUT) != 'retailer'))
 
         # Fill the NaN values with the last value to know who trades with whom
         bids = bids.fill_null(strategy='backward')
@@ -508,7 +501,8 @@ class Lem(MarketBase):
         transactions = transactions.with_columns([
             pl.when(pl.col(c.TC_ID_AGENT_IN).is_not_null())
             .then(pl.col(c.TC_ID_AGENT_IN)).otherwise(pl.col(c.TC_ID_AGENT_OUT)).alias(c.TC_ID_AGENT),
-            pl.lit(c.TT_MARKET).alias(c.TC_TYPE_TRANSACTION).cast(pl.Categorical),  # TODO: Change this so that trades with the retailer are marked as TT_RETAIL (relevant to differentiate between levies)
+            pl.lit(c.TT_MARKET).alias(c.TC_TYPE_TRANSACTION).cast(pl.Categorical),
+            # TODO: Change this so that trades with the retailer are marked as TT_RETAIL (relevant to differentiate between levies)
             pl.lit(0).alias(c.TC_QUALITY).cast(pl.UInt8),  # TODO: Take out once quality is included in the table
         ])
         # Drop unnecessary columns
@@ -560,7 +554,7 @@ class Lem(MarketBase):
 
         # Create new trades table that contains only the balancing transactions
         transactions = pl.concat([bids_uncleared, offers_uncleared], how='diagonal')
-            
+
         # Add temporary columns
         transactions = transactions.with_columns([
             pl.lit(retailer["balancing_price_sell"].alias("balancing_price_sell")),
@@ -572,8 +566,10 @@ class Lem(MarketBase):
             pl.when(pl.col(c.TC_ID_AGENT_IN).is_not_null())
             .then(pl.col(c.TC_ID_AGENT_IN)).otherwise(pl.col(c.TC_ID_AGENT_OUT)).alias(c.TC_ID_AGENT),
             # Energy pu prices
-            pl.when(pl.col(c.TC_ENERGY_IN).is_not_null()).then(pl.col("balancing_price_buy")).alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
-            pl.when(pl.col(c.TC_ENERGY_OUT).is_not_null()).then(pl.col("balancing_price_sell")).alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
+            pl.when(pl.col(c.TC_ENERGY_IN).is_not_null()).then(pl.col("balancing_price_buy")).alias(
+                c.TC_PRICE_PU_IN).cast(pl.Int32),
+            pl.when(pl.col(c.TC_ENERGY_OUT).is_not_null()).then(pl.col("balancing_price_sell")).alias(
+                c.TC_PRICE_PU_OUT).cast(pl.Int32),
             # Trade type
             pl.lit(c.TT_BALANCING).alias(c.TC_TYPE_TRANSACTION).cast(pl.Categorical),
             # Quality

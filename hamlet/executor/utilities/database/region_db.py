@@ -4,11 +4,12 @@ __license__ = ""
 __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
-import polars as pl
 import os
-from datetime import datetime
-from hamlet import functions as f
+
+import polars as pl
+
 from hamlet import constants as c
+from hamlet import functions as f
 from hamlet.executor.utilities.database.agent_db import AgentDB
 from hamlet.executor.utilities.database.market_db import MarketDB
 from hamlet.executor.utilities.forecasts.forecaster import Forecaster
@@ -193,4 +194,4 @@ class RegionDB:
                 path = os.path.join(self.region_save, 'markets', markets_type, market_name)
 
                 # Save market data
-                marketDB.save_market(path)
+                marketDB.save_market(path, save_all=True)
