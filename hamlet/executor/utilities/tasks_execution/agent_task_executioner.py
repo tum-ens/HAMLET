@@ -1,3 +1,5 @@
+import os
+
 import polars as pl
 
 import hamlet.constants as c
@@ -42,9 +44,11 @@ class AgentTaskExecutioner(TaskExecutioner):
         markets = self.database.get_market_data(region=region_name)
         # Iterate over the agents and execute them sequentially
         for agent_type, agent in agents.items():
-            for agent_id, data in agent.items():
+            for agent_id, agent_db in agent.items():
+                # Update save path for agent
+                agent_db.agent_save = os.path.join(self.results_path, 'agents', agent_type, agent_id)
                 # Create an instance of the Agent class and execute its tasks
-                results.append(Agent(agent_type=agent_type, data=data, timetable=tasks,
+                results.append(Agent(agent_type=agent_type, data=agent_db, timetable=tasks,
                                      market=markets).execute())
         return results
 
