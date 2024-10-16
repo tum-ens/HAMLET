@@ -4,19 +4,17 @@ __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
-import time
-from linopy import Model, Variable
-import polars as pl
-from pprint import pprint
-from hamlet import constants as c
-from hamlet.executor.utilities.controller.rtc import lincomps
-from hamlet.executor.utilities.controller.controller_base import ControllerBase
-from hamlet.executor.utilities.database.database import Database as db
-from hamlet import functions as f
-import warnings
 import logging
-import sys
 import os
+import sys
+
+import polars as pl
+from linopy import Model
+from linopy.io import read_netcdf
+
+from hamlet import constants as c
+from hamlet.executor.utilities.controller.controller_base import ControllerBase
+from hamlet.executor.utilities.controller.rtc import lincomps
 
 # warnings.filterwarnings("ignore")
 logging.getLogger('linopy').setLevel(logging.CRITICAL)
@@ -63,7 +61,16 @@ class Rtc(ControllerBase):
     class Linopy(RtcBase):
         def __init__(self, **kwargs):
             # Create the model
-            self.model = Model()
+            self.loaded_model = False
+            self.model_path = f"{kwargs['agent'].agent_save}/model_rtc.nc"
+            # Check for existing saved models
+            if os.path.exists(self.model_path):
+                # Load model
+                self.model = read_netcdf(self.model_path)
+                self.loaded_model = True
+            else:
+                # Create a new model
+                self.model = Model()
 
             # Store the mapping of the components to the energy types and operation modes
             self.mapping = kwargs['mapping']
@@ -162,6 +169,10 @@ class Rtc(ControllerBase):
             self.define_constraints()
             self.define_objective()
 
+            # Save first model to file to load later
+            if not os.path.exists(self.model_path):
+                self.model.to_netcdf(self.model_path)
+
         def create_plants(self):
             """
             Create the plant objects for the optimization problem
@@ -241,6 +252,9 @@ class Rtc(ControllerBase):
             return self.model
 
         def add_balance_constraints(self):
+            # If model was loaded, no changes required for these constraints
+            if self.loaded_model:
+                return
             # Initialize the balance equations for each energy type by creating a zero variable for each energy type
             balance_equations = {energy_type: self.model.add_variables(name=f'balance_{energy_type}',
                                                                        lower=0, upper=0, integer=True)
@@ -291,7 +305,7 @@ class Rtc(ControllerBase):
             # Add the constraints for each energy type
             for energy_type, equation in balance_equations.items():
                 self.model.add_constraints(equation == 0, name="balance_" + energy_type)
-                
+
             return self.model
 
         def define_objective(self):
@@ -305,7 +319,7 @@ class Rtc(ControllerBase):
             }
 
             # Initialize the objective function as zero
-            objective = self.model.add_variables(name='objective', lower=0, upper=0, integer=True)
+            objective = []
 
             # Loop through the model's variables to identify the balancing variables that need to be minimized
             for variable_name, variable in self.model.variables.items():
@@ -320,10 +334,10 @@ class Rtc(ControllerBase):
                     weight = weights.get(component_type)
 
                     # Add deviation to objective function
-                    objective += variable * weight
+                    objective.append(variable * weight)
 
             # Set the objective function to the model with the minimize direction
-            self.model.add_objective(objective)
+            self.model.add_objective(sum(objective), overwrite=True)
 
             return self.model
 

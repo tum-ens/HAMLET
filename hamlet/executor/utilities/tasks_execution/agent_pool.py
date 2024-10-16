@@ -24,9 +24,11 @@ def task(agent_data):
 
 def init_agentdb(agent_type, agent_id, region_path):
     """Initializes agent database"""
-    agent_db = AgentDB(path=os.path.join(region_path, 'agents', agent_type, agent_id),
+    agent_path = os.path.join(region_path, 'agents', agent_type, agent_id)
+    agent_db = AgentDB(path=agent_path,
                        agent_type=agent_type,
                        agent_id=agent_id)
+    agent_db.agent_save = agent_path
     # Load data from files
     agent_db.register_agent()
     return agent_db

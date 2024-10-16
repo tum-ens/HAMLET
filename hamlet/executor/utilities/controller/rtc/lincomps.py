@@ -4,11 +4,13 @@ __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
-import hamlet.constants as c
-from pprint import pprint
-from numpy import inf
+import math
+
 import polars.exceptions as pl_e
 from linopy import Model
+from numpy import inf
+
+import hamlet.constants as c
 
 
 class LinopyComps:
@@ -33,9 +35,18 @@ class LinopyComps:
     def define_constraints(model):
         return model
 
+    @staticmethod
+    def add_variable_to_model(model, name, **kwargs):
+        if name not in model.variables:
+            model.add_variables(name=name, **kwargs)
+        else:
+            model.variables[name].lower = kwargs.get("lower", -math.inf)
+            model.variables[name].upper = kwargs.get("upper", math.inf)
+
     def define_electricity_variable(self, model, comp_type, lower, upper, integer=False) -> Model:
         # Define the power variable
-        model.add_variables(name=f'{self.name}_{comp_type}_{c.ET_ELECTRICITY}', lower=lower, upper=upper, integer=integer)
+        self.add_variable_to_model(model, name=f'{self.name}_{comp_type}_{c.ET_ELECTRICITY}', lower=lower, upper=upper,
+                              integer=integer)
 
         return model
 
@@ -45,7 +56,7 @@ class LinopyComps:
             name = f'{self.name}_{comp_type}_{c.ET_HEAT}'
         else:
             name = f'{self.name}_{comp_type}_{c.ET_HEAT}_{load_target}'
-        model.add_variables(name=name, lower=lower, upper=upper, integer=integer)
+        self.add_variable_to_model(model, name=name, lower=lower, upper=upper, integer=integer)
 
         return model
 
@@ -55,33 +66,34 @@ class LinopyComps:
             name = f'{self.name}_{comp_type}_{c.ET_COOLING}'
         else:
             name = f'{self.name}_{comp_type}_{c.ET_COOLING}_{load_target}'
-        model.add_variables(name=name, lower=lower, upper=upper, integer=integer)
+        self.add_variable_to_model(model, name=name, lower=lower, upper=upper, integer=integer)
 
         return model
 
     def define_h2_variable(self, model, comp_type, lower, upper, integer=False) -> Model:
         # Define the power variable
-        model.add_variables(name=f'{self.name}_{comp_type}_{c.ET_H2}', lower=lower, upper=upper, integer=integer)
+        self.add_variable_to_model(model, name=f'{self.name}_{comp_type}_{c.ET_H2}', lower=lower, upper=upper,
+                              integer=integer)
 
         return model
 
     # Subclass methods
 
     def _define_target_and_deviations_variables(self, model):
-        model.add_variables(name=f'{self.name}_{self.comp_type}_target',
+        self.add_variable_to_model(model, name=f'{self.name}_{self.comp_type}_target',
                             lower=self.target, upper=self.target)
 
         # Define the deviation variable for positive and negative deviations
         # Deviation when more is charged than according to target
         name = f'{self.name}_{self.comp_type}_deviation_pos'
         if self.target <= self.upper:
-            model.add_variables(name=name, lower=0, upper=max(0, self.upper - self.target))
+            self.add_variable_to_model(model, name=name, lower=0, upper=max(0, self.upper - self.target))
         else:
             raise Warning(f'Target value ({self.target}) is higher than upper limit ({self.upper}) for {name}.')
         # Deviation when less is discharged than according to target
         name = f'{self.name}_{self.comp_type}_deviation_neg'
         if self.target >= self.lower:
-            model.add_variables(name=name, lower=0, upper=max(0, self.target - self.lower))
+            self.add_variable_to_model(model, name=name, lower=0, upper=max(0, self.target - self.lower))
         else:
             raise Warning(f'Target value ({self.target}) is lower than lower limit ({self.lower}) for {name}.')
 
@@ -95,9 +107,10 @@ class LinopyComps:
         var_deviation_neg = model.variables[f'{self.name}_{self.comp_type}_deviation_neg']
 
         # Define the deviation constraint
-        equation = (var_power - var_target == var_deviation_pos - var_deviation_neg)
-
-        model.add_constraints(equation, name=f'{self.name}_deviation')
+        cons_name = f'{self.name}_deviation'
+        if cons_name not in model.constraints:
+            equation = (var_power - var_target == var_deviation_pos - var_deviation_neg)
+            model.add_constraints(equation, name=cons_name)
 
         return model
 
@@ -121,32 +134,32 @@ class Market(LinopyComps):
         self.energy_type = kwargs['energy_type']
 
         # Define the market power variable
-        model.add_variables(name=f'{self.name}_{self.energy_type}', lower=-inf, upper=inf, integer=True)
+        self.add_variable_to_model(model, name=f'{self.name}_{self.energy_type}', lower=-inf, upper=inf, integer=False)
         
         # Define the target variable (what was previously bought/sold on the market)
-        model.add_variables(name=f'{self.name}_{self.energy_type}_target',
-                            lower=self.market_power, upper=self.market_power, integer=True)
+        self.add_variable_to_model(model, name=f'{self.name}_{self.energy_type}_target',
+                            lower=self.market_power, upper=self.market_power, integer=False)
         
         # Define the deviation variable for positive and negative deviations
         # Deviation when more is bought/sold on the market than according to the market
-        model.add_variables(name=f'{self.name}_{self.energy_type}_deviation_pos',
-                            lower=0, upper=self.balancing_power, integer=True)
+        self.add_variable_to_model(model, name=f'{self.name}_{self.energy_type}_deviation_pos',
+                            lower=0, upper=self.balancing_power, integer=False)
         # Deviation when less is needed from the grid than according to the market
-        model.add_variables(name=f'{self.name}_{self.energy_type}_deviation_neg',
-                            lower=0, upper=self.balancing_power, integer=True)
+        self.add_variable_to_model(model, name=f'{self.name}_{self.energy_type}_deviation_neg',
+                            lower=0, upper=self.balancing_power, integer=False)
 
         return model
 
     def define_constraints(self, model) -> Model:
+        # Define the deviation constraint
+        cons_name = f'{self.name}_deviation'
+        if cons_name not in model.constraints:
+            equation = (model.variables[f'{self.name}_{self.energy_type}']
+                        - model.variables[f'{self.name}_{self.energy_type}_target']
+                        == model.variables[f'{self.name}_{self.energy_type}_deviation_pos']
+                        - model.variables[f'{self.name}_{self.energy_type}_deviation_neg'])
 
-        # Define the deviation constraint        
-        equation = (model.variables[f'{self.name}_{self.energy_type}']
-                    - model.variables[f'{self.name}_{self.energy_type}_target']
-                    == model.variables[f'{self.name}_{self.energy_type}_deviation_pos'] 
-                    - model.variables[f'{self.name}_{self.energy_type}_deviation_neg'])
-        
-        model.add_constraints(equation, name=f'{self.name}_deviation')
-
+            model.add_constraints(equation, name=cons_name)
         return model
 
 
@@ -346,8 +359,12 @@ class Hp(LinopyComps):
         var_heat = model.variables[f'{self.name}_{self.comp_type}_{c.ET_HEAT}']
 
         # Add the constraint
-        equation = (var_heat + var_electricity * self.cop_heat == 0)
-        model.add_constraints(equation, name=f'{self.name}_cop')
+        cons_name = f'{self.name}_cop'
+        if cons_name not in model.constraints:
+            equation = (var_heat + var_electricity * self.cop_heat == 0)
+            model.add_constraints(equation, name=cons_name)
+        else:
+            model.constraints[cons_name].coeffs[1] = self.cop_heat
 
         return model
 
@@ -435,15 +452,15 @@ class Ev(LinopyComps):
 
         # # Define the target variable
         # model.add_variables(name=f'{self.name}_{self.comp_type}_target',
-        #                     lower=self.target, upper=self.target, integer=True)
+        #                     lower=self.target, upper=self.target, integer=False)
         #
         # # Define the deviation variable for positive and negative deviations
         # # Deviation when more is charged than according to target
         # model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_pos',
-        #                     lower=0, upper=self.upper - self.target, integer=True)
+        #                     lower=0, upper=self.upper - self.target, integer=False)
         # # Deviation when less is discharged than according to target
         # model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_neg',
-        #                     lower=0, upper=self.target - self.lower, integer=True)
+        #                     lower=0, upper=self.target - self.lower, integer=False)
 
         return model
 

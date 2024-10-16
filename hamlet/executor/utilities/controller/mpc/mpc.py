@@ -5,21 +5,17 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 import os
-import time
-
-import numpy as np
-from linopy import Model, Variable
-import polars as pl
-import pandas as pd
-from pprint import pprint
-from hamlet import constants as c
-from hamlet.executor.utilities.controller.mpc import lincomps
-from hamlet.executor.utilities.controller.controller_base import ControllerBase
-from hamlet.executor.utilities.database.database import Database as db
-from hamlet import functions as f
 import sys
 
-AGENT_ID = '1q5Nid2Bwz2WzxG' # 'HnYxh1u9BEFpWyK'
+import numpy as np
+import pandas as pd
+import polars as pl
+from linopy import Model
+from linopy.io import read_netcdf
+
+from hamlet import constants as c
+from hamlet.executor.utilities.controller.controller_base import ControllerBase
+from hamlet.executor.utilities.controller.mpc import lincomps
 
 
 class MpcBase:
@@ -60,7 +56,16 @@ class Mpc(ControllerBase):
     class Linopy(MpcBase):
         def __init__(self, **kwargs):
             # Create the model
-            self.model = Model(force_dim_names=True)
+            self.loaded_model = False
+            self.model_path = f"{kwargs['agent'].agent_save}/model_mpc.nc"
+            # Check for existing saved models
+            if os.path.exists(self.model_path):
+                # Load model
+                self.model = read_netcdf(self.model_path)
+                self.loaded_model = True
+            else:
+                # Create a new model
+                self.model = Model(force_dim_names=True)
 
             # Store the mapping of the components to the energy types and operation modes
             self.mapping = kwargs['mapping']
@@ -101,7 +106,7 @@ class Mpc(ControllerBase):
             # TODO: Still needs to be done and then adjusted in the market objects (right now the names are simply
             #  local and wholesale as this will suffice as long as there is only one market)
             # Get the market data
-            self.market = kwargs[c.TC_MARKET]
+            # self.market = kwargs[c.TC_MARKET]
             # Get the market names and types
             self.market_names = self.timetable.select(c.TC_NAME).unique().to_series().to_list()
             self.market_types = self.timetable.select(c.TC_MARKET).unique().to_series().to_list()
@@ -137,6 +142,10 @@ class Mpc(ControllerBase):
             self.define_variables()
             self.define_constraints()
             self.define_objective()
+
+            # Save first model to file to load later
+            if not os.path.exists(self.model_path):
+                self.model.to_netcdf(self.model_path)
 
         def create_markets(self):
             """"""
@@ -207,11 +216,13 @@ class Mpc(ControllerBase):
             return self.model
 
         def add_balance_constraints(self):
+            # If model was loaded, no changes required for these constraints
+            if self.loaded_model:
+                return
             # Initialize the balance equations for each energy type by creating a zero variable for each energy type
             balance_equations = {energy_type: self.model.add_variables(name=f'balance_{energy_type}',
                                                                        lower=0, upper=0, integer=True)
                                  for energy_type in self.energy_types}
-
             # Loop through each energy type
             for energy_type in self.energy_types:
                 # Loop through each variable and add it to the balance equation accordingly
@@ -222,7 +233,7 @@ class Mpc(ControllerBase):
                             and (variable_name.endswith(f'_{c.PF_IN}') or variable_name.endswith(f'_{c.PF_OUT}'))):
                         balance_equations[energy_type] += variable
                     # Add the variable if it is a plant variable
-                    elif (variable_name.startswith(tuple(self.plant_objects)))\
+                    elif (variable_name.startswith(tuple(self.plant_objects))) \
                             and (variable_name.endswith(f'_{energy_type}')
                                  or variable_name.endswith(f'_{energy_type}_{c.PF_IN}')
                                  or variable_name.endswith(f'_{energy_type}_{c.PF_OUT}')):
@@ -268,7 +279,7 @@ class Mpc(ControllerBase):
             """Defines the objective function. The objective is to reduce the costs."""
 
             # Initialize the objective function as zero
-            objective = self.model.add_variables(name='objective', lower=0, upper=0, integer=True)
+            objective = []
 
             # Loop through the model's variables to identify the balancing variables
             for variable_name, variable in self.model.variables.items():
@@ -276,17 +287,17 @@ class Mpc(ControllerBase):
                 if variable_name.startswith(tuple(self.market_names)):
                     if variable_name.endswith('_costs'):
                         # Add the variable to the objective function
-                        objective += variable
+                        objective.append(variable)
                     elif variable_name.endswith('_revenue'):
                         # Subtract the variable from the objective function
-                        objective -= variable
+                        objective.append(-1 * variable)
                     else:
                         pass
                 else:
                     pass
 
             # Set the objective function to the model with the minimize direction
-            self.model.add_objective(objective.sum())
+            self.model.add_objective(sum(objective), overwrite=True)
 
             return self.model
 
