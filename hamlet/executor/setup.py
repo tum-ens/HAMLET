@@ -135,6 +135,8 @@ class Executor:
         """Cleans up the scenario after execution"""
         self.database.save_database(os.path.dirname(self.path_results))
 
+        self.database.concat_market_files()
+
         self.pbar.set_description('Simulation finished: ')
 
     def pause(self):

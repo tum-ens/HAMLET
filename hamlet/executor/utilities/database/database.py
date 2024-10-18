@@ -4,18 +4,14 @@ __license__ = ""
 __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
-import time
-
-import pandas as pd
-import polars as pl
 import os
-import hamlet.functions as f
-import hamlet.constants as c
-from hamlet.executor.utilities.database.region_db import RegionDB
-from hamlet.executor.utilities.database.agent_db import AgentDB
-from hamlet.executor.utilities.database.market_db import MarketDB
 from datetime import datetime
-from pprint import pprint
+
+import polars as pl
+
+import hamlet.constants as c
+import hamlet.functions as f
+from hamlet.executor.utilities.database.region_db import RegionDB
 
 
 class Database:
@@ -217,7 +213,7 @@ class Database:
             agent_type = agent.agent_type
             self.__regions[region].agents[agent_type][agent_id] = agent
 
-    def post_markets_to_region(self, region: str, markets: list):
+    def post_markets_to_region(self, region: str, markets: list, timestamp, path_results):
         """
         Post the given markets to the given region.
 
@@ -228,7 +224,8 @@ class Database:
         Args:
             region: name of the region.
             markets: list of MarketDB objects to be written into Database.
-
+            timestamp: current simulation timestamp
+            path_results: results path
         """
         # Dict to store all markets in the region
         region_markets = {}
@@ -265,6 +262,9 @@ class Database:
             # Split market name into market type and market name
             market_type, market_name = market.split(item_separator)
             market_db = self.__regions[region].markets.get(market_type, {}).get(market_name)
+
+            # Drop out of scope data
+            market_db.save_and_drop_past_records(timestamp, path_results)
 
             # Save results to region
             # Tables that are to be expanded
@@ -424,3 +424,10 @@ class Database:
 
             # register agent's forecaster for agents in the region
             self.__regions[region].register_forecasters_for_agents(self.__general)
+
+    def concat_market_files(self):
+        """Concatenates saved market attribute files to single files"""
+        for region in self.__regions.values():
+            for markets in region.markets.values():
+                for marketDB in markets.values():
+                    marketDB.concat_past_data()

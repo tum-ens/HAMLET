@@ -40,4 +40,6 @@ class MarketTaskExecutioner(TaskExecutioner):
     def postprocess_results(self, tasks, results):
         """Post-processes results"""
         region_name = tasks.select(pl.first(c.TC_REGION)).item()
-        self.database.post_markets_to_region(region=region_name, markets=results)
+        timestamp = tasks.select(c.TC_TIMESTAMP).sample(n=1).item()
+        self.database.post_markets_to_region(region=region_name, markets=results, timestamp=timestamp,
+                                             path_results=self.results_path)
