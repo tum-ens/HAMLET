@@ -1,4 +1,4 @@
-name: '🔀 Pull Request'
+name: '🔀 Merge Request'
 description: Submit a pull request (merge request) with code changes.
 
 body:
