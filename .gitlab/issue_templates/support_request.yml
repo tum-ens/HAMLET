@@ -1,0 +1,45 @@
+name: '❓ Support request'
+description: Request help or ask for guidance.
+labels: [Type::Support]
+
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Description
+      description: >
+        Describe the issue you're facing with as much detail as possible. Provide
+        information on what you are trying to do and where you are stuck.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps Taken
+      description: >
+        List the steps you have already taken to try to resolve the issue.
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or Output
+      description: >
+        If applicable, include any logs or output that could help diagnose the issue.
+        You can paste the output here in a code block:
+        ```
+        log_output_here
+        ```
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: >
+        Add any other context or details about the problem here.
+    validations:
+      required: false
