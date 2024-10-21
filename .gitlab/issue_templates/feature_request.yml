@@ -1,0 +1,36 @@
+name: '✨ Feature request'
+description: Suggest a new feature or enhancement.
+labels: [Type::Feature]
+
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: >
+        Describe the feature or enhancement and explain why it should be implemented.
+        Include a code example if applicable. Link to relevant problems or issues if it relates.
+        **Example**: "I would like a way to export data from the grid planner to CSV format
+        because this would help us integrate with our legacy systems."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: >
+        Describe any alternative solutions or features you have considered.
+        **Example**: "Instead of adding an export button, we could create an API that returns
+        the data in JSON format, and users could transform it into CSV themselves."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: >
+        Add any other context, links, or screenshots about the feature request here.
+    validations:
+      required: false
