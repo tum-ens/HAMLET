@@ -1,3 +1,9 @@
+__author__ = "HodaHamdy"
+__credits__ = ""
+__license__ = ""
+__maintainer__ = "MarkusDoepfert"
+__email__ = "markus.doepfert@tum.de"
+
 from multiprocessing import Pool, get_context
 
 

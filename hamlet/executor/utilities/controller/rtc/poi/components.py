@@ -1,5 +1,5 @@
-__author__ = "MarkusDoepfert"
-__credits__ = ""
+__author__ = "HodaHamdy"
+__credits__ = "MarkusDoepfert"
 __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
@@ -7,14 +7,13 @@ __email__ = "markus.doepfert@tum.de"
 import math
 
 import polars.exceptions as pl_e
-from linopy import Model
+import pyoptinterface as poi
 from numpy import inf
 
 import hamlet.constants as c
 
 
-class LinopyComps:
-
+class POIComps:
     def __init__(self, name, timeseries, **kwargs):
 
         # Get the data
@@ -28,97 +27,91 @@ class LinopyComps:
         self.upper = None
         self.lower = None
 
-    def define_variables(self, model, **kwargs):
+    def define_variables(self, model, variables, **kwargs):
         raise NotImplementedError(f'{self.name} has not been implemented yet.')
 
     @staticmethod
-    def define_constraints(model):
-        return model
+    def define_constraints(model, variables):
+        pass
 
     @staticmethod
-    def add_variable_to_model(model, name, **kwargs):
-        if name not in model.variables:
-            model.add_variables(name=name, **kwargs)
-        else:
-            model.variables[name].lower = kwargs.get("lower", -math.inf)
-            model.variables[name].upper = kwargs.get("upper", math.inf)
+    def add_variable_to_model(model, variables, name, **kwargs):
+        var_name = name
+        lb = kwargs.get("lower", -math.inf)
+        ub = kwargs.get("upper", math.inf)
+        kwargs_var = {
+            'name': var_name,
+            'lb': lb,
+            'ub': ub,
+            'domain': poi.VariableDomain.Integer if kwargs.get('integer', False)
+            else poi.VariableDomain.Binary
+            if kwargs.get('binary', False) else poi.VariableDomain.Continuous,
+        }
+        variables[name] = model.add_variable(**kwargs_var)
 
-    def define_electricity_variable(self, model, comp_type, lower, upper, integer=False) -> Model:
+    def define_electricity_variable(self, model, variables, comp_type, lower, upper, integer=False):
         # Define the power variable
-        self.add_variable_to_model(model, name=f'{self.name}_{comp_type}_{c.ET_ELECTRICITY}', lower=lower, upper=upper,
-                              integer=integer)
+        self.add_variable_to_model(model, variables, name=f'{self.name}_{comp_type}_{c.ET_ELECTRICITY}', lower=lower,
+                                   upper=upper,
+                                   integer=integer)
 
-        return model
-
-    def define_heat_variable(self, model, comp_type, lower, upper, load_target=None, integer=False) -> Model:
+    def define_heat_variable(self, model, variables, comp_type, lower, upper, load_target=None, integer=False):
         # Define the power variable
         if load_target is None:
             name = f'{self.name}_{comp_type}_{c.ET_HEAT}'
         else:
             name = f'{self.name}_{comp_type}_{c.ET_HEAT}_{load_target}'
-        self.add_variable_to_model(model, name=name, lower=lower, upper=upper, integer=integer)
+        self.add_variable_to_model(model, variables, name=name, lower=lower, upper=upper, integer=integer)
 
-        return model
-
-    def define_cool_variable(self, model, comp_type, lower, upper, load_target=None, integer=False) -> Model:
+    def define_cool_variable(self, model, variables, comp_type, lower, upper, load_target=None, integer=False):
         # Define the power variable
         if load_target is None:
             name = f'{self.name}_{comp_type}_{c.ET_COOLING}'
         else:
             name = f'{self.name}_{comp_type}_{c.ET_COOLING}_{load_target}'
-        self.add_variable_to_model(model, name=name, lower=lower, upper=upper, integer=integer)
+        self.add_variable_to_model(model, variables, name=name, lower=lower, upper=upper, integer=integer)
 
-        return model
-
-    def define_h2_variable(self, model, comp_type, lower, upper, integer=False) -> Model:
+    def define_h2_variable(self, model, variables, comp_type, lower, upper, integer=False):
         # Define the power variable
-        self.add_variable_to_model(model, name=f'{self.name}_{comp_type}_{c.ET_H2}', lower=lower, upper=upper,
-                              integer=integer)
-
-        return model
+        self.add_variable_to_model(model, variables, name=f'{self.name}_{comp_type}_{c.ET_H2}', lower=lower,
+                                   upper=upper,
+                                   integer=integer)
 
     # Subclass methods
 
-    def _define_target_and_deviations_variables(self, model):
-        self.add_variable_to_model(model, name=f'{self.name}_{self.comp_type}_target',
-                            lower=self.target, upper=self.target)
+    def _define_target_and_deviations_variables(self, model, variables):
+        self.add_variable_to_model(model, variables, name=f'{self.name}_{self.comp_type}_target',
+                                   lower=self.target, upper=self.target)
 
         # Define the deviation variable for positive and negative deviations
         # Deviation when more is charged than according to target
         name = f'{self.name}_{self.comp_type}_deviation_pos'
         if self.target <= self.upper:
-            self.add_variable_to_model(model, name=name, lower=0, upper=max(0, self.upper - self.target))
+            self.add_variable_to_model(model, variables, name=name, lower=0, upper=max(0, self.upper - self.target))
         else:
             raise Warning(f'Target value ({self.target}) is higher than upper limit ({self.upper}) for {name}.')
         # Deviation when less is discharged than according to target
         name = f'{self.name}_{self.comp_type}_deviation_neg'
         if self.target >= self.lower:
-            self.add_variable_to_model(model, name=name, lower=0, upper=max(0, self.target - self.lower))
+            self.add_variable_to_model(model, variables, name=name, lower=0, upper=max(0, self.target - self.lower))
         else:
             raise Warning(f'Target value ({self.target}) is lower than lower limit ({self.lower}) for {name}.')
 
-        return model
-
-    def _constraint_target_deviation(self, model, energy_type: str) -> Model:
+    def _constraint_target_deviation(self, model, variables, energy_type: str):
         # Define the variables
-        var_power = model.variables[f'{self.name}_{self.comp_type}_{energy_type}']
-        var_target = model.variables[f'{self.name}_{self.comp_type}_target']
-        var_deviation_pos = model.variables[f'{self.name}_{self.comp_type}_deviation_pos']
-        var_deviation_neg = model.variables[f'{self.name}_{self.comp_type}_deviation_neg']
+        var_power = variables[f'{self.name}_{self.comp_type}_{energy_type}']
+        var_target = variables[f'{self.name}_{self.comp_type}_target']
+        var_deviation_pos = variables[f'{self.name}_{self.comp_type}_deviation_pos']
+        var_deviation_neg = variables[f'{self.name}_{self.comp_type}_deviation_neg']
 
         # Define the deviation constraint
-        cons_name = f'{self.name}_deviation'
-        if cons_name not in model.constraints:
-            equation = (var_power - var_target == var_deviation_pos - var_deviation_neg)
-            model.add_constraints(equation, name=cons_name)
-
-        return model
+        model.add_linear_constraint(var_power - var_target - var_deviation_pos + var_deviation_neg,
+                                    poi.ConstraintSense.Equal, 0, name=f'{self.name}_deviation')
 
 
-class Market(LinopyComps):
+class Market(POIComps):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
@@ -130,111 +123,93 @@ class Market(LinopyComps):
         # Get the energy type
         self.energy_type = None
 
-    def define_variables(self, model, **kwargs) -> Model:
+    def define_variables(self, model, variables, **kwargs):
         self.energy_type = kwargs['energy_type']
 
         # Define the market power variable
-        self.add_variable_to_model(model, name=f'{self.name}_{self.energy_type}', lower=-inf, upper=inf, integer=False)
-        
+        self.add_variable_to_model(model, variables, name=f'{self.name}_{self.energy_type}', lower=-inf, upper=inf,
+                                   integer=True)
+
         # Define the target variable (what was previously bought/sold on the market)
-        self.add_variable_to_model(model, name=f'{self.name}_{self.energy_type}_target',
-                            lower=self.market_power, upper=self.market_power, integer=False)
-        
+        self.add_variable_to_model(model, variables, name=f'{self.name}_{self.energy_type}_target',
+                                   lower=self.market_power, upper=self.market_power, integer=True)
+
         # Define the deviation variable for positive and negative deviations
         # Deviation when more is bought/sold on the market than according to the market
-        self.add_variable_to_model(model, name=f'{self.name}_{self.energy_type}_deviation_pos',
-                            lower=0, upper=self.balancing_power, integer=False)
+        self.add_variable_to_model(model, variables, name=f'{self.name}_{self.energy_type}_deviation_pos',
+                                   lower=0, upper=self.balancing_power, integer=True)
         # Deviation when less is needed from the grid than according to the market
-        self.add_variable_to_model(model, name=f'{self.name}_{self.energy_type}_deviation_neg',
-                            lower=0, upper=self.balancing_power, integer=False)
+        self.add_variable_to_model(model, variables, name=f'{self.name}_{self.energy_type}_deviation_neg',
+                                   lower=0, upper=self.balancing_power, integer=True)
 
-        return model
-
-    def define_constraints(self, model) -> Model:
+    def define_constraints(self, model, variables):
         # Define the deviation constraint
-        cons_name = f'{self.name}_deviation'
-        if cons_name not in model.constraints:
-            equation = (model.variables[f'{self.name}_{self.energy_type}']
-                        - model.variables[f'{self.name}_{self.energy_type}_target']
-                        == model.variables[f'{self.name}_{self.energy_type}_deviation_pos']
-                        - model.variables[f'{self.name}_{self.energy_type}_deviation_neg'])
+        equation = (variables[f'{self.name}_{self.energy_type}']
+                    - variables[f'{self.name}_{self.energy_type}_target']
+                    - variables[f'{self.name}_{self.energy_type}_deviation_pos']
+                    + variables[f'{self.name}_{self.energy_type}_deviation_neg'])
 
-            model.add_constraints(equation, name=cons_name)
-        return model
+        model.add_linear_constraint(equation, poi.ConstraintSense.Equal, 0, name=f'{self.name}_deviation')
 
 
-class InflexibleLoad(LinopyComps):
+class InflexibleLoad(POIComps):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
         self.power = self.ts[f'{self.name}_power'][0]
 
-    def define_variables(self, model, **kwargs) -> Model:
+    def define_variables(self, model, variables, **kwargs):
         comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self.define_electricity_variable(model, comp_type=comp_type, lower=-self.power, upper=-self.power)
-
-        return model
+        self.define_electricity_variable(model, variables, comp_type=comp_type, lower=-self.power, upper=-self.power)
 
 
-class FlexibleLoad(LinopyComps):
+class FlexibleLoad(POIComps):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
-        # Get specific object attributes
-        print(self.ts)
 
-
-class Heat(LinopyComps):
+class Heat(POIComps):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
         self.heat = self.ts[f'{self.name}_heat'][0]
 
-    def define_variables(self, model, **kwargs) -> Model:
+    def define_variables(self, model, variables, **kwargs):
         comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self.define_heat_variable(model, comp_type=comp_type, lower=-self.heat, upper=-self.heat)
-
-        return model
+        self.define_heat_variable(model, variables, comp_type=comp_type, lower=-self.heat, upper=-self.heat)
 
 
-class Dhw(LinopyComps):
+class Dhw(POIComps):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
         self.dhw = self.ts[f'{self.name}_dhw'][0]
 
-    def define_variables(self, model, **kwargs) -> Model:
+    def define_variables(self, model, variables, **kwargs):
         comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self.define_heat_variable(model, comp_type=comp_type, lower=-self.dhw, upper=-self.dhw)
-
-        return model
+        self.define_heat_variable(model, variables, comp_type=comp_type, lower=-self.dhw, upper=-self.dhw)
 
 
-class SimplePlant(LinopyComps):
+class SimplePlant(POIComps):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
@@ -243,19 +218,16 @@ class SimplePlant(LinopyComps):
         self.controllable = self.info['sizing']['controllable']
         self.lower = 0 if self.controllable else self.power
 
-    def define_variables(self, model, **kwargs) -> Model:
+    def define_variables(self, model, variables, **kwargs):
         comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self.define_electricity_variable(model, comp_type=comp_type, lower=self.lower, upper=self.power)
-
-        return model
+        self.define_electricity_variable(model, variables, comp_type=comp_type, lower=self.lower, upper=self.power)
 
 
 class Pv(SimplePlant):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
@@ -263,7 +235,6 @@ class Pv(SimplePlant):
 class Wind(SimplePlant):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
@@ -271,12 +242,11 @@ class Wind(SimplePlant):
 class FixedGen(SimplePlant):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
 
-class Hp(LinopyComps):
+class Hp(POIComps):
 
     def __init__(self, name, **kwargs):
 
@@ -316,7 +286,8 @@ class Hp(LinopyComps):
         # Calculate the power for electricity
         try:
             self.power_electricity = -int(round(max(self.info['sizing']['power'] / self.cop_heat,
-                                                   self.ts[f'{self.name}_{c.S_POWER}_{c.ET_ELECTRICITY}_{c.P_HEAT}'][0])))
+                                                    self.ts[f'{self.name}_{c.S_POWER}_{c.ET_ELECTRICITY}_{c.P_HEAT}'][
+                                                        0])))
         except pl_e.ColumnNotFoundError:
             self.power_electricity = -inf
 
@@ -325,65 +296,42 @@ class Hp(LinopyComps):
         # Ensure that target never exceeds the limits
         self.target = max(min(self.target, self.upper), self.lower)
 
-    def define_variables(self, model, **kwargs) -> Model:
+    def define_variables(self, model, variables, **kwargs):
         self.comp_type = kwargs['comp_type']
 
         # Define the heat power variable (positive as it generates heat)
-        model = self.define_heat_variable(model, comp_type=self.comp_type, lower=0, upper=self.power_heat)
-        # model = self.define_heat_variable(model, comp_type=comp_type, lower=0, upper=self.power_dhw,
+        self.define_heat_variable(model, variables, comp_type=self.comp_type, lower=0, upper=self.power_heat)
+        #  self.define_heat_variable(model, comp_type=comp_type, lower=0, upper=self.power_dhw,
         # load_target=c.P_DHW)
 
         # Define the electricity power variable (negative as it consumes electricity)
-        model = self.define_electricity_variable(model, comp_type=self.comp_type,
-                                                 lower=self.power_electricity, upper=0)
+        self.define_electricity_variable(model, variables, comp_type=self.comp_type,
+                                         lower=self.power_electricity, upper=0)
 
         # Define the target and deviation variables (refers to the heat power)
-        model = self._define_target_and_deviations_variables(model)
-
-        return model
-
-    def define_constraints(self, model) -> Model:
-
-        # Add constraint that the heat power is the electricity power times the cop
-        model = self.__constraint_cop(model)
-
-        # Define the deviation constraint that shows the relationship between the power and the target
-        model = self._constraint_target_deviation(model, energy_type=c.ET_ELECTRICITY)
-
-        return model
-
-    def __constraint_cop(self, model) -> Model:
-        """Add constraint that the heat power is the electricity power times the cop"""
-        # Define the variables
-        var_electricity = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}']
-        var_heat = model.variables[f'{self.name}_{self.comp_type}_{c.ET_HEAT}']
-
-        # Add the constraint
-        cons_name = f'{self.name}_cop'
-        if cons_name not in model.constraints:
-            equation = (var_heat + var_electricity * self.cop_heat == 0)
-            model.add_constraints(equation, name=cons_name)
-        else:
-            model.constraints[cons_name].coeffs[1] = self.cop_heat
-
-        return model
-
-    # def __constraint_target_deviation(self, model) -> Model:
-    #     # Define the variables
-    #     var_power = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}']
-    #     var_target = model.variables[f'{self.name}_{self.comp_type}_target']
-    #     var_deviation_pos = model.variables[f'{self.name}_{self.comp_type}_deviation_pos']
-    #     var_deviation_neg = model.variables[f'{self.name}_{self.comp_type}_deviation_neg']
-    #
-    #     # Define the deviation constraint
-    #     equation = (var_power - var_target == var_deviation_pos - var_deviation_neg)
-    #
-    #     model.add_constraints(equation, name=f'{self.name}_deviation')
-    #
-    #     return model
+        self._define_target_and_deviations_variables(model, variables)
 
 
-class Ev(LinopyComps):
+def define_constraints(self, model, variables):
+    # Add constraint that the heat power is the electricity power times the cop
+    self.__constraint_cop(model, variables)
+
+    # Define the deviation constraint that shows the relationship between the power and the target
+    self._constraint_target_deviation(model, variables, energy_type=c.ET_ELECTRICITY)
+
+
+def __constraint_cop(self, model, variables):
+    """Add constraint that the heat power is the electricity power times the cop"""
+    # Define the variables
+    var_electricity = variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}']
+    var_heat = variables[f'{self.name}_{self.comp_type}_{c.ET_HEAT}']
+
+    # Add the constraint
+    model.add_linear_constraint(var_heat + var_electricity * self.cop_heat, poi.ConstraintSense.Equal, 0,
+                                name=f'{self.name}_cop')
+
+
+class Ev(POIComps):
 
     def __init__(self, name, **kwargs):
 
@@ -441,38 +389,21 @@ class Ev(LinopyComps):
         # Ensure that target never exceeds the limits
         self.target = max(min(self.target, self.upper), self.lower)
 
-    def define_variables(self, model, **kwargs):
+    def define_variables(self, model, variables, **kwargs):
         self.comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self.define_electricity_variable(model, comp_type=self.comp_type, lower=self.lower, upper=self.upper)
+        self.define_electricity_variable(model, variables, comp_type=self.comp_type, lower=self.lower, upper=self.upper)
 
         # Define the target variable
-        model = self._define_target_and_deviations_variables(model)
+        self._define_target_and_deviations_variables(model, variables)
 
-        # # Define the target variable
-        # model.add_variables(name=f'{self.name}_{self.comp_type}_target',
-        #                     lower=self.target, upper=self.target, integer=False)
-        #
-        # # Define the deviation variable for positive and negative deviations
-        # # Deviation when more is charged than according to target
-        # model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_pos',
-        #                     lower=0, upper=self.upper - self.target, integer=False)
-        # # Deviation when less is discharged than according to target
-        # model.add_variables(name=f'{self.name}_{self.comp_type}_deviation_neg',
-        #                     lower=0, upper=self.target - self.lower, integer=False)
-
-        return model
-
-    def define_constraints(self, model):
-
+    def define_constraints(self, model, variables):
         # Define the deviation constraint that shows the relationship between the power and the target
-        model = self._constraint_target_deviation(model, energy_type=c.ET_ELECTRICITY)
-
-        return model
+        self._constraint_target_deviation(model, variables, energy_type=c.ET_ELECTRICITY)
 
 
-class SimpleStorage(LinopyComps):
+class SimpleStorage(POIComps):
 
     def __init__(self, name, **kwargs):
 
@@ -496,45 +427,37 @@ class SimpleStorage(LinopyComps):
 
         # Define the charging and discharging power variables (depend on capacity, soc, efficiency and dt)
         self.upper = int(round(min(self.charging_power,
-                         self.soc * self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
+                                   self.soc * self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
         self.lower = -int(round(min(self.charging_power,
-                          self.energy_to_full / self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
+                                    self.energy_to_full / self.efficiency / (self.dt * c.SECONDS_TO_HOURS))))
 
-    def define_variables(self, model, **kwargs) -> Model:
+    def define_variables(self, model, variables, **kwargs):
         self.comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self._define_power_variable(model)
+        self._define_power_variable(model, variables)
 
         # Define the target variable
-        model = self._define_target_and_deviations_variables(model)
+        self._define_target_and_deviations_variables(model, variables)
 
-        return model
-
-    def _define_power_variable(self, model, energy_type: str = c.ET_ELECTRICITY):
-
+    def _define_power_variable(self, model, variables, energy_type: str = c.ET_ELECTRICITY):
         # Define the power variable depending on the energy type
         match energy_type:
             case c.ET_ELECTRICITY:
-                model = self.define_electricity_variable(model, comp_type=self.comp_type,
-                                                         lower=self.lower, upper=self.upper)
+                self.define_electricity_variable(model, variables, comp_type=self.comp_type,
+                                                 lower=self.lower, upper=self.upper)
             case c.ET_HEAT:
-                model = self.define_heat_variable(model, comp_type=self.comp_type, lower=self.lower, upper=self.upper)
+                self.define_heat_variable(model, variables, comp_type=self.comp_type, lower=self.lower, upper=self.upper)
             case c.ET_COOLING:
-                model = self.define_cool_variable(model, comp_type=self.comp_type, lower=self.lower, upper=self.upper)
+                self.define_cool_variable(model, variables, comp_type=self.comp_type, lower=self.lower, upper=self.upper)
             case c.ET_H2:
-                model = self.define_h2_variable(model, comp_type=self.comp_type, lower=self.lower, upper=self.upper)
+                self.define_h2_variable(model, variables, comp_type=self.comp_type, lower=self.lower, upper=self.upper)
             case _:
                 raise NotImplementedError(f'{energy_type} has not been implemented yet for the simple storage system.')
 
-        return model
-
-    def define_constraints(self, model) -> Model:
-
+    def define_constraints(self, model, variables):
         # Define the deviation constraint that shows the relationship between the power and the target
-        model = self._constraint_target_deviation(model, energy_type=c.ET_ELECTRICITY)
-
-        return model
+        self._constraint_target_deviation(model, variables, energy_type=c.ET_ELECTRICITY)
 
     def _limit_target(self):
         # Ensure that target never exceeds the limits
@@ -544,7 +467,6 @@ class SimpleStorage(LinopyComps):
 class Battery(SimpleStorage):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
@@ -560,7 +482,6 @@ class Battery(SimpleStorage):
 class Psh(SimpleStorage):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
@@ -574,7 +495,6 @@ class Psh(SimpleStorage):
 class Hydrogen(SimpleStorage):
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
@@ -584,30 +504,24 @@ class Hydrogen(SimpleStorage):
         # Ensure that target never exceeds the limits
         self.target = self._limit_target()
 
-    def define_variables(self, model, **kwargs) -> Model:
+    def define_variables(self, model, variables, **kwargs):
         self.comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self._define_power_variable(model, energy_type=c.ET_H2)
+        self._define_power_variable(model, variables, energy_type=c.ET_H2)
 
         # Define the target variable
-        model = self._define_target_and_deviations_variables(model)
+        self._define_target_and_deviations_variables(model, variables)
 
-        return model
-
-    def define_constraints(self, model) -> Model:
-
+    def define_constraints(self, model, variables):
         # Define the deviation constraint that shows the relationship between the power and the target
-        model = self._constraint_target_deviation(model, energy_type=c.ET_H2)
-
-        return model
+        self._constraint_target_deviation(model, variables, energy_type=c.ET_H2)
 
 
 class HeatStorage(SimpleStorage):
     """This one is for heating. Dhw would need a separate one. Will be included in the future."""
 
     def __init__(self, name, **kwargs):
-
         # Call the parent class constructor
         super().__init__(name, **kwargs)
 
@@ -617,20 +531,15 @@ class HeatStorage(SimpleStorage):
         # Ensure that target never exceeds the limits
         self.target = self._limit_target()
 
-    def define_variables(self, model, **kwargs) -> Model:
+    def define_variables(self, model, variables, **kwargs):
         self.comp_type = kwargs['comp_type']
 
         # Define the power variable
-        model = self._define_power_variable(model, energy_type=c.ET_HEAT)
+        self._define_power_variable(model, variables, energy_type=c.ET_HEAT)
 
         # Define the target variable
-        model = self._define_target_and_deviations_variables(model)
+        self._define_target_and_deviations_variables(model, variables)
 
-        return model
-
-    def define_constraints(self, model) -> Model:
-
+    def define_constraints(self, model, variables):
         # Define the deviation constraint that shows the relationship between the power and the target
-        model = self._constraint_target_deviation(model, energy_type=c.ET_HEAT)
-
-        return model
+        self._constraint_target_deviation(model, variables, energy_type=c.ET_HEAT)

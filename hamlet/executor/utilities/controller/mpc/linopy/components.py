@@ -1,5 +1,5 @@
 __author__ = "MarkusDoepfert"
-__credits__ = ""
+__credits__ = "HodaHamdy"
 __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
@@ -16,10 +16,7 @@ import hamlet.constants as c
 
 
 class LinopyComps:
-
     def __init__(self, name, forecasts, **kwargs):
-
-        # Get the data
         self.name = name
         self.fcast = forecasts
         self.timesteps = kwargs['timesteps']
@@ -42,15 +39,18 @@ class LinopyComps:
             model.variables[name].lower = kwargs.get("lower", -math.inf)
             model.variables[name].upper = kwargs.get("upper", math.inf)
 
+    @staticmethod
+    def _create_variable_name(name: str, component_type: str, energy_type: str, direction: str = None):
+        if direction:
+            return f'{name}_{component_type}_{energy_type}_{direction}'
+        return f'{name}_{component_type}_{energy_type}'
+
     def define_electricity_variable(self, model: linopy.Model, comp_type: str, lower, upper, direction: str = None,
                                     integer=False):
         """Creates the electricity variable for the component. The direction is either in or out."""
 
         # Set the name of the variable
-        if direction:
-            name = f'{self.name}_{comp_type}_{c.ET_ELECTRICITY}_{direction}'
-        else:
-            name = f'{self.name}_{comp_type}_{c.ET_ELECTRICITY}'
+        name = self._create_variable_name(self.name, comp_type, c.ET_ELECTRICITY, direction)
 
         # Define the variable
         self.add_variable_to_model(model, name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=integer)
@@ -62,10 +62,7 @@ class LinopyComps:
         """Creates the heat variable for the component. The direction is either in or out."""
 
         # Set the name of the variable
-        if direction:
-            name = f'{self.name}_{comp_type}_{c.ET_HEAT}_{direction}'
-        else:
-            name = f'{self.name}_{comp_type}_{c.ET_HEAT}'
+        name = self._create_variable_name(self.name, comp_type, c.ET_HEAT, direction)
 
         # Define the variable
         self.add_variable_to_model(model, name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=integer)
@@ -74,13 +71,10 @@ class LinopyComps:
 
     def define_cool_variable(self, model: linopy.Model, comp_type: str, lower, upper, direction: str = None,
                              integer=False):
-        """Creates the heat variable for the component. The direction is either in or out."""
+        """Creates the cooling variable for the component. The direction is either in or out."""
 
         # Set the name of the variable
-        if direction:
-            name = f'{self.name}_{comp_type}_{c.ET_COOLING}_{direction}'
-        else:
-            name = f'{self.name}_{comp_type}_{c.ET_COOLING}'
+        name = self._create_variable_name(self.name, comp_type, c.ET_COOLING, direction)
 
         # Define the variable
         self.add_variable_to_model(model, name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=integer)
@@ -89,13 +83,10 @@ class LinopyComps:
 
     def define_h2_variable(self, model: linopy.Model, comp_type: str, lower, upper, direction: str = None,
                            integer=False):
-        """Creates the heat variable for the component. The direction is either in or out."""
+        """Creates the hydrogen variable for the component. The direction is either in or out."""
 
         # Set the name of the variable
-        if direction:
-            name = f'{self.name}_{comp_type}_{c.ET_H2}_{direction}'
-        else:
-            name = f'{self.name}_{comp_type}_{c.ET_H2}'
+        name = self._create_variable_name(self.name, comp_type, c.ET_H2, direction)
 
         # Define the variable
         self.add_variable_to_model(model, name=name, lower=lower, upper=upper, coords=[self.timesteps], integer=integer)
@@ -134,6 +125,7 @@ class Market(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
+        self.comp_type = None
         self.dt_hours = kwargs['delta'].total_seconds() * c.SECONDS_TO_HOURS  # time delta in hours
 
         # Calculate the upper and lower bounds for the market power from the energy quantity
@@ -238,73 +230,6 @@ class Market(LinopyComps):
         else:
             model.constraints[cons_name].coeffs[:, 1] = dt_hours * (self.price_sell + self.grid_sell + self.levies_sell)
         return model
-    # def define_variables(self, model, **kwargs):
-    #     self.comp_type = kwargs['comp_type']
-    #
-    #     # Define the market power variables (need to be positive and negative due to different pricing)
-    #     self.add_variable_to_model(model, name=f'{self.name}_{self.comp_type}_{c.PF_IN}', lower=self.lower, upper=0,
-    #                         coords=[self.timesteps], integer=False)  # buying
-    #     self.add_variable_to_model(model, name=f'{self.name}_{self.comp_type}_{c.PF_OUT}', lower=0, upper=self.upper,
-    #                         coords=[self.timesteps], integer=False)  # selling
-    #     # Define mode flag that decides whether the market energy is bought or sold
-    #     self.add_variable_to_model(model, name=f'{self.name}_mode', coords=[self.timesteps], binary=True)
-    #
-    #     # Define the market cost and revenue variables
-    #     self.add_variable_to_model(model, name=f'{self.name}_costs', lower=0, upper=np.inf, coords=[self.timesteps])
-    #     self.add_variable_to_model(model, name=f'{self.name}_revenue', lower=0, upper=np.inf, coords=[self.timesteps])
-    #
-    #     return model
-
-    # def define_constraints(self, model):
-    #     # Add constraint that the market can either buy or sell but not both at the same time
-    #     model = self.__constraint_operation_mode(model)
-    #
-    #     # Add constraint that the market cost and revenue are linked to the power
-    #     model = self.__constraint_cost_revenue(model)
-    #
-    #     return model
-    #
-    #
-    # def __constraint_operation_mode(self, model):
-    #     """Adds the constraint that energy can either be bought or sold but not both at the same time."""
-    #
-    #     # Define the variables
-    #     mode_var = model.variables[f'{self.name}_mode']  # mode variable
-    #     var_in = model.variables[f'{self.name}_{self.comp_type}_{c.PF_IN}']  # inflow
-    #     var_out = model.variables[f'{self.name}_{self.comp_type}_{c.PF_OUT}']  # outflow
-    #
-    #     # Define the constraint for inflow
-    #     # Note: The constraints should look something like: var_charge <= max_power * (1 - mode_var)
-    #     #       However, linopy does not support it. Thus, the somewhat more complicated version below is used.
-    #     eq_in = (var_in >= -(mode_var - 1) * self.lower)
-    #     model.add_constraints(eq_in, name=f'{self.name}_outflowflag', coords=[self.timesteps])
-    #
-    #     # Define the constraint for outflow
-    #     eq_out = (var_out <= mode_var * self.upper)
-    #     model.add_constraints(eq_out, name=f'{self.name}_inflowflag', coords=[self.timesteps])
-    #
-    #     return model
-    #
-    # def __constraint_cost_revenue(self, model):
-    #     """Adds the constraint that the market cost and revenue are linked to the power."""
-    #
-    #     # Define the variables
-    #     var_in = model.variables[f'{self.name}_{self.comp_type}_{c.PF_IN}']  # inflow (buying)
-    #     var_out = model.variables[f'{self.name}_{self.comp_type}_{c.PF_OUT}']  # outflow (selling)
-    #     var_cost = model.variables[f'{self.name}_costs']  # costs
-    #     var_revenue = model.variables[f'{self.name}_revenue']  # revenue
-    #     dt_hours = pd.Series([self.dt_hours] * len(self.timesteps), index=self.timesteps)  # time delta
-    #
-    #     # Define the constraint for costs
-    #     # TODO: These are changed as that is a temp fix until the variables are switched around again.
-    #     eq_cost = (var_cost == -var_in * dt_hours * (self.price_buy + self.grid_buy + self.levies_buy))
-    #     model.add_constraints(eq_cost, name=f'{self.name}_costs', coords=[self.timesteps])
-    #
-    #     # Define the constraint for revenue
-    #     eq_revenue = (var_revenue == var_out * dt_hours * (self.price_sell + self.grid_sell + self.levies_sell))
-    #     model.add_constraints(eq_revenue, name=f'{self.name}_revenue', coords=[self.timesteps])
-    #
-    #     return model
 
 
 class InflexibleLoad(LinopyComps):
@@ -330,9 +255,6 @@ class FlexibleLoad(LinopyComps):
     def __init__(self, name, **kwargs):
         # Call the parent class constructor
         super().__init__(name, **kwargs)
-
-        # Get specific object attributes
-        print(self.fcast)
 
 
 class Heat(LinopyComps):
@@ -361,8 +283,7 @@ class Dhw(LinopyComps):
 
         # Get specific object attributes
         self.heat = list(self.fcast[f'{self.name}_dhw'].round(3))
-        self.heat = [int(x * 1000) for x in self.heat]  # TODO: Fix the input data so that this is not needed anymore
-        self.heat = np.array(self.heat)
+        self.heat = np.array([int(x * 1000) for x in self.heat])  # TODO: Fix the input data so that this is not needed anymore
 
     def define_variables(self, model, **kwargs):
         comp_type = kwargs['comp_type']
@@ -569,7 +490,6 @@ class Ev(LinopyComps):
         """Adds the constraint that the battery can either charge or discharge but not both at the same time."""
 
         # Define the variables
-        max_power = self.charging_power  # helper variable
         mode_var = model.variables[f'{self.name}_{self.comp_type}_mode']  # mode variable
         var_charge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_OUT}']  # charging power
         var_discharge = model.variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}']  # discharging
@@ -603,11 +523,11 @@ class Ev(LinopyComps):
             case 'full':
                 model = self.__constraint_cs_full(model)
             case 'price_sensitive':
-                raise NotImplementedError(f'Charging scheme {scheme} not implemented yet.')
+                raise NotImplementedError(f'Charging scheme {scheme} not implemented for this mpc model.')
             case 'min_soc':
                 model = self.__constraint_cs_min_soc(model)
             case 'min_soc_time':
-                raise NotImplementedError(f'Charging scheme {scheme} not implemented yet.')
+                raise NotImplementedError(f'Charging scheme {scheme} not implemented for this mpc model.')
             case _:
                 raise ValueError(f'Charging scheme {scheme} not available.')
 

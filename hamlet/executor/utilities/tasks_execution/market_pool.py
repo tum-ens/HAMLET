@@ -1,3 +1,10 @@
+__author__ = "HodaHamdy"
+__credits__ = ""
+__license__ = ""
+__maintainer__ = "MarkusDoepfert"
+__email__ = "markus.doepfert@tum.de"
+
+
 from hamlet.executor.markets.market import Market
 from hamlet.executor.utilities.tasks_execution.process_pool import ProcessPool
 
