@@ -29,7 +29,10 @@ AVAILABLE_PLANTS = {
 
 class POI(RtcBase):
     def get_model(self, **kwargs):
-        model = gurobi.Model()
+        env = gurobi.Env(empty=True)
+        env.set_raw_parameter("OutputFlag", 0)
+        env.start()
+        model = gurobi.Model(env)
         model.set_model_attribute(poi.ModelAttribute.Silent, True)
         model.set_raw_parameter("OutputFlag", 0)
         model.set_raw_parameter("LogToConsole", 0)
