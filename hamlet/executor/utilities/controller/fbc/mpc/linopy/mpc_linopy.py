@@ -9,8 +9,8 @@ import sys
 
 from linopy.io import read_netcdf
 
-from hamlet.executor.utilities.controller.rtc.linopy.components import *
-from hamlet.executor.utilities.controller.rtc.rtc_base import RtcBase
+from hamlet.executor.utilities.controller.fbc.mpc.linopy.components import *
+from hamlet.executor.utilities.controller.fbc.mpc.mpc_base import MpcBase
 
 # Define all the available plants for this controller
 AVAILABLE_PLANTS = {
@@ -30,18 +30,14 @@ AVAILABLE_PLANTS = {
         }
 
 
-class Linopy(RtcBase):
+class Linopy(MpcBase):
     def __init__(self, **kwargs):
         self.loaded_model = False
-        self.model_path = f"{kwargs['agent'].agent_save}/model_rtc.nc"
+        self.model_path = f"{kwargs['agent'].agent_save}/linopy_mpc.nc"
         super().__init__(**kwargs)
+        self.ems = self.ems[c.C_LINOPY]
         # Save first model to file to load later
         self.save_model()
-
-    def save_model(self):
-        # Save first model to file to load later
-        if not os.path.exists(self.model_path):
-            self.model.to_netcdf(self.model_path)
 
     def get_model(self, **kwargs):
         # Check for existing saved models
@@ -51,8 +47,12 @@ class Linopy(RtcBase):
             self.loaded_model = True
         else:
             # Create a new model
-            model = Model()
+            model = Model(force_dim_names=True)
         return model
+
+    def save_model(self):
+        if not os.path.exists(self.model_path):
+            self.model.to_netcdf(self.model_path)
 
     def get_available_plants(self):
         return AVAILABLE_PLANTS
@@ -67,24 +67,18 @@ class Linopy(RtcBase):
 
         # Define variables for each market
         for market_name, market in self.market_objects.items():
-            # Balancing markets are not explicitly modeled and have the same comp_type as their original market
-            if c.TT_BALANCING in market_name:
-                energy_type = self.markets[market_name.rsplit('_', 1)[0]]
-            else:
-                energy_type = self.markets[market_name]
-
-            self.model = market.define_variables(self.model, energy_type=energy_type)
+            self.model = market.define_variables(self.model, comp_type=self.markets[market_name])
 
         return self.model
 
     def define_constraints(self):
         # Define constraints for each plant
         for plant_name, plant in self.plant_objects.items():
-            plant.define_constraints(self.model)
+            self.model = plant.define_constraints(self.model)
 
         # Define constraints for each market
         for market_name, market in self.market_objects.items():
-            market.define_constraints(self.model)
+            self.model = market.define_constraints(self.model)
 
         # Additional constraints for energy balancing, etc.
         self.add_balance_constraints()
@@ -99,18 +93,20 @@ class Linopy(RtcBase):
         balance_equations = {energy_type: self.model.add_variables(name=f'balance_{energy_type}',
                                                                    lower=0, upper=0, integer=True)
                              for energy_type in self.energy_types}
-
         # Loop through each energy type
         for energy_type in self.energy_types:
             # Loop through each variable and add it to the balance equation accordingly
             for variable_name, variable in self.model.variables.items():
                 # Add the variable as generation if it is a market variable for the current energy type
-                if (variable_name.startswith(tuple(self.market_objects))
-                        and variable_name.endswith(f'_{energy_type}')):
+                if ((variable_name.startswith(tuple(self.market_objects)))
+                        and (energy_type in variable_name)
+                        and (variable_name.endswith(f'_{c.PF_IN}') or variable_name.endswith(f'_{c.PF_OUT}'))):
                     balance_equations[energy_type] += variable
-                # Add the variable if it is a plant variable for the current energy type
-                elif (variable_name.startswith(tuple(self.plant_objects))
-                      and variable_name.endswith(f'_{energy_type}')):
+                # Add the variable if it is a plant variable
+                elif (variable_name.startswith(tuple(self.plant_objects))) \
+                        and (variable_name.endswith(f'_{energy_type}')
+                             or variable_name.endswith(f'_{energy_type}_{c.PF_IN}')
+                             or variable_name.endswith(f'_{energy_type}_{c.PF_OUT}')):
                     # Get the component name by splitting the variable name at the underscore
                     component_name = variable_name.split('_', 1)[0]
 
@@ -118,9 +114,9 @@ class Linopy(RtcBase):
                     component_type = [vals['type'] for plant, vals in self.plants.items()
                                       if plant == component_name][0]
 
-                    # If the component type is in the mapping for the current energy type, add the variable to the
-                    # balance equation
-                    if energy_type in self.mapping[component_type].keys():
+                    # If the component type is in the mapping for the current energy type and the variable is for
+                    # the energy type, add the variable to the balance equation
+                    if (energy_type in self.mapping[component_type].keys()) and (energy_type in variable_name):
                         # Get the operation mode for the component and energy type
                         component_energy_mode = self.mapping[component_type][energy_type]
 
@@ -140,6 +136,7 @@ class Linopy(RtcBase):
                         # The component type is not in the mapping for the current energy type
                         pass
                 else:
+                    # The variable is not a market or plant variable
                     pass
 
         # Add the constraints for each energy type
@@ -149,32 +146,25 @@ class Linopy(RtcBase):
         return self.model
 
     def define_objective(self):
-        # Weights to prioritize components (the higher the weight, the higher the penalty for deviation)
-        weights = {
-            c.P_BATTERY: 1,  # weight for battery
-            c.P_HEAT_STORAGE: 1,  # weight for heat storage
-            c.P_EV: 2,  # weight for electric vehicle
-            c.P_HP: 3,  # weight for heat pump
-            'market': 4  # weight for market energy
-        }
+        """Defines the objective function. The objective is to reduce the costs."""
 
         # Initialize the objective function as zero
         objective = []
 
-        # Loop through the model's variables to identify the balancing variables that need to be minimized
+        # Loop through the model's variables to identify the balancing variables
         for variable_name, variable in self.model.variables.items():
-            # Check if variable_name contains an underscore
-            if "_deviation_" in variable_name:
-                # Extract component type from variable name using the weights mapping
-                component_type = next((key for key in weights.keys() if f'_{key}_' in variable_name), None)
-                # If component type is None assign market weight
-                component_type = 'market' if component_type is None else component_type
-
-                # Get the weight for the component type
-                weight = weights.get(component_type)
-
-                # Add deviation to objective function
-                objective.append(variable * weight)
+            # Only consider the cost and revenue components of the markets
+            if variable_name.startswith(tuple(self.market_names)):
+                if variable_name.endswith('_costs'):
+                    # Add the variable to the objective function
+                    objective.append(variable)
+                elif variable_name.endswith('_revenue'):
+                    # Subtract the variable from the objective function
+                    objective.append(-1 * variable)
+                else:
+                    pass
+            else:
+                pass
 
         # Set the objective function to the model with the minimize direction
         self.model.add_objective(sum(objective), overwrite=True)
@@ -184,11 +174,13 @@ class Linopy(RtcBase):
     def run(self):
 
         # Solve the optimization problem
-        solver = 'gurobi'  # Note: Currently overwriting other solvers as only gurobi is available
+        solver = self.ems.get('solver')
         match solver:
             case 'gurobi':
                 sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
                 solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
+                if self.ems.get('time_limit') is not None:
+                    solver_options.update({'TimeLimit': self.ems['time_limit'] / 60})
                 status = self.model.solve(solver_name='gurobi', **solver_options)
                 sys.stdout = sys.__stdout__  # re-activate printing
             case _:
@@ -196,11 +188,10 @@ class Linopy(RtcBase):
 
         # Check if the solution is optimal
         if status[0] != 'ok':
-            print(f'Exited with status "{status[0]}". \n'
-                  f'Infeasibilities for agent {self.agent.agent_id}: \n'
-                  f'{self.model.print_infeasibilities()}')
+            print(f'Exited with status "{status[0]}". \n '
+                  f'Infeasibilities for agent {self.agent.agent_id}:')
+            print(self.model.print_infeasibilities())
 
-            # Print the model
             print('Model:')
             for name, var in self.model.variables.items():
                 print(var)
@@ -216,6 +207,5 @@ class Linopy(RtcBase):
         return self.agent
 
     def get_solution(self):
-
         # Obtain the solution values
-        return {name: int(sol) for name, sol in self.model.solution.items()}
+        return {name: sol for name, sol in self.model.solution.items()}

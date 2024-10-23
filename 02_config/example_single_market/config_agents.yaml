@@ -1018,24 +1018,57 @@ sfh:
   ################################ energy management system (EMS) ################################
   ems:
     controller:                                 # controller parameters
-      rtc:                                      # real time controller parameters (acts only at last possible timestep)
+      rtc:                                      # real-time controller parameters (acts only at last possible timestep)
         method: linopy                          # options:
-                                                #   - None:       no rtc is used to correct behavior in last timestep
-                                                #   - rule-based: production is maxed out, EVs charge immediately
-                                                #                 at max power, HP and CHP run cyclically
-                                                #                 to fill storage
-                                                #   - linopy:     linopy optimization problem is solved
+                                                #   - linopy: linopy optimization problem is solved
+                                                #   - poi:    poi optimization problem is solved
+                                                #   - rb:     rule-based controller
 
-      mpc:                                      # model predictive controller parameters (acts into the future)
+        linopy:
+          solver: gurobi                        # solver used for optimization
+                                                # options:
+                                                #   - gurobi
+
+          time_limit: 120                       # time limit for optimization
+                                                # unit: s
+                                                # note: measure to reduce overall simulation time
+        poi:
+          solver: gurobi                        # solver used for optimization
+                                                # options:
+                                                #   - gurobi
+
+          time_limit: 120                       # time limit for optimization
+                                                # unit: s
+                                                # note: measure to reduce overall simulation time
+
+      fbc:                                      # forecast-based controller parameters (acts into the future)
         method: linopy                          # options:
-                                                #   - None:       no mpc is used to forecast and plan operation
-                                                #   - linopy:     linopy optimization problem is solved to forecast and
-                                                #                 plan operation
+                                                #   - None:   no controller used for future time steps
+                                                #   - linopy: linopy mpc to forecast and optimize
+                                                #   - poi:    poi mpc to forecast and optimize
+                                                #   - rb:     rule-based controller
+                                                #   - rl:     reinforcement learning controller
 
         horizon: 86_400                         # control horizon
                                                 # unit: s
-                                                # note: applies to strategy: mpc
-                                                # cannot exceed forecast horizon
+                                                # note: cannot exceed forecast horizon
+
+        linopy:
+          solver: gurobi                        # solver used for optimization
+                                                # options:
+                                                #   - gurobi
+
+          time_limit: 120                       # time limit for optimization
+                                                # unit: s
+                                                # note: measure to reduce overall simulation time
+        poi:
+          solver: gurobi                        # solver used for optimization
+                                                # options:
+                                                #   - gurobi
+
+          time_limit: 120                       # time limit for optimization
+                                                # unit: s
+                                                # note: measure to reduce overall simulation time
 
     market:                                     # market parameters
       strategy: linear                          # market agent trading strategy
@@ -1047,7 +1080,7 @@ sfh:
                                                 #   - retailer:   agent offers energy at the retailer prices, i.e. buys
                                                 #                 at the retailer sell price and sells at the retailer
                                                 #                 buy price (default strategy when there is no clearing)
-                                                # note: does not apply when simulation ex-post markets
+                                                # note: does not apply for ex-post markets
 
       horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
                                                 # unit: s

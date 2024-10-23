@@ -8,9 +8,10 @@ import logging
 
 from hamlet import constants as c
 from hamlet.executor.utilities.controller.controller_base import ControllerBase
-from hamlet.executor.utilities.controller.rtc.rtc_base import RtcBase
-from hamlet.executor.utilities.controller.rtc.linopy.rtc_linopy import Linopy
-from hamlet.executor.utilities.controller.rtc.poi.rtc_poi import POI
+from hamlet.executor.utilities.controller.rtc.optim.linopy.optim_linopy import Linopy
+from hamlet.executor.utilities.controller.rtc.optim.poi.optim_poi import POI
+from hamlet.executor.utilities.controller.rtc.rb.rule_based import RuleBased
+from hamlet.executor.utilities.database.agent_db import AgentDB
 
 # warnings.filterwarnings("ignore")
 logging.getLogger('linopy').setLevel(logging.CRITICAL)
@@ -18,7 +19,7 @@ logging.getLogger('linopy').setLevel(logging.CRITICAL)
 
 class Rtc(ControllerBase):
 
-    def __init__(self, method='poi', **kwargs):
+    def __init__(self, method: str, **kwargs):
 
         # Call the super class
         super().__init__()
@@ -29,12 +30,12 @@ class Rtc(ControllerBase):
 
         # Mapping from input string to class name
         self.class_mapping = {
-            'linopy': Linopy,
-            'poi': POI,
-            'rule-based': RuleBased
+            c.C_LINOPY: Linopy,
+            c.C_POI: POI,
+            c.C_RB: RuleBased,
         }
 
-    def run(self, **kwargs):
+    def run(self, **kwargs) -> AgentDB:
         # Return if no method is specified
         if self.method is None:
             return
@@ -48,11 +49,3 @@ class Rtc(ControllerBase):
 
         return controller_class(**kwargs, mapping=c.COMP_MAP).run()
 
-
-class RuleBased(RtcBase):  # Note the change in class name
-
-    def __init__(self, **kwargs):
-        pass
-
-    def run(self):
-        print('Running Rule-Based')

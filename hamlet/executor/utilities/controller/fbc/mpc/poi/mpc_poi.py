@@ -4,10 +4,8 @@ __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
-from pyoptinterface import gurobi
-
-from hamlet.executor.utilities.controller.rtc.poi.components import *
-from hamlet.executor.utilities.controller.rtc.rtc_base import RtcBase
+from hamlet.executor.utilities.controller.fbc.mpc.mpc_base import MpcBase
+from hamlet.executor.utilities.controller.fbc.mpc.poi.components import *
 
 # Define all the available plants for this controller
 AVAILABLE_PLANTS = {
@@ -27,7 +25,7 @@ AVAILABLE_PLANTS = {
         }
 
 
-class POI(RtcBase):
+class POI(MpcBase):
     def get_model(self, **kwargs):
         env = gurobi.Env(empty=True)
         env.set_raw_parameter("OutputFlag", 0)
@@ -52,15 +50,7 @@ class POI(RtcBase):
 
         # Define variables for each market
         for market_name, market in self.market_objects.items():
-            # Balancing markets are not explicitly modeled and have the same comp_type as their original market
-            if c.TT_BALANCING in market_name:
-                energy_type = self.markets[market_name.rsplit('_', 1)[0]]
-            else:
-                energy_type = self.markets[market_name]
-
-            market.define_variables(self.model, self.variables, energy_type=energy_type)
-
-        return self.model
+            market.define_variables(self.model, self.variables, comp_type=self.markets[market_name])
 
     def define_constraints(self):
         # Define constraints for each plant
@@ -74,23 +64,23 @@ class POI(RtcBase):
         # Additional constraints for energy balancing, etc.
         self.add_balance_constraints()
 
-        return self.model
-
     def add_balance_constraints(self):
         # Initialize the balance equations for each energy type by creating a zero variable for each energy type
         balance_equations = {energy_type: [] for energy_type in self.energy_types}
-
         # Loop through each energy type
         for energy_type in self.energy_types:
             # Loop through each variable and add it to the balance equation accordingly
-            for variable_name, variable in self.variables.items():
+            for variable_name, variables in self.variables.items():
                 # Add the variable as generation if it is a market variable for the current energy type
-                if (variable_name.startswith(tuple(self.market_objects))
-                        and variable_name.endswith(f'_{energy_type}')):
-                    balance_equations[energy_type].append(variable)
-                # Add the variable if it is a plant variable for the current energy type
-                elif (variable_name.startswith(tuple(self.plant_objects))
-                      and variable_name.endswith(f'_{energy_type}')):
+                if ((variable_name.startswith(tuple(self.market_objects)))
+                        and (energy_type in variable_name)
+                        and (variable_name.endswith(f'_{c.PF_IN}') or variable_name.endswith(f'_{c.PF_OUT}'))):
+                    balance_equations[energy_type].append(variables)
+                # Add the variable if it is a plant variable
+                elif (variable_name.startswith(tuple(self.plant_objects))) \
+                        and (variable_name.endswith(f'_{energy_type}')
+                             or variable_name.endswith(f'_{energy_type}_{c.PF_IN}')
+                             or variable_name.endswith(f'_{energy_type}_{c.PF_OUT}')):
                     # Get the component name by splitting the variable name at the underscore
                     component_name = variable_name.split('_', 1)[0]
 
@@ -98,9 +88,9 @@ class POI(RtcBase):
                     component_type = [vals['type'] for plant, vals in self.plants.items()
                                       if plant == component_name][0]
 
-                    # If the component type is in the mapping for the current energy type, add the variable to the
-                    # balance equation
-                    if energy_type in self.mapping[component_type].keys():
+                    # If the component type is in the mapping for the current energy type and the variable is for
+                    # the energy type, add the variable to the balance equation
+                    if (energy_type in self.mapping[component_type].keys()) and (energy_type in variable_name):
                         # Get the operation mode for the component and energy type
                         component_energy_mode = self.mapping[component_type][energy_type]
 
@@ -109,64 +99,59 @@ class POI(RtcBase):
                         #  main meter while negative flows flow out of the main meter. The components are modeled
                         #  accordingly
                         if component_energy_mode == c.OM_GENERATION:
-                            balance_equations[energy_type].append(variable)
+                            balance_equations[energy_type].append(variables)
                         elif component_energy_mode == c.OM_LOAD:
-                            balance_equations[energy_type].append(variable)
+                            balance_equations[energy_type].append(variables)
                         elif component_energy_mode == c.OM_STORAGE:
-                            balance_equations[energy_type].append(variable)
+                            balance_equations[energy_type].append(variables)
                         else:
                             raise ValueError(f"Unsupported operation mode: {component_energy_mode}")
                     else:
                         # The component type is not in the mapping for the current energy type
                         pass
                 else:
+                    # The variable is not a market or plant variable
                     pass
 
         # Add the constraints for each energy type
-        for energy_type, vars in balance_equations.items():
-            self.model.add_linear_constraint(sum(vars), poi.ConstraintSense.Equal, 0,
-                                                 name=f"balance_{energy_type}")
+        for energy_type, expressions in balance_equations.items():
+            timestep_equations = np.sum(expressions, axis=0)
+            for timestep, equation in enumerate(timestep_equations):
+                self.model.add_linear_constraint(equation, poi.ConstraintSense.Equal, 0,
+                                                 name=f"balance_{energy_type}_{timestep}")
 
     def define_objective(self):
-        # Weights to prioritize components (the higher the weight, the higher the penalty for deviation)
-        weights = {
-            c.P_BATTERY: 1,  # weight for battery
-            c.P_HEAT_STORAGE: 1,  # weight for heat storage
-            c.P_EV: 2,  # weight for electric vehicle
-            c.P_HP: 3,  # weight for heat pump
-            'market': 4  # weight for market energy
-        }
+        """Defines the objective function. The objective is to reduce the costs."""
 
         # Initialize the objective function as zero
         objective = []
 
-        # Loop through the model's variables to identify the balancing variables that need to be minimized
-        for variable_name, variable in self.variables.items():
-            # Check if variable_name contains an underscore
-            if "_deviation_" in variable_name:
-                # Extract component type from variable name using the weights mapping
-                component_type = next((key for key in weights.keys() if f'_{key}_' in variable_name), None)
-                # If component type is None assign market weight
-                component_type = 'market' if component_type is None else component_type
-
-                # Get the weight for the component type
-                weight = weights.get(component_type)
-
-                # Add deviation to objective function
-                objective.append(variable * weight)
+        # Loop through the model's variables to identify the balancing variables
+        for variable_name, variables in self.variables.items():
+            # Only consider the cost and revenue components of the markets
+            if variable_name.startswith(tuple(self.market_names)):
+                if variable_name.endswith('_costs'):
+                    # Add the variable to the objective function
+                    objective.append(variables)
+                elif variable_name.endswith('_revenue'):
+                    # Subtract the variable from the objective function
+                    objective.append(-1 * variables)
+                else:
+                    pass
+            else:
+                pass
 
         # Set the objective function to the model with the minimize direction
-        self.model.set_objective(sum(objective), poi.ObjectiveSense.Minimize)
+        self.model.set_objective(np.sum(objective), poi.ObjectiveSense.Minimize)
 
     def run(self):
 
         # Solve the optimization problem
-        solver = 'gurobi'  # Note: Currently overwriting other solvers as only gurobi is available
+        solver = self.ems[c.C_POI].get('solver')
         match solver:
             case 'gurobi':
-                self.model.set_model_attribute(poi.ModelAttribute.Silent, True)
-                self.model.set_raw_parameter("OutputFlag", 0)
-                self.model.set_raw_parameter("LogToConsole", 0)
+                if self.ems[c.C_POI].get('time_limit') is not None:
+                    self.model.set_raw_parameter('TimeLimit', self.ems[c.C_POI]['time_limit'] / 60)
                 self.model.optimize()
                 status = self.model.get_model_attribute(poi.ModelAttribute.TerminationStatus)
             case _:
@@ -174,7 +159,7 @@ class POI(RtcBase):
 
         # Check if the solution is optimal
         if status not in [poi.TerminationStatusCode.OPTIMAL, poi.TerminationStatusCode.TIME_LIMIT]:
-            print(f'Exited with status "{status[0]}". \n')
+            print(f'Exited with status "{status}". \n ')
             # raise ValueError(f"Optimization failed: {status}")
 
         # Process the solution into control commands and return
@@ -184,4 +169,5 @@ class POI(RtcBase):
 
     def get_solution(self):
         # Obtain the solution values
-        return {var_name: int(self.model.get_value(var)) for var_name, var in self.variables.items()}
+        return {var_name: np.array([self.model.get_value(var) for var in vars]) for var_name, vars in
+                self.variables.items()}
