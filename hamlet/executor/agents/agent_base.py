@@ -63,10 +63,10 @@ class AgentBase:
         """Sets the controller for the agent"""
 
         # Get the required data
-        ems = self.agent.account[c.K_EMS]
+        controllers = self.agent.account[c.K_EMS][c.C_CONTROLLER]
 
         # Loop through the ems controllers
-        for controller, params in ems['controller'].items():
+        for controller, params in controllers.items():
             # Skip if method is None
             if params['method'] is None:
                 continue
@@ -76,9 +76,6 @@ class AgentBase:
 
             # Run the controller
             self.agent = controller.run(agent=self.agent, timetable=self.timetable, market=self.market)
-
-        # TODO: Check if this needs to be changed since it might be that the method is None but still something
-        #  needs to be done for the tables. Probably needs to implement a sanity check function
 
         return self.agent
 

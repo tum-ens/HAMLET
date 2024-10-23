@@ -11,8 +11,6 @@ import hamlet.constants as c
 
 class RtcBase:
     def __init__(self, **kwargs):
-        # Create the model
-        self.model = self.get_model(**kwargs)
 
         # Store the mapping of the components to the energy types and operation modes
         self.mapping = kwargs['mapping']
@@ -33,6 +31,7 @@ class RtcBase:
         # Get the agent and other data
         self.agent = kwargs['agent']
         self.account = self.agent.account
+        self.ems = self.account[c.K_EMS]
         self.plants = self.agent.plants  # Formerly known as components
         self.setpoints = self.agent.setpoints
         self.timeseries = self.agent.timeseries
@@ -56,97 +55,13 @@ class RtcBase:
         # Assign each market name to an energy type
         self.markets = {name: c.TRADED_ENERGY[mtype] for name, mtype in zip(self.market_names, self.market_types)}
         # Get the market results for each market
-        self.market_results = {}
-        for market_type, market in self.market.items():
-            for market_name, data in market.items():
-                # Get transactions table
-                transactions = data.market_transactions
-                # Filter for agent ID
-                transactions = transactions.filter(pl.col(c.TC_ID_AGENT) == self.agent.agent_id)
-                # Filter for current timestamp
-                transactions = transactions.filter(pl.col(c.TC_TIMESTEP) == self.timestamp)
-                # Fill NaN values with 0
-                transactions = transactions.fill_null(0)
-                # Get net energy amount for market
-                self.market_results[market_name] = (transactions
-                .select(pl.sum(c.TC_ENERGY_IN).cast(pl.Int64)
-                        - pl.sum(c.TC_ENERGY_OUT).cast(pl.Int64))
-                .to_series().to_list()[0])
-
-        # Obtain maximum balancing power
-        # TODO: Deprecate balancing market in the equations. The relevant value is the market itself.
-        #  Balancing occurs in the market section of the code.
-        # TODO: self.balancing = db.get_balancing_power(market name, energy type)
+        self.market_results = self._get_market_results()
 
         # Available plants
         self.available_plants = self.get_available_plants()
 
-        # Note: This can probably be only done once and then stored in the agent. Afterwards, it only needs to be
-        #  updated every timestep (will need considerable adjustment though and might not be worth the effort).
-
-        # Create the plant objects
+        # Filled by sub-functions
         self.plant_objects = {}
-        self.create_plants()
-
-        # Create the market objects
-        self.market_class = self.get_market_class()
-        self.market_objects = {}
-        self.create_markets()
-
-        # Define the model
-        self.define_variables()
-        self.define_constraints()
-        self.define_objective()
-
-    def run(self):
-        raise NotImplementedError()
-
-    def create_plants(self):
-        """
-        Create the plant objects for the optimization problem
-        """
-        for plant_name, plant_data in self.plants.items():
-
-            # Get the plant type from the plant data
-            plant_type = plant_data['type']
-
-            # Retrieve the timeseries data for the plant
-            cols = [col for col in self.timeseries.columns if col.startswith(plant_name)]
-            timeseries = self.timeseries.select(cols)
-
-            # Retrieve the target setpoints for the plant
-            cols = [col for col in self.targets.columns if col.startswith(plant_name)]
-            targets = self.targets.select(cols)
-
-            # Retrieve the soc data for the plant (if applicable)
-            cols = [col for col in self.socs.columns if col.startswith(plant_name)]
-            socs = self.socs.select(cols)
-
-            # Get the plant class
-            plant_class = self.available_plants.get(plant_type)
-            if plant_class is None:
-                raise ValueError(f"Unsupported plant type: {plant_name}")
-
-            # Create the plant object
-            self.plant_objects[plant_name] = plant_class(name=plant_name, timeseries=timeseries, **plant_data,
-                                                         targets=targets, socs=socs, delta=self.dt)
-
-        return self.plant_objects
-
-    def create_markets(self):
-        """
-        Create the market objects for the optimization problem
-        """
-
-        # Define variables from the market results and a balancing variable for each energy type
-        for market in self.markets:
-            # Create market object
-            self.market_objects[market] = self.market_class(name=market,
-                                                            timeseries=self.market,
-                                                            market_result=self.market_results[market],
-                                                            delta=self.dt)
-
-        return self.market_objects
 
     def process_solution(self):
 
@@ -203,7 +118,7 @@ class RtcBase:
 
         # Sum the respective market columns into one column
         # (Will be deprecated once the balancing variable is taken out of the equations)
-        self.setpoints, src_cols = self.sum_market_columns(self.setpoints, src_cols, list(self.markets.keys()))
+        self.setpoints, src_cols = self._sum_market_columns(self.setpoints, src_cols, list(self.markets.keys()))
 
         # Drop all setpoint columns that are not part of src_cols (plus keep timestamp and timestep column)
         sel_cols = [self.setpoints.columns[0]] + src_cols
@@ -226,7 +141,7 @@ class RtcBase:
             if key:  # Check for matching key
                 # Get power from solution
                 # Note: Since negative power means that the plant takes energy from the grid,
-                #  we need to multiply the power by -1. Thus the signs are also reversed subsequently.
+                #  we need to multiply the power by -1. Thus, the signs are also reversed subsequently.
                 power = solution[key] * -1
 
                 # Get the column dtype
@@ -295,8 +210,27 @@ class RtcBase:
 
         return self.meters
 
+    def _get_market_results(self):
+        self.market_results = {}
+        for market_type, market in self.market.items():
+            for market_name, data in market.items():
+                # Get transactions table
+                transactions = data.market_transactions
+                # Filter for agent ID
+                transactions = transactions.filter(pl.col(c.TC_ID_AGENT) == self.agent.agent_id)
+                # Filter for current timestamp
+                transactions = transactions.filter(pl.col(c.TC_TIMESTEP) == self.timestamp)
+                # Fill NaN values with 0
+                transactions = transactions.fill_null(0)
+                # Get net energy amount for market
+                self.market_results[market_name] = (transactions.select(pl.sum(c.TC_ENERGY_IN).cast(pl.Int64)
+                                                                        - pl.sum(c.TC_ENERGY_OUT).cast(pl.Int64))
+                                                    .to_series().to_list()[0])
+
+        return self.market_results
+
     @staticmethod
-    def sum_market_columns(df: pl.DataFrame, src_cols: list, markets: list):
+    def _sum_market_columns(df: pl.DataFrame, src_cols: list, markets: list):
 
         # Loop through each market
         for market_name in markets:
@@ -316,23 +250,13 @@ class RtcBase:
 
         return df, src_cols
 
-    def get_model(self, **kwargs):
-        raise NotImplementedError
+############################################## To be implemented in subclasses #########################################
 
     def get_available_plants(self):
         raise NotImplementedError
 
-    def get_market_class(self):
-        raise NotImplementedError
+    def run(self):
+        raise NotImplementedError()
 
     def get_solution(self):
         raise NotImplementedError
-
-    def define_variables(self):
-        pass
-
-    def define_constraints(self):
-        pass
-
-    def define_objective(self):
-        pass
