@@ -12,8 +12,8 @@ import ast
 import polars as pl
 import pandas as pd
 import numpy as np
-from keras.layers import Input, Dense, LSTM, Conv1D, MaxPooling1D, Flatten, Dropout
-from keras.models import Model
+from keras.api.layers import Input, Dense, LSTM, Conv1D, MaxPooling1D, Flatten, Dropout
+from keras.api.models import Model
 from sktime.forecasting.arima import ARIMA
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
