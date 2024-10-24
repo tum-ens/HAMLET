@@ -9,10 +9,12 @@ import pandas as pd
 import polars as pl
 
 import hamlet.constants as c
+from hamlet.executor.utilities.controller.controller_base import ControllerBase
 
 
-class FbcBase:
+class FbcBase(ControllerBase):
     def __init__(self, **kwargs):
+        super().__init__()
 
         # Store the mapping of the components to the energy types and operation modes
         self.mapping = kwargs['mapping']

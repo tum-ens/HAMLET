@@ -7,10 +7,12 @@ __email__ = "markus.doepfert@tum.de"
 import polars as pl
 
 import hamlet.constants as c
+from hamlet.executor.utilities.controller.controller_base import ControllerBase
 
 
-class RtcBase:
+class RtcBase(ControllerBase):
     def __init__(self, **kwargs):
+        super().__init__()
 
         # Store the mapping of the components to the energy types and operation modes
         self.mapping = kwargs['mapping']
