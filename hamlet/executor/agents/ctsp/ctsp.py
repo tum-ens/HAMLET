@@ -13,7 +13,7 @@ from hamlet.executor.agents.agent_base import AgentBase
 
 class Ctsp(AgentBase):
 
-    def __init__(self, agent, timetable, database):
+    def __init__(self, agent, timetable, market):
 
         # Type of agent
-        super().__init__(agent_type=c.A_CTSP, agent=agent, timetable=timetable, database=database)
+        super().__init__(agent_type=c.A_CTSP, agent=agent, timetable=timetable, market=market)
