@@ -6,6 +6,7 @@ __email__ = "jiahe.chu@tum.de"
 
 import os.path
 import polars as pl
+from polars.type_aliases import SizeUnit
 from hamlet import functions as f
 
 
@@ -118,11 +119,12 @@ class AgentDB:
             f.save_file(path=os.path.join(self.agent_save, 'plants.json'), data=self.plants)
             f.save_file(path=os.path.join(self.agent_save, 'specs.json'), data=self.specs)
 
-    def estimated_size(self) -> float:
+    def estimated_size(self, unit:SizeUnit = "kb") -> float:
         ret = 0
-        ret += self.meters.estimated_size("kb")
-        ret += self.timeseries.estimated_size("kb")
-        ret += self.socs.estimated_size("kb")
-        ret += self.setpoints.estimated_size("kb")
-        ret += self.forecasts.estimated_size("kb")
+        ret += self.meters.estimated_size(unit)
+        ret += self.socs.estimated_size(unit)
+        ret += self.timeseries.estimated_size(unit)
+        ret += self.setpoints.estimated_size(unit)
+        ret += self.forecasts.estimated_size(unit)
+        ret += self.bids_offers.estimated_size(unit)
         return ret
