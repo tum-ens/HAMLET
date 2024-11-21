@@ -31,7 +31,7 @@ def task(agent_data):
         folder = f"{agent_db.__hash__()}"
         ret_path = os.path.join(region_path, 'agents', agent_type, agent_id, folder)
         agent_db.save_agent(ret_path, save_all=True)
-        return (agent_type, agent_id, ret_path)
+        return (agent_type, agent_id, region_tasks, region_path, ret_path)
 
     except Exception:
         # Exceptions from the function running inside the multiprocessing pool
