@@ -117,3 +117,12 @@ class AgentDB:
             f.save_file(path=os.path.join(self.agent_save, 'account.json'), data=self.account)
             f.save_file(path=os.path.join(self.agent_save, 'plants.json'), data=self.plants)
             f.save_file(path=os.path.join(self.agent_save, 'specs.json'), data=self.specs)
+
+    def estimated_size(self) -> float:
+        ret = 0
+        ret += self.meters.estimated_size("kb")
+        ret += self.timeseries.estimated_size("kb")
+        ret += self.socs.estimated_size("kb")
+        ret += self.setpoints.estimated_size("kb")
+        ret += self.forecasts.estimated_size("kb")
+        return ret
