@@ -15,6 +15,13 @@ from hamlet.executor.utilities.database.market_db import MarketDB
 
 import psutil
 
+weather = None
+def get_weather(path):
+    global weather
+    if weather is None:
+        weather = f.load_file(path=os.path.join(path, 'general', 'weather', 'weather.ft'), df='polars', method='eager', memory_map=False)
+    return weather
+
 def init_agentdb(agent_type, agent_id, region_tasks, region_path, agent_path):
     """Initializes agent database"""
     agent_db = AgentDB(path=agent_path,
@@ -30,8 +37,7 @@ def init_agentdb(agent_type, agent_id, region_tasks, region_path, agent_path):
 
 def load_general(path):
     """Loads general information"""
-    general = {'weather': f.load_file(path=os.path.join(path, 'general', 'weather',
-                                                        'weather.ft'), df='polars', method='eager', memory_map=False),
+    general = {'weather': get_weather(path),
                'retailer': f.load_file(path=os.path.join(path, 'general', 'retailer.ft'),
                                        df='polars', method='eager'),
                'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
