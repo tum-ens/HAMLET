@@ -5,6 +5,7 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 import os
+import traceback
 
 import hamlet.constants as c
 from hamlet import functions as f
@@ -17,15 +18,26 @@ from hamlet.executor.utilities.tasks_execution.process_pool import ProcessPool
 
 # Define the function to be executed in parallel
 def task(agent_data):
-    # Prepare agent data
-    agent_type, agent_id, region_tasks, region_path = agent_data
-    agent_db = init_agentdb(agent_type, agent_id, region_path)
-    market_db, market_type = get_market(region_path, region_tasks)
-    add_forecaster(agent_db, market_db, market_type, region_path)
-    # Initialize and execute the agent instance
-    agent = Agent(agent_type=agent_type, data=agent_db, timetable=region_tasks, market=market_db)
-    agent_db = agent.execute()
-    return agent_db
+    try:
+        # Prepare agent data
+        agent_type, agent_id, region_tasks, region_path = agent_data
+        agent_db = init_agentdb(agent_type, agent_id, region_path)
+        market_db, market_type = get_market(region_path, region_tasks)
+        add_forecaster(agent_db, market_db, market_type, region_path)
+        # Initialize and execute the agent instance
+        agent = Agent(agent_type=agent_type, data=agent_db, timetable=region_tasks, market=market_db)
+        agent_db = agent.execute()
+        return agent_db
+
+    except Exception:
+        # Exceptions from the function running inside the multiprocessing pool
+        # are not reported by python (the process silently exists and None is
+        # returned)
+        # There is not much we can do about this, but at least we can print the
+        # Exception so we see that something did go wrong (and also investigate
+        # what did go wrong)
+        print(traceback.format_exc())
+        return None
 
 
 def init_agentdb(agent_type, agent_id, region_path):
