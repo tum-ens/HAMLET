@@ -56,7 +56,7 @@ class TaskExecutioner:
             self.pool.update_num_workers(self.num_workers)
             # Execute multiprocessing pool
             results = self.pool.execute(para_tasks) # TODO(Lukas) imap can/should still be used here
-            results = map(lambda x: init_agentdb(*x), results)
+            results = list(map(lambda x: init_agentdb(*x), results))
         # Postprocess results of tasks execution
         self.postprocess_results(tasks, results)
 
