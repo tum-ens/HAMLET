@@ -16,6 +16,8 @@ class ProcessPool:
         pool (multiprocessing.pool.Pool): the multiprocessing pool
         task: method to execute in parallel
     """
+    # TODO(Lukas) should we remove this? (afaik this only makes sense if we
+    # expect memory leaks in the spawned processes)
     MAX_TASKS_PER_CHILD = 10  # Maximum tasks per child process after which the pool will spawn a fresh process
 
     def __init__(self, num_workers: int, task):
@@ -39,7 +41,7 @@ class ProcessPool:
             chunksize += 1
         try:
             # Submit the tasks for parallel execution
-            results = self.pool.map(self.task, task_args, chunksize=chunksize)
+            results = self.pool.map(self.task, task_args, chunksize=chunksize) # TODO(Lukas) think about the chunksize
             return results
         except Exception as e:
             print(e)
