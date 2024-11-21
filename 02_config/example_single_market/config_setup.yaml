@@ -6,7 +6,7 @@ time:                                     # time settings
   start: 2021-03-24T00:00:00+01:00        # start of simulation in unix time with timezone information
                                           # format (ISO 8601): %Y-%m-%dT%H:%M:%S%z (YYYY-MM-DDTHH:MM:SS+HH:MM)
 
-  duration: 1                             # duration of the simulation
+  duration: 0.05                          # duration of the simulation
                                           # unit: days
 
   timestep: 900                           # minimum timestep of the simulation

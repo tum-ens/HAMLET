@@ -8,7 +8,7 @@ if __name__ == "__main__":
     path = "../04_scenarios/example_single_market"
 
     # Create the executor object
-    sim = Executor(path)
+    sim = Executor(path, num_workers=2)
 
     # Run the simulation
     sim.run()
