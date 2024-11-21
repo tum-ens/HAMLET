@@ -68,7 +68,7 @@ def add_forecaster(agent_db, market_db, market_type, region_path):
 def load_general(path):
     """Loads general information"""
     general = {'weather': f.load_file(path=os.path.join(path, 'general', 'weather',
-                                                        'weather.ft'), df='polars', method='eager'),
+                                                        'weather.ft'), df='polars', method='eager', memory_map=False),
                'retailer': f.load_file(path=os.path.join(path, 'general', 'retailer.ft'),
                                        df='polars', method='eager'),
                'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
