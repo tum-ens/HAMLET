@@ -6,9 +6,19 @@ __email__ = "markus.doepfert@tum.de"
 
 import multiprocessing as mp
 import os
+from hamlet.executor.utilities.database.agent_db import AgentDB
 
 import psutil
 
+def init_agentdb(agent_type, agent_id, agent_path):
+    """Initializes agent database"""
+    agent_db = AgentDB(path=agent_path,
+                       agent_type=agent_type,
+                       agent_id=agent_id)
+    agent_db.agent_save = agent_path
+    # Load data from files
+    agent_db.register_agent()
+    return agent_db
 
 class TaskExecutioner:
     """
@@ -45,7 +55,8 @@ class TaskExecutioner:
             # Also update the pool's workers
             self.pool.update_num_workers(self.num_workers)
             # Execute multiprocessing pool
-            results = self.pool.execute(para_tasks)
+            results = self.pool.execute(para_tasks) # TODO(Lukas) imap can/should still be used here
+            results = map(lambda x: init_agentdb(*x), results)
         # Postprocess results of tasks execution
         self.postprocess_results(tasks, results)
 

@@ -27,7 +27,11 @@ def task(agent_data):
         # Initialize and execute the agent instance
         agent = Agent(agent_type=agent_type, data=agent_db, timetable=region_tasks, market=market_db)
         agent_db = agent.execute()
-        return agent_db
+
+        folder = f"{agent_db.__hash__()}"
+        ret_path = os.path.join(region_path, 'agents', agent_type, agent_id, folder)
+        agent_db.save_agent(ret_path, save_all=True)
+        return (agent_type, agent_id, ret_path)
 
     except Exception:
         # Exceptions from the function running inside the multiprocessing pool
