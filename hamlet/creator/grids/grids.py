@@ -90,10 +90,17 @@ class Grids:
                     if config['file']['file'].split('.')[-1] == 'xlsx':
                         net = pp.from_excel(os.path.join(self.config_path, config['file']['file']))
                         pp.to_json(net, os.path.join(path, f'{grid}.json'))
+
+                        # also copy xlsx file
+                        shutil.copy(os.path.join(self.config_path, config['file']['file']),
+                                    os.path.join(path, config['file']['file']))
                     # Copy file
                     else:
                         shutil.copy(os.path.join(self.config_path, config['file']['file']),
                                     os.path.join(path, config['file']['file']))
+                elif config['method'] == 'topology':
+                    shutil.copy(os.path.join(self.config_path, config['topology']['file']),
+                                os.path.join(path, config['topology']['file']))
                 else:
                     # Load grid file and save as json
                     file = self._load_file(path=os.path.join(self.config_path, f'{grid}.xlsx'), index=0)

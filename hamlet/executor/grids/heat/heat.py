@@ -23,7 +23,7 @@ from hamlet.executor.grids.grid_base import GridBase
 
 class Heat(GridBase):
 
-    def __init__(self, grid):
+    def __init__(self, grid_db, tasks: pl.DataFrame, database):
 
         # Call the super class
-        super().__init__()
+        super().__init__(grid_db=grid_db, tasks=tasks, database=database)

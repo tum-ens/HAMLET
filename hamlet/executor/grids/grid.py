@@ -17,6 +17,7 @@ import traceback
 from datetime import datetime
 import pandapower as pp
 import hamlet.constants as c
+from hamlet.executor.utilities.database.database import Database
 
 # Types of grids (add your own if others are created here)
 from hamlet.executor.grids.electricity.electricity import Electricity
@@ -26,18 +27,18 @@ from hamlet.executor.grids.hydrogen.hydrogen import Hydrogen
 
 class Grid:
 
-    def __init__(self, grid, grid_type: str):
+    def __init__(self, grid_db, tasks: pl.DataFrame, grid_type: str, database: Database):
 
         self.types = {
-            c.ET_ELECTRICITY: Electricity,
-            c.ET_HEAT: Heat,
-            c.ET_H2: Hydrogen,
+            c.G_ELECTRICITY: Electricity,
+            c.G_HEAT: Heat,
+            c.G_H2: Hydrogen,
         }
 
         # Instance of the grid class
-        self.grid = self.types[grid_type](grid)
+        self.grid = self.types[grid_type](grid_db=grid_db, tasks=tasks, database=database)
 
-    def execute(self, data: dict, timetable: pl.DataFrame):
+    def execute(self):
         """Executes the grid"""
 
-        self.grid.execute()
+        return self.grid.execute()

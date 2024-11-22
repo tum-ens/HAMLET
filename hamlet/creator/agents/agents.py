@@ -542,6 +542,9 @@ class Agents:
             None
 
         """
+        # make sure all timeseries are integer
+        data['timeseries.ft'].fillna(0, inplace=True)
+        data['timeseries.ft'] = data['timeseries.ft'].astype(float).astype(int)
 
         # Create the agent files
         for key, value in data.items():

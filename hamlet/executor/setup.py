@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 pl.enable_string_cache(True)
 from hamlet import functions as f
+from copy import deepcopy
 # from numba import njit, jit
 from datetime import datetime
 from hamlet.executor.utilities.database.database import Database
@@ -19,6 +20,7 @@ import hamlet.constants as c
 # pl.enable_string_cache(True)
 from hamlet.executor.utilities.tasks_execution.agent_task_executioner import AgentTaskExecutioner
 from hamlet.executor.utilities.tasks_execution.market_task_executioner import MarketTaskExecutioner
+from hamlet.executor.grids.grid import Grid
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -68,6 +70,9 @@ class Executor:
         # Overwrites the results folder if it already exists
         self.overwrite = overwrite_sim
 
+        # Maximal number of iterations per timesteps (when direct power control is activated)
+        self.max_iteration = 1
+
     def run(self):
         """Runs the simulation"""
         self.setup()
@@ -84,9 +89,7 @@ class Executor:
         self.__setup_database()
 
     def execute(self):
-        """Executes the scenario
-
-        """
+        """Executes the scenario"""
         # Loop through the timetable and execute the tasks for each market for each timestamp
         # Note: The design assumes that there is nothing to be gained for the simulation to run in between market
         #   timestamps. Therefore, the simulation is only executed for the market timestamps
@@ -104,26 +107,35 @@ class Executor:
             if self.type == 'rts':
                 self.__wait_for_ts(timestamp.iloc[0, 0])
 
-            # get current timestamp as string item for progress bar
-            timestamp_str = str(timestamp.select(c.TC_TIMESTAMP).sample(n=1).item())
+            # init variables for the grid simulation
+            grid_ok = False  # init variable, grid is not simulated yet
+            num_iteration = 0  # init number of iteration, max. 10
 
-            # Iterate over timestamp by region_tasks
-            for region_tasks in timestamp.partition_by(c.TC_REGION):
-                # get current region_tasks as string item for progress bar
-                region_name = str(region_tasks.select(c.TC_REGION).sample(n=1).item())
+            # get initial database at timestamp, in case this ts need to be overwritten
+            initial_db = deepcopy(self.database)
 
-                # update progress bar description
-                self.pbar.set_description(
-                    'Executing timestamp ' + timestamp_str + ' for region_tasks ' + region_name + ': ')
+            while not grid_ok:  # iterate until grid is working
+                num_iteration += 1
 
-                # Execute agent and market tasks
-                self.agent_task_executioner.execute(region_tasks)
-                self.market_task_executioner.execute(region_tasks)
+                # get current timestamp as string item for progress bar
+                timestamp_str = str(timestamp.select(c.TC_TIMESTAMP).sample(n=1).item())
 
-            # Calculate the grids for the current timestamp (calculated together as they are connected)
-            self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid: ')
+                # Iterate over timestamp by region_tasks
+                for region_tasks in timestamp.partition_by(c.TC_REGION):
+                    # get current region_tasks as string item for progress bar
+                    region_name = str(region_tasks.select(c.TC_REGION).sample(n=1).item())
 
-            self.__execute_grids()
+                    # update progress bar description
+                    self.pbar.set_description(
+                        'Executing timestamp ' + timestamp_str + ' for region_tasks ' + region_name + ': ')
+
+                    # Execute agent and market tasks
+                    self.agent_task_executioner.execute(region_tasks)
+                    self.market_task_executioner.execute(region_tasks)
+
+                # Calculate the grids for the current timestamp (calculated together as they are connected)
+                self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid: ')
+                grid_ok = self.__execute_grids(tasklist=timestamp, initial_db=initial_db, num_iteration=num_iteration)
 
             self.pbar.update(1)
 
@@ -137,6 +149,8 @@ class Executor:
 
         self.database.concat_market_files()
 
+        self.database.save_grid(os.path.dirname(self.path_results))
+
         self.pbar.set_description('Simulation finished: ')
 
     def pause(self):
@@ -147,10 +161,38 @@ class Executor:
         """Resumes the simulation"""
         raise NotImplementedError("Resume functionality not implemented yet")
 
-    def __execute_grids(self):
-        # # Pass info to grids class and execute its tasks
-        # Grid().execute()
-        return
+    def __execute_grids(self, tasklist: pl.DataFrame, initial_db: Database, num_iteration: int) -> (bool, dict):
+        """Execute grids for the given tasklist."""
+        # Only electricity grids is implemented now
+        grid_results = {}
+
+        # get grid databases
+        grids_data = self.database.get_grid_data()
+
+        # execute grids
+        grid_ok = True  # set a base variable for grid status
+        for grid_type, grid_db in grids_data.items():   # iterate through all grid types
+            result, single_grid_ok = Grid(grid_db=grid_db, tasks=tasklist, grid_type=c.G_ELECTRICITY,
+                                          database=self.database).execute()
+
+            grid_ok = grid_ok and single_grid_ok    # each grid should be ok
+
+            grid_results[grid_type] = result
+
+        # if number of iteration exceed maximal number of iteration, set grid_ok to True so that this timestep won't be
+        # simulated again
+        if num_iteration > self.max_iteration:
+            grid_ok = True
+
+        # if grid status is not ok, delete all simulated data for this ts, this ts needs to be simulated again
+        if not grid_ok:
+            self.database = deepcopy(initial_db)
+
+        # write grid results to database
+        for grid_type, grid_db in grid_results.items():
+            self.database.post_grids(grid_type=grid_type, grid=grid_db)
+
+        return grid_ok
 
     def __prepare_scenario(self):
         """Prepares the scenario"""
@@ -180,6 +222,10 @@ class Executor:
         """Creates a database connector object"""
 
         self.database.setup_database(self.structure)
+
+        # assign maximal number of iterations from the database
+        self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.K_GRID][c.G_ELECTRICITY]
+        ['direct_power_control']['max_iteration'])
 
     @staticmethod
     def __wait_for_ts(timestamp):

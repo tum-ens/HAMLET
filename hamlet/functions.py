@@ -4,6 +4,7 @@ import time
 import json
 import pandas as pd
 import polars as pl
+import numpy as np
 from ruamel.yaml import YAML
 from typing import Callable
 import hamlet.constants as c
@@ -322,3 +323,75 @@ def slice_dataframe_between_times(target_df, reference_ts, duration: int, unit='
     sliced_df = sliced_df.drop('timedelta')     # delete unnecessary column
 
     return sliced_df
+
+
+def add_info_from_col(df: pd.DataFrame, col: str, drop: bool = False, sep: str = ',', key_val_sep: str = ':') -> \
+        pd.DataFrame:
+    """
+    Adds information from a column to the dataframe.
+
+    The column should contain a string with the following format:
+    'key1:value1,key2:value2,...,keyN:valueN'
+
+    Parameters:
+        df (pd.DataFrame): The input dataframe
+        col (str): The column containing the information
+        drop (bool): Whether to drop the column containing the information
+        sep (str): The separator between key-value pairs
+        key_val_sep (str): The separator between keys and values
+
+    Returns:
+        pd.DataFrame: The dataframe with the information added as separate columns
+
+    Alternative method:
+        # Split the strings into separate key-value pairs
+        df['parsed'] = df[col].apply(lambda x: dict(tuple(i.split(key_val_sep)) for i in x.split(sep)))
+
+        # Get all the keys from the parsed strings
+        keys = set().union(*df['parsed'].apply(lambda x: x.keys()))
+
+        # Create separate columns for each key-value pair and fill with np.nan if not present
+        for key in keys:
+            df[key] = df['parsed'].apply(
+                lambda x: x.get(key, np.nan) if x.get(key, None) in ['NaN', 'nan'] else x.get(key, np.nan))
+
+        # Drop the original column and the intermediate parsed column
+        df.drop(columns=['col', 'parsed'], inplace=True)
+    """
+
+    # Turn the column into a dictionary
+    info = df[col].to_dict()
+
+    # Loop through the dictionary and create entries for the key-value pairs
+    for idx, val in info.items():
+        # Split the key-value pairs
+
+        key_value_pairs = val.split(sep)
+        # Create a dictionary for the key-value pairs
+        info[idx] = dict()
+
+        for key_value_pair in key_value_pairs:
+            # Split the key and value
+            key, value = key_value_pair.split(key_val_sep)
+
+            # Add the key-value pair to the dictionary and convert them to the desired data type
+            try:
+                info[idx][key] = int(value)
+            except ValueError:
+                try:
+                    info[idx][key] = float(value)
+                except ValueError:
+                    info[idx][key] = str(value)
+
+    # Create a dataframe from the dictionary
+    df = df.join(pd.DataFrame(info).T)
+
+    # Fill empty values and cells with string NaN and nan with NaN
+    df = df.replace(r'^\s*$', np.nan, regex=True)
+    df = df.replace(["NaN", "nan"], np.nan, regex=True)
+
+    # Drop the original column
+    if drop:
+        df.drop(columns=col, inplace=True)
+
+    return df
