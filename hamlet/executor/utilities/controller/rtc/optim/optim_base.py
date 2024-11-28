@@ -38,6 +38,7 @@ class OptimBase(RtcBase):
         self.define_variables()
         self.define_constraints()
         self.define_objective()
+        self.apply_grid_commands()
 
     def create_plants(self):
         """
@@ -107,4 +108,8 @@ class OptimBase(RtcBase):
         pass
 
     def define_objective(self):
+        pass
+
+    def apply_grid_commands(self):
+        """Apply grid commands if any"""
         pass

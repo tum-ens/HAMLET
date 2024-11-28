@@ -11,6 +11,7 @@ import polars as pl
 import pandapower as pp
 from hamlet import constants as c
 from hamlet import functions as f
+import pickle
 
 
 class GridDB:
@@ -40,11 +41,13 @@ class GridDB:
 
         self.results = {}               # grid simulation results
 
+        self.restriction_commands = {}  # dict for store and exchange grid restriction commands
+
     def register_grid(self, regions: dict):
         """Assign class attribute from data in grids folder."""
         raise NotImplementedError('The register_grid function must be implemented for each grids type.')
 
-    def save_grid(self, path: str):
+    def save_grid(self, **kwargs):
         """Save the grid results to the given path."""
         raise NotImplementedError('The save_grid function must be implemented for each grids type.')
 
@@ -70,10 +73,6 @@ class ElectricityGridDB(GridDB):
             'res_ext_grid': [],
             'res_load': [],
             'res_sgen': [],
-
-            # regulation results
-            'res_variable_grid_fees': [],
-            'res_direct_power_control': []
         }
 
     def register_grid(self, regions: dict):
@@ -86,7 +85,7 @@ class ElectricityGridDB(GridDB):
 
         """
 
-        match self.grid_config['method']:
+        match self.grid_config['generation']['method']:
 
             case 'file':        # create pandapower network from a complete electricity grid file
                 self.__create_grid_from_file(regions)
@@ -94,10 +93,14 @@ class ElectricityGridDB(GridDB):
             case 'topology':    # create pandapower network from a grid topology and agent data
                 self.__create_grid_from_topology(regions)
 
+        # scaling grid capacity for simulating grid restrictions
+        # self.grid.line['max_i_ka'] *= 0.015
+        # self.grid.trafo['sn_mva'] *= 0.015
+
         # this is for direct power control, add a column with minimal possible hp power to prevent infeasibility
         self.grid.load['hp_min_control'] = 0
 
-    def save_grid(self, path: str):
+    def save_grid(self, path):
         """
         Save the grid results to the given path.
 
@@ -105,9 +108,8 @@ class ElectricityGridDB(GridDB):
             path: path to save the grid results to.
 
         """
-
         # save pandapower grid object
-        pp.to_excel(self.grid, os.path.join(path, self.grid_config['file']['file']))
+        pp.to_excel(self.grid, os.path.join(path, self.grid_config['generation']['file']['file']))
 
         # save grid simulation results
         for key, data in self.results.items():
@@ -127,7 +129,7 @@ class ElectricityGridDB(GridDB):
         """
 
         # create pandapower network object from Excel file
-        grid_object = pp.from_excel(os.path.join(self.grid_path, self.grid_config['file']['file']))
+        grid_object = pp.from_excel(os.path.join(self.grid_path, self.grid_config['generation']['file']['file']))
 
         # unpack all agents to {agent_id: AgentDB}
         all_agents = {}

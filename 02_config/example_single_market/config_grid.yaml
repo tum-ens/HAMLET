@@ -8,37 +8,50 @@ grids:
 
     active: True                        # grid active
 
-    method: file                        # grid creation method
+    generation:
+      method: file                      # grid creation method
                                         # options:
                                         #   - file: create grid from 'electricity.xlsx'
                                         #   - topology: create scenario first, then user has to assign agent-id to bus
-                                        #     in 'topology.xlsx' file
+                                        #     in the topology Excel file
                                         # TODO: Create automatic grid generator, e.g. based on Kerber grids
 
-    file:
-      file: electricity.xlsx            # file that contains the grid information
+      file:
+        file: electricity.xlsx          # file that contains the grid information
                                         # file types: xlsx
                                         # note: needs to be in the same folder as this file
-    topology:
-      file: topology.xlsx
 
-    variable_grid_fees:
-      active: False
+      topology:
+        file: topology.xlsx
 
-      horizon: 86400                    # variable grid fees calculation horizon
-                                        # unit: s
 
-      update: 3600                      # variable grid fees update frequency
-                                        # unit: s
+    restrictions:
+      apply: ['enwg_14a']                # grid restrictions to be applied. Empty list means don't apply any restriction
 
-    direct_power_control:
-      active: False
+      max_iteration: 10                  # maximal number of iteration when iteratively applying restriction
 
-      control: individual               # types of direct power control
-                                        # individual: control individual devices
-                                        # ems: control via EMS
+      enwg_14a:                          # regulation according to section 14a of Energy Industry Act (§14a EnWG)
 
-      max_iteration: 10                 # maximal number of iteration
+        variable_grid_fees:              # https://www.bundesnetzagentur.de/DE/Beschlusskammern/1_GZ/BK8-GZ/2022/2022_4-Steller/BK8-22-0010/BK8-22-0010-A_Festlegung_Download.pdf?__blob=publicationFile&v=5
+          active: True
+
+          horizon: 86400                 # variable grid fees calculation horizon
+                                         # unit: s
+
+          update: 3600                   # variable grid fees update frequency
+                                         # unit: s
+
+          grid_fee_base: 0.07            # base grid fees
+                                         # unit: €/kWh
+
+        direct_power_control:            # https://www.bundesnetzagentur.de/DE/Beschlusskammern/1_GZ/BK6-GZ/2022/BK6-22-300/Beschluss/BK6-22-300_Beschluss_Anlage1.pdf?__blob=publicationFile&v=1
+          active: False
+
+          method: individual             # types of direct power control
+                                         # individual: control individual devices
+                                         # ems: control via EMS
+
+          threshold: 0.0042              # minimal power to be guaranteed in MW (according to §14a: 4.2 kW)
 
   heat:
     active: False

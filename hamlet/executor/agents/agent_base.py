@@ -18,7 +18,7 @@ from hamlet.executor.utilities.trading.trading import Trading
 class AgentBase:
     """Base class for all agents. It provides a default implementation of the run method."""
 
-    def __init__(self, agent_type: str, agent: AgentDB, timetable: pl.DataFrame, market: dict):
+    def __init__(self, agent_type: str, agent: AgentDB, timetable: pl.DataFrame, market: dict, grid_commands: dict):
 
         # Type of agent
         self.agent_type = agent_type
@@ -32,10 +32,13 @@ class AgentBase:
         # Market data
         self.market = market
 
+        # Grid data
+        self.grid_commands = grid_commands
+
     def execute(self):
         """Executes the agent"""
-        # Get the grid data from the database
-        self.get_grid_data()
+        # Apply grid commands
+        self.apply_grid_commands()
 
         # Get forecasts
         self.get_forecasts()
@@ -48,9 +51,11 @@ class AgentBase:
 
         return self.agent
 
-    def get_grid_data(self):
-        """Gets the grid data from the database"""
-        ...
+    def apply_grid_commands(self):
+        """Adjust data or parameter of agent to apply grid restriction commands."""
+        if ('current_variable_grid_fees' in self.grid_commands[c.G_ELECTRICITY] and
+                self.grid_commands[c.G_ELECTRICITY]['current_variable_grid_fees']):
+            self.__update_variable_grid_fees()
 
     def get_forecasts(self):
         """Gets the predictions for the agent"""
@@ -75,7 +80,8 @@ class AgentBase:
             controller = Controller(controller_type=controller, **params).create_instance()
 
             # Run the controller
-            self.agent = controller.run(agent=self.agent, timetable=self.timetable, market=self.market)
+            self.agent = controller.run(agent=self.agent, timetable=self.timetable, market=self.market,
+                                        grid_commands=self.grid_commands)
 
         return self.agent
 
@@ -108,3 +114,28 @@ class AgentBase:
             self.agent = strategy.create_bids_offers()
 
         return self.agent
+
+    def __update_variable_grid_fees(self):
+        """Update grid fees for agent in forecast (§14a EnWG regulation)."""
+        # get variable grid fees factor at the bus
+        bus_id = self.agent.account[c.K_GENERAL]['bus']
+        variable_grid_fees = self.grid_commands[c.G_ELECTRICITY]['current_variable_grid_fees'][bus_id]
+
+        # get target grid data in forecaster
+        grid_fees_train_data = self.agent.forecaster.train_data['lem_continuous_wholesale'][c.K_TARGET]
+
+        # adjust grid fees by replacing original grid fees with variable grid fees when available
+        grid_fees_train_data_new = (grid_fees_train_data.join(variable_grid_fees, on=c.TC_TIMESTAMP, how='left'))
+        grid_fees_train_data_new = grid_fees_train_data_new.with_columns(pl.when(pl.col(str(bus_id)).is_null())
+                                                                         .then(pl.col('grid_retail_buy'))
+                                                                         .otherwise(pl.col(str(bus_id)))
+                                                                         .alias('grid_retail_buy').cast(pl.Int32))
+        grid_fees_train_data_new = grid_fees_train_data_new.with_columns(pl.when(pl.col(str(bus_id)).is_null())
+                                                                         .then(pl.col('grid_local_buy'))
+                                                                         .otherwise(pl.col(str(bus_id)))
+                                                                         .alias('grid_local_buy').cast(pl.Int32))
+        grid_fees_train_data_new = grid_fees_train_data_new.drop(str(bus_id))
+
+        # write new grid fees to agent db object
+        self.agent.forecaster.update_forecaster(id='lem_continuous_wholesale', dataframe=grid_fees_train_data_new,
+                                                target=True)

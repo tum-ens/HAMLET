@@ -34,6 +34,8 @@ class Linopy(OptimBase):
     def __init__(self, **kwargs):
         self.loaded_model = False
         self.model_path = f"{kwargs['agent'].agent_save}/linopy_rtc.nc"
+        # grid commands
+        self.grid_commands = kwargs['grid_commands']
         super().__init__(**kwargs)
         self.ems = self.ems[c.C_LINOPY]
         # Save first model to file to load later
@@ -222,3 +224,89 @@ class Linopy(OptimBase):
 
         # Obtain the solution values
         return {name: int(sol) for name, sol in self.model.solution.items()}
+
+    def apply_grid_commands(self):
+        """Adjust model variables according to grid control commands if necessary."""
+        # apply direct power control (§14a EnWG regulation)
+        electricity_grid_command = self.grid_commands[c.G_ELECTRICITY]
+
+        if ('current_direct_power_control' in electricity_grid_command and
+                self.agent.agent_id in electricity_grid_command['current_direct_power_control']):
+
+            control_target = electricity_grid_command['current_direct_power_control'][self.agent.agent_id]
+
+            # iterate through all relevant plants in grid commands
+            for plant_id in control_target.keys():
+
+                plant_power = control_target[plant_id]
+
+                # get plant type
+                if plant_id == 'ems' and 'direct_power_control_ems' not in self.model.variables.labels:  # EMS control
+                    # add a new constraint to limit total load / generation
+                    if plant_power > 0:
+                        balance_equations = self.model.add_variables(name='direct_power_control_ems', lower=-inf,
+                                                                     upper=plant_power, integer=False)
+                    else:
+                        balance_equations = self.model.add_variables(name='direct_power_control_ems', lower=plant_power,
+                                                                     upper=inf, integer=False)
+
+                    # Loop through each variable and add it to the balance equation accordingly
+                    for variable_name, variable in self.model.variables.items():
+                        # Add the variable if it is a plant variable for the current energy type
+                        if variable_name.startswith(tuple(self.plant_objects)) and variable_name.endswith(
+                                c.ET_ELECTRICITY):
+                            # Get the component name by splitting the variable name at the underscore
+                            component_name = variable_name.split('_', 1)[0]
+
+                            # Get the component type by comparing the ID with the plant names
+                            component_type = [vals['type'] for plant, vals in self.plants.items()
+                                              if plant == component_name][0]
+
+                            # If the component type is in the mapping for the current energy type, add the variable to
+                            # the balance equation
+                            if c.ET_ELECTRICITY in self.mapping[component_type].keys():
+                                # Get the operation mode for the component and energy type
+                                component_energy_mode = self.mapping[component_type][c.ET_ELECTRICITY]
+
+                                # Add the variable to the balance equation
+                                if component_energy_mode == c.OM_GENERATION:
+                                    balance_equations += variable
+                                elif component_energy_mode == c.OM_LOAD:
+                                    balance_equations += variable
+                                elif component_energy_mode == c.OM_STORAGE:
+                                    balance_equations += variable
+                                else:
+                                    raise ValueError(f"Unsupported operation mode: {component_energy_mode}")
+                            else:
+                                # The component type is not in the mapping for the current energy type
+                                pass
+
+                    self.model.add_constraints(balance_equations == 0, name='direct_power_control_ems')
+
+                elif plant_id == 'ems' and 'direct_power_control_ems' in self.model.variables.labels:
+                    # check if ems power is positive (load) or negative (generation) and set boundary
+                    if plant_power > 0:
+                        self.model.variables['direct_power_control_ems'].upper = plant_power
+                    else:
+                        self.model.variables['direct_power_control_ems'].lower = plant_power
+
+                else:   # individual device control
+                    plant_type = self.plants[plant_id]['type']
+
+                    power_variable_name = '_'.join([plant_id, plant_type, c.ET_ELECTRICITY])
+                    target_variable_name = '_'.join([plant_id, plant_type, 'target'])
+
+                    # check if plant power is positive (load) or negative (generation) and set boundary
+                    if plant_power > 0:
+                        self.model.variables[power_variable_name].upper = plant_power
+                        self.model.variables[power_variable_name].lower = min(self.model.variables[power_variable_name]
+                                                                              .lower, plant_power)
+                    else:
+                        self.model.variables[power_variable_name].lower = plant_power
+                        self.model.variables[power_variable_name].upper = max(self.model.variables[power_variable_name]
+                                                                              .upper, plant_power)
+
+                    # set target value also to control target
+                    if target_variable_name in self.model.variables.labels:
+                        self.model.variables[target_variable_name].upper = plant_power
+                        self.model.variables[target_variable_name].lower = plant_power

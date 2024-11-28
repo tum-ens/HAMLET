@@ -85,22 +85,22 @@ class Grids:
             if config['active']:
                 path = os.path.join(self.scenario_path, 'grids', grid)
                 self.__create_folder(path=path, delete=False)
-                if config['method'] == 'file':
+                if config['generation']['method'] == 'file':
                     # Load grid file and save as json if it is an Excel file
-                    if config['file']['file'].split('.')[-1] == 'xlsx':
-                        net = pp.from_excel(os.path.join(self.config_path, config['file']['file']))
+                    if config['generation']['file']['file'].split('.')[-1] == 'xlsx':
+                        net = pp.from_excel(os.path.join(self.config_path, config['generation']['file']['file']))
                         pp.to_json(net, os.path.join(path, f'{grid}.json'))
 
                         # also copy xlsx file
-                        shutil.copy(os.path.join(self.config_path, config['file']['file']),
-                                    os.path.join(path, config['file']['file']))
+                        shutil.copy(os.path.join(self.config_path, config['generation']['file']['file']),
+                                    os.path.join(path, config['generation']['file']['file']))
                     # Copy file
                     else:
-                        shutil.copy(os.path.join(self.config_path, config['file']['file']),
-                                    os.path.join(path, config['file']['file']))
-                elif config['method'] == 'topology':
-                    shutil.copy(os.path.join(self.config_path, config['topology']['file']),
-                                os.path.join(path, config['topology']['file']))
+                        shutil.copy(os.path.join(self.config_path, config['generation']['file']['file']),
+                                    os.path.join(path, config['generation']['file']['file']))
+                elif config['generation']['method'] == 'topology':
+                    shutil.copy(os.path.join(self.config_path, config['generation']['topology']['file']),
+                                os.path.join(path, config['generation']['topology']['file']))
                 else:
                     # Load grid file and save as json
                     file = self._load_file(path=os.path.join(self.config_path, f'{grid}.xlsx'), index=0)
