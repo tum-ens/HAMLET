@@ -228,12 +228,11 @@ class Linopy(OptimBase):
     def apply_grid_commands(self):
         """Adjust model variables according to grid control commands if necessary."""
         # apply direct power control (§14a EnWG regulation)
-        electricity_grid_command = self.grid_commands[c.G_ELECTRICITY]
+        if (c.G_ELECTRICITY in self.grid_commands and
+                'current_direct_power_control' in self.grid_commands[c.G_ELECTRICITY] and
+                self.agent.agent_id in self.grid_commands[c.G_ELECTRICITY]['current_direct_power_control']):
 
-        if ('current_direct_power_control' in electricity_grid_command and
-                self.agent.agent_id in electricity_grid_command['current_direct_power_control']):
-
-            control_target = electricity_grid_command['current_direct_power_control'][self.agent.agent_id]
+            control_target = self.grid_commands[c.G_ELECTRICITY]['current_direct_power_control'][self.agent.agent_id]
 
             # iterate through all relevant plants in grid commands
             for plant_id in control_target.keys():
@@ -247,7 +246,8 @@ class Linopy(OptimBase):
                         balance_equations = self.model.add_variables(name='direct_power_control_ems', lower=-inf,
                                                                      upper=plant_power, integer=False)
                     else:
-                        balance_equations = self.model.add_variables(name='direct_power_control_ems', lower=plant_power,
+                        balance_equations = self.model.add_variables(name='direct_power_control_ems',
+                                                                     lower=plant_power,
                                                                      upper=inf, integer=False)
 
                     # Loop through each variable and add it to the balance equation accordingly
@@ -290,7 +290,7 @@ class Linopy(OptimBase):
                     else:
                         self.model.variables['direct_power_control_ems'].lower = plant_power
 
-                else:   # individual device control
+                else:  # individual device control
                     plant_type = self.plants[plant_id]['type']
 
                     power_variable_name = '_'.join([plant_id, plant_type, c.ET_ELECTRICITY])
@@ -299,12 +299,14 @@ class Linopy(OptimBase):
                     # check if plant power is positive (load) or negative (generation) and set boundary
                     if plant_power > 0:
                         self.model.variables[power_variable_name].upper = plant_power
-                        self.model.variables[power_variable_name].lower = min(self.model.variables[power_variable_name]
-                                                                              .lower, plant_power)
+                        self.model.variables[power_variable_name].lower = min(
+                            self.model.variables[power_variable_name]
+                            .lower, plant_power)
                     else:
                         self.model.variables[power_variable_name].lower = plant_power
-                        self.model.variables[power_variable_name].upper = max(self.model.variables[power_variable_name]
-                                                                              .upper, plant_power)
+                        self.model.variables[power_variable_name].upper = max(
+                            self.model.variables[power_variable_name]
+                            .upper, plant_power)
 
                     # set target value also to control target
                     if target_variable_name in self.model.variables.labels:
