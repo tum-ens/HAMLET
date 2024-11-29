@@ -5,13 +5,11 @@ __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
 import os
-
 import pandas as pd
 import polars as pl
 import pandapower as pp
 from hamlet import constants as c
 from hamlet import functions as f
-import pickle
 
 
 class GridDB:

@@ -64,6 +64,9 @@ def add_forecaster(agent_db, market_db, market_type, region_path):
     forecaster.init_forecaster()
     # TODO if forecaster is updated during the simulation (e.g. by update_local_market_in_forecasters),
     #  we need to load it here correctly
+    with open(os.path.join(agent_db.agent_save, 'forecaster_train.pickle'), 'rb') as handle:
+        forecaster.train_data = pickle.load(handle)
+
     agent_db.forecaster = forecaster  # register
 
 
