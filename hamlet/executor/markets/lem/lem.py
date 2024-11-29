@@ -647,16 +647,39 @@ class Lem(MarketBase):
             # pl.lit(retailer["grid_retail_sell"].alias("grid_retail_sell")),  # TODO: Add this once clearing differentiates between wholesale and local
             # pl.lit(retailer["grid_retail_buy"].alias("grid_retail_buy")),
         ])
-        # Adjust the price columns
+
+        # TODO: this part is specifically implemented for variable grid fees, agents have different grid price pu
+        grid = grid.with_columns(pl.lit(None).alias(c.TC_PRICE_PU_IN).cast(pl.Int32))
+        for agent_id in grid.select(c.TC_ID_AGENT).unique().to_series().to_list():
+            # get agent database
+            agent_db = self.database.get_agent_data(region=self.tasks[c.TC_REGION], agent_id=agent_id)
+            agent_retailer_data = agent_db.forecaster.train_data['lem_continuous_wholesale'][
+                c.K_TARGET]  # TODO: this part market name is hard-coded
+            grid_fee = agent_retailer_data.filter(pl.col(c.TC_TIMESTAMP) == self.tasks[c.TC_TIMESTEP]).select(
+                pl.col('grid_local_buy')).item()
+            grid = grid.with_columns(
+                # Energy pu prices  # TODO: Differentiate further between wholesale and local and balancing
+                pl.when(pl.col(c.TC_ID_AGENT) == agent_id).then(pl.lit(grid_fee)).otherwise(pl.col(c.TC_PRICE_PU_IN))
+                .alias(c.TC_PRICE_PU_IN).cast(pl.Int32)
+            )
         grid = grid.with_columns([
-            # Energy pu prices  # TODO: Differentiate further between wholesale and local and balancing
-            pl.when(pl.col(c.TC_ENERGY_IN).is_not_null()).then(pl.col("grid_market_buy"))
+            pl.when(pl.col(c.TC_ENERGY_IN).is_not_null()).then(pl.col(c.TC_PRICE_PU_IN))
             .otherwise(None).alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
             pl.when(pl.col(c.TC_ENERGY_OUT).is_not_null()).then(pl.col("grid_market_sell"))
             .otherwise(None).alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
             # Trade type
-            pl.lit(c.TT_GRID).alias(c.TC_TYPE_TRANSACTION).cast(pl.Categorical),
-        ])
+            pl.lit(c.TT_GRID).alias(c.TC_TYPE_TRANSACTION).cast(pl.Categorical)])
+
+        # Adjust the price columns
+        # grid = grid.with_columns([
+        #     # Energy pu prices  # TODO: Differentiate further between wholesale and local and balancing
+        #     pl.when(pl.col(c.TC_ENERGY_IN).is_not_null()).then(pl.col("grid_market_buy"))
+        #     .otherwise(None).alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
+        #     pl.when(pl.col(c.TC_ENERGY_OUT).is_not_null()).then(pl.col("grid_market_sell"))
+        #     .otherwise(None).alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
+        #     # Trade type
+        #     pl.lit(c.TT_GRID).alias(c.TC_TYPE_TRANSACTION).cast(pl.Categorical),
+        # ])
         # Calculate the total price
         grid = grid.with_columns([
             (pl.col(c.TC_PRICE_PU_IN) * pl.col(c.TC_ENERGY_IN)).alias(c.TC_PRICE_IN).cast(pl.Int64),
