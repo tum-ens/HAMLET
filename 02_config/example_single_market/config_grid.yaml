@@ -8,7 +8,7 @@ grids:
 
     active: True                        # grid active
 
-    method: file                        # grid creation method
+    method: topology                    # grid creation method
                                         # options:
                                         #   - file: create grid from 'electricity.xlsx'
                                         #   - topology: create scenario first, then user has to assign agent-id to bus
