@@ -1,12 +1,9 @@
-__author__ = "MarkusDoepfert"
+__author__ = "jiahechu"
 __credits__ = ""
 __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
-# This file is in charge of handling the grids in the execution of the scenario
-
-# Imports
 import os
 import math
 import pandas as pd
@@ -28,6 +25,8 @@ import hamlet.constants as c
 from hamlet.executor.grids.grid_base import GridBase
 from hamlet.executor.utilities.database.database import Database
 from hamlet.executor.utilities.database.grid_db import ElectricityGridDB
+
+# This file is in charge of handling electricity grids
 
 
 class Electricity(GridBase):

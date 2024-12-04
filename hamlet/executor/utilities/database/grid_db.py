@@ -30,7 +30,7 @@ class GridDB:
 
     def __init__(self, grid_type: str, grid_path: str, grid_config: dict):
 
-        self.grid_type = grid_type      # types of grid (electricity, heat, h2)
+        self.grid_type = grid_type      # type of grid (electricity, heat, h2)
 
         self.grid_path = grid_path      # path with grid files
 
@@ -381,7 +381,7 @@ class HeatGridDB(GridDB):
         super().__init__(grid_type, grid_path, grid_config)
 
     def register_grid(self, regions: dict):
-        raise NotImplementedError('The heat grids is not implemented yet.')
+        raise NotImplementedError('The heat grids are not implemented yet.')
 
 
 class HydrogenGridDB(GridDB):
@@ -389,4 +389,4 @@ class HydrogenGridDB(GridDB):
         super().__init__(grid_type, grid_path, grid_config)
 
     def register_grid(self, regions: dict):
-        raise NotImplementedError('The hydrogen grids is not implemented yet.')
+        raise NotImplementedError('The hydrogen grids are not implemented yet.')
