@@ -14,7 +14,7 @@ grids:
                                         #   - True: grid is active and will be calculated during simulation
                                         #   - False: grid is inactive and will be ignored during simulation
 
-    method: file                        # grid creation method
+    method: topology                    # grid creation method
                                         # options:
                                         #   - file: create grid from file
                                         #   - topology: create scenario first, then user has to assign agent-id to bus
