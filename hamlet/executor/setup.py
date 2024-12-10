@@ -172,7 +172,7 @@ class Executor:
         # execute grids
         grid_ok = True  # set a base variable for grid status
         for grid_type, grid_db in grids_data.items():   # iterate through all grid types
-            result, single_grid_ok = Grid(grid_db=grid_db, tasks=tasklist, grid_type=c.G_ELECTRICITY,
+            result, single_grid_ok = Grid(grid_db=grid_db, tasks=tasklist, grid_type=grid_type,
                                           database=self.database).execute()
 
             grid_ok = grid_ok and single_grid_ok    # each grid should be ok

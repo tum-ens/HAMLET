@@ -4,23 +4,15 @@ __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
-import os
+
 import math
-import pandas as pd
 import polars as pl
 import numpy as np
-import time
-import pytz
-import logging
-import traceback
-import matplotlib.pyplot as plt
-from datetime import datetime
+import pandas as pd
 from copy import deepcopy
 import pandapower as pp
-from pandapower.timeseries import DFData, OutputWriter
-from pandapower.timeseries.run_time_series import run_timeseries
+from pandapower.timeseries import DFData
 from pandapower.control import ConstControl
-import networkx as nx
 import hamlet.constants as c
 from hamlet.executor.grids.grid_base import GridBase
 from hamlet.executor.utilities.database.database import Database
@@ -51,177 +43,37 @@ class Electricity(GridBase):
         grid_ok = True
 
         # Convert trade data to grid parameters
-        self.__write_grid_parameters()
+        self._write_grid_parameters()
 
         # Calculate the power flows
-        self.__calculate_powerflow()
+        self._calculate_powerflow()
 
         # Generate new grid db object with results
-        self.__write_result_to_grid_db()
+        self._write_result_to_grid_db()
 
         return self.grid_db, grid_ok
 
-    def __write_grid_parameters(self):
-        """Write grid parameters like active/reactive power of loads and generations to grid object."""
-        # write parameters for load
-        load_df = self.grid.load
-        load_df.fillna({'cos_phi': 1}, inplace=True)    # if cos phi data is missing, assume the phase angle is 0
+    def _write_grid_parameters(self, is_timeseries=False):
+        """Write grid parameters for a single timestamp."""
+        # Process loads
+        self.__process_elements(
+            df=self.grid.load.copy(),
+            element_name='load',
+            power_sign=-1,
+            type_field='load_type',
+            is_timeseries=is_timeseries
+        )
 
-        for index in load_df.index:     # iterate through all loads
-            if load_df.loc[index, c.TC_ID_AGENT] is not None and load_df.loc[index, c.TC_ID_PLANT] is not None:
-                # get corresponding agent database
-                region = load_df.loc[index, 'zone']
-                agent_db = self.database.get_agent_data(region=region, agent_type=load_df.loc[index, 'agent_type'],
-                                                        agent_id=load_df.loc[index, c.TC_ID_AGENT])
-                column_name = (load_df.loc[index, c.TC_ID_PLANT] + '_' + load_df.loc[index, 'load_type'] + '_' +
-                               c.ET_ELECTRICITY)    # get column name for the plant in setpoints dataframe
+        # Process sgens
+        self.__process_elements(
+            df=self.grid.sgen.copy(),
+            element_name='sgen',
+            power_sign=1,
+            type_field='plant_type',
+            is_timeseries=is_timeseries
+        )
 
-                # calculate active power
-                p_mw = (agent_db.setpoints.filter(pl.col(c.TC_TIMESTAMP) == self.timestamp).select(column_name).item() *
-                        c.WH_TO_MWH)
-
-                # assign active power to grid
-                load_df.loc[index, 'p_mw'] = - p_mw
-
-                # calculate reactive power for ac power flow
-                if self.method == 'ac':
-                    # convert power factor to phase angle in radians
-                    phi = math.acos(load_df.loc[index, 'cos_phi'])
-
-                    # calculate reactive power
-                    q_mvar = p_mw * math.tan(phi)
-
-                    # assign reactive power to grid
-                    load_df.loc[index, 'q_mvar'] = q_mvar
-
-        # write parameters for sgen
-        sgen_df = self.grid.sgen
-        sgen_df.fillna({'cos_phi': 0}, inplace=True)    # if cos phi data is missing, assume the phase angle is 0
-
-        for index in sgen_df.index:     # iterate through all sgens
-            if sgen_df.loc[index, c.TC_ID_AGENT] is not None and sgen_df.loc[index, c.TC_ID_PLANT] is not None:
-                # get corresponding agent database
-                region = sgen_df.loc[index, 'zone']
-                agent_db = self.database.get_agent_data(region=region, agent_type=sgen_df.loc[index, 'agent_type'],
-                                                        agent_id=sgen_df.loc[index, c.TC_ID_AGENT])
-                column_name = (sgen_df.loc[index, c.TC_ID_PLANT] + '_' + sgen_df.loc[index, 'plant_type'] + '_' +
-                               c.ET_ELECTRICITY)    # get column name for the plant in setpoints dataframe
-
-                # calculate active power
-                p_mw = (agent_db.setpoints.filter(pl.col(c.TC_TIMESTAMP) == self.timestamp).select(column_name).item() *
-                        c.WH_TO_MWH)
-
-                # assign active power to grid
-                sgen_df.loc[index, 'p_mw'] = p_mw
-
-                # calculate reactive power for ac power flow
-                if self.method == 'ac':
-                    # convert power factor to phase angle in radians
-                    phi = math.acos(sgen_df.loc[index, 'cos_phi'])
-
-                    # calculate reactive power
-                    q_mvar = p_mw * math.tan(phi)
-
-                    # assign reactive power to grid
-                    sgen_df.loc[index, 'q_mvar'] = q_mvar
-
-        # write load df and sgen df back to grid
-        self.grid.load = load_df
-        self.grid.sgen = sgen_df
-
-    def __write_grid_parameters_for_timeseries(self):
-        """
-        Write grid parameters like controllers of loads and generations to grid object for time series calculation.
-        """
-        # write timeseries controller for loads
-        load_df = self.grid.load
-        load_df.fillna({'cos_phi': 0}, inplace=True)    # if cos phi data is missing, assume the phase angle is 0
-
-        # get unique agent ids and loop through them
-        agents_id = load_df[c.TC_ID_AGENT].unique()
-
-        for agent_id in agents_id:  # iterate through all agents
-            loads_for_agent = load_df[load_df[c.TC_ID_AGENT] == agent_id]   # get the part of load df for this agent
-            region = loads_for_agent['zone'].unique()[0]    # get the region where the agent is
-            agent_type = loads_for_agent['agent_type'].unique()[0]      # get agent type
-
-            # get agent db object
-            agent_db = self.database.get_agent_data(region=region, agent_type=agent_type, agent_id=agent_id)
-
-            # get agent setpoints as datasource for pandapower
-            setpoints = agent_db.setpoints.to_pandas()
-            setpoints[setpoints.select_dtypes(include=['number']).columns] *= - c.WH_TO_MWH
-
-            # define datasource
-            datasource = DFData(setpoints)
-
-            # iterate through plants
-            for load_index in loads_for_agent.index:
-                column_name = (loads_for_agent.loc[load_index, c.TC_ID_PLANT] + '_' +
-                               loads_for_agent.loc[load_index, 'load_type'] + '_' + c.ET_ELECTRICITY)
-
-                # add controller
-                ConstControl(self.grid, element='load', variable='p_mw', element_index=load_index,
-                             data_source=datasource, profile_name=[column_name])
-
-                # calculate reactive power for ac powerflow
-                if self.method == 'ac':
-                    # convert power factor to phase angle in radians
-                    phi = math.acos(loads_for_agent.loc[load_index, 'cos_phi'])
-
-                    # calculate reactive power
-                    q_mvar = setpoints[column_name] * math.tan(phi)
-
-                    # assign reactive power to grid
-                    datasource_q = DFData(q_mvar)   # data source
-                    ConstControl(self.grid, element='load', variable='q_mvar', element_index=load_index,
-                                 data_source=datasource_q, profile_name=[column_name])      # controller
-
-        # write timeseries controller for sgens
-        sgen_df = self.grid.sgen
-        sgen_df.fillna({'cos_phi': 0}, inplace=True)    # if cos phi data is missing, assume the phase angle is 0
-
-        # get unique agent ids and loop through them
-        agents_id = sgen_df[c.TC_ID_AGENT].unique()
-
-        for agent_id in agents_id:  # iterate through all agents
-            sgen_for_agent = sgen_df[sgen_df[c.TC_ID_AGENT] == agent_id]  # get the part of sgen df for this agent
-            region = sgen_for_agent['zone'].unique()[0]  # get the region where the agent is
-            agent_type = sgen_for_agent['agent_type'].unique()[0]  # get agent type
-
-            # get agent db object
-            agent_db = self.database.get_agent_data(region=region, agent_type=agent_type, agent_id=agent_id)
-
-            # get agent setpoints as datasource for pandapower
-            setpoints = agent_db.setpoints.to_pandas()
-            setpoints[setpoints.select_dtypes(include=['number']).columns] *= c.WH_TO_MWH # / resolution
-
-            # define datasource
-            datasource = DFData(setpoints)
-
-            # iterate through plants
-            for sgen_index in sgen_for_agent.index:
-                column_name = (sgen_for_agent.loc[sgen_index, c.TC_ID_PLANT] + '_' +
-                               sgen_for_agent.loc[sgen_index, 'plant_type'] + '_' + c.ET_ELECTRICITY)
-
-                # add controller
-                ConstControl(self.grid, element='sgen', variable='p_mw', element_index=sgen_index,
-                             data_source=datasource, profile_name=[column_name])
-
-                # calculate reactive power for ac powerflow
-                if self.method == 'ac':
-                    # convert power factor to phase angle in radians
-                    phi = math.acos(sgen_for_agent.loc[sgen_index, 'cos_phi'])
-
-                    # Calculate reactive power
-                    q_mvar = setpoints[column_name] * math.tan(phi)
-
-                    # assign reactive power to grid
-                    datasource_q = DFData(q_mvar)   # data source
-                    ConstControl(self.grid, element='sgen', variable='q_mvar', element_index=sgen_index,
-                                 data_source=datasource_q, profile_name=[column_name])      # controller
-
-    def __calculate_powerflow(self):
+    def _calculate_powerflow(self):
         """Calculates the power flows."""
 
         match self.method:
@@ -234,20 +86,7 @@ class Electricity(GridBase):
             case 'dcopf':
                 pp.rundcopp(self.grid)
 
-    def __check_overloads(self) -> bool:
-        """Check if grid is overloaded."""
-        # check trafo overload
-        trafo_overloaded = self.grid.res_trafo['loading_percent'].max() > 100
-
-        # check line overload
-        line_overloaded = self.grid.res_line['loading_percent'].max() > 100
-
-        # check voltage pu
-        # to be implemented
-
-        return trafo_overloaded or line_overloaded
-
-    def __write_result_to_grid_db(self):
+    def _write_result_to_grid_db(self):
         """Write result from executed grid to grid db object."""
         timestamp_str = str(self.timestamp)
 
@@ -256,3 +95,98 @@ class Electricity(GridBase):
                 result_df = deepcopy(getattr(self.grid, key))
                 result_df.insert(0, c.TC_TIMESTAMP, timestamp_str)
                 self.grid_db.results[key].append(result_df)
+
+    def __process_elements(self, df, element_name, power_sign, type_field, is_timeseries):
+        """
+        Process and adjust grid elements according to agent data.
+
+        Args:
+            df (pd.DataFrame): dataframe of grid element (normally load or sgen).
+            element_name (string): name of grid element (normally load or sgen).
+            power_sign (-1 or 1): power sign of grid element (normally -1 for load and 1 for sgen).
+            type_field (string): name of the column containing plant type (currently 'load_type' for load and '
+            plant_type' for sgen).
+            is_timeseries (boolean): True if grid element is timeseries, False otherwise.
+        """
+        # prepare_data
+        df.fillna({'cos_phi': 1}, inplace=True)     # if cos phi data is missing, assume the phase angle is 0
+        valid_df = df[df[c.TC_ID_AGENT].notnull() & df[c.TC_ID_PLANT].notnull()]
+        grouped = valid_df.groupby(c.TC_ID_AGENT)
+
+        # iterate through all agents and get setpoints data
+        for agent_id, agent_elements in grouped:
+            # get agent db object from the main database
+            region = agent_elements['zone'].iloc[0]
+            agent_type = agent_elements['agent_type'].iloc[0]
+            agent_db = self.database.get_agent_data(region=region, agent_type=agent_type, agent_id=agent_id)
+
+            # get setpoints data from agent db object depending on whether calculating timeseries
+            setpoints = agent_db.setpoints.to_pandas()
+            if not is_timeseries:
+                setpoints = setpoints[setpoints[c.TC_TIMESTAMP] == self.timestamp]
+
+            # adjust numeric columns for units
+            numeric_cols = setpoints.select_dtypes(include='number').columns
+            setpoints[numeric_cols] *= power_sign * c.WH_TO_MWH
+
+            # rename corresponding columns
+            agent_elements['column_name'] = (
+                    agent_elements[c.TC_ID_PLANT] + '_' + agent_elements[type_field] + '_' + c.ET_ELECTRICITY
+            )
+            columns = agent_elements['column_name'].tolist()
+
+            # update grid data
+            if is_timeseries:
+                self.__add_controller_to_grid(agent_elements, setpoints, element_name)
+            else:
+                p_mw_values, q_mvar_values = self.__calculate_power(setpoints, columns, agent_elements)
+                df.loc[agent_elements.index, 'p_mw'] = p_mw_values.values
+                if q_mvar_values is not None:
+                    df.loc[agent_elements.index, 'q_mvar'] = q_mvar_values
+
+        # write result df back to the grid if not timeseries
+        if not is_timeseries:
+            setattr(self.grid, element_name, df)
+
+    def __calculate_power(self, setpoints, columns, agent_elements):
+        """
+        Calculate active and reactive power from setpoints and columns.
+
+        Args:
+            setpoints (DataFrame): dataframe of setpoint.
+            columns (list): list of column names for plants.
+            agent_elements (DataFrame): dataframe of grid elements belonging to the agent.
+        """
+
+        p_mw_values = setpoints.loc[:, columns]
+        if self.method == 'ac':
+            phi = np.arccos(agent_elements['cos_phi'])
+            q_mvar_values = p_mw_values.values * np.tan(phi)
+            return p_mw_values.T, q_mvar_values.T
+        else:
+            return p_mw_values.T, None
+
+    def __add_controller_to_grid(self, agent_elements, setpoints, element_name):
+        """
+        Add controller to the grid for timeseries calculation.
+
+        Args:
+            agent_elements (DataFrame): dataframe of grid elements belonging to the agent.
+            setpoints (DataFrame): dataframe of setpoint.
+            element_name (string): name of grid element (normally load or sgen).
+        """
+        datasource = DFData(setpoints)
+        for idx, row in agent_elements.iterrows():
+            column_name = row['column_name']
+            # Add controller for p_mw
+            ConstControl(self.grid, element=element_name, variable='p_mw', element_index=idx,
+                         data_source=datasource, profile_name=[column_name])
+
+            if self.method == 'ac':
+                phi = math.acos(row['cos_phi'])
+                q_mvar_series = setpoints[column_name] * np.tan(phi)
+                # Assign reactive power controller
+                datasource_q = DFData(pd.DataFrame({column_name: q_mvar_series}))
+                ConstControl(self.grid, element=element_name, variable='q_mvar', element_index=idx,
+                             data_source=datasource_q, profile_name=[column_name])
+

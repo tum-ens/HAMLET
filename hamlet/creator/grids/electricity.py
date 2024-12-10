@@ -18,15 +18,15 @@ class Electricity(Grids):
         self.methods = ['file']
 
     def create_grids(self) -> None:
-        """Creates the grids from the configuration file
+        """
+        Creates the grids from the configuration file.
+
+        Currently, the grid doesn't really need to be created, only grid file need to be copied. So this function does
+        nothing now. If e.g. synthetic grid generation is implemented in the future, this function need to be adjusted
+        accordingly.
 
         Returns:
             None
         """
 
-        if self.grid['method'] == 'file':
-            return None
-        else:
-            raise ValueError(f'Method "{self.grid["method"]}" not available. Available methods are: {self.methods}')
-
-        # return grid
+        pass

@@ -54,15 +54,11 @@ class Grids:
         for grid, config in self.config['grids'].items():
             if grid in self.types:
                 if config['active']:
-                    if config['method'] == 'file':
-                        continue
-                    else:
-                        # Create grid
-                        grid = self.types[grid](config=config, config_path=self.config_path, input_path=self.input_path,
-                                                scenario_path=self.scenario_path, config_root=self.config_root)
+                    grid = self.types[grid](config=config, config_path=self.config_path, input_path=self.input_path,
+                                            scenario_path=self.scenario_path, config_root=self.config_root)
 
-                        # Create grid
-                        dict_grids[grid] = grid.create_grid()
+                    # Create grid
+                    dict_grids[grid] = grid.create_grid()
             else:
                 raise ValueError(f'Grid type "{grid}" not available. Available types are: {list(self.types.keys())}')
 
@@ -85,27 +81,10 @@ class Grids:
             if config['active']:
                 path = os.path.join(self.scenario_path, 'grids', grid)
                 self.__create_folder(path=path, delete=False)
-                if config['method'] == 'file':
-                    # Load grid file and save as json if it is an Excel file
-                    if config['file']['file'].split('.')[-1] == 'xlsx':
-                        net = pp.from_excel(os.path.join(self.config_path, config['file']['file']))
-                        pp.to_json(net, os.path.join(path, f'{grid}.json'))
 
-                        # also copy xlsx file
-                        shutil.copy(os.path.join(self.config_path, config['file']['file']),
-                                    os.path.join(path, config['file']['file']))
-                    # Copy file
-                    else:
-                        shutil.copy(os.path.join(self.config_path, config['file']['file']),
-                                    os.path.join(path, config['file']['file']))
-                elif config['method'] == 'topology':
-                    shutil.copy(os.path.join(self.config_path, config['topology']['file']),
-                                os.path.join(path, config['topology']['file']))
-                else:
-                    # Load grid file and save as json
-                    file = self._load_file(path=os.path.join(self.config_path, f'{grid}.xlsx'), index=0)
-                    self._save_file(path=os.path.join(path, f'{grid}.xlsx'), data=file)
-
+                # copy grid file
+                shutil.copy(os.path.join(self.config_path, config['file'][config['method']]),
+                            os.path.join(path, config['file'][config['method']]))
             else:
                 pass
 
