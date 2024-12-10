@@ -111,6 +111,8 @@ class ElectricityGridDB(GridDB):
 
         # assign relevant plant type
         self.relevant_plant_type = self.filter_energy_types()
+        self.relevant_plant_type[c.OM_STORAGE].remove(c.P_EV)   # remove ev from storage
+        self.relevant_plant_type[c.OM_LOAD].append(c.P_EV)      # add ev to load
         self.relevant_plant_type['sgen'] = self.relevant_plant_type.pop(c.OM_GENERATION)     # rename generation
         self.relevant_plant_type['sgen'].extend(self.relevant_plant_type[c.OM_STORAGE])      # combine sgen and storage
 
@@ -154,7 +156,6 @@ class ElectricityGridDB(GridDB):
             regions: dictionary contains all RegionDBs.
 
         """
-
         # unpack all agents to {agent_id: AgentDB}
         all_agents = {}
         for region in regions.values():

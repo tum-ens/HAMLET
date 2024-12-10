@@ -127,14 +127,14 @@ class Executor:
 
                     # update progress bar description
                     self.pbar.set_description(
-                        'Executing timestamp ' + timestamp_str + ' for region_tasks ' + region_name + ': ')
+                        'Executing timestamp ' + timestamp_str + ' for region_tasks ' + region_name)
 
                     # Execute agent and market tasks
                     self.agent_task_executioner.execute(region_tasks)
                     self.market_task_executioner.execute(region_tasks)
 
                 # Calculate the grids for the current timestamp (calculated together as they are connected)
-                self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid: ')
+                self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid')
                 grid_ok = self.__execute_grids(tasklist=timestamp, initial_db=initial_db, num_iteration=num_iteration)
 
             self.pbar.update(1)
@@ -151,7 +151,7 @@ class Executor:
 
         self.database.save_grid(os.path.dirname(self.path_results))
 
-        self.pbar.set_description('Simulation finished: ')
+        self.pbar.set_description('Simulation finished')
 
     def pause(self):
         """Pauses the simulation"""
@@ -224,7 +224,7 @@ class Executor:
         self.database.setup_database(self.structure)
 
         # assign maximal number of iterations from the database
-        self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.K_GRID][c.G_ELECTRICITY]
+        self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]
         ['direct_power_control']['max_iteration'])
 
     @staticmethod

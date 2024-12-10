@@ -35,7 +35,7 @@ class Electricity(GridBase):
         self.timestamp = self.tasks.select(c.TC_TIMESTAMP).sample(n=1).item()
 
         # Calculation method
-        self.method = self.database.get_general_data()[c.K_GRID][c.K_GRID][c.G_ELECTRICITY]['powerflow']
+        self.method = self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['powerflow']
 
     def execute(self):
         """Executes the grids"""

@@ -504,7 +504,7 @@ class Database:
         Currently only electricity grids is implemented.
 
         """
-        grid_dict = self.__general[c.K_GRID][c.K_GRID]
+        grid_dict = self.__general[c.K_GRID]
         grid_path = os.path.join(self.__scenario_path, 'grids')
 
         # register electricity grid if activated

@@ -77,14 +77,14 @@ class Grids:
         """
 
         # Copy grids
-        for grid, config in self.config['grids'].items():
+        for grid, config in self.config.items():
             if config['active']:
                 path = os.path.join(self.scenario_path, 'grids', grid)
                 self.__create_folder(path=path, delete=False)
 
                 # copy grid file
-                shutil.copy(os.path.join(self.config_path, config['file'][config['method']]),
-                            os.path.join(path, config['file'][config['method']]))
+                shutil.copy(os.path.join(self.config_path, config[config['method']]['file']),
+                            os.path.join(path, config[config['method']]['file']))
             else:
                 pass
 
