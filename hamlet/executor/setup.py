@@ -127,14 +127,14 @@ class Executor:
 
                     # update progress bar description
                     self.pbar.set_description(
-                        'Executing timestamp ' + timestamp_str + ' for region_tasks ' + region_name + ': ')
+                        'Executing timestamp ' + timestamp_str + ' for region_tasks ' + region_name)
 
                     # Execute agent and market tasks
                     self.agent_task_executioner.execute(region_tasks)
                     self.market_task_executioner.execute(region_tasks)
 
                 # Calculate the grids for the current timestamp (calculated together as they are connected)
-                self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid: ')
+                self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid')
                 grid_ok = self.__execute_grids(tasklist=timestamp, initial_db=initial_db, num_iteration=num_iteration)
 
             self.pbar.update(1)
@@ -149,7 +149,7 @@ class Executor:
 
         self.database.concat_market_files()
 
-        self.pbar.set_description('Simulation finished: ')
+        self.pbar.set_description('Simulation finished')
 
     def pause(self):
         """Pauses the simulation"""
@@ -170,7 +170,7 @@ class Executor:
         # execute grids
         grid_ok = True  # set a base variable for grid status
         for grid_type, grid_db in grids_data.items():   # iterate through all grid types
-            result, single_grid_ok = Grid(grid_db=grid_db, tasks=tasklist, grid_type=c.G_ELECTRICITY,
+            result, single_grid_ok = Grid(grid_db=grid_db, tasks=tasklist, grid_type=grid_type,
                                           database=self.database).execute()
 
             grid_ok = grid_ok and single_grid_ok    # each grid should be ok
@@ -222,8 +222,7 @@ class Executor:
         self.database.setup_database(self.structure)
 
         # assign maximal number of iterations from the database
-        self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.K_GRID][c.G_ELECTRICITY]['restrictions']
-        ['max_iteration'])
+        self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['restrictions']['max_iteration'])
 
     @staticmethod
     def __wait_for_ts(timestamp):

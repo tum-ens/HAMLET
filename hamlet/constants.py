@@ -1,3 +1,9 @@
+__author__ = "MarkusDoepfert"
+__credits__ = "jiahechu"
+__license__ = ""
+__maintainer__ = "MarkusDoepfert"
+__email__ = "markus.doepfert@tum.de"
+
 # This file contains all constants used in the project
 import polars as pl
 
