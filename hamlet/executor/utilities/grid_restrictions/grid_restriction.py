@@ -9,7 +9,7 @@ from hamlet.executor.utilities.database.database import Database
 from hamlet.executor.utilities.grid_restrictions.enwg_14a import EnWG14a
 
 
-class GridRegulator:
+class GridRestriction:
 
     def __init__(self, grid_db, tasks: pl.DataFrame, restriction_type: str, database: Database, **kwargs):
 

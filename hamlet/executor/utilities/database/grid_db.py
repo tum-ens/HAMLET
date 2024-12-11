@@ -29,21 +29,21 @@ class GridDB:
 
     def __init__(self, grid_type: str, grid_path: str, grid_config: dict):
 
-        self.grid_type = grid_type      # type of grid (electricity, heat, h2)
+        self.grid_type = grid_type  # type of grid (electricity, heat, h2)
 
-        self.grid_path = grid_path      # path with grid files
+        self.grid_path = grid_path  # path with grid files
 
         self.grid_config = grid_config  # grid configuration dict
 
-        self.grid = None                # grids object will be created when calling register_grid function.
+        self.grid = None  # grids object will be created when calling register_grid function.
 
-        self.results = {}               # grid simulation results
+        self.results = {}  # grid simulation results
 
         self.restriction_commands = {}  # dict for store and exchange grid restriction commands
 
-        self.energy_type = None         # energy type of the grid
+        self.energy_type = None  # energy type of the grid
 
-        self.relevant_plant_type = {}        # relevant plant type for the grid
+        self.relevant_plant_type = {}  # relevant plant type for the grid
 
     def register_grid(self, regions: dict):
         """Assign class attribute from data in grids folder."""
@@ -104,22 +104,23 @@ class ElectricityGridDB(GridDB):
 
         """
         # read pandapower network object from Excel file
-        self.grid = pp.from_excel(os.path.join(self.grid_path, self.grid_config[self.grid_config['method']]['file']))
+        self.grid = pp.from_excel(os.path.join(self.grid_path, self.grid_config['generation']
+        [self.grid_config['generation']['method']]['file']))
 
         # assign relevant plant type
         self.relevant_plant_type = self.filter_energy_types()
-        self.relevant_plant_type[c.OM_STORAGE].remove(c.P_EV)   # remove ev from storage
-        self.relevant_plant_type[c.OM_LOAD].append(c.P_EV)      # add ev to load
-        self.relevant_plant_type['sgen'] = self.relevant_plant_type.pop(c.OM_GENERATION)     # rename generation
-        self.relevant_plant_type['sgen'].extend(self.relevant_plant_type[c.OM_STORAGE])      # combine sgen and storage
+        self.relevant_plant_type[c.OM_STORAGE].remove(c.P_EV)  # remove ev from storage
+        self.relevant_plant_type[c.OM_LOAD].append(c.P_EV)  # add ev to load
+        self.relevant_plant_type['sgen'] = self.relevant_plant_type.pop(c.OM_GENERATION)  # rename generation
+        self.relevant_plant_type['sgen'].extend(self.relevant_plant_type[c.OM_STORAGE])  # combine sgen and storage
 
         # create detailed grid components
         match self.grid_config['generation']['method']:
 
-            case 'file':        # create pandapower network from a complete electricity grid file
+            case 'file':  # create pandapower network from a complete electricity grid file
                 self._create_grid_from_file(regions)
 
-            case 'topology':    # create pandapower network from a grid topology and agent data
+            case 'topology':  # create pandapower network from a grid topology and agent data
                 self._create_grid_from_topology(regions)
 
             case _:
@@ -242,7 +243,7 @@ class ElectricityGridDB(GridDB):
                                    'zone': region_name, 'cos_phi': 0}
 
                         # generate grid component
-                        if plant['type'] in self.relevant_plant_type['load']:    # create load
+                        if plant['type'] in self.relevant_plant_type['load']:  # create load
                             pp.create_load(self.grid, bus=agents_bus[agent_id], p_mw=0, load_type=plant['type'],
                                            **kw_args)
                         elif plant['type'] in self.relevant_plant_type['sgen']:
@@ -253,7 +254,8 @@ class ElectricityGridDB(GridDB):
         self.grid.load.dropna(subset=[c.TC_ID_AGENT], inplace=True)
         self.grid.sgen.dropna(subset=[c.TC_ID_AGENT], inplace=True)
 
-    def __get_grid_element_dataframe(self, element_name: str, type_field: str, add_columns: list) -> (pd.DataFrame, list):
+    def __get_grid_element_dataframe(self, element_name: str, type_field: str, add_columns: list) -> (
+    pd.DataFrame, list):
         """
         Get dataframe and pre-process it for the given grid element.
 
@@ -269,8 +271,8 @@ class ElectricityGridDB(GridDB):
         """
         # get dataframe and unpack description column
         df = f.add_info_from_col(df=getattr(self.grid, element_name).copy(), col='description', drop=False)
-        df = df.loc[df[type_field].isin(self.relevant_plant_type[element_name])]   # remove unnecessary plants from grid
-        df[add_columns] = 0   # add additional columns
+        df = df.loc[df[type_field].isin(self.relevant_plant_type[element_name])]  # remove unnecessary plants from grid
+        df[add_columns] = 0  # add additional columns
 
         # add region to df
         bus_df = self.grid.bus.copy()
@@ -441,13 +443,14 @@ class ElectricityGridDB(GridDB):
         plant_file = plants_df.loc[plants_df_index, 'file']
 
         available_plant = element_df.loc[element_df[type_field] == plant_type] \
-                                    .loc[element_df['bus'] == agent.account[c.K_GENERAL]['bus']] \
-                                    .loc[element_df[c.TC_ID_PLANT] == None]
+            .loc[element_df['bus'] == agent.account[c.K_GENERAL]['bus']] \
+            .loc[element_df[c.TC_ID_PLANT] == None]
 
         for grid_index in available_plant.index:
             # since file name is checked before, here also check if file_add name matches
             if plant_file == available_plant.loc[grid_index, 'file'] or ('file_add' in available_plant.columns and
-                    plant_file == available_plant.loc[grid_index, 'file_add']):
+                                                                         plant_file == available_plant.loc[
+                                                                             grid_index, 'file_add']):
                 element_df.loc[grid_index, c.TC_ID_PLANT] = plants_df.loc[plants_df_index, c.TC_ID_PLANT]
                 element_df.loc[grid_index, c.TC_ID_AGENT] = agent.agent_id
                 element_df.loc[grid_index, 'agent_type'] = agent.agent_type
@@ -492,7 +495,7 @@ class ElectricityGridDB(GridDB):
 
             if not current_plant_df['file'].str.contains(str(owned_plants_df.loc[plant_index, 'file'])).any():
                 if (('file_add' in owned_plants_df.columns and
-                    current_plant_df['file'].str.contains(str(owned_plants_df.loc[plant_index, 'file_add'])).any())
+                     current_plant_df['file'].str.contains(str(owned_plants_df.loc[plant_index, 'file_add'])).any())
                         or plant_type in self.relevant_plant_type[c.OM_STORAGE]):
                     continue
                 else:
