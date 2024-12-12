@@ -355,3 +355,39 @@ def gen_ids(n: int = 1, length: int = 15, prefix: str = '', suffix: str = '', on
 
     ids = list(id_set)
     return ids[0] if n == 1 else ids
+
+
+def enforce_schema(schema: dict, df: pl.DataFrame, threshold: int = 20_000) -> pl.DataFrame:
+    """
+    Dynamically selects the best method to enforce schema based on DataFrame size.
+    """
+
+    def enforce_schema_eager(schema: dict, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Enforces schema using eager execution for small DataFrames.
+        """
+        for col, dtype in schema.items():
+            if col in df.columns and df[col].dtype != dtype:
+                try:
+                    df = df.with_columns(df[col].cast(dtype))
+                except Exception as e:
+                    raise ValueError(
+                        f"Failed to cast column '{col}' to type '{dtype}'. Error: {e}"
+                    )
+        return df
+
+    def enforce_schema_lazy(schema: dict, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Enforces schema using lazy evaluation for large DataFrames.
+        """
+        lazy_df = df.lazy()
+        for col, dtype in schema.items():
+            if col in df.columns and df[col].dtype != dtype:
+                lazy_df = lazy_df.with_columns(pl.col(col).cast(dtype))
+        return lazy_df.collect()
+
+    if len(df) < threshold:  # Threshold for choosing method
+        return enforce_schema_eager(schema, df)
+    else:
+        return enforce_schema_lazy(schema, df)
+
