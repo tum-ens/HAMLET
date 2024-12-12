@@ -282,8 +282,7 @@ class Dhw(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        self.heat = list(self.fcast[f'{self.name}_dhw'].round(3))
-        self.heat = np.array([int(x * 1000) for x in self.heat])  # TODO: Fix the input data so that this is not needed anymore
+        self.heat = pd.Series(self.fcast[f'{self.name}_dhw'], index=self.timesteps, dtype='int32')
 
     def define_variables(self, model, **kwargs):
         comp_type = kwargs['comp_type']
