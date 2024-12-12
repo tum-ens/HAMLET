@@ -1,0 +1,31 @@
+name: '🛠️ Task/Chore'
+description: Log a maintenance task or small improvement.
+labels: [Type::Task]
+
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: Task Description
+      description: >
+        Describe the task or chore that needs to be completed (e.g., upgrading a dependency, fixing a typo, adding a comment).
+    validations:
+      required: true
+
+  - type: textarea
+    id: importance
+    attributes:
+      label: Importance and Urgency
+      description: >
+        Indicate how important and/or urgent this task is (e.g., minor, critical).
+    validations:
+      required: true
+
+  - type: textarea
+    id: related-areas
+    attributes:
+      label: Related Areas
+      description: >
+        Specify any related areas of the project that might be affected by this task (e.g., other modules, dependencies).
+    validations:
+      required: false

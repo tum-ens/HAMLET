@@ -154,6 +154,7 @@ class Agents:
                 'func_ts': self.__make_timeseries_heat,
             },
             c.P_DHW: {
+                'func_ts': self.__make_timeseries_dhw,
             },
             c.P_PV: {
                 'specs': self.__timeseries_from_specs_pv,
@@ -502,7 +503,7 @@ class Agents:
                         file_path=os.path.join(self.input_path, 'agents', agent_type, plant,
                                                plant_dict['sizing']['file']),
                         plant_id=plant_id, plant_dict=plant_dict,
-                        delta=pd.Timedelta(f"{(timeseries.index[1] - timeseries.index[0]) / 3}S"))
+                        delta=pd.Timedelta(f"{(timeseries.index[1] - timeseries.index[0])}S"))
                     timeseries = timeseries.join(ts)
                 except KeyError:
                     specs = None
@@ -1094,6 +1095,11 @@ class Agents:
         df = df['heat'].round().astype(int).to_frame()
 
         return df
+
+    @staticmethod
+    def __make_timeseries_dhw(df: pd.DataFrame, plant_dict: dict) -> pd.DataFrame:
+        """Ensures that values are integers and rounds them to the nearest integer."""
+        return df.round().astype(int)
 
     @staticmethod
     def __list_to_dict(input_list: list, separator: str = '/') -> dict:

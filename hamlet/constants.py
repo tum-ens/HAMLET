@@ -294,8 +294,15 @@ P_HYDROGEN = 'hydrogen'
 P_HEAT_STORAGE = 'heat-storage'
 
 # CONTROLLERS
+C_CONTROLLER = 'controller'
 C_RTC = 'rtc'
-C_MPC = 'mpc'
+C_FBC = 'fbc'
+C_RB = 'rb'  # category of rtc and fbc: rule-based
+C_OPTIM = 'optim'  # category of rtc: optimization
+C_MPC = 'mpc'  # category of fbc: model predictive control
+C_RL = 'rl'  # category of fbc: reinforcement learning
+C_POI = 'poi'  # subcategory of mpc and optim: PyOptInterface package
+C_LINOPY = 'linopy'  # subcategory of mpc and optim: Linopy package
 
 # MARKET TRADING STRATEGIES
 MTS_ZI = 'zi'
