@@ -16,12 +16,18 @@ from hamlet.executor.utilities.database.market_db import MarketDB
 
 import psutil
 
-weather = None
-def get_weather(path):
-    global weather
-    if weather is None:
-        weather = f.load_file(path=os.path.join(path, 'general', 'weather', 'weather.ft'), df='polars', method='eager', memory_map=False)
-    return weather
+cached_general = None
+def get_general(path) -> dict:
+    """Loads general information"""
+    global cached_general
+    if cached_general is None:
+        return {'weather': f.load_file(path=os.path.join(path, 'general', 'weather', 'weather.ft'), df='polars', method='eager', memory_map=False),
+                   'retailer': f.load_file(path=os.path.join(path, 'general', 'retailer.ft'),
+                                           df='polars', method='eager'),
+                   'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
+                                        df='polars', method='eager'),
+                   'general': f.load_file(path=os.path.join(path, 'config', 'config_setup.yaml'))}
+    return cached_general
 
 def init_agentdb(agent_type, agent_id, region_tasks, region_path, agent_path):
     """Initializes agent database"""
@@ -35,16 +41,6 @@ def init_agentdb(agent_type, agent_id, region_tasks, region_path, agent_path):
     market_db, market_type = get_market(region_path, region_tasks)
     add_forecaster(agent_db, market_db, market_type, region_path)
     return agent_db
-
-def load_general(path):
-    """Loads general information"""
-    general = {'weather': get_weather(path),
-               'retailer': f.load_file(path=os.path.join(path, 'general', 'retailer.ft'),
-                                       df='polars', method='eager'),
-               'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
-                                    df='polars', method='eager'),
-               'general': f.load_file(path=os.path.join(path, 'config', 'config_setup.yaml'))}
-    return general
 
 def get_market(region_path, region_tasks):
     """Gets market database"""
@@ -62,7 +58,7 @@ def get_market(region_path, region_tasks):
 
 def add_forecaster(agent_db, market_db, market_type, region_path):
     """Adds agent forecaster to the agent database"""
-    general = load_general(region_path)
+    general = get_general(region_path)
     forecaster = Forecaster(agentDB=agent_db, marketsDB=market_db[market_type], general=general)
     forecaster.init_forecaster()
     # TODO if forecaster is updated during the simulation (e.g. by update_local_market_in_forecasters),
