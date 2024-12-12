@@ -12,7 +12,6 @@ import ast
 from hamlet import constants as c
 import hamlet.executor.utilities.forecasts.models as models
 import hamlet.functions as f
-from pprint import pprint
 
 
 class Forecaster:
