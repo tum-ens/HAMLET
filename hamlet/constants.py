@@ -201,71 +201,73 @@ TC_DNI = 'dni'
 
 # TABLE SCHEMAS
 # Note: The schemas are used to define the data types of the columns in the tables and are taken from tables.xlsx
-TS_MARKET_TRANSACTIONS = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
-                          TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
-                          TC_REGION: pl.Categorical,
-                          TC_MARKET: pl.Categorical,
-                          TC_NAME: pl.Categorical,
-                          TC_TYPE_ENERGY: pl.Categorical,
-                          TC_TYPE_TRANSACTION: pl.Categorical,
-                          TC_ID_AGENT: pl.Categorical,
-                          TC_ENERGY_IN: pl.UInt64,
-                          TC_ENERGY_OUT: pl.UInt64,
-                          TC_PRICE_PU_IN: pl.Int32,
-                          TC_PRICE_PU_OUT: pl.Int32,
-                          TC_PRICE_IN: pl.Int64,
-                          TC_PRICE_OUT: pl.Int64,
-                          TC_QUALITY: pl.UInt8}
-TS_BIDS_OFFERS = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
-                  TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
-                  TC_REGION: pl.Categorical,
-                  TC_MARKET: pl.Categorical,
-                  TC_NAME: pl.Categorical,
-                  TC_TYPE_ENERGY: pl.Categorical,
-                  TC_ID_AGENT: pl.Categorical,
-                  TC_ENERGY_IN: pl.UInt64,
-                  TC_ENERGY_OUT: pl.UInt64,
-                  TC_PRICE_PU_IN: pl.Int32,
-                  TC_PRICE_PU_OUT: pl.Int32,
-                  TC_PRICE_IN: pl.Int64,
-                  TC_PRICE_OUT: pl.Int64,
-                  TC_QUALITY: pl.UInt8}
-TS_BIDS_CLEARED = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
-                   TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
-                   TC_REGION: pl.Categorical,
-                   TC_MARKET: pl.Categorical,
-                   TC_NAME: pl.Categorical,
-                   TC_TYPE_ENERGY: pl.Categorical,
-                   TC_ID_AGENT_IN: pl.Categorical,
-                   TC_ENERGY_IN: pl.UInt64,
-                   TC_PRICE_PU_IN: pl.Int32,
-                   TC_PRICE_IN: pl.Int64,
-                   TC_QUALITY: pl.UInt8}
+SCHEMA = {
+    TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+    TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
+    TC_REGION: pl.Categorical,
+    TC_MARKET: pl.Categorical,
+    TC_NAME: pl.Categorical,
+    TC_TYPE_ENERGY: pl.Categorical,
+    TC_ACTIONS: pl.Categorical,
+    TC_CLEARING_TYPE: pl.Categorical,
+    TC_CLEARING_METHOD: pl.Categorical,
+    TC_CLEARING_PRICING: pl.Categorical,
+    TC_COUPLING: pl.Categorical,
+    TC_TYPE_TRANSACTION: pl.Categorical,
+    TC_ID_AGENT: pl.Categorical,
+    TC_ID_AGENT_IN: pl.Categorical,
+    TC_ID_AGENT_OUT: pl.Categorical,
+    TC_ID_METER: pl.Categorical,
+    TC_ID_TRADE: pl.String,
+    TC_ENERGY: pl.Int64,
+    TC_ENERGY_IN: pl.UInt64,
+    TC_ENERGY_OUT: pl.UInt64,
+    TC_ENERGY_USED: pl.UInt64,
+    TC_PRICE_PU: pl.Int32,
+    TC_PRICE_PU_IN: pl.Int32,
+    TC_PRICE_PU_OUT: pl.Int32,
+    TC_PRICE: pl.Int64,
+    TC_PRICE_IN: pl.Int64,
+    TC_PRICE_OUT: pl.Int64,
+    TC_POWER: pl.Int32,
+    TC_POWER_IN: pl.UInt32,
+    TC_POWER_OUT: pl.UInt32,
+    TC_BALANCE_ACCOUNT: pl.Int64,
+    TC_QUALITY: pl.UInt8,
+    TC_SHARE_QUALITY: pl.Int8,
+    TC_QUANTITY: pl.UInt64,
+    TC_TYPE_METER: pl.Categorical,
+    TC_TYPE_PLANTS: pl.Categorical,
+    TC_SOC: pl.UInt16,
+}
+
+
+def create_subschema(schema: dict, columns: list) -> dict:
+    """
+    Extract a subschema from the full schema.
+    """
+    return {col: schema[col] for col in columns if col in schema}
+
+
+TS_MARKET_TRANSACTIONS = create_subschema(SCHEMA,
+                                          [TC_TIMESTAMP, TC_TIMESTEP, TC_REGION, TC_MARKET, TC_NAME, TC_TYPE_ENERGY,
+                                           TC_TYPE_TRANSACTION, TC_ID_AGENT, TC_ENERGY_IN, TC_ENERGY_OUT,
+                                           TC_PRICE_PU_IN, TC_PRICE_PU_OUT, TC_PRICE_IN, TC_PRICE_OUT])
+TS_BIDS_OFFERS = create_subschema(SCHEMA,
+                                  [TC_TIMESTAMP, TC_TIMESTEP, TC_REGION, TC_MARKET, TC_NAME, TC_TYPE_ENERGY,
+                                   TC_ID_AGENT, TC_ENERGY_IN, TC_ENERGY_OUT, TC_PRICE_PU_IN, TC_PRICE_PU_OUT,
+                                   TC_PRICE_IN, TC_PRICE_OUT])
+TS_BIDS_CLEARED = create_subschema(SCHEMA,
+                                   [TC_TIMESTAMP, TC_TIMESTEP, TC_REGION, TC_MARKET, TC_NAME, TC_TYPE_ENERGY,
+                                    TC_ID_AGENT_IN, TC_ENERGY_IN, TC_PRICE_PU_IN, TC_PRICE_IN])
 TS_BIDS_UNCLEARED = TS_BIDS_CLEARED
-TS_OFFERS_CLEARED = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
-                     TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
-                     TC_REGION: pl.Categorical,
-                     TC_MARKET: pl.Categorical,
-                     TC_NAME: pl.Categorical,
-                     TC_TYPE_ENERGY: pl.Categorical,
-                     TC_ID_AGENT_OUT: pl.Categorical,
-                     TC_ENERGY_OUT: pl.UInt64,
-                     TC_PRICE_PU_OUT: pl.Int32,
-                     TC_PRICE_OUT: pl.Int64,
-                     TC_QUALITY: pl.UInt8}
+TS_OFFERS_CLEARED = create_subschema(SCHEMA,
+                                     [TC_TIMESTAMP, TC_TIMESTEP, TC_REGION, TC_MARKET, TC_NAME, TC_TYPE_ENERGY,
+                                      TC_ID_AGENT_OUT, TC_ENERGY_OUT, TC_PRICE_PU_OUT, TC_PRICE_OUT])
 TS_OFFERS_UNCLEARED = TS_OFFERS_CLEARED
-TS_POSITIONS_MATCHED = {TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
-                        TC_TIMESTEP: pl.Datetime(time_unit='ns', time_zone='UTC'),
-                        TC_REGION: pl.Categorical,
-                        TC_MARKET: pl.Categorical,
-                        TC_NAME: pl.Categorical,
-                        TC_TYPE_ENERGY: pl.Categorical,
-                        TC_ID_AGENT_IN: pl.Categorical,
-                        TC_ID_AGENT_OUT: pl.Categorical,
-                        TC_ENERGY: pl.UInt64,
-                        TC_PRICE_PU: pl.Int32,
-                        TC_PRICE: pl.Int64,
-                        TC_QUALITY: pl.UInt8}
+TS_POSITIONS_MATCHED = create_subschema(SCHEMA,
+                                        [TC_TIMESTAMP, TC_TIMESTEP, TC_REGION, TC_MARKET, TC_NAME, TC_TYPE_ENERGY,
+                                         TC_ID_AGENT_IN, TC_ID_AGENT_OUT, TC_ENERGY, TC_PRICE_PU, TC_PRICE])
 
 # AGENTS
 A_SFH = 'sfh'
