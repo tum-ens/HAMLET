@@ -748,6 +748,14 @@ class Lem(MarketBase):
             (pl.col(c.TC_PRICE_PU_OUT) * pl.col(c.TC_ENERGY_OUT)).alias(c.TC_PRICE_OUT).cast(pl.Int64),
         ])
 
+        # Update timestamp
+        grid = grid.with_columns(pl.lit(self.tasks[c.TC_TIMESTAMP]).alias(c.TC_TIMESTAMP))
+        levies = levies.with_columns(pl.lit(self.tasks[c.TC_TIMESTAMP]).alias(c.TC_TIMESTAMP))
+
+        # Enforce schema
+        grid = f.enforce_schema(c.SCHEMA, grid)
+        levies = f.enforce_schema(c.SCHEMA, levies)
+
         return grid, levies
 
     def __method_pda(self, bids, offers, pricing_method):
