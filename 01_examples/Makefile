@@ -36,7 +36,7 @@ profile_memory_local: cleanup_artifacts
 	memray run -f --output "./memray-02_execute_scenario.bin" 02_execute_scenario.py
 	memray flamegraph -f --output "./memray-02_execute_scenario.html" "./memray-02_execute_scenario.bin"
 
-profile_perf: cleanup_artifacts
+profile_perf: $(OUTDIR) cleanup_artifacts
 	@echo "OUTDIR='$(OUTDIR)'"
 	# check if git is in a clean state
 	git update-index --refresh
