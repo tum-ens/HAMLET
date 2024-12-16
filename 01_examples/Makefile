@@ -7,6 +7,7 @@ save_all:
 	test -e "$(OUTDIR)/memray-02_execute_scenario.html"
 	test -n "$(SAVE_BASE)"
 	mv "$(OUTDIR)/memray-02_execute_scenario.html" "$(OUTDIR)/$(SAVE_BASE)memray-02_execute_scenario.html"
+	mv "$(OUTDIR)/memray-02_execute_scenario.bin" "$(OUTDIR)/$(SAVE_BASE)memray-02_execute_scenario.bin"
 	mv "$(OUTDIR)/cProfile-02_execute_scenario.prof" "$(OUTDIR)/$(SAVE_BASE)cProfile-02_execute_scenario.prof"
 
 save_all_local:
