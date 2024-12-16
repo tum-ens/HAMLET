@@ -44,17 +44,14 @@ profile_perf: $(OUTDIR) cleanup_artifacts
 
 	# checks to avoid overriding old test results
 	test ! -e "$(OUTDIR)/cProfile-02_execute_scenario.prof"
-	test ! -e "$(OUTDIR)/cProfile-02_execute_scenario.svg"
 
 	python3 01_create_scenario.py
 	python3 -m cProfile -o "$(OUTDIR)/cProfile-02_execute_scenario.prof" 02_execute_scenario.py
-	flameprof "$(OUTDIR)/cProfile-02_execute_scenario.prof" > "$(OUTDIR)/cProfile-02_execute_scenario.svg"
 	# you can also have a look with snakeviz on th prof file
 
 profile_perf_local: cleanup_artifacts
 	python3 01_create_scenario.py
 	python3 -m cProfile -o "./cProfile-02_execute_scenario.prof" 02_execute_scenario.py
-	flameprof "./cProfile-02_execute_scenario.prof" > "./cProfile-02_execute_scenario.svg"
 	# you can also have a look with snakeviz on th prof file
 
 cleanup_artifacts:
@@ -64,7 +61,7 @@ $(OUTDIR):
 	mkdir $@
 
 clean_local:
-	$(RM) "./cProfile-02_execute_scenario.prof" "./cProfile-02_execute_scenario.svg" "./memray-02_execute_scenario.html" "./memray-02_execute_scenario.bin"
+	$(RM) "./cProfile-02_execute_scenario.prof" "./memray-02_execute_scenario.html" "./memray-02_execute_scenario.bin"
 
 clean:
 	$(RM) -r $(OUTDIR)
