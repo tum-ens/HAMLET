@@ -4,11 +4,13 @@ __license__ = ""
 __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
+import logging
 import os
+import warnings
 
-import pandas as pd
-import polars as pl
 import pandapower as pp
+import pandas as pd
+
 from hamlet import constants as c
 from hamlet import functions as f
 
@@ -137,7 +139,8 @@ class ElectricityGridDB(GridDB):
 
         """
 
-        # save pandapower grid object
+        # save pandapower grid object (warnings are turned off due to an issue in pandapower)
+        logging.getLogger("pandapower.io_utils").setLevel(logging.ERROR)
         pp.to_excel(self.grid, os.path.join(path, self.grid_config['file']['file']))
 
         # save grid simulation results
