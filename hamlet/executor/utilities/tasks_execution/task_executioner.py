@@ -104,7 +104,6 @@ class TaskExecutioner:
             results = list(map(lambda x: init_agentdb(*x), result_dirs))
             for fn in result_dirs:
                 print(fn)
-                shutil.rmtree(fn[3])
                 shutil.rmtree(fn[4])
         # Postprocess results of tasks execution
         self.postprocess_results(tasks, results)
