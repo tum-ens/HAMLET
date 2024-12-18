@@ -21,7 +21,7 @@ def get_general(path) -> dict:
     """Loads general information"""
     global cached_general
     if cached_general is None:
-        return {'weather': f.load_file(path=os.path.join(path, 'general', 'weather', 'weather.ft'), df='polars', method='eager', memory_map=False),
+        cached_general = {'weather': f.load_file(path=os.path.join(path, 'general', 'weather', 'weather.ft'), df='polars', method='eager', memory_map=False),
                    'retailer': f.load_file(path=os.path.join(path, 'general', 'retailer.ft'),
                                            df='polars', method='eager'),
                    'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
