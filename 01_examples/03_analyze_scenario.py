@@ -4,10 +4,10 @@ sys.path.append("./")  # Add the current directory to the Python path for execut
 from hamlet import Analyzer
 
 # Path to the results folder (relative or absolute)
-path = "../05_results/example_small"
+path = {'test': "../05_results/example_grid"}
 
 # Create the analyzer object
 sim = Analyzer(path)
 
 # Plot the general analysis (more details in the documentation)
-sim.plot_general_analysis()
+sim.plot(save_path='../05_results/example_grid/plots')
