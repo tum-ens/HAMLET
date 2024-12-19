@@ -4,9 +4,10 @@ from hamlet.analyzer.plotter_base import PlotterBase
 
 class AgentPlotter(PlotterBase):
     def __init__(self, path: dict, config: dict, data: dict):
-        super().__init__(path=path, config=config, data=data)
+        super().__init__(path=path, config=config, data=data, name_subdirectory='agents')
 
-    def plot_all_meters_data(self):
+    @PlotterBase.decorator_plot_function
+    def plot_all_meters_data(self, **kwargs):
         """
         Generate area plots of meter data for all scenarios.
 

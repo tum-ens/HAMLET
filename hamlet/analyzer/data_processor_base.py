@@ -1,13 +1,21 @@
-class DataProcessorBase:
-    def __init__(self, path: dict, config: dict):
-        # Path storing relevant results
-        self.path = path
+import os
 
+
+class DataProcessorBase:
+    def __init__(self, path: dict, config: dict, name_subdirectory: str):
         # Configuration dictionary
         self.config = config
 
         # Processed data
         self.data = {}
+
+        # subdirectory name
+        self.name_subdirectory = name_subdirectory
+
+        # Combine normal path and subdirectory path
+        self.path = {}
+        for path_key, value in path.items():
+            self.path[path_key] = os.path.join(value, self.name_subdirectory)
 
     def process(self, **kwargs):
         """Process all relevant results data."""

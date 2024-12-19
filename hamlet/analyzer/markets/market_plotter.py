@@ -5,9 +5,10 @@ from hamlet.analyzer.plotter_base import PlotterBase
 
 class MarketPlotter(PlotterBase):
     def __init__(self, path: dict, config: dict, data: dict):
-        super().__init__(path=path, config=config, data=data)
+        super().__init__(path=path, config=config, data=data, name_subdirectory='markets')
 
-    def plot_total_balancing(self):
+    @PlotterBase.decorator_plot_function
+    def plot_total_balancing(self, **kwargs):
         """
         Generate bar plots for total balancing data across all scenarios and markets.
 

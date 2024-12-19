@@ -7,7 +7,7 @@ from hamlet.analyzer.data_processor_base import DataProcessorBase
 
 class AgentDataProcessor(DataProcessorBase):
     def __init__(self, path: dict, config: dict):
-        super().__init__(path=path, config=config)
+        super().__init__(path=path, config=config, name_subdirectory='agents')
 
     def process_all_meters_data(self):
         """
