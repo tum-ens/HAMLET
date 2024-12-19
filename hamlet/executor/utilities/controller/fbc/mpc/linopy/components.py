@@ -239,7 +239,7 @@ class InflexibleLoad(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        self.power = pd.Series(self.fcast[f'{self.name}_power'], index=self.timesteps, dtype='int32')
+        self.power = pd.Series(self.fcast[f'{self.name}_power'].cast(int), index=self.timesteps, dtype='int32')
 
     def define_variables(self, model, **kwargs):
         comp_type = kwargs['comp_type']
