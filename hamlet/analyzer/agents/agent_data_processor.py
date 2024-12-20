@@ -75,5 +75,3 @@ class AgentDataProcessor(DataProcessorBase):
             results_summary[scenario_name] = summarized_data
 
         return results_summary
-
-
