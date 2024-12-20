@@ -8,7 +8,7 @@
 sfh:
   ################################ general ################################
   general:
-    number_of: 8                               # number of single family homes to simulate
+    number_of: 10                               # number of single family homes to simulate
      
     parameters:                                 # basic parameters of SFHs
       distribution: [0.5, 0.5]                  # relative distribution of household types
@@ -1109,7 +1109,7 @@ sfh:
                                                 # unit: days
 
         wholesale:
-          method: naive                         # forecasting method for wholesale market prices
+          method: perfect                         # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
@@ -1128,19 +1128,19 @@ sfh:
                                                 # note: first value is for prices and second for quantities
 
           grid:                                 # forecasting method for grid fees
-            local: naive                        # forecasting method for grid fees
+            local: perfect                        # forecasting method for grid fees
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
 
-            retail: naive                       # forecasting method for retail grid fees
+            retail: perfect                       # forecasting method for retail grid fees
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
                                                 #   - perfect: perfect foresight of market price
                                                 # note: first value is for selling, second for buying
-          levies: naive                         # forecasting method for levies
+          levies: perfect                         # forecasting method for levies
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)

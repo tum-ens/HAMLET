@@ -1,8 +1,18 @@
+__author__ = "MarkusDoepfert"
+__credits__ = "jiahechu"
+__license__ = ""
+__maintainer__ = "MarkusDoepfert"
+__email__ = "markus.doepfert@tum.de"
+
 # This file contains all constants used in the project
 import polars as pl
 
 # KEYS
 K_GENERAL = 'general'
+K_GRID = 'grids'
+K_WEATHER = 'weather'
+K_RETAILER = 'retailer'
+K_TASKS = 'tasks'
 K_ACCOUNT = 'account'
 K_PLANTS = 'plants'
 K_EMS = 'ems'
@@ -12,6 +22,7 @@ K_TIMESERIES = 'timeseries'
 K_SETPOINTS = 'setpoints'
 K_TARGET = 'target'  # relevant for forecast train data
 K_FEATURES = 'features'  # relevant for forecast train data
+
 
 # UNIT CONSTANTS
 WH_TO_MWH = 1e-6
@@ -61,6 +72,11 @@ ET_ELECTRICITY = 'power'
 ET_HEAT = 'heat'
 ET_COOLING = 'cold'
 ET_H2 = 'h2'
+
+# GRID TYPES
+G_ELECTRICITY = 'electricity'
+G_HEAT = 'heat'
+G_H2 = 'hydrogen'
 
 # SYMBOLS (symbols used for the units in the tables)
 S_POWER = 'P'
@@ -153,7 +169,7 @@ TC_TYPE_TRANSACTION = 'type_transaction'
 TC_ID_AGENT = 'id_agent'
 TC_ID_AGENT_IN = 'id_agent_in'
 TC_ID_AGENT_OUT = 'id_agent_out'
-TC_ID_METER = 'id_meter'
+TC_ID_PLANT = 'id_plant'
 TC_ENERGY = 'energy'
 TC_ENERGY_IN = 'energy_in'
 TC_ENERGY_OUT = 'energy_out'
