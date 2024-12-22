@@ -5,17 +5,25 @@ OUTDIR := ../../benchmarks/$(shell git rev-parse --short HEAD)
 save_all:
 	test -e "$(OUTDIR)/cProfile-02_execute_scenario.prof"
 	test -e "$(OUTDIR)/memray-02_execute_scenario.html"
+	test -e "$(OUTDIR)/ps-02_execute_scenario.dat"
+	test -e "$(OUTDIR)/out.log"
 	test -n "$(SAVE_BASE)"
 	mv "$(OUTDIR)/memray-02_execute_scenario.html" "$(OUTDIR)/$(SAVE_BASE)memray-02_execute_scenario.html"
 	mv "$(OUTDIR)/memray-02_execute_scenario.bin" "$(OUTDIR)/$(SAVE_BASE)memray-02_execute_scenario.bin"
 	mv "$(OUTDIR)/cProfile-02_execute_scenario.prof" "$(OUTDIR)/$(SAVE_BASE)cProfile-02_execute_scenario.prof"
+	mv "$(OUTDIR)/ps-02_execute_scenario.dat" "$(OUTDIR)/$(SAVE_BASE)ps-02_execute_scenario.dat"
+	mv "$(OUTDIR)/out.log" "$(OUTDIR)/$(SAVE_BASE)out.log"
 
 save_all_local:
 	test -e "./cProfile-02_execute_scenario.prof"
 	test -e "./memray-02_execute_scenario.html"
+	test -e "./ps-02_execute_scenario.dat"
+	test -e "./out.log"
 	test -n "$(SAVE_BASE)"
 	mv "./memray-02_execute_scenario.html" "$(SAVE_BASE)memray-02_execute_scenario.html"
 	mv "./cProfile-02_execute_scenario.prof" "$(SAVE_BASE)cProfile-02_execute_scenario.prof"
+	mv "./ps-02_execute_scenario.dat" "$(SAVE_BASE)ps-02_execute_scenario.dat"
+	mv "./out.log" "$(SAVE_BASE)out.log"
 
 profile_memory: $(OUTDIR) cleanup_artifacts
 	@echo "OUTDIR='$(OUTDIR)'"
@@ -62,7 +70,7 @@ $(OUTDIR):
 	mkdir $@
 
 clean_local:
-	$(RM) "./cProfile-02_execute_scenario.prof" "./memray-02_execute_scenario.html" "./memray-02_execute_scenario.bin"
+	$(RM) "./cProfile-02_execute_scenario.prof" "./memray-02_execute_scenario.html" "./memray-02_execute_scenario.bin" "./ps-02_execute_scenario.dat"
 
 clean:
 	$(RM) -r $(OUTDIR)
