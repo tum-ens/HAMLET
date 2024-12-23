@@ -27,7 +27,7 @@ real_memory(){
 
 set -e
 
-for num_workers in 1 2 4 6 8 10 ; do
+for num_workers in 1 2 4 6 8 10 12 14 16 18 20 ; do
 	make clean_local
 
 	# run with cProfile
