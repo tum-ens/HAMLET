@@ -27,7 +27,6 @@ def task(agent_data):
         # Initialize and execute the agent instance
         agent = Agent(agent_type=agent_type, data=agent_db, timetable=region_tasks, market=market_db)
         agent_db = agent.execute()
-        print("ret", type(agent_db), agent_db, agent_db.estimated_size("kb"), "kb")
 
         folder = f"{agent_db.__hash__()}"
         ret_path = os.path.join(region_path, 'agents', agent_type, agent_id, folder)

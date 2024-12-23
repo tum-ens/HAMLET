@@ -36,7 +36,6 @@ class AgentTaskExecutioner(TaskExecutioner):
         agents_data = self.database.get_agent_data(region=region_name)
         all_type_agents = [(agent_type, agent_id, tasks, self.results_path) for agent_type, agents in
                            agents_data.items() for agent_id in agents]
-        print("tasks size", tasks.estimated_size("kb"), "kb")
         return all_type_agents
 
     def execute_serial(self, tasks):
