@@ -53,9 +53,7 @@ class AgentBase:
 
     def apply_grid_commands(self):
         """Adjust data or parameter of agent to apply grid restriction commands."""
-        if (c.G_ELECTRICITY in self.grid_commands and
-                'current_variable_grid_fees' in self.grid_commands[c.G_ELECTRICITY] and
-                self.grid_commands[c.G_ELECTRICITY]['current_variable_grid_fees']):
+        if self.grid_commands.get(c.G_ELECTRICITY, {}).get('current_variable_grid_fees'):
             self.__update_variable_grid_fees()
 
     def get_forecasts(self):
