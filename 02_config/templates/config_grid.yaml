@@ -19,7 +19,6 @@ electricity:                          # type of grid (needs to match available g
                                       #   - file: create grid from 'electricity.xlsx'
                                       #   - topology: create scenario first, then user has to assign agent-id to bus
                                       #     in the topology Excel file
-                                      # TODO: Create automatic grid generator, e.g. based on Kerber grids
 
     file:                             # file method settings
       file: electricity.xlsx          # file containing the detailed agent and grid information (bus, line, load, sgen)
@@ -32,32 +31,39 @@ electricity:                          # type of grid (needs to match available g
                                       # note: needs to be in the same folder as this file
 
   restrictions:
-    apply: ['enwg_14a']                # grid restrictions to be applied. Empty list means don't apply any restriction
+    apply: ['enwg_14a']               # grid restrictions to be applied
+                                      # note: Empty list means don't apply any restriction
 
-    max_iteration: 10                  # maximal number of iteration when iteratively applying restriction
+    max_iteration: 10                 # maximum number of iteration when iteratively applying restriction
 
-    enwg_14a:                          # regulation according to section 14a of Energy Industry Act (§14a EnWG)
+    enwg_14a:                         # regulation according to section 14a of Energy Industry Act (§14a EnWG in DE)
 
-      variable_grid_fees:              # https://www.bundesnetzagentur.de/DE/Beschlusskammern/1_GZ/BK8-GZ/2022/2022_4-Steller/BK8-22-0010/BK8-22-0010-A_Festlegung_Download.pdf?__blob=publicationFile&v=5
-        active: True
+      variable_grid_fees:             # variable grid fee parameters (indirect grid control)
+                                      # https://www.bundesnetzagentur.de/DE/Beschlusskammern/1_GZ/BK8-GZ/2022/2022_4-Steller/BK8-22-0010/BK8-22-0010-A_Festlegung_Download.pdf?__blob=publicationFile&v=5
 
-        horizon: 86400                 # variable grid fees calculation horizon
-                                       # unit: s
+        active: True                  # is the variable grid fee active?
 
-        update: 3600                   # variable grid fees update frequency
-                                       # unit: s
+        horizon: 86400                # calculation horizon
+                                      # unit: s
 
-        grid_fee_base: 0.07            # base grid fees
-                                       # unit: €/kWh
+        update: 3600                  # update frequency
+                                      # unit: s
 
-      direct_power_control:            # https://www.bundesnetzagentur.de/DE/Beschlusskammern/1_GZ/BK6-GZ/2022/BK6-22-300/Beschluss/BK6-22-300_Beschluss_Anlage1.pdf?__blob=publicationFile&v=1
-        active: False
+        grid_fee_base: 0.07           # base grid fees
+                                      # unit: €/kWh
 
-        method: individual             # types of direct power control
-                                       # individual: control individual devices
-                                       # ems: control via EMS
+      direct_power_control:           # direct grid control parameters
+                                      # https://www.bundesnetzagentur.de/DE/Beschlusskammern/1_GZ/BK6-GZ/2022/BK6-22-300/Beschluss/BK6-22-300_Beschluss_Anlage1.pdf?__blob=publicationFile&v=1
 
-        threshold: 0.0042              # minimal power to be guaranteed in MW (according to §14a: 4.2 kW)
+        active: True                  # is the direct power control active?
+
+        method: individual            # types of direct power control
+                                      # options:
+                                      #   - individual: control individual devices
+                                      #   - ems: control via EMS (net grid connection flow relevant)
+
+        threshold: 0.0042             # minimum guaranteed power (according to §14a: 4200 W)
+                                      # unit: MW
 
 heat:
   active: False
