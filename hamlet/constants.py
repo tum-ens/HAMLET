@@ -1,8 +1,18 @@
+__author__ = "MarkusDoepfert"
+__credits__ = "jiahechu"
+__license__ = ""
+__maintainer__ = "MarkusDoepfert"
+__email__ = "markus.doepfert@tum.de"
+
 # This file contains all constants used in the project
 import polars as pl
 
 # KEYS
 K_GENERAL = 'general'
+K_GRID = 'grids'
+K_WEATHER = 'weather'
+K_RETAILER = 'retailer'
+K_TASKS = 'tasks'
 K_ACCOUNT = 'account'
 K_PLANTS = 'plants'
 K_EMS = 'ems'
@@ -12,6 +22,7 @@ K_TIMESERIES = 'timeseries'
 K_SETPOINTS = 'setpoints'
 K_TARGET = 'target'  # relevant for forecast train data
 K_FEATURES = 'features'  # relevant for forecast train data
+
 
 # UNIT CONSTANTS
 WH_TO_MWH = 1e-6
@@ -61,6 +72,11 @@ ET_ELECTRICITY = 'power'
 ET_HEAT = 'heat'
 ET_COOLING = 'cold'
 ET_H2 = 'h2'
+
+# GRID TYPES
+G_ELECTRICITY = 'electricity'
+G_HEAT = 'heat'
+G_H2 = 'hydrogen'
 
 # SYMBOLS (symbols used for the units in the tables)
 S_POWER = 'P'
@@ -158,7 +174,7 @@ TC_TYPE_TRANSACTION = 'type_transaction'
 TC_ID_AGENT = 'id_agent'
 TC_ID_AGENT_IN = f'{TC_ID_AGENT}_{PF_IN}'
 TC_ID_AGENT_OUT = f'{TC_ID_AGENT}_{PF_OUT}'
-TC_ID_METER = 'id_meter'
+TC_ID_PLANT = 'id_plant'
 TC_ID_TRADE = 'id_trade'
 TC_ENERGY = 'energy'
 TC_ENERGY_IN = f'{TC_ENERGY}_{PF_IN}'
@@ -217,7 +233,7 @@ SCHEMA = {
     TC_ID_AGENT: pl.Categorical,
     TC_ID_AGENT_IN: pl.Categorical,
     TC_ID_AGENT_OUT: pl.Categorical,
-    TC_ID_METER: pl.Categorical,
+    TC_ID_PLANT: pl.Categorical,
     TC_ID_TRADE: pl.String,
     TC_ENERGY: pl.Int64,
     TC_ENERGY_IN: pl.UInt64,
