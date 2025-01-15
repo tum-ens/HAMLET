@@ -222,7 +222,8 @@ class Executor:
         self.database.setup_database(self.structure)
 
         # assign maximal number of iterations from the database
-        self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['restrictions']['max_iteration'])
+        self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['restrictions']
+                              ['max_iteration'])
 
     @staticmethod
     def __wait_for_ts(timestamp):

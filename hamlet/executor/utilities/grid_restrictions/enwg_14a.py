@@ -3,11 +3,9 @@ from copy import deepcopy
 import pandas as pd
 import numpy as np
 import polars as pl
-import math
 import networkx as nx
 import pandapower as pp
-from pandapower.timeseries import DFData, OutputWriter
-from pandapower.control import ConstControl
+from pandapower.timeseries import OutputWriter
 from pandapower.timeseries.run_time_series import run_timeseries
 from hamlet.executor.utilities.database.database import Database
 from hamlet.executor.utilities.database.grid_db import ElectricityGridDB
@@ -339,7 +337,7 @@ class EnWG14a(GridRestrictionBase):
         control_target = deepcopy(self.grid_db.restriction_commands['current_direct_power_control'])
 
         # get minimal power to be guaranteed
-        threshold = self.restriction_config['direct_power_control']['threshold']
+        threshold = self.restriction_config['direct_power_control']['threshold'] * c.WH_TO_MWH
 
         # get total power at the bus
         total_p_at_bus = grid.res_bus.loc[bus, 'p_mw']
@@ -510,7 +508,7 @@ class EnWG14a(GridRestrictionBase):
         control_target = self.grid_db.restriction_commands['current_direct_power_control']
 
         # get minimal power to be guaranteed
-        threshold = self.restriction_config['direct_power_control']['threshold']
+        threshold = self.restriction_config['direct_power_control']['threshold'] * c.WH_TO_MWH
 
         # get total power at the bus
         total_p_at_bus = grid.res_bus.loc[bus, 'p_mw']

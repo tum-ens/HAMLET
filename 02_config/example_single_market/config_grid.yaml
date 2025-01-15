@@ -62,8 +62,8 @@ electricity:                          # type of grid (needs to match available g
                                       #   - individual: control individual devices
                                       #   - ems: control via EMS (net grid connection flow relevant)
 
-        threshold: 0.0042             # minimum guaranteed power (according to §14a: 4200 W)
-                                      # unit: MW
+        threshold: 4200               # minimum guaranteed power (according to §14a: 4200 W)
+                                      # unit: W
 
 heat:
   active: False
