@@ -139,7 +139,8 @@ class ElectricityGridDB(GridDB):
         """
         # save pandapower grid object (warnings are turned off due to an issue in pandapower)
         logging.getLogger("pandapower.io_utils").setLevel(logging.ERROR)
-        pp.to_excel(self.grid, os.path.join(path, self.grid_config['generation'][self.grid_config['method']]['file']))
+        pp.to_excel(self.grid, os.path.join(path, self.grid_config['generation'][self.grid_config['generation']
+        ['method']]['file']))
 
         # save grid simulation results
         for key, data in self.results.items():

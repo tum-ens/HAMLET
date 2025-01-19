@@ -14,7 +14,7 @@ electricity:                          # type of grid (needs to match available g
                                       #   - False: grid is inactive and will be ignored during simulation
 
   generation:
-    method: topology                      # grid creation method
+    method: file                      # grid creation method
                                       # options:
                                       #   - file: create grid from 'electricity.xlsx'
                                       #   - topology: create scenario first, then user has to assign agent-id to bus

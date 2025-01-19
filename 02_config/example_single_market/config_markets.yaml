@@ -49,7 +49,7 @@ lem_continuous:                       # name of the market (must be unique in it
                                       #       unit: seconds
 
 
-      opening: 900                    # when does the first auction occur after the first delivery period
+      opening: 3600                    # when does the first auction occur after the first delivery period
                                       # unit: seconds
 
       horizon: [0, 86400]             # horizon of the market clearings (at what time range is energy delivered?)
@@ -60,13 +60,13 @@ lem_continuous:                       # name of the market (must be unique in it
                                       #   period, the market clearing period is repeated until the horizon is
                                       #   covered and vice versa.
 
-      duration: 900                   # duration of one energy delivery period
+      duration: 3600                   # duration of one energy delivery period
                                       # unit: seconds
 
-      frequency: 900                  # how often is ex-ante market clearing executed?
+      frequency: 3600                  # how often is ex-ante market clearing executed?
                                       # unit: seconds
 
-      closing: 900                    # when does the last auction occur before the delivery period
+      closing: 3600                    # when does the last auction occur before the delivery period
                                       # unit: seconds
 
       settling: 'continuous'          # at which time steps is the market settled?

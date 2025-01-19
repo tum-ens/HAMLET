@@ -121,20 +121,24 @@ class AgentBase:
         variable_grid_fees = self.grid_commands[c.G_ELECTRICITY]['current_variable_grid_fees'][bus_id]
 
         # get target grid data in forecaster
-        grid_fees_train_data = self.agent.forecaster.train_data['lem_continuous_wholesale'][c.K_TARGET]
+        for key, data in self.agent.forecaster.train_data.items():
+            train_data = data[c.K_TARGET]
+            train_data = (train_data.join(variable_grid_fees, on=c.TC_TIMESTAMP, how='left'))
 
-        # adjust grid fees by replacing original grid fees with variable grid fees when available
-        grid_fees_train_data_new = (grid_fees_train_data.join(variable_grid_fees, on=c.TC_TIMESTAMP, how='left'))
-        grid_fees_train_data_new = grid_fees_train_data_new.with_columns(pl.when(pl.col(str(bus_id)).is_null())
-                                                                         .then(pl.col('grid_retail_buy'))
-                                                                         .otherwise(pl.col(str(bus_id)))
-                                                                         .alias('grid_retail_buy').cast(pl.Int32))
-        grid_fees_train_data_new = grid_fees_train_data_new.with_columns(pl.when(pl.col(str(bus_id)).is_null())
-                                                                         .then(pl.col('grid_local_buy'))
-                                                                         .otherwise(pl.col(str(bus_id)))
-                                                                         .alias('grid_local_buy').cast(pl.Int32))
-        grid_fees_train_data_new = grid_fees_train_data_new.drop(str(bus_id))
+            # adjust grid fees by replacing original grid fees with variable grid fees
+            if f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}' in train_data.columns:
+                train_data = train_data.with_columns(pl.when(pl.col(str(bus_id)).is_null())
+                                                       .then(pl.col(f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'))
+                                                       .otherwise(pl.col(str(bus_id)))
+                                                       .alias(f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}').cast(pl.Int32))
 
-        # write new grid fees to agent db object
-        self.agent.forecaster.update_forecaster(id='lem_continuous_wholesale', dataframe=grid_fees_train_data_new,
-                                                target=True)
+            if f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}' in train_data.columns:
+                train_data = train_data.with_columns(pl.when(pl.col(str(bus_id)).is_null())
+                                                       .then(pl.col(f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}'))
+                                                       .otherwise(pl.col(str(bus_id)))
+                                                       .alias(f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}').cast(pl.Int32))
+
+            train_data = train_data.drop(str(bus_id))
+
+            # write new grid fees to agent db object
+            self.agent.forecaster.update_forecaster(id=key, dataframe=train_data, target=True)

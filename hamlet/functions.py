@@ -1,5 +1,3 @@
-<<<<<<< hamlet/functions.py
-=======
 __author__ = "MarkusDoepfert"
 __credits__ = "jiahechu"
 __license__ = ""
@@ -9,7 +7,6 @@ __email__ = "markus.doepfert@tum.de"
 import os
 import shutil
 import time
->>>>>>> hamlet/functions.py
 import json
 import os
 import random

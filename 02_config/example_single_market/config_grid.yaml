@@ -8,7 +8,7 @@ electricity:                          # type of grid (needs to match available g
                                       #   - dc: direct current
                                       #   - ac: alternating current (not implemented yet)
 
-  active: True                        # is the grid active?
+  active: False                        # is the grid active?
                                       # options:
                                       #   - True: grid is active and will be calculated during simulation
                                       #   - False: grid is inactive and will be ignored during simulation
