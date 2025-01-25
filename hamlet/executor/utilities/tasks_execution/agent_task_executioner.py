@@ -5,12 +5,14 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 import os
+import shutil
 
 import polars as pl
 
 import hamlet.constants as c
 from hamlet.executor.agents.agent import Agent
 from hamlet.executor.utilities.tasks_execution.agent_pool import AgentPool
+from hamlet.executor.utilities.tasks_execution.agent_pool import init_agentdb_full
 from hamlet.executor.utilities.tasks_execution.task_executioner import TaskExecutioner
 
 
@@ -63,3 +65,10 @@ class AgentTaskExecutioner(TaskExecutioner):
         region_name = tasks.select(pl.first(c.TC_REGION)).item()
         # Update agents data in database
         self.database.post_agents_to_region(region=region_name, agents=results)
+
+    def load_results_from_para(self, result_dirs: list[str]):
+        """Load results (e.g. from file) if needed"""
+        results = list(map(lambda x: init_agentdb_full(*x), result_dirs)) # is list needed here? squash with "remove folders"
+        for fn in result_dirs:
+            shutil.rmtree(fn[4])
+        return results

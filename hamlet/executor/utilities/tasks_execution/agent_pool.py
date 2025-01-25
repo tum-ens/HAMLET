@@ -44,9 +44,22 @@ def task(agent_data):
         return None
 
 
-def init_agentdb(agent_type, agent_id, region_path):
+def init_agentdb_full(agent_type, agent_id, region_tasks, region_path, agent_path=None):
+    """fully initializes agent database (including market + forecaster)"""
+    if not agent_path:
+        agent_path = os.path.join(region_path, 'agents', agent_type, agent_id)
+
+    agent_db = init_agentdb(agent_type, agent_id, region_path, agent_path)
+
+    market_db, market_type = get_market(region_path, region_tasks)
+    add_forecaster(agent_db, market_db, market_type, region_path)
+
+    return agent_db
+
+def init_agentdb(agent_type, agent_id, region_path, agent_path=None):
     """Initializes agent database"""
-    agent_path = os.path.join(region_path, 'agents', agent_type, agent_id)
+    if not agent_path:
+        agent_path = os.path.join(region_path, 'agents', agent_type, agent_id)
     agent_db = AgentDB(path=agent_path,
                        agent_type=agent_type,
                        agent_id=agent_id)
@@ -81,16 +94,18 @@ def add_forecaster(agent_db, market_db, market_type, region_path):
     agent_db.forecaster = forecaster  # register
 
 
-def load_general(path):
+cached_general = None
+def load_general(path) -> dict:
     """Loads general information"""
-    general = {'weather': f.load_file(path=os.path.join(path, 'general', 'weather',
-                                                        'weather.ft'), df='polars', method='eager', memory_map=False),
-               'retailer': f.load_file(path=os.path.join(path, 'general', 'retailer.ft'),
-                                       df='polars', method='eager'),
-               'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
-                                    df='polars', method='eager'),
-               'general': f.load_file(path=os.path.join(path, 'config', 'config_setup.yaml'))}
-    return general
+    global cached_general
+    if cached_general is None:
+        cached_general = {'weather': f.load_file(path=os.path.join(path, 'general', 'weather', 'weather.ft'), df='polars', method='eager', memory_map=False),
+                   'retailer': f.load_file(path=os.path.join(path, 'general', 'retailer.ft'),
+                                           df='polars', method='eager'),
+                   'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
+                                        df='polars', method='eager'),
+                   'general': f.load_file(path=os.path.join(path, 'config', 'config_setup.yaml'))}
+    return cached_general
 
 
 class AgentPool(ProcessPool):

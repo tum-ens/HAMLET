@@ -6,64 +6,8 @@ __email__ = "markus.doepfert@tum.de"
 
 import multiprocessing as mp
 import os
-import shutil
-
-from hamlet import functions as f
-import hamlet.constants as c
-from hamlet.executor.utilities.database.agent_db import AgentDB
-from hamlet.executor.utilities.forecasts.forecaster import Forecaster
-from hamlet.executor.utilities.database.market_db import MarketDB
 
 import psutil
-
-cached_general = None
-def get_general(path) -> dict:
-    """Loads general information"""
-    global cached_general
-    if cached_general is None:
-        cached_general = {'weather': f.load_file(path=os.path.join(path, 'general', 'weather', 'weather.ft'), df='polars', method='eager', memory_map=False),
-                   'retailer': f.load_file(path=os.path.join(path, 'general', 'retailer.ft'),
-                                           df='polars', method='eager'),
-                   'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
-                                        df='polars', method='eager'),
-                   'general': f.load_file(path=os.path.join(path, 'config', 'config_setup.yaml'))}
-    return cached_general
-
-def init_agentdb(agent_type, agent_id, region_tasks, region_path, agent_path):
-    """Initializes agent database"""
-    agent_db = AgentDB(path=agent_path,
-                       agent_type=agent_type,
-                       agent_id=agent_id)
-    agent_db.agent_save = agent_path
-    # Load data from files
-    agent_db.register_agent()
-
-    market_db, market_type = get_market(region_path, region_tasks)
-    add_forecaster(agent_db, market_db, market_type, region_path)
-    return agent_db
-
-def get_market(region_path, region_tasks):
-    """Gets market database"""
-    market_type = str(region_tasks.select(c.TC_MARKET).sample(n=1).item())
-    market_name = str(region_tasks.select(c.TC_NAME).sample(n=1).item())
-    market_db = MarketDB(market_type=market_type,
-                         name=market_name,
-                         market_path=os.path.join(region_path, 'markets',
-                                                  market_type, market_name),
-                         retailer_path=os.path.join(region_path, 'retailers',
-                                                    market_type, market_name))
-    market_db.load_market_from_files(market_transactions_only=True)
-    market_db = {market_type: {market_name: market_db}}
-    return market_db, market_type
-
-def add_forecaster(agent_db, market_db, market_type, region_path):
-    """Adds agent forecaster to the agent database"""
-    general = get_general(region_path)
-    forecaster = Forecaster(agentDB=agent_db, marketsDB=market_db[market_type], general=general)
-    forecaster.init_forecaster()
-    # TODO if forecaster is updated during the simulation (e.g. by update_local_market_in_forecasters),
-    #  we need to load it here correctly
-    agent_db.forecaster = forecaster  # register
 
 class TaskExecutioner:
     """
@@ -101,9 +45,7 @@ class TaskExecutioner:
             self.pool.update_num_workers(self.num_workers)
             # Execute multiprocessing pool
             result_dirs = self.pool.execute(para_tasks)
-            results = list(map(lambda x: init_agentdb(*x), result_dirs)) # is list needed here? squash with "remove folders"
-            for fn in result_dirs:
-                shutil.rmtree(fn[4])
+            results = self.load_results_from_para(result_dirs)
         # Postprocess results of tasks execution
         self.postprocess_results(tasks, results)
 
@@ -130,6 +72,10 @@ class TaskExecutioner:
 
     def postprocess_results(self, tasks, results):
         """Post-processes results"""
+        raise NotImplementedError
+
+    def load_results_from_para(self, results):
+        """Load results (e.g. from file) if needed"""
         raise NotImplementedError
 
     def set_results_path(self, results_path):
