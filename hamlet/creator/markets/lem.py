@@ -16,7 +16,7 @@ import time
 import shutil
 import hamlet.constants as c
 
-TIMETABLE_COLUMNS = [c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_ENERGY_TYPE, c.TC_ACTIONS]
+TIMETABLE_COLUMNS = [c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME, c.TC_TYPE_ENERGY, c.TC_ACTIONS]
 
 TIMETABLE_FORMAT = {
     c.TC_TIMESTAMP: 'datetime64[ns, UTC]',
@@ -24,7 +24,7 @@ TIMETABLE_FORMAT = {
     c.TC_REGION: 'category',
     c.TC_MARKET: 'category',
     c.TC_NAME: 'category',
-    c.TC_ENERGY_TYPE: 'category',
+    c.TC_TYPE_ENERGY: 'category',
     c.TC_ACTIONS: 'category',
     c.TC_CLEARING_TYPE: 'category',
     c.TC_CLEARING_METHOD: 'category',
@@ -241,7 +241,7 @@ class Lem(Markets):
         timetable[c.TC_REGION] = self.region
         timetable[c.TC_MARKET] = self.market_type
         timetable[c.TC_NAME] = self.name
-        timetable[c.TC_ENERGY_TYPE] = self.energy_type
+        timetable[c.TC_TYPE_ENERGY] = self.energy_type
 
         return timetable
 
@@ -300,13 +300,19 @@ class Lem(Markets):
         prices.rename(columns={c.TC_TIMESTEP: c.TC_TIMESTAMP}, inplace=True)
         prices.reset_index(drop=True, inplace=True)
 
-        # Add region, market and name of market
+        # Add region, market and name of market and retailer, and energy type
         prices[c.TC_REGION] = self.region
         prices[c.TC_MARKET] = self.market_type
         prices[c.TC_NAME] = self.name
+        prices[c.TC_ID_AGENT] = name
+        prices[c.TC_TYPE_ENERGY] = self.energy_type
 
-        # Add retailer name
-        prices['retailer'] = name
+        # Find columns that are in retails and timestamp
+        cols = list(set(prices.columns) & set(timetable.columns))
+
+        # Assign dtypes from timetable format
+        for col in cols:
+            prices[col] = prices[col].astype(timetable[col].dtype)
 
         # Add columns of the retailer for each cost component (e.g. energy, grid, etc.)
         for key, info in config.items():
@@ -325,7 +331,7 @@ class Lem(Markets):
 
         # Add prices and quantities based on the method
         if config['method'] == 'fixed':
-            df = self._create_fixed_cols(df=df, config=config['fixed'], prefix=component)
+            df = self._create_fixed_cols(df=df, config=config['fixed'], commodity=component)
         elif config['method'] == 'file':
             df = self._create_file_cols(df=df, config=config['file'])
         else:
@@ -334,16 +340,26 @@ class Lem(Markets):
         return df
 
     @staticmethod
-    def _create_fixed_cols(df: pd.DataFrame, config: dict, prefix: str):
+    def _create_fixed_cols(df: pd.DataFrame, config: dict, commodity: str):
         """Create fixed prices"""
 
         # Add price information
         for key, val in config.items():
             if isinstance(val, list):
-                df[f'{prefix}_{key}_sell'] = int(val[0] * c.EUR_KWH_TO_EURe7_WH)
-                df[f'{prefix}_{key}_buy'] = int(val[1] * c.EUR_KWH_TO_EURe7_WH)
+                match key:
+                    case c.TC_PRICE | c.TT_MARKET | c.TT_RETAIL:
+                        df[f'{commodity}_{key}_{c.PF_IN}'] = int(val[0] * c.EUR_KWH_TO_EURe7_WH)
+                        df[f'{commodity}_{key}_{c.PF_OUT}'] = int(val[1] * c.EUR_KWH_TO_EURe7_WH)
+                    case c.TC_QUANTITY:
+                        # TODO: Change to conform with issue #117 once it is implemented
+                        df[f'{commodity}_{c.TC_ENERGY}_{c.PF_IN}'] = int(val[0])
+                        df[f'{commodity}_{c.TC_ENERGY}_{c.PF_OUT}'] = int(val[1])
+                    case _:
+                        df[f'{commodity}_{key}_{c.PF_IN}'] = int(val[0])
+                        df[f'{commodity}_{key}_{c.PF_OUT}'] = int(val[1])
+
             else:
-                df[f'{prefix}_{key}'] = val
+                df[f'{commodity}_{key}'] = val
 
         return df
 
@@ -351,9 +367,13 @@ class Lem(Markets):
         """Create prices from file"""
 
         # Read file
-        file = pd.read_csv(os.path.join(self.input_path, 'retailers', self.market_type, config['file']))
+        file = pd.read_csv(os.path.join(self.input_path, 'retailers', self.market_type, config['file']),
+                           index_col=c.TC_TIMESTAMP)
+
+        # Convert index to datetime
+        file.index = pd.to_datetime(file.index, utc=True)
 
         # Add price information from file
-        df = df.join(file.set_index('timestamp'), on='timestamp', how='left')
+        df = df.join(file, on=c.TC_TIMESTAMP, how='left')
 
         return df
