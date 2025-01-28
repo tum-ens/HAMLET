@@ -199,7 +199,8 @@ class Lem(MarketBase):
         bids, offers = self.__split_bids_offers(bids_offers)
 
         # Clear the bids and offers
-        trades_cleared, trades_uncleared = self.__clear_bids_offers(bids, offers, clearing_method, pricing_method)
+        trades_cleared, trades_uncleared = self.__clear_bids_offers(bids, offers, clearing_method, pricing_method,
+                                                                    retailer)
 
         # Create the tables about the market results
         bids_cleared, offers_cleared, bids_uncleared, offers_uncleared, transactions = (
@@ -211,7 +212,6 @@ class Lem(MarketBase):
                                transactions=transactions)
 
         return self.transactions
-
 
     def __settle_ex_ante(self, clearing_method, pricing_method, **kwargs):
 
