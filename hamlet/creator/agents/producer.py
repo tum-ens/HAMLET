@@ -4,13 +4,15 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
-from hamlet.creator.agents.agent_base import AgentBase
 import os
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 from ruamel.yaml.compat import ordereddict
-from pprint import pprint
+
 import hamlet.constants as c
+from hamlet.creator.agents.agent_base import AgentBase
+import hamlet.functions as f
 
 
 class Producer(AgentBase):
@@ -300,7 +302,7 @@ class Producer(AgentBase):
             self.df.loc[i] = np.nan
 
         # general
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/agent_id"] = self._gen_new_ids(n=self.num_agents)
+        self.df.loc[self.idx_start:self.idx_end, f"{key}/agent_id"] = f.gen_ids(n=self.num_agents)
 
         # market participation
         self.df.loc[self.idx_start:self.idx_end, f"{key}/market_participant"] = self._gen_rand_bool_list(

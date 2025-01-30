@@ -272,8 +272,8 @@ class Forecaster:
             self.train_data[market_name + '_wholesale'] = {c.K_TARGET: target_wholesale}
 
             # initial prepare for the local market
-            target_local = target_wholesale.select(c.TC_TIMESTAMP, 'energy_price_sell')\
-                                           .rename({'energy_price_sell': 'energy_price_local'})
+            target_local = target_wholesale.select(c.TC_TIMESTAMP, f'{c.MCT_ENERGY}_{c.TC_PRICE}_{c.PF_IN}')\
+                                           .rename({f'{c.MCT_ENERGY}_{c.TC_PRICE}_{c.PF_IN}': 'energy_price_local'})
             self.train_data[market_name + '_local'] = {c.K_TARGET: target_local}
 
     def __prepare_plants_target_data(self):
