@@ -7,8 +7,8 @@ from hamlet.analyzer.plotter_base import PlotterBase
 
 
 class GridPlotter(PlotterBase):
-    def __init__(self, path: dict, config: dict, data: dict):
-        super().__init__(path=path, config=config, data=data, name_subdirectory='grids')
+    def __init__(self, path: dict, config: dict, data_processor):
+        super().__init__(path=path, config=config, data_processor=data_processor, name_subdirectory='grids')
 
         # Initialize specific grid paths for active grids in the configuration.
         self.specific_grid_path = {}
@@ -25,7 +25,6 @@ class GridPlotter(PlotterBase):
 
     def plot_all(self, **kwargs):
         """Plot all results for active grids based on configuration."""
-
         for grid_type, path_dict in self.specific_grid_path.items():
             if path_dict:
                 plot_functions = [func for func in dir(self) if callable(getattr(self, func)) and
@@ -47,7 +46,7 @@ class GridPlotter(PlotterBase):
         Returns:
             matplotlib.figure.Figure: The figure containing the plot of transformer loading percentages.
         """
-        trafo_loading_dict = self.data['electricity_transformer_loading']
+        trafo_loading_dict = super().get_plotting_data(data_name='electricity_transformer_loading')
 
         # Combine transformer loading data from all scenarios
         trafo_loading = pd.concat(trafo_loading_dict.values(), axis=1)
@@ -76,7 +75,7 @@ class GridPlotter(PlotterBase):
             dict: A dictionary with scenario names as keys and Plotly Figure objects as values.
         """
         result_figs = {}
-        grid_topology = self.data['electricity_grid_topology']
+        grid_topology = super().get_plotting_data(data_name='electricity_grid_topology')
 
         # Iterate through each scenario
         for scenario_name, scenario_path in self.path.items():

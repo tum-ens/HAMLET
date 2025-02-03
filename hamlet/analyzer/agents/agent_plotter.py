@@ -3,8 +3,8 @@ from hamlet.analyzer.plotter_base import PlotterBase
 
 
 class AgentPlotter(PlotterBase):
-    def __init__(self, path: dict, config: dict, data: dict):
-        super().__init__(path=path, config=config, data=data, name_subdirectory='agents')
+    def __init__(self, path: dict, config: dict, data_processor):
+        super().__init__(path=path, config=config, data_processor=data_processor, name_subdirectory='agents')
 
     @PlotterBase.decorator_plot_function
     def plot_all_meters_data(self, **kwargs):
@@ -18,7 +18,7 @@ class AgentPlotter(PlotterBase):
         Returns:
             fig (matplotlib.figure.Figure): The figure containing the plots for all scenarios.
         """
-        all_meters_data = self.data['all_meters_data']
+        all_meters_data = super().get_plotting_data(data_name='all_meters_data')
         reference_columns = list(all_meters_data.values())[0].columns
 
         # Determine the number of subplots

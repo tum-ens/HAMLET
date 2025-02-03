@@ -1,9 +1,8 @@
-__author__ = "TUM-Doepfert"
+__author__ = "jiahechu"
 __credits__ = ""
 __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
-__status__ = "Development"
 
 import os
 import hamlet.functions as f
@@ -41,19 +40,19 @@ class Analyzer:
         self.agents = AgentPlotter(
             path=path,
             config=self.config,
-            data=AgentDataProcessor(path=path, config=self.config).process()
+            data_processor=AgentDataProcessor(path=path, config=self.config)
         )
 
         self.grids = GridPlotter(
             path=path,
             config=self.config,
-            data=GridDataProcessor(path=path, config=self.config).process()
+            data_processor=GridDataProcessor(path=path, config=self.config)
         )
 
         self.markets = MarketPlotter(
             path=path,
             config=self.config,
-            data=MarketDataProcessor(path=path, config=self.config).process()
+            data_processor=MarketDataProcessor(path=path, config=self.config)
         )
 
     def plot_all(self, save_path=None, **kwargs):

@@ -5,8 +5,8 @@ from hamlet.analyzer.plotter_base import PlotterBase
 
 
 class MarketPlotter(PlotterBase):
-    def __init__(self, path: dict, config: dict, data: dict):
-        super().__init__(path=path, config=config, data=data, name_subdirectory='markets')
+    def __init__(self, path: dict, config: dict, data_processor):
+        super().__init__(path=path, config=config, data_processor=data_processor, name_subdirectory='markets')
 
     @PlotterBase.decorator_plot_function
     def plot_total_balancing(self, **kwargs):
@@ -22,7 +22,7 @@ class MarketPlotter(PlotterBase):
             dict: A dictionary where keys are scenario names, and values are matplotlib Figure objects.
                   Each figure contains the plots for all markets in the scenario.
         """
-        total_balancing = self.data['total_balancing']
+        total_balancing = super().get_plotting_data(data_name='total_balancing')
         result_figs = {}
 
         # Iterate through all scenarios
@@ -90,7 +90,7 @@ class MarketPlotter(PlotterBase):
             dict: A dictionary where keys are scenario names and values are matplotlib Figure objects.
         """
 
-        agent_balancing_data = self.data['agent_balancing']
+        agent_balancing_data = super().get_plotting_data(data_name='agent_balancing')
 
         num_scenarios = len(agent_balancing_data)
         fig, axes = plt.subplots(
@@ -141,6 +141,7 @@ class MarketPlotter(PlotterBase):
 
         return fig
 
+    @PlotterBase.decorator_plot_function
     def plot_average_balancing(self, market_only=False, **kwargs):
         """
         Plot average balancing data for all scenarios. Generates line plots of average pricing data for each market
@@ -153,7 +154,7 @@ class MarketPlotter(PlotterBase):
         Returns:
             matplotlib.figure.Figure: A figure containing the plots for all scenarios.
         """
-        average_pricing_data = self.data['average_pricing']
+        average_pricing_data = super().get_plotting_data(data_name='average_pricing')
         num_scenarios = len(average_pricing_data)
 
         fig, axes = plt.subplots(

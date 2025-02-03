@@ -3,12 +3,12 @@ import matplotlib.pyplot as plt
 
 
 class PlotterBase:
-    def __init__(self, path: dict, config: dict, data: dict, name_subdirectory: str):
+    def __init__(self, path: dict, config: dict, name_subdirectory: str, data_processor):
         # Configuration dictionary
         self.config = config
 
-        # Processed results data
-        self.data = data
+        # Data processor
+        self.data_processor = data_processor
 
         # Plotted figures
         self.figures = {}
@@ -24,12 +24,35 @@ class PlotterBase:
     def plot_all(self, **kwargs):
         """Plot all relevant results data."""
         # get all plot data functions, function has to start with 'plot_' to be included
-        plot_functions = [func for func in dir(self) if callable(getattr(self, func)) and func.startswith('plot_') and
-                          func != 'plot_all']
+        plot_functions = [func for func in dir(self) if callable(getattr(self, func)) and
+                          getattr(getattr(self, func), 'is_plot', False)]
 
         # iterate through all functions and plot results
         for func in plot_functions:
-            getattr(self, func)(**kwargs)
+            try:
+                getattr(self, func)(**kwargs)
+            except Exception as e:
+                print(f"Error in {func}: {e}")
+
+    def get_plotting_data(self, data_name, **kwargs):
+        """
+        Retrieve or process data for plotting. If the requested data is not already stored in the data processor, it is
+        processed using the corresponding method and then stored.
+
+        Args:
+            data_name (str): The name of the data to retrieve or process.
+
+        Returns:
+            Any: The processed or retrieved data associated with `data_name`.
+        """
+        # Check if the requested data is already available in the data processor
+        if data_name not in self.data_processor.data.keys():
+            # If not, generate the processing method name dynamically and call it
+            self.data_processor.data[data_name] = (getattr(self.data_processor, '_'.join(['process', data_name]))
+                                                   (**kwargs))
+
+        # Return the processed or retrieved data
+        return self.data_processor.data[data_name]
 
     @staticmethod
     def decorator_plot_function(func):
@@ -44,21 +67,20 @@ class PlotterBase:
         """
 
         def func_wrapper(*args, **kwargs):
+            func.is_plot = True
             result_figs = func(*args, **kwargs)  # Execute the function and get figures
             save_path = kwargs.get('save_path')
 
             if save_path:
                 os.makedirs(save_path, exist_ok=True)  # Ensure save path exists
 
-                if isinstance(result_figs, dict):
-                    for name, fig in result_figs.items():
-                        save_method = "savefig" if hasattr(fig, "savefig") else "write_image"
-                        getattr(fig, save_method)(
-                            os.path.join(save_path, f"{name}_{func.__name__.replace('plot_', '')}.pdf"))
-                else:
-                    save_method = "savefig" if hasattr(result_figs, "savefig") else "write_image"
-                    getattr(result_figs, save_method)(
-                        os.path.join(save_path, f"{func.__name__.replace('plot_', '')}.pdf"))
+                if not isinstance(result_figs, dict):
+                    result_figs = {'': result_figs}
+
+                for name, fig in result_figs.items():
+                    save_method = "savefig" if hasattr(fig, "savefig") else "write_image"
+                    getattr(fig, save_method)(
+                        os.path.join(save_path, f"{name}_{func.__name__.replace('plot_', '')}.pdf"))
 
             plt.show()
 
