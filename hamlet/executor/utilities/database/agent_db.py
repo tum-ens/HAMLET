@@ -5,6 +5,7 @@ __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
 import os.path
+import pickle
 import polars as pl
 from hamlet import functions as f
 
@@ -78,8 +79,6 @@ class AgentDB:
         self.setpoints = f.load_file(path=os.path.join(self.agent_path, 'setpoints.ft'), df='polars', method='eager')
         self.forecasts = f.load_file(path=os.path.join(self.agent_path, 'forecasts.ft'), df='polars', method='eager')
 
-        # initialize setpoints and forecast
-
     def register_sub_agent(self, id: str, path: str) -> None:
         """
         Registers a sub-agent with a given ID and path.
@@ -111,6 +110,10 @@ class AgentDB:
         f.save_file(path=os.path.join(self.agent_save, 'socs.ft'), data=self.socs, df='polars')
         f.save_file(path=os.path.join(self.agent_save, 'setpoints.ft'), data=self.setpoints, df='polars')
         f.save_file(path=os.path.join(self.agent_save, 'forecasts.ft'), data=self.forecasts, df='polars')
+
+        # Save forecaster train data (for multiprocessing)
+        with open(os.path.join(self.agent_save, 'forecaster_train.pickle'), 'wb') as handle:
+            pickle.dump(self.forecaster.train_data, handle)
 
         # Data optional to save as there aren't any changes to them (as of now)
         if save_all:

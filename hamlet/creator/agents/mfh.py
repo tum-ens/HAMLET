@@ -4,14 +4,16 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
-from hamlet.creator.agents.agent_base import AgentBase
 import os
 import random
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 from ruamel.yaml.compat import ordereddict
+
 import hamlet.constants as c
-import random
+from hamlet.creator.agents.agent_base import AgentBase
+import hamlet.functions as f
 
 
 class Mfh(AgentBase):
@@ -415,7 +417,7 @@ class Mfh(AgentBase):
     def _general_config(self, key: str, config: dict) -> pd.DataFrame:
 
         # Fill general information for buildings
-        self.df[f"{key}/agent_id"] = self._gen_new_ids(n=self.num)
+        self.df[f"{key}/agent_id"] = f.gen_ids(n=self.num)
         self.ids = dict.fromkeys(set(self.df[f"{key}/agent_id"]), [])
 
         # parameters
@@ -432,7 +434,7 @@ class Mfh(AgentBase):
             # assign main and apartment ids
             aps_num = self.df.loc[self.df[f"{key}/agent_id"] == agent_id, f"{key}/parameters/apartments"].iloc[0]
             self.num_aps += aps_num
-            aps_ids = self._gen_new_ids(n=aps_num)
+            aps_ids = f.gen_ids(n=aps_num)
             self.ids[agent_id] = aps_ids
             self.df.loc[self.df[f"{key}/agent_id"] == agent_id, f"{key}/sub_id"] = [self.main_subid] + aps_ids
 
@@ -449,7 +451,7 @@ class Mfh(AgentBase):
         # Fill general information for apartments
         self.df[f"{key}/name"] = list(self.agents["name"])
         self.df[f"{key}/bus"] = list(self.agents["bus"])
-        self.df[f"{key}/sub_id"] = self._gen_new_ids(n=len(self.df))
+        self.df[f"{key}/sub_id"] = f.gen_ids(n=len(self.df))
         # TODO: adjust as now different approach self.ids = dict.fromkeys(set(self.df[f"{key}/agent_id"]), [])
 
         # Create a separate df that contains the buildings (i.e. sub ID = self.main_subid)
@@ -459,7 +461,7 @@ class Mfh(AgentBase):
         df_buildings.index = range(max(self.df.index) + 1, max(self.df.index) + 1 + len(df_buildings))
 
         # Assign agent, sub IDs and name
-        df_buildings[f"{key}/agent_id"] = self._gen_new_ids(n=self.num)
+        df_buildings[f"{key}/agent_id"] = f.gen_ids(n=self.num)
         df_buildings[f"{key}/sub_id"] = self.main_subid
         df_buildings[f"{key}/name"] = df_buildings[f"{key}/name"].apply(lambda x: x[:-1] + "0")
 

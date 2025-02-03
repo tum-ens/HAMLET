@@ -38,7 +38,7 @@ class TradingBase:
         self.dt_hours = self.dt / pd.Timedelta(hours=1)  # in hours
 
         # Get the energy type
-        self.energy_type = self.timetable.row(0, named=True)[c.TC_ENERGY_TYPE]
+        self.energy_type = self.timetable.row(0, named=True)[c.TC_TYPE_ENERGY]
 
         # Get the market data, name, type and transactions
         self.market_data = kwargs['market_data']
@@ -84,7 +84,9 @@ class TradingBase:
         # Get the forecast of the prices
         self.forecast = self.agent.forecasts
         # Reduce the table to only include the relevant columns (energy price sell and buy)
-        relevant_cols = [c.TC_TIMESTEP, 'energy_price_sell', 'energy_price_buy']
+        relevant_cols = [c.TC_TIMESTEP,
+                         f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}',
+                         f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}']
         self.forecast = self.forecast.select(relevant_cols)
 
     def create_bids_offers(self):
@@ -98,14 +100,15 @@ class TradingBase:
         self.market_transactions = self.market_transactions.fill_null(0)
 
         # Check if there is a difference between the setpoints and the previous market results
+        col_buy_sell = 'buy_sell'
         self.market_transactions = self.market_transactions.with_columns(
-            (pl.col(f'{self.market_name}_{self.energy_type}') - pl.col(c.TC_ENERGY)).alias('buy_sell').cast(pl.Int32))
+            (pl.col(f'{self.market_name}_{self.energy_type}') - pl.col(c.TC_ENERGY)).alias(col_buy_sell).cast(pl.Int32))
 
         # Split the buy and sell values
         self.market_transactions = self.market_transactions.with_columns(
             [
-                pl.col('buy_sell').apply(lambda x: abs(x) if x > 0 else 0).alias(c.TC_ENERGY_IN).cast(pl.UInt64),
-                pl.col('buy_sell').apply(lambda x: abs(x) if x < 0 else 0).alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
+                pl.col(col_buy_sell).apply(lambda x: abs(x) if x > 0 else 0).alias(c.TC_ENERGY_IN).cast(pl.UInt64),
+                pl.col(col_buy_sell).apply(lambda x: abs(x) if x < 0 else 0).alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
             ]
         )
 
@@ -117,18 +120,18 @@ class TradingBase:
                 ]
             )
             # Drop unnecessary columns
-            self.market_transactions = self.market_transactions.drop([c.TC_ENERGY, 'buy_sell',
+            self.market_transactions = self.market_transactions.drop([c.TC_ENERGY, col_buy_sell,
                                                                       f'{self.market_name}_{self.energy_type}',
                                                                       f'{c.TC_TIMESTEP}_right'])
         except pl.exceptions.ColumnNotFoundError:
             # Drop unnecessary columns
-            self.market_transactions = self.market_transactions.drop([c.TC_ENERGY, 'buy_sell',
+            self.market_transactions = self.market_transactions.drop([c.TC_ENERGY, col_buy_sell,
                                                                       f'{self.market_name}_{self.energy_type}'])
 
 
         # Create the dataframe for the bids and offers
         self.bids_offers = self.timetable.select([c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME,
-                                                  c.TC_ENERGY_TYPE])
+                                                  c.TC_TYPE_ENERGY])
 
         # Compute length of table
         len_table = len(self.bids_offers)
@@ -168,7 +171,8 @@ class TradingBase:
 
         # Drop unnecessary columns
         self.bids_offers = self.bids_offers.drop(['within_horizon', 'time_to_trade',
-                                                  'energy_price_sell', 'energy_price_buy'])
+                                                  f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}',
+                                                  f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'])
 
         return self.bids_offers
 
@@ -209,11 +213,11 @@ class Linear(TradingBase):
         # Add columns for the price per unit
         self.bids_offers = self.bids_offers.with_columns(
             [
-                (pl.col('energy_price_buy')
-                 + ((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table * pl.col(c_factor)))
+                (pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}')
+                 + ((pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}') - pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}')) / len_table * pl.col(c_factor)))
                 .alias(c.TC_PRICE_PU_IN).round().cast(pl.Int32),
-                (((pl.col('energy_price_sell') - pl.col('energy_price_buy')) / len_table
-                  * (len_table - pl.col(c_factor))) + pl.col('energy_price_buy'))
+                (((pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}') - pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}')) / len_table
+                  * (len_table - pl.col(c_factor))) + pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'))
                 .alias(c.TC_PRICE_PU_OUT).round().cast(pl.Int32),
             ]
         )
@@ -248,13 +252,13 @@ class Zi(TradingBase):
         # Add columns for the price per unit
         self.bids_offers = self.bids_offers.with_columns(
             [
-                (((pl.col('energy_price_sell') - pl.col('energy_price_buy'))
+                (((pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}') - pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'))
                   * pl.Series([random.random() for _ in range(len_table)]))
-                 + pl.col('energy_price_buy'))
+                 + pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'))
                 .alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
-                (((pl.col('energy_price_sell') - pl.col('energy_price_buy'))
+                (((pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}') - pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'))
                   * pl.Series([random.random() for _ in range(len_table)]))
-                 + pl.col('energy_price_buy'))
+                 + pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'))
                 .alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
             ]
         )
@@ -285,8 +289,8 @@ class Retailer(TradingBase):
         # Add columns for the price per unit
         self.bids_offers = self.bids_offers.with_columns(
             [
-                pl.col('energy_price_buy').alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
-                pl.col('energy_price_sell').alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
+                pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}').alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
+                pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}').alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
             ]
         )
 

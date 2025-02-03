@@ -145,11 +145,9 @@ class Executor:
 
     def cleanup(self):
         """Cleans up the scenario after execution"""
-        self.database.save_database(os.path.dirname(self.path_results))
+        self.database.save_database(os.path.dirname(self.path_results), save_restriction_commands_only=False)
 
         self.database.concat_market_files()
-
-        self.database.save_grid(os.path.dirname(self.path_results))
 
         self.pbar.set_description('Simulation finished')
 
@@ -224,8 +222,8 @@ class Executor:
         self.database.setup_database(self.structure)
 
         # assign maximal number of iterations from the database
-        self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]
-        ['direct_power_control']['max_iteration'])
+        self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['restrictions']
+                              ['max_iteration'])
 
     @staticmethod
     def __wait_for_ts(timestamp):

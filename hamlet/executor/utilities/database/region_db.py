@@ -78,7 +78,7 @@ class RegionDB:
         """
         for markets in self.markets.values():
             for market in markets.values():
-                local_market_key = market.market_name + '_local'    # keys of local market for lookup in forecaster
+                local_market_key = f'{market.market_name}_{c.TT_MARKET}'  # key of local market for lookup in forecaster
 
                 # TODO: calculate the new market price, the result should be in this format:
                 # 'new_target' column should contain market price

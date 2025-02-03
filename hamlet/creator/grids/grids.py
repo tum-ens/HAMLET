@@ -83,8 +83,9 @@ class Grids:
                 self.__create_folder(path=path, delete=False)
 
                 # copy grid file
-                shutil.copy(os.path.join(self.config_path, config[config['method']]['file']),
-                            os.path.join(path, config[config['method']]['file']))
+                shutil.copy(os.path.join(self.config_path,
+                                         config['generation'][config['generation']['method']]['file']),
+                            os.path.join(path, config['generation'][config['generation']['method']]['file']))
             else:
                 pass
 

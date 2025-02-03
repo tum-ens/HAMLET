@@ -50,7 +50,6 @@ sfh:
                                                 # note: value is randomly chosen from list
 
     sizing:
-      # TODO: method: absolute, relative      -> absolute is Wh/a and relative is Wh/a/person -> json file decides what per person values are assigned
 
       distribution: [0.2, 0.6, 0.2]             # relative distribution of sizing parameters
                                                 # unit: 1 [0, 1]
@@ -262,8 +261,6 @@ sfh:
                                                 # options:
                                                 #   - linked:     linked to the respective building
                                                 #   - pu:         random pu timeseries file
-                                                #   - TODO: 5r1c: 5r1c model (https://github.com/architecture-building-systems/RC_BuildingSimulator)
-                                                #   - TODO: 2r2c: 2r2c model (https://buildingenergygeeks.org/a-simple-rc-model-python.html#case-study)
                                                 # note: if file is set to linked, the heat demand file is linked to
                                                 #   the respective inflexible electricity demand and number of occupants
 
@@ -362,10 +359,7 @@ sfh:
 
       file: ['pu', 'pu', 'pu']                  # file to be used for dhw demand
                                                 # options:
-                                                #   - TODO: linked: linked to the respective building (not yet implemented)
-                                                #   - pu:     random pu timeseries file
-                                                # note: if file is set to linked, the dhw demand file is linked to
-                                                #   the respective inflexible electricity demand and number of occupants
+                                                #   - pu: random pu timeseries file (per person)
 
       temperature: [55, 55, 55]                 # supply temperature of dhw
                                                 # unit: °C
@@ -1461,8 +1455,6 @@ mfh:
                                                 # options:
                                                 #   - linked:     linked to the respective building
                                                 #   - pu:         random pu timeseries file
-                                                #   - TODO: 5r1c: 5r1c model (https://github.com/architecture-building-systems/RC_BuildingSimulator)
-                                                #   - TODO: 2r2c: 2r2c model (https://buildingenergygeeks.org/a-simple-rc-model-python.html#case-study)
                                                 # note: if file is set to linked, the heat demand file is linked to
                                                 #   the respective inflexible electricity demand and number of occupants
 
@@ -1572,10 +1564,7 @@ mfh:
 
       file: ['pu', 'pu', 'pu']                  # file to be used for dhw demand
                                                 # options:
-                                                #   - TODO: linked: linked to the respective building (not yet implemented)
-                                                #   - pu:     random pu timeseries file
-                                                # note: if file is set to linked, the dhw demand file is linked to
-                                                #   the respective inflexible electricity demand and number of occupants
+                                                #   - pu: random pu timeseries file (per person)
 
       temperature: [55, 55, 55]                 # supply temperature of dhw
                                                 # unit: °C
