@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from copy import deepcopy
 import hamlet.functions as f
 import hamlet.constants as c
 from hamlet.analyzer.data_processor_base import DataProcessorBase
@@ -41,35 +42,44 @@ class AgentDataProcessor(DataProcessorBase):
                     # Process meter readings
                     for meter_name in meters.columns:
                         plant_key = '_'.join(meter_name.split('_')[1:])
-                        if plant_key not in scenario_meters:
-                            scenario_meters[plant_key] = {}
+                        energy_type = meter_name.split('_')[-1]
+                        if energy_type not in scenario_meters:
+                            scenario_meters[energy_type] = {}
+
+                        if plant_key not in scenario_meters[energy_type]:
+                            scenario_meters[energy_type][plant_key] = {}
 
                         # Store the difference in meter readings (time series)
-                        scenario_meters[plant_key][meter_name] = meters[meter_name].diff()
+                        scenario_meters[energy_type][plant_key][meter_name] = meters[meter_name].diff()
 
             # Combine all agent data for each meter type
-            plant_data = {
-                plant_key: pd.concat(readings.values(), axis=1)
-                for plant_key, readings in scenario_meters.items()
-            }
+            plant_data = {}
+            for energy_type, energy_data in scenario_meters.items():
+                plant_data[energy_type] = {plant_key: pd.concat(readings.values(), axis=1) for plant_key, readings in
+                                           energy_data.items()}
 
             # Aggregate data for plotting
-            summarized_data = pd.DataFrame()
-            for plant_key, plant_readings in plant_data.items():
-                aggregated_reading = plant_readings.sum(axis=1)
+            summarized_data = {key: pd.DataFrame() for key in plant_data.keys()}
+            for energy_type, energy_data in plant_data.items():
+                for plant_key, readings in energy_data.items():
+                    aggregated_reading = readings.sum(axis=1)
 
-                # Split into charging and discharging if applicable
-                if (aggregated_reading > 0).any() and (aggregated_reading < 0).any():
-                    summarized_data[f"{plant_key}_discharging"] = aggregated_reading[aggregated_reading > 0]
-                    summarized_data[f"{plant_key}_charging"] = aggregated_reading[aggregated_reading < 0]
-                else:
-                    summarized_data[plant_key] = aggregated_reading
+                    # Split into charging and discharging if applicable
+                    if (aggregated_reading > 0).any() and (aggregated_reading < 0).any():
+                        discharging = deepcopy(aggregated_reading)
+                        discharging[discharging < 0] = 0
+                        charging = deepcopy(aggregated_reading)
+                        charging[charging > 0] = 0
+                        summarized_data[energy_type][f"{plant_key}_discharging"] = discharging
+                        summarized_data[energy_type][f"{plant_key}_charging"] = charging
+                    else:
+                        summarized_data[energy_type][plant_key] = aggregated_reading
 
-            # Add total power and finalize DataFrame
-            summarized_data.fillna(0, inplace=True)
-            summarized_data['total_power'] = summarized_data.sum(axis=1)
-            summarized_data.index = pd.DatetimeIndex(timestamps)
-            summarized_data /= 1000  # Convert to kilowatts
+                # Add total power and finalize DataFrame
+                summarized_data[energy_type].fillna(0, inplace=True)
+                summarized_data[energy_type]['total'] = summarized_data[energy_type].sum(axis=1)
+                summarized_data[energy_type].index = pd.DatetimeIndex(timestamps)
+                summarized_data[energy_type] /= 1000  # Convert to kilowatts
 
             # Store summarized data for the scenario
             results_summary[scenario_name] = summarized_data

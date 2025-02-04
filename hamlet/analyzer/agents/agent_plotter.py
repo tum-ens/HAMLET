@@ -19,34 +19,35 @@ class AgentPlotter(PlotterBase):
             fig (matplotlib.figure.Figure): The figure containing the plots for all scenarios.
         """
         all_meters_data = super().get_plotting_data(data_name='all_meters_data')
-        reference_columns = list(all_meters_data.values())[0].columns
+        result_figs = {}
 
-        # Determine the number of subplots
-        num_scenarios = len(all_meters_data)
-        fig, axes = plt.subplots(
-            nrows=num_scenarios,
-            ncols=1,
-            figsize=(10, 4 * num_scenarios),
-            layout="constrained"
-        )
-
-        # Ensure axes is iterable, even for single subplot
-        axes = axes if num_scenarios > 1 else [axes]
-
-        # Plot data for each scenario
-        for ax, (scenario_name, meters_df) in zip(axes, all_meters_data.items()):
-            # Filter and plot the data
-            meters_df = meters_df[reference_columns]
-            meters_df.drop(columns='total_power').plot.area(ax=ax)
-            meters_df['total_power'].plot.line(
-                ax=ax, color='black', linewidth=2, linestyle='--', label='Total Power'
+        for scenario_name, scenario_data in all_meters_data.items():
+            # Determine the number of subplots
+            num_energy_type = len(scenario_data)
+            fig, axes = plt.subplots(
+                nrows=num_energy_type,
+                ncols=1,
+                figsize=(10, 4 * num_energy_type),
+                layout="constrained"
             )
 
-            # Set axis labels, title, and legend
-            ax.set(xlabel='', ylabel='Power [kW]', title=scenario_name)
-            ax.legend(loc='center left', bbox_to_anchor=(1.05, 0.5), ncol=1)
+            # Ensure axes is iterable, even for single subplot
+            axes = axes if num_energy_type > 1 else [axes]
 
-        fig.tight_layout()
-        plt.show()
+            # Plot data for each scenario
+            for ax, (energy_type, meters_df) in zip(axes, scenario_data.items()):
+                # Filter and plot the data
+                meters_df.drop(columns='total').plot.area(ax=ax)
+                meters_df['total'].plot.line(
+                    ax=ax, color='black', linewidth=2, linestyle='--', label='total'
+                )
+
+                # Set axis labels, title, and legend
+                ax.set(xlabel='', ylabel=f'{energy_type} [kW]', title=scenario_name)
+                ax.legend(loc='center left', bbox_to_anchor=(1.05, 0.5), ncol=1)
+
+            fig.tight_layout()
+            plt.show()
+            result_figs[scenario_name] = fig
 
         return fig
