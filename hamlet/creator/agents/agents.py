@@ -480,7 +480,7 @@ class Agents:
                 plant_dict["type"] = plant
 
                 # Generate and store plant ID
-                plant_id = self._gen_new_ids()
+                plant_id = f.gen_ids()
                 plant_dict["id"] = plant_id
                 plants_ids += [plant_id]
 
@@ -542,7 +542,6 @@ class Agents:
             None
 
         """
-
         # Create the agent files
         for key, value in data.items():
             f.save_file(path=os.path.join(path, key), data=value)
@@ -2016,18 +2015,6 @@ class Agents:
             return Agents._get_closest_sorted(search_list, val)
 
         return min(enumerate(search_list), key=lambda x: abs(x[1] - val))
-
-    @staticmethod
-    def _gen_new_ids(n: int = 1, length: int = 15) -> Union[str, list[str]]:
-        """creates random ID"""
-        ids = []
-        for _ in range(n):
-            ids.append("".join(random.choices(string.ascii_letters + string.digits, k=length)))
-
-        if len(ids) == 1:
-            return ids[0]
-        else:
-            return ids
 
 
 # Playground

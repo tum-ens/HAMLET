@@ -129,19 +129,19 @@ class Market(LinopyComps):
         self.dt_hours = kwargs['delta'].total_seconds() * c.SECONDS_TO_HOURS  # time delta in hours
 
         # Calculate the upper and lower bounds for the market power from the energy quantity
-        self.upper = [int(round(x / self.dt_hours)) for x in self.fcast[f'energy_quantity_sell']]
-        self.lower = [int(round(x / self.dt_hours * -1)) for x in self.fcast[f'energy_quantity_buy']]
+        self.upper = [int(round(x / self.dt_hours)) for x in self.fcast[f'{c.TC_ENERGY}_{c.TC_ENERGY}_{c.PF_IN}']]
+        self.lower = [int(round(x / self.dt_hours * -1)) for x in self.fcast[f'{c.TC_ENERGY}_{c.TC_ENERGY}_{c.PF_OUT}']]
 
         self.lower = pd.Series(self.lower, index=self.timesteps)
         self.upper = pd.Series(self.upper, index=self.timesteps)
 
         # Get market price forecasts
-        self.price_sell = pd.Series(self.fcast[f'energy_price_sell'], index=self.timesteps)
-        self.price_buy = pd.Series(self.fcast[f'energy_price_buy'], index=self.timesteps)
-        self.grid_sell = pd.Series(self.fcast[f'grid_local_sell'], index=self.timesteps)
-        self.grid_buy = pd.Series(self.fcast[f'grid_local_buy'], index=self.timesteps)
-        self.levies_sell = pd.Series(self.fcast[f'levies_price_sell'], index=self.timesteps)
-        self.levies_buy = pd.Series(self.fcast[f'levies_price_buy'], index=self.timesteps)
+        self.price_sell = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}'], index=self.timesteps)
+        self.price_buy = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
+        self.grid_sell = pd.Series(self.fcast[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'], index=self.timesteps)
+        self.grid_buy = pd.Series(self.fcast[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'], index=self.timesteps)
+        self.levies_sell = pd.Series(self.fcast[f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
+        self.levies_buy = pd.Series(self.fcast[f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_IN}'], index=self.timesteps)
 
         # TODO: Add constraint that market value becomes zero if there is no market for this energy:
         #  One way to do this is check if market forecasts can be obtained. If that is not the case, it is assumed
@@ -239,7 +239,7 @@ class InflexibleLoad(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        self.power = pd.Series(self.fcast[f'{self.name}_power'], index=self.timesteps, dtype='int32')
+        self.power = pd.Series(self.fcast[f'{self.name}_power'].cast(int), index=self.timesteps, dtype='int32')
 
     def define_variables(self, model, **kwargs):
         comp_type = kwargs['comp_type']

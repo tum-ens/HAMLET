@@ -4,15 +4,17 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
-from hamlet.creator.agents.agent_base import AgentBase
 import os
-import pandas as pd
-import numpy as np
-from ruamel.yaml.compat import ordereddict
-from pprint import pprint
-import hamlet.constants as c
-from typing import Callable
 import random
+from typing import Callable
+
+import numpy as np
+import pandas as pd
+from ruamel.yaml.compat import ordereddict
+
+import hamlet.constants as c
+from hamlet.creator.agents.agent_base import AgentBase
+import hamlet.functions as f
 
 
 class Sfh(AgentBase):
@@ -290,7 +292,7 @@ class Sfh(AgentBase):
         config = self.config[f"{key}"]
 
         # general
-        self.df[f"{key}/agent_id"] = self._gen_new_ids(n=self.num)
+        self.df[f"{key}/agent_id"] = f.gen_ids(n=self.num)
 
         # parameters
         idx_list = self._gen_idx_list_from_distr(n=self.num, distr=config["parameters"]["distribution"])
