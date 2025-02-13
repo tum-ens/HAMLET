@@ -78,7 +78,7 @@ class RegionDB:
         """
         for markets in self.markets.values():
             for market in markets.values():
-                local_market_key = f'{market.market_name}_{c.TT_MARKET}'  # key of local market for lookup in forecaster
+                wholesale_market_key = f'{market.market_name}_{c.TT_RETAIL}'  # key of local market for lookup
 
                 # initialize
                 unique_timestep_bids = market.bids_cleared.select(c.TC_TIMESTEP).unique()
@@ -120,24 +120,24 @@ class RegionDB:
                 for agents in self.agents.values():
                     for agent in agents.values():
                         # print(f'updating local market for agent {agent.agent_id}')
-                        old_target = agent.forecaster.train_data[market_key][c.K_TARGET]
+                        old_target = agent.forecaster.train_data[wholesale_market_key][c.K_TARGET]
 
                         # replace a part of the old target with new target
                         new_target = old_target.join(market_price, on=c.TC_TIMESTAMP, how='left')
                         new_target = new_target.with_columns(pl.when(pl.col('new_target_buy').is_null())
-                                                             .then(pl.col('energy_price_buy'))
+                                                             .then(pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}'))
                                                              .otherwise(pl.col('new_target_buy'))
-                                                             .alias('energy_price_buy'))
+                                                             .alias(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}'))
                         new_target = new_target.with_columns(pl.when(pl.col('new_target_sell').is_null())
-                                                             .then(pl.col('energy_price_sell'))
+                                                             .then(pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'))
                                                              .otherwise(pl.col('new_target_sell'))
-                                                             .alias('energy_price_sell'))
+                                                             .alias(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'))
 
                         # delete unnecessary column
                         new_target = new_target.drop('new_target_buy', 'new_target_sell')
 
                         # update forecaster
-                        agent.forecaster.update_forecaster(id=market_key, dataframe=new_target, target=True)
+                        agent.forecaster.update_forecaster(id=wholesale_market_key, dataframe=new_target, target=True)
 
     def __register_all_agents(self):
         """
