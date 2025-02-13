@@ -154,6 +154,7 @@ class Agents:
                 'func_ts': self.__make_timeseries_heat,
             },
             c.P_DHW: {
+                'func_ts': self.__make_timeseries_dhw,
             },
             c.P_PV: {
                 'specs': self.__timeseries_from_specs_pv,
@@ -479,7 +480,7 @@ class Agents:
                 plant_dict["type"] = plant
 
                 # Generate and store plant ID
-                plant_id = self._gen_new_ids()
+                plant_id = f.gen_ids()
                 plant_dict["id"] = plant_id
                 plants_ids += [plant_id]
 
@@ -502,7 +503,7 @@ class Agents:
                         file_path=os.path.join(self.input_path, 'agents', agent_type, plant,
                                                plant_dict['sizing']['file']),
                         plant_id=plant_id, plant_dict=plant_dict,
-                        delta=pd.Timedelta(f"{(timeseries.index[1] - timeseries.index[0]) / 3}S"))
+                        delta=pd.Timedelta(f"{(timeseries.index[1] - timeseries.index[0])}S"))
                     timeseries = timeseries.join(ts)
                 except KeyError:
                     specs = None
@@ -541,7 +542,6 @@ class Agents:
             None
 
         """
-
         # Create the agent files
         for key, value in data.items():
             f.save_file(path=os.path.join(path, key), data=value)
@@ -1094,6 +1094,11 @@ class Agents:
         df = df['heat'].round().astype(int).to_frame()
 
         return df
+
+    @staticmethod
+    def __make_timeseries_dhw(df: pd.DataFrame, plant_dict: dict) -> pd.DataFrame:
+        """Ensures that values are integers and rounds them to the nearest integer."""
+        return df.round().astype(int)
 
     @staticmethod
     def __list_to_dict(input_list: list, separator: str = '/') -> dict:
@@ -2010,18 +2015,6 @@ class Agents:
             return Agents._get_closest_sorted(search_list, val)
 
         return min(enumerate(search_list), key=lambda x: abs(x[1] - val))
-
-    @staticmethod
-    def _gen_new_ids(n: int = 1, length: int = 15) -> Union[str, list[str]]:
-        """creates random ID"""
-        ids = []
-        for _ in range(n):
-            ids.append("".join(random.choices(string.ascii_letters + string.digits, k=length)))
-
-        if len(ids) == 1:
-            return ids[0]
-        else:
-            return ids
 
 
 # Playground

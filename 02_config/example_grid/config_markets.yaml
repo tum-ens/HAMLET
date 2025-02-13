@@ -16,23 +16,24 @@ lem_continuous:                       # name of the market (must be unique in it
   clearing:
     type: ex-ante                     # type of market clearing
                                       # options:
-                                      #   - ex-ante: market clearing is done before the settlement
-                                      #   - ex-post: market clearing is done after the settlement (to be implemented)
+                                      #   - ex-ante: market clearing is done before the delivery period
+                                      #   - TODO ex-post: market clearing is done after the delivery period
+                                      #   - None: no market clearing is done (all energy is purchased from retailer)
 
     method: pda                       # method of market clearing
                                       # options:
-                                      #   - None: energy can only be sold to and bought from the retailer
-                                      #           (practically no local market exists)
-                                      #   - pda (ex-ante): periodic double auction
-                                      #   - community (ex-post): community clearing  (to be implemented)
+                                      #   - pda: periodic double auction
+                                      #   - community: community clearing
+                                      # note: for further information about the method options see the documentation
 
     pricing: uniform                  # pricing method of the market clearing
                                       # options:
                                       #   - uniform (ex-ante): all participants pay the same price
-                                      #   - discriminatory (ex-ante): each participant pays a different price (to be implemented)
-                                      #   - standard (ex-post): see details in the ex-post folder (to be implemented)
+                                      #   - discriminatory (ex-ante): each participant pays a different price
+                                      #   - standard (ex-post): see details in the ex-post folder
+                                      # note: for further information about the pricing options see the documentation
 
-    coupling: None                    # method of coupling market regions (are uncleared positions posted elsewhere?)
+    coupling: above_l                 # method of coupling market regions (are uncleared positions posted elsewhere?)
                                       # options:
                                       #   - None: unsettled bids are not offered at other markets, i.e. bids get feed-in tariff and offers pay retail wholesale price
                                       #   - above_c: unsettled bids are continuously offered at higher market levels (if possible)
@@ -49,7 +50,7 @@ lem_continuous:                       # name of the market (must be unique in it
                                       #       unit: seconds
 
 
-      opening: 900                    # when does the first auction occur after the first delivery period
+      opening: 3600                    # when does the first auction occur after the first delivery period
                                       # unit: seconds
 
       horizon: [0, 86400]             # horizon of the market clearings (at what time range is energy delivered?)
@@ -60,13 +61,13 @@ lem_continuous:                       # name of the market (must be unique in it
                                       #   period, the market clearing period is repeated until the horizon is
                                       #   covered and vice versa.
 
-      duration: 900                   # duration of one energy delivery period
+      duration: 3600                   # duration of one energy delivery period
                                       # unit: seconds
 
-      frequency: 900                  # how often is ex-ante market clearing executed?
+      frequency: 3600                  # how often is ex-ante market clearing executed?
                                       # unit: seconds
 
-      closing: 900                    # when does the last auction occur before the delivery period
+      closing: 3600                      # when does the last auction occur before the delivery period
                                       # unit: seconds
 
       settling: 'continuous'          # at which time steps is the market settled?
@@ -85,11 +86,11 @@ lem_continuous:                       # name of the market (must be unique in it
                                       #   - file: prices contained in file provided by 'file' parameter
 
         fixed:                        # fixed retail energy settings (retailer market offers from the agents' view)
-          price: [0.05, 0.15]         # retail energy prices
+          'price': [0.0827, 0.147]       # retail energy prices
                                       # unit: €/kWh
                                       # note: first position is for selling to, second for buying energy from retailer
 
-          quantity: [1e5, 1e5]        # retail energy quantities
+          'quantity': [1e6, 1e6]      # retail energy quantities
                                       # unit: Wh
                                       # note: first position is for selling, second for buying energy
 
@@ -97,7 +98,7 @@ lem_continuous:                       # name of the market (must be unique in it
                                       # note: the value needs to match the index of one of the values under types/qualities
 
         file:
-          file: energy.csv            # file containing the energy prices and quantities for each time step
+          file: lem_continuous_energy.csv  # file containing the energy prices and quantities for each time step
 
       grid:                           # parameters for grid fees
                                       # explanation: logic behind it is that the grid fees are always added to the
@@ -115,17 +116,17 @@ lem_continuous:                       # name of the market (must be unique in it
                                       # to the market result, or to assist the system in restoring its balance
 
         fixed:                        # fixed grid fees settings
-          market: [0.04, 0]           # local grid fees (applies to this market)
+          local: [0, 0.10]            # local grid fees (applies to this market)
                                       # unit: €/kWh
-                                      # note: first position is for buying, second for selling energy
+                                      # note: first position is for selling, second for buying energy
 
-          retail: [0.08, 0]           # retail grid fees (applies to energy purchased form/sold to retailer)
+          retail: [0, 0.10]           # retail grid fees (applies to energy purchased form/sold to retailer)
                                       # unit: €/kWh
-                                      # note: first position is for buying, second for selling energy
+                                      # note: first position is for selling, second for buying energy
 
 
         file:                         # file grid fees settings
-          file: grid.csv              # file containing the grid fees for each time step
+          file: grid_1.csv            # file containing the grid fees for each time step
                                       # note: columns need to match the names of the parameters in the 'fixed' section
 
       levies:                         # parameters for levies
@@ -136,12 +137,12 @@ lem_continuous:                       # name of the market (must be unique in it
                                       # note: levies are taxes that are added to the energy price
 
         fixed:                        # fixed levies settings
-          price: [0.18, 0]            # price of the levies
+          price: [0, 0.1297]            # price of the levies
                                       # unit: €/kWh
-                                      # note: first position is for buying, second for selling energy
+                                      # note: first position is for selling, second for buying energy
 
         file:
-          file: levies.csv            # file containing the levies for each time step
+          file: levies_1.csv          # file containing the levies for each time step
                                       # note: columns need to match the names of the parameters in the 'fixed' section
 
       balancing:                      # parameters for balancing energy
@@ -157,9 +158,9 @@ lem_continuous:                       # name of the market (must be unique in it
                                       #   - file: prices contained in file provided by 'file' parameter
 
         fixed:                        # fixed balancing settings
-          price: [0.04, 0.16]         # balancing energy prices
+          price: [0.0727, 0.157]         # balancing energy prices
                                       # unit: €/kWh
-                                      # note: first position is for selling to, second for buying energy from retailer
+                                      # note: first position is for selling, second for buying energy
 
           quantity: [1e6, 1e6]        # balancing energy quantities
                                       # unit: Wh
@@ -168,5 +169,5 @@ lem_continuous:                       # name of the market (must be unique in it
 
 
         file:                         # file balancing settings
-          file: balancing.csv         # file containing the balancing energy prices for each time step
+          file: balancing_1.csv       # file containing the balancing energy prices for each time step
                                       # note: columns need to match the names of the parameters in the 'fixed' section

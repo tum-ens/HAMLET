@@ -1,11 +1,23 @@
-import os
-import shutil
-import time
+__author__ = "MarkusDoepfert"
+__credits__ = "jiahechu"
+__license__ = ""
+__maintainer__ = "MarkusDoepfert"
+__email__ = "markus.doepfert@tum.de"
+
+
 import json
+import os
+import random
+import shutil
+import string
+import time
+
 import pandas as pd
 import polars as pl
+import numpy as np
 from ruamel.yaml import YAML
 from typing import Callable
+
 import hamlet.constants as c
 
 # Contains all functions that are shared among the classes and used universally
@@ -322,3 +334,139 @@ def slice_dataframe_between_times(target_df, reference_ts, duration: int, unit='
     sliced_df = sliced_df.drop('timedelta')     # delete unnecessary column
 
     return sliced_df
+
+
+def gen_ids(n: int = 1, length: int = 15, prefix: str = '', suffix: str = '', only_integers: bool = False) \
+        -> list[str] | str:
+    """
+    Generate random unique IDs with optional prefix, suffix, and integer-only option.
+
+    This function generates a specified number of unique random IDs, each of a given length.
+    Optionally, a prefix and/or suffix can be added to each ID. IDs can be made of only integers if desired.
+
+    Args:
+        n (int): The number of IDs to generate. Defaults to 1.
+        length (int): The length of the random part of each ID. Defaults to 15.
+        prefix (str): A prefix string to add to the start of each ID. Defaults to an empty string.
+        suffix (str): A suffix string to add to the end of each ID. Defaults to an empty string.
+        only_integers (bool): If True, the IDs will consist only of integers. Defaults to False.
+
+    Returns:
+        list[str] | str: A list of generated IDs if n > 1, otherwise a single ID as a string.
+    """
+    id_set = set()
+    characters = string.digits if only_integers else string.ascii_letters + string.digits
+
+    while len(id_set) < n:
+        new_id = ''.join(random.choices(characters, k=length))
+        id_set.add(prefix + new_id + suffix)
+
+    ids = list(id_set)
+    return ids[0] if n == 1 else ids
+
+
+def enforce_schema(schema: dict, df: pl.DataFrame, threshold: int = 20_000) -> pl.DataFrame:
+    """
+    Dynamically selects the best method to enforce schema based on DataFrame size.
+    """
+
+    def enforce_schema_eager(schema: dict, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Enforces schema using eager execution for small DataFrames.
+        """
+        for col, dtype in schema.items():
+            if col in df.columns and df[col].dtype != dtype:
+                try:
+                    df = df.with_columns(df[col].cast(dtype))
+                except Exception as e:
+                    raise ValueError(
+                        f"Failed to cast column '{col}' to type '{dtype}'. Error: {e}"
+                    )
+        return df
+
+    def enforce_schema_lazy(schema: dict, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Enforces schema using lazy evaluation for large DataFrames.
+        """
+        lazy_df = df.lazy()
+        for col, dtype in schema.items():
+            if col in df.columns and df[col].dtype != dtype:
+                lazy_df = lazy_df.with_columns(pl.col(col).cast(dtype))
+        return lazy_df.collect()
+
+    if len(df) < threshold:  # Threshold for choosing method
+        return enforce_schema_eager(schema, df)
+    else:
+        return enforce_schema_lazy(schema, df)
+
+
+def add_info_from_col(df: pd.DataFrame, col: str, drop: bool = False, sep: str = ',', key_val_sep: str = ':') -> \
+        pd.DataFrame:
+    """
+    Adds information from a column to the dataframe.
+
+    The column should contain a string with the following format:
+    'key1:value1,key2:value2,...,keyN:valueN'
+
+    Parameters:
+        df (pd.DataFrame): The input dataframe
+        col (str): The column containing the information
+        drop (bool): Whether to drop the column containing the information
+        sep (str): The separator between key-value pairs
+        key_val_sep (str): The separator between keys and values
+
+    Returns:
+        pd.DataFrame: The dataframe with the information added as separate columns
+
+    Alternative method:
+        # Split the strings into separate key-value pairs
+        df['parsed'] = df[col].apply(lambda x: dict(tuple(i.split(key_val_sep)) for i in x.split(sep)))
+
+        # Get all the keys from the parsed strings
+        keys = set().union(*df['parsed'].apply(lambda x: x.keys()))
+
+        # Create separate columns for each key-value pair and fill with np.nan if not present
+        for key in keys:
+            df[key] = df['parsed'].apply(
+                lambda x: x.get(key, np.nan) if x.get(key, None) in ['NaN', 'nan'] else x.get(key, np.nan))
+
+        # Drop the original column and the intermediate parsed column
+        df.drop(columns=['col', 'parsed'], inplace=True)
+    """
+
+    # Turn the column into a dictionary
+    info = df[col].to_dict()
+
+    # Loop through the dictionary and create entries for the key-value pairs
+    for idx, val in info.items():
+        # Split the key-value pairs
+
+        key_value_pairs = val.split(sep)
+        # Create a dictionary for the key-value pairs
+        info[idx] = dict()
+
+        for key_value_pair in key_value_pairs:
+            # Split the key and value
+            key, value = key_value_pair.split(key_val_sep)
+
+            # Add the key-value pair to the dictionary and convert them to the desired data type
+            try:
+                info[idx][key] = int(value)
+            except ValueError:
+                try:
+                    info[idx][key] = float(value)
+                except ValueError:
+                    info[idx][key] = str(value)
+
+    # Create a dataframe from the dictionary
+    df = df.join(pd.DataFrame(info).T)
+
+    # Fill empty values and cells with string NaN and nan with NaN
+    df = df.replace(r'^\s*$', np.nan, regex=True)
+    df = df.replace(["NaN", "nan"], np.nan, regex=True)
+
+    # Drop the original column
+    if drop:
+        df.drop(columns=col, inplace=True)
+
+    return df

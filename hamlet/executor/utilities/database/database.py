@@ -12,6 +12,7 @@ import polars as pl
 import hamlet.constants as c
 import hamlet.functions as f
 from hamlet.executor.utilities.database.region_db import RegionDB
+from hamlet.executor.utilities.database.grid_db import ElectricityGridDB, HeatGridDB, HydrogenGridDB
 
 
 class Database:
@@ -27,6 +28,7 @@ class Database:
         __general: Dictionary contains general data.
         __regions: Dictionary contains RegionDB objects. The AgentDB and MarketDB objects of the corresponding region
         are stored in each RegionDB object.
+        __grids: Dictionary contains different types of GridDB objects.
 
     """
 
@@ -38,6 +40,8 @@ class Database:
 
         self.__regions = {}
 
+        self.__grids = {}
+
     ########################################## PUBLIC METHODS ##########################################
 
     """initialize database"""
@@ -48,6 +52,8 @@ class Database:
         self.__setup_general()
 
         self.__register_all_regions(structure)
+
+        self.__register_grids()
 
     """get data"""
 
@@ -74,6 +80,8 @@ class Database:
         Note:
         - If 'agent_type' is provided without 'agent_id,' the function returns all agents of the specified type in the
         region.
+        - If 'agent_id' is provided without 'agent_type,' the function loops through all agent types to return the
+        agent with the specified agent ID.
         - If both 'agent_type' and 'agent_id' are provided, the function returns the specific agent object.
         - If no filter parameters are provided, the function returns all agent data for the specified region.
 
@@ -90,12 +98,16 @@ class Database:
         ```
 
         """
-        if not agent_type:
+        if not agent_type and not agent_id:
             return self.__regions[region].agents
         elif agent_type and not agent_id:
             return self.__regions[region].agents[agent_type]
-        elif agent_type and not agent_id:
+        elif agent_type and agent_id:
             return self.__regions[region].agents[agent_type][agent_id]
+        elif not agent_type and agent_id:
+            for agent_type in self.__regions[region].agents.keys():
+                if agent_id in self.__regions[region].agents[agent_type].keys():
+                    return self.__regions[region].agents[agent_type][agent_id]
 
     def get_market_data(self, region: str, market_type=None, market_name=None):
         """
@@ -137,6 +149,37 @@ class Database:
             return self.__regions[region].markets[market_type]
         else:
             return self.__regions[region].markets[market_type][market_name]
+
+    def get_grid_data(self, grid_type=None):
+        """
+        Retrieve grids data for the specified grids type.
+
+        Parameters:
+            grid_type (str, optional): The type of grids to filter by or None to include all grids types.
+
+        Returns:
+            grid_data: The grids data for the specified grids type. Returns a dictionary or a specific grids
+            object based on the provided parameters.
+
+        Note:
+        - If no filter parameters are provided, the function returns all grids data.
+
+        Example:
+        To retrieve all grids you can call the function as follows:
+        ```
+        grid_data = your_instance.get_grid_data()
+        ```
+
+        To retrieve only electricity grids, you can call the function as follows:
+        ```
+        electricity_grid = your_instance.get_grid_data(grid_type='electricity')
+        ```
+
+        """
+        if not grid_type:
+            return self.__grids
+        else:
+            return self.__grids[grid_type]
 
     def get_bids_offers(self, region: str, market_type: str | list[str] = None, market_name: str | list[str] = None,
                         timestep: datetime | list[datetime] = None):
@@ -283,6 +326,17 @@ class Database:
         # Update local market price in forecasters
         self.__regions[region].update_local_market_in_forecasters()
 
+    def post_grids(self, grid_type: str, grid):
+        """
+        Post the given grid results to the given region.
+
+        Args:
+            grid_type: type of grid.
+            grid: new grid db to be written into Database.
+
+        """
+        self.__grids[grid_type] = grid
+
     """static methods"""
 
     @staticmethod
@@ -389,6 +443,20 @@ class Database:
         for region in self.__regions.keys():
             self.__regions[region].save_region(path=os.path.join(path, region))
 
+    def save_grid(self, path: str):
+        """
+        Save grid results to the specified path.
+
+        Args:
+            path: The path to save grid results to.
+
+        """
+
+        region = list(self.__regions)[0]    # take the most upper region folder to save
+
+        for grid_type, grid in self.__grids.items():
+            grid.save_grid(path=os.path.join(path, region, 'grids', grid_type))
+
     ########################################## PRIVATE METHODS ##########################################
 
     def __setup_general(self):
@@ -398,13 +466,15 @@ class Database:
         Get all general information from files in scenario path and write them to self.__general dict.
 
         """
-        self.__general['weather'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'weather',
-                                                                  'weather.ft'), df='polars', method='eager')
-        self.__general['retailer'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'retailer.ft'),
-                                                 df='polars', method='eager')
-        self.__general['tasks'] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
-                                                  df='polars', method='eager')
-        self.__general['general'] = f.load_file(path=os.path.join(self.__scenario_path, 'config', 'config_setup.yaml'))
+        self.__general[c.K_WEATHER] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'weather',
+                                                                    'weather.ft'), df='polars', method='eager')
+        self.__general[c.K_RETAILER] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'retailer.ft'),
+                                                   df='polars', method='eager')
+        self.__general[c.K_TASKS] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
+                                                df='polars', method='eager')
+        self.__general[c.K_GENERAL] = f.load_file(path=os.path.join(self.__scenario_path, 'config',
+                                                                    'config_setup.yaml'))
+        self.__general[c.K_GRID] = f.load_file(path=os.path.join(self.__scenario_path, 'config', 'config_grid.yaml'))
 
     def __register_all_regions(self, structure):
         """
@@ -424,6 +494,37 @@ class Database:
 
             # register agent's forecaster for agents in the region
             self.__regions[region].register_forecasters_for_agents(self.__general)
+
+    def __register_grids(self):
+        """
+        Register all grids for the simulation.
+
+        This function creates a grids for each energy type (electricity, heat, hydrogen) and stores the results in
+        self.grids as a dict with keys grids types and values grids-objects (e.g. pandapower network for electricity).
+        Currently only electricity grids is implemented.
+
+        """
+        grid_dict = self.__general[c.K_GRID]
+        grid_path = os.path.join(self.__scenario_path, 'grids')
+
+        # register electricity grid if activated
+        if grid_dict[c.G_ELECTRICITY]['active']:
+            self.__grids[c.G_ELECTRICITY] = ElectricityGridDB(grid_type=c.G_ELECTRICITY,
+                                                              grid_path=os.path.join(grid_path, c.G_ELECTRICITY),
+                                                              grid_config=grid_dict[c.G_ELECTRICITY])
+            self.__grids[c.G_ELECTRICITY].register_grid(self.__regions)
+
+        # register heat grid if activated
+        if grid_dict[c.G_HEAT]['active']:
+            self.__grids[c.G_HEAT] = HeatGridDB(grid_type=c.G_HEAT, grid_path=os.path.join(grid_path, c.G_HEAT),
+                                                grid_config=grid_dict[c.G_HEAT])
+            self.__grids[c.G_HEAT].register_grid(self.__regions)
+
+        # register h2 grid if activated
+        if grid_dict[c.G_H2]['active']:
+            self.__grids[c.G_H2] = HydrogenGridDB(grid_type=c.G_H2, grid_path=os.path.join(grid_path, c.G_H2),
+                                                  grid_config=grid_dict[c.G_H2])
+            self.__grids[c.G_H2].register_grid(self.__regions)
 
     def concat_market_files(self):
         """Concatenates saved market attribute files to single files"""
