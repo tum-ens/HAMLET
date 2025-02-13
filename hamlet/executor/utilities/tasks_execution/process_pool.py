@@ -37,13 +37,15 @@ class ProcessPool:
         chunksize, extra = divmod(len(task_args), self.num_workers)
         if extra:
             chunksize += 1
-        try:
-            # Submit the tasks for parallel execution
-            results = self.pool.map(self.task, task_args, chunksize=chunksize)
-            return results
-        except Exception as e:
-            print(e)
-            self.close()
+
+        # TODO: strongly recommend remove the try - except here since otherwise this function will return a None and further debug will be annoying
+        # try:
+        #     # Submit the tasks for parallel execution
+        results = self.pool.map(self.task, task_args, chunksize=chunksize)
+        return results
+        # except Exception as e:
+        #     print(e)
+        #     self.close()
 
     def close(self):
         """Closes the pool"""

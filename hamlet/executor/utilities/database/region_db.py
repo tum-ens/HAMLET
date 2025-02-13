@@ -78,7 +78,7 @@ class RegionDB:
         """
         for markets in self.markets.values():
             for market in markets.values():
-                market_key = market.market_name + '_wholesale'  # TODO: give a proper key for corresponding market
+                local_market_key = f'{market.market_name}_{c.TT_MARKET}'  # key of local market for lookup in forecaster
 
                 # initialize
                 unique_timestep_bids = market.bids_cleared.select(c.TC_TIMESTEP).unique()

@@ -17,6 +17,7 @@ import hamlet.constants as c
 from hamlet.executor.grids.grid_base import GridBase
 from hamlet.executor.utilities.database.database import Database
 from hamlet.executor.utilities.database.grid_db import ElectricityGridDB
+from hamlet.executor.utilities.grid_restrictions.grid_restriction import GridRestriction
 
 # This file is in charge of handling electricity grids
 
@@ -37,27 +38,40 @@ class Electricity(GridBase):
         # Calculation method
         self.method = self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['powerflow']
 
+        # Grid restrictions
+        self.restrictions = self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['restrictions']['apply']
+
     def execute(self):
-        """Executes the grids"""
+        """Executes the grid."""
         # Boolean variable presents if grid status is ok (no overload)
         grid_ok = True
 
         # Convert trade data to grid parameters
-        self._write_grid_parameters()
+        self.grid = self._write_grid_parameters(deepcopy(self.grid))
 
         # Calculate the power flows
         self._calculate_powerflow()
+
+        # Execute grid restrictions
+        for restriction in self.restrictions:
+            kwargs = self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['restrictions'][restriction]
+            self.grid_db, grid_ok = GridRestriction(grid_db=self.grid_db,
+                                                    grid=self._write_grid_parameters(deepcopy(self.grid),
+                                                                                     is_timeseries=True),
+                                                    tasks=self.tasks, restriction_type=restriction,
+                                                    database=self.database, **kwargs).execute()
 
         # Generate new grid db object with results
         self._write_result_to_grid_db()
 
         return self.grid_db, grid_ok
 
-    def _write_grid_parameters(self, is_timeseries=False):
+    def _write_grid_parameters(self, grid, is_timeseries=False) -> pp.pandapowerNet:
         """Write grid parameters for a single timestamp."""
         # Process loads
-        self.__process_elements(
-            df=self.grid.load.copy(),
+        grid = self.__process_elements(
+            grid=grid,
+            df=grid.load.copy(),
             element_name='load',
             power_sign=-1,
             type_field='load_type',
@@ -65,13 +79,16 @@ class Electricity(GridBase):
         )
 
         # Process sgens
-        self.__process_elements(
-            df=self.grid.sgen.copy(),
+        grid = self.__process_elements(
+            grid=grid,
+            df=grid.sgen.copy(),
             element_name='sgen',
             power_sign=1,
             type_field='plant_type',
             is_timeseries=is_timeseries
         )
+
+        return grid
 
     def _calculate_powerflow(self):
         """Calculates the power flows."""
@@ -96,17 +113,21 @@ class Electricity(GridBase):
                 result_df.insert(0, c.TC_TIMESTAMP, timestamp_str)
                 self.grid_db.results[key].append(result_df)
 
-    def __process_elements(self, df, element_name, power_sign, type_field, is_timeseries):
+    def __process_elements(self, grid, df, element_name, power_sign, type_field, is_timeseries) -> pp.pandapowerNet:
         """
         Process and adjust grid elements according to agent data.
 
         Args:
+            grid (pp.pandapowerNet): pandapower network object.
             df (pd.DataFrame): dataframe of grid element (normally load or sgen).
             element_name (string): name of grid element (normally load or sgen).
             power_sign (-1 or 1): power sign of grid element (normally -1 for load and 1 for sgen).
             type_field (string): name of the column containing plant type (currently 'load_type' for load and '
             plant_type' for sgen).
             is_timeseries (boolean): True if grid element is timeseries, False otherwise.
+
+        Returns:
+            grid (pp.pandapowerNet): pandapower network object with modified grid parameters.
         """
         # prepare_data
         df.fillna({'cos_phi': 1}, inplace=True)     # if cos phi data is missing, assume the phase angle is 0
@@ -137,7 +158,7 @@ class Electricity(GridBase):
 
             # update grid data
             if is_timeseries:
-                self.__add_controller_to_grid(agent_elements, setpoints, element_name)
+                grid = self.__add_controller_to_grid(grid, agent_elements, setpoints, element_name)
             else:
                 p_mw_values, q_mvar_values = self.__calculate_power(setpoints, columns, agent_elements)
                 df.loc[agent_elements.index, 'p_mw'] = p_mw_values.values
@@ -146,7 +167,9 @@ class Electricity(GridBase):
 
         # write result df back to the grid if not timeseries
         if not is_timeseries:
-            setattr(self.grid, element_name, df)
+            setattr(grid, element_name, df)
+
+        return grid
 
     def __calculate_power(self, setpoints, columns, agent_elements):
         """
@@ -166,20 +189,24 @@ class Electricity(GridBase):
         else:
             return p_mw_values.T, None
 
-    def __add_controller_to_grid(self, agent_elements, setpoints, element_name):
+    def __add_controller_to_grid(self, grid, agent_elements, setpoints, element_name) -> pp.pandapowerNet:
         """
         Add controller to the grid for timeseries calculation.
 
         Args:
+            grid (pp.pandapowerNet): pandapower network object.
             agent_elements (DataFrame): dataframe of grid elements belonging to the agent.
             setpoints (DataFrame): dataframe of setpoint.
             element_name (string): name of grid element (normally load or sgen).
+
+        Returns:
+            grid (pp.pandapowerNet): pandapower network object with controller added.
         """
         datasource = DFData(setpoints)
         for idx, row in agent_elements.iterrows():
             column_name = row['column_name']
             # Add controller for p_mw
-            ConstControl(self.grid, element=element_name, variable='p_mw', element_index=idx,
+            ConstControl(grid, element=element_name, variable='p_mw', element_index=idx,
                          data_source=datasource, profile_name=[column_name])
 
             if self.method == 'ac':
@@ -187,6 +214,7 @@ class Electricity(GridBase):
                 q_mvar_series = setpoints[column_name] * np.tan(phi)
                 # Assign reactive power controller
                 datasource_q = DFData(pd.DataFrame({column_name: q_mvar_series}))
-                ConstControl(self.grid, element=element_name, variable='q_mvar', element_index=idx,
+                ConstControl(grid, element=element_name, variable='q_mvar', element_index=idx,
                              data_source=datasource_q, profile_name=[column_name])
 
+        return grid

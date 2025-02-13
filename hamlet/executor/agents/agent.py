@@ -42,7 +42,7 @@ class Agent:
 
     """
 
-    def __init__(self, agent_type: str, data: dict, timetable: pl.DataFrame, market: dict):
+    def __init__(self, agent_type: str, data: dict, timetable: pl.DataFrame, market: dict, grid_commands: dict):
         """
         Parameters
         ----------
@@ -60,7 +60,7 @@ class Agent:
 
         """
         # Instance of the agent class
-        self.agent = AgentFactory.create_agent(agent_type, data, timetable, market)
+        self.agent = AgentFactory.create_agent(agent_type, data, timetable, market, grid_commands)
 
     def execute(self) -> AgentDB:
         """
@@ -101,7 +101,7 @@ class AgentFactory:
     }
 
     @staticmethod
-    def create_agent(agent_type: str, agent_data: dict, timetable: pl.DataFrame, market: dict):
+    def create_agent(agent_type: str, agent_data: dict, timetable: pl.DataFrame, market: dict, grid_commands: dict):
         """Create an agent.
 
         Parameters
@@ -121,4 +121,4 @@ class AgentFactory:
             The created agent.
 
         """
-        return AgentFactory.AGENT_MAPPING[agent_type](agent_data, timetable, market)
+        return AgentFactory.AGENT_MAPPING[agent_type](agent_data, timetable, market, grid_commands)
