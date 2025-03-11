@@ -198,8 +198,8 @@ class Market(POIComps):
         self.add_variable_to_model(model, variables, name=f'{self.name}_{self.comp_type}_{c.PF_IN}', lower=0,
                                    upper=self.upper, coords=[self.timesteps],
                                    integer=True)  # inflow into the building (buying)
-        # Define mode flag that decides whether the market energy is bought or sold
 
+        # Define mode flag that decides whether the market energy is bought or sold
         self.add_variable_to_model(model, variables, name=f'{self.name}_mode', coords=[self.timesteps], binary=True)
 
         # Define the market cost and revenue variables
@@ -256,7 +256,7 @@ class Market(POIComps):
 
             # Define the constraint for revenue
             model.add_linear_constraint(var_revenue + var_out * self.dt_hours * (
-                    self.price_sell[timestep] + self.grid_sell[timestep] + self.levies_sell[timestep]),
+                    self.price_sell[timestep] - self.grid_sell[timestep] - self.levies_sell[timestep]),
                                         poi.ConstraintSense.Equal,
                                         0, name=f'{self.name}_revenue_{timestep}')
 
