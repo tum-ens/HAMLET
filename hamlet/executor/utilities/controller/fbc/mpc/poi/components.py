@@ -175,12 +175,12 @@ class Market(POIComps):
         self.lower = [int(round(x / self.dt_hours * -1)) for x in self.fcast[f'energy_quantity_buy']]
 
         # Get market price forecasts
-        self.price_sell = pd.Series(self.fcast[f'energy_price_sell'], index=self.timesteps)
-        self.price_buy = pd.Series(self.fcast[f'energy_price_buy'], index=self.timesteps)
-        self.grid_sell = pd.Series(self.fcast[f'grid_local_sell'], index=self.timesteps)
-        self.grid_buy = pd.Series(self.fcast[f'grid_local_buy'], index=self.timesteps)
-        self.levies_sell = pd.Series(self.fcast[f'levies_price_sell'], index=self.timesteps)
-        self.levies_buy = pd.Series(self.fcast[f'levies_price_buy'], index=self.timesteps)
+        self.price_sell = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
+        self.price_buy = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}'], index=self.timesteps)
+        self.grid_sell = pd.Series(self.fcast[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'], index=self.timesteps)
+        self.grid_buy = pd.Series(self.fcast[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'], index=self.timesteps)
+        self.levies_sell = pd.Series(self.fcast[f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
+        self.levies_buy = pd.Series(self.fcast[f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_IN}'], index=self.timesteps)
 
         # TODO: Add constraint that market value becomes zero if there is no market for this energy:
         #  One way to do this is check if market forecasts can be obtained. If that is not the case, it is assumed
@@ -198,8 +198,8 @@ class Market(POIComps):
         self.add_variable_to_model(model, variables, name=f'{self.name}_{self.comp_type}_{c.PF_IN}', lower=0,
                                    upper=self.upper, coords=[self.timesteps],
                                    integer=True)  # inflow into the building (buying)
-        # Define mode flag that decides whether the market energy is bought or sold
 
+        # Define mode flag that decides whether the market energy is bought or sold
         self.add_variable_to_model(model, variables, name=f'{self.name}_mode', coords=[self.timesteps], binary=True)
 
         # Define the market cost and revenue variables
@@ -256,7 +256,7 @@ class Market(POIComps):
 
             # Define the constraint for revenue
             model.add_linear_constraint(var_revenue + var_out * self.dt_hours * (
-                    self.price_sell[timestep] + self.grid_sell[timestep] + self.levies_sell[timestep]),
+                    self.price_sell[timestep] - self.grid_sell[timestep] - self.levies_sell[timestep]),
                                         poi.ConstraintSense.Equal,
                                         0, name=f'{self.name}_revenue_{timestep}')
 

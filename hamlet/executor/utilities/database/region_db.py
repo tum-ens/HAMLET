@@ -78,38 +78,66 @@ class RegionDB:
         """
         for markets in self.markets.values():
             for market in markets.values():
-                local_market_key = market.market_name + '_local'    # keys of local market for lookup in forecaster
+                wholesale_market_key = f'{market.market_name}_{c.TT_RETAIL}'  # key of local market for lookup
 
-                # TODO: calculate the new market price, the result should be in this format:
-                # 'new_target' column should contain market price
-                market_price = pl.DataFrame(schema={c.TC_TIMESTAMP: pl.Datetime(time_unit='ns', time_zone='UTC'),
-                                                    'new_target': pl.Int64})
+                # initialize
+                unique_timestep_bids = market.bids_cleared.select(c.TC_TIMESTEP).unique()
+                market_price = pl.concat([market.bids_cleared.select(c.TC_TIMESTEP),
+                                          market.offers_cleared.select(c.TC_TIMESTEP)], how='vertical').unique()
+                market_price = market_price.with_columns(pl.lit(None).alias('new_target_buy'),
+                                                         pl.lit(None).alias('new_target_sell'))
+                market_price = market_price.rename({c.TC_TIMESTEP: c.TC_TIMESTAMP})
+
+                # calculate average price for each timestep
+                for ts in unique_timestep_bids:
+                    for ts_ in ts:
+                        # buy price
+                        bids_for_ts = market.bids_cleared.filter((pl.col(c.TC_TIMESTEP) == ts_) &
+                                                                 (pl.col(c.TC_ID_AGENT_IN) != 'retailer'))
+
+                        if len(bids_for_ts) != 0:
+                            buy_price_for_ts = int(bids_for_ts.select(pl.col(c.TC_PRICE_IN).sum()).item() /
+                                                   bids_for_ts.select(pl.col(c.TC_ENERGY_IN).sum()).item())
+
+                            market_price = market_price.with_columns(pl.when(pl.col(c.TC_TIMESTAMP) == ts_)
+                                                                     .then(buy_price_for_ts)
+                                                                     .otherwise(pl.col('new_target_buy'))
+                                                                     .alias('new_target_buy'))
+
+                        # sell price
+                        offers_for_ts = market.offers_cleared.filter((pl.col(c.TC_TIMESTEP) == ts_) &
+                                                                     (pl.col(c.TC_ID_AGENT_OUT) != 'retailer'))
+
+                        if len(offers_for_ts) != 0:
+                            sell_price_for_ts = int(offers_for_ts.select(pl.col(c.TC_PRICE_OUT).sum()).item() /
+                                                    offers_for_ts.select(pl.col(c.TC_ENERGY_OUT).sum()).item())
+
+                            market_price = market_price.with_columns(pl.when(pl.col(c.TC_TIMESTAMP) == ts_)
+                                                                     .then(sell_price_for_ts)
+                                                                     .otherwise(pl.col('new_target_sell'))
+                                                                     .alias('new_target_sell'))
 
                 for agents in self.agents.values():
                     for agent in agents.values():
                         # print(f'updating local market for agent {agent.agent_id}')
-                        old_target = agent.forecaster.train_data[local_market_key][c.K_TARGET]
-
-                        # get column name of the old target
-                        column_name = old_target.columns
-                        column_name.remove(c.TC_TIMESTAMP)
-                        column_name = column_name[0]
-                        # print('hi')
+                        old_target = agent.forecaster.train_data[wholesale_market_key][c.K_TARGET]
 
                         # replace a part of the old target with new target
-                        # NOTICE: adjust dataframe to dataframe if necessary, polars concat is sometimes tricky
-                        new_target = pl.concat([old_target, market_price], how='diagonal')
-                        new_target = new_target.with_columns(pl.when(pl.col('new_target').is_null())
-                                                             .then(pl.col(column_name))
-                                                             .otherwise(pl.col('new_target')).alias(column_name))
-                        # print('hi2')
+                        new_target = old_target.join(market_price, on=c.TC_TIMESTAMP, how='left')
+                        new_target = new_target.with_columns(pl.when(pl.col('new_target_buy').is_null())
+                                                             .then(pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}'))
+                                                             .otherwise(pl.col('new_target_buy'))
+                                                             .alias(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}'))
+                        new_target = new_target.with_columns(pl.when(pl.col('new_target_sell').is_null())
+                                                             .then(pl.col(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'))
+                                                             .otherwise(pl.col('new_target_sell'))
+                                                             .alias(f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'))
 
                         # delete unnecessary column
-                        new_target = new_target.drop('new_target')
+                        new_target = new_target.drop('new_target_buy', 'new_target_sell')
 
-                        # update forecaster bzw. models
-                        # NOTICE: new_target should be dataframe now
-                        agent.forecaster.update_forecaster(id=local_market_key, dataframe=new_target, target=True)
+                        # update forecaster
+                        agent.forecaster.update_forecaster(id=wholesale_market_key, dataframe=new_target, target=True)
 
     def __register_all_agents(self):
         """

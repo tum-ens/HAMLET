@@ -703,6 +703,7 @@ class Lem(MarketBase):
 
         # Copy the transactions table to apply the grid fees
         grid = transactions.clone()
+
         # Add temporary columns
         grid = grid.with_columns([
             pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'].alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_OUT}')),
@@ -710,6 +711,26 @@ class Lem(MarketBase):
             pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_OUT}'].alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_OUT}')),
             pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}'].alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_IN}')),
         ])
+
+        # Replace price with agent forecast for variable grid fees
+        for agent_id in grid.select(c.TC_ID_AGENT).unique().to_series().to_list():
+            # get agent database
+            agent_db = self.database.get_agent_data(region=self.tasks[c.TC_REGION], agent_id=agent_id)
+            agent_retailer_data = agent_db.forecaster.train_data[f'{self.market.market_name}_{c.TT_RETAIL}'][c.K_TARGET]
+
+            # iterate through different trade type and different power flow direction
+            for column_name in [[c.TT_RETAIL, c.PF_IN, c.TC_PRICE_PU_IN],[c.TT_RETAIL, c.PF_OUT, c.TC_PRICE_PU_OUT],
+                                [c.TT_MARKET, c.PF_IN, c.TC_PRICE_PU_IN],[c.TT_MARKET, c.PF_OUT, c.TC_PRICE_PU_OUT]]:
+                # get grid fee value from forecaster
+                grid_fee = agent_retailer_data.filter(pl.col(c.TC_TIMESTAMP) == self.tasks[c.TC_TIMESTEP]).select(
+                    pl.col(f'{c.TT_GRID}_{column_name[0]}_{column_name[1]}')).item()
+                # write to grid transaction df
+                grid = grid.with_columns(
+                    # Energy pu prices
+                    pl.when(pl.col(c.TC_ID_AGENT) == agent_id).then(pl.lit(grid_fee))
+                    .otherwise(pl.col(f'{column_name[0]}_{column_name[2]}'))
+                    .alias(f'{column_name[0]}_{column_name[2]}').cast(pl.Int32)
+                )
 
         # Calculate the price pu columns (market * ratio + retail * (1 - ratio))
         grid = grid.with_columns([
