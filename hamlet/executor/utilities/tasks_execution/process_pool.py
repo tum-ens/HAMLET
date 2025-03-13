@@ -16,7 +16,9 @@ class ProcessPool:
         pool (multiprocessing.pool.Pool): the multiprocessing pool
         task: method to execute in parallel
     """
-    MAX_TASKS_PER_CHILD = 4  # Maximum tasks per child process after which the pool will spawn a fresh process
+    # Maximum tasks per child process after which the pool will spawn a fresh process
+    # Findings showed using the child indefinitely does not make the amount of memory explode
+    MAX_TASKS_PER_CHILD = None
 
     def __init__(self, num_workers: int, task):
         self.num_workers = num_workers
