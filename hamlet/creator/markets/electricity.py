@@ -33,14 +33,14 @@ TIMETABLE_FORMAT = {
 }
 
 
-class Lem(Markets):
+class ElectricityMarket(Markets):
 
     def __init__(self, market: dict, config_path: str, input_path: str, scenario_path: str, config_root,
                  name: str = None):
         super().__init__(config_path, input_path, scenario_path, config_root)
 
         self.market = market
-        self.market_type = 'lem'
+        self.market_type = c.MT_ELECTRICITY
         self.name = name if name else f'{self.market["clearing"]["type"]}' \
                                       f'_{self.market["clearing"]["method"]}' \
                                       f'_{self.market["clearing"]["pricing"]}'
