@@ -10,12 +10,12 @@ __email__ = "markus.doepfert@tum.de"
 import polars as pl
 
 import hamlet.constants as c
-from hamlet.executor.agents.ctsp.ctsp import Ctsp
-from hamlet.executor.agents.industry.industry import Industry
-from hamlet.executor.agents.mfh.mfh import Mfh
-from hamlet.executor.agents.producer.producer import Producer
-from hamlet.executor.agents.sfh.sfh import Sfh
-from hamlet.executor.agents.storage.storage import Storage
+from hamlet.executor.agents.ctsp import Ctsp
+from hamlet.executor.agents.industry import Industry
+from hamlet.executor.agents.mfh import Mfh
+from hamlet.executor.agents.producer import Producer
+from hamlet.executor.agents.sfh import Sfh
+from hamlet.executor.agents.storage import Storage
 from hamlet.executor.utilities.database.agent_db import AgentDB
 from hamlet.executor.utilities.database.market_db import MarketDB
 
