@@ -19,7 +19,7 @@ from hamlet.executor.utilities.database.database import Database
 from hamlet.executor.markets.market_base import MarketBase
 
 
-class Lh2m(MarketBase):
+class HeatMarket(MarketBase):
 
     def __init__(self, market: MarketDB, tasks: dict, database: Database):
 

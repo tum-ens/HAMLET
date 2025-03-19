@@ -8,7 +8,7 @@ import pandas as pd
 from markets import Markets
 
 
-class Lh2m(Markets):
+class FlexibilityMarket(Markets):
 
     def __init__(self):
         super().__init__()

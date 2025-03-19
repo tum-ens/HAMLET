@@ -8,7 +8,7 @@ import pandas as pd
 from markets import Markets
 
 
-class Lhm(Markets):
+class HydrogenMarket(Markets):
 
     def __init__(self):
         super().__init__()

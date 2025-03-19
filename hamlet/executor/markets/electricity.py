@@ -20,7 +20,7 @@ import hamlet.functions as f
 C_ENERGY_CUMSUM = 'energy_cumsum'
 
 
-class Lem(MarketBase):
+class ElectricityMarket(MarketBase):
 
     def __init__(self, market: MarketDB, tasks: dict, database: Database):
 
