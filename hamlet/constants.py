@@ -71,12 +71,13 @@ EUR_KWH_TO_EURe7_WH = EUR_TO_EURe7 / KWH_TO_WH  # conversion to ensure that the 
 ET_ELECTRICITY = 'electricity'
 ET_HEAT = 'heat'
 ET_COOLING = 'cold'
-ET_H2 = 'h2'
+ET_H2 = 'hydrogen'
 
 # GRID TYPES
-G_ELECTRICITY = 'electricity'
-G_HEAT = 'heat'
-G_H2 = 'hydrogen'
+G_ELECTRICITY = ET_ELECTRICITY
+G_HEAT = ET_HEAT
+G_COOLING = ET_COOLING
+G_H2 = ET_H2
 
 # SYMBOLS (symbols used for the units in the tables)
 S_POWER = 'P'
@@ -87,11 +88,11 @@ S_SOC = 'soc'
 S_COP = 'COP100'
 
 # MARKET TYPES
-MT_LEM = 'lem'
-MT_LFM = 'lfm'
-MT_LHM = 'lhm'
-MT_LCM = 'lcm'
-MT_LH2M = 'lh2m'
+MT_ELECTRICITY = ET_ELECTRICITY
+MT_FLEXIBILITY = 'flexibility'
+MT_HEAT = ET_HEAT
+MT_COLD = ET_COOLING
+MT_H2 = ET_H2
 MT_RETAIL = 'retail'  # might not be needed
 MT_BALANCING = 'balancing'  # might not be needed
 
@@ -130,11 +131,11 @@ TT_BALANCING = 'balancing'
 
 # TRADED ENERGY TYPES
 TRADED_ENERGY = {
-    MT_LEM: ET_ELECTRICITY,
-    MT_LFM: ET_ELECTRICITY,
-    MT_LHM: ET_HEAT,
-    MT_LCM: ET_COOLING,
-    MT_LH2M: ET_H2,
+    MT_ELECTRICITY: ET_ELECTRICITY,
+    MT_FLEXIBILITY: ET_ELECTRICITY,
+    MT_HEAT: ET_HEAT,
+    MT_COLD: ET_COOLING,
+    MT_H2: ET_H2,
 }
 
 # OPERATION MODES
