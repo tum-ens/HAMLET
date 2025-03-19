@@ -12,9 +12,7 @@ import datetime
 import time
 import shutil
 from pprint import pprint
-# from lfm import Lfm
-# from lhm import Lhm
-# from lh2m import Lh2m
+import hamlet.constants as c
 
 
 class Markets:
@@ -32,15 +30,15 @@ class Markets:
         self.config = self._load_file(path=os.path.join(self.config_path, 'config_markets.yaml'))
 
         # Available types of markets
-        from hamlet.creator.markets.lem import Lem
-        # from hamlet.creator.markets.lfm import Lfm  # currently not implemented
-        # from hamlet.creator.markets.lhm import Lhm  # currently not implemented
-        # from hamlet.creator.markets.lh2m import Lh2m  # currently not implemented
+        from hamlet.creator.markets.electricity import ElectricityMarket
+        # from hamlet.creator.markets.lfm import FlexibilityMarket  # currently not implemented
+        # from hamlet.creator.markets.lhm import HeatMarket  # currently not implemented
+        # from hamlet.creator.markets.lh2m import HydrogenMarket  # currently not implemented
         self.types = {
-            'lem': Lem,
-            # 'lfm': Lfm,
-            # 'lhm': Lhm,
-            # 'lh2m': Lh2m,
+            c.MT_ELECTRICITY: ElectricityMarket,
+            c.MT_FLEXIBILITY: None,
+            c.MT_HEAT: None,
+            c.MT_H2: None,
         }
 
     def create_markets(self, file_type: str = 'ft'):
