@@ -100,7 +100,7 @@ class Markets:
         # Save individual information
         for name, market in dict_markets.items():
             # Get market type from name
-            market_type = name.split('_', 1)[0]
+            market_type = market['config']['type']
 
             # Path of the folder in which all the market's files are to be stored
             path = os.path.join(self.scenario_path, 'markets', market_type, name)
