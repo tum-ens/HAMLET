@@ -622,6 +622,12 @@ class Lem(MarketBase):
         # Remove retailer from the transactions (as they are not subject to levies and taxes)
         transactions = transactions.filter(~pl.col(c.TC_ID_AGENT).is_in(retailer[c.TC_ID_AGENT].to_list()))
 
+        # Handle explicitly the case with no transactions:
+        if transactions.is_empty():
+            # Create explicitly empty dataframes following the expected schema:
+            empty_df = pl.DataFrame(schema=c.TS_MARKET_TRANSACTIONS)
+            return empty_df, empty_df.clone()
+
         # Sum energy_in and energy_out for each type of transaction per agent
         transaction_sums = (
             transactions.group_by([c.TC_ID_AGENT, c.TC_TYPE_TRANSACTION])
@@ -638,24 +644,77 @@ class Lem(MarketBase):
 
         # Calculate total energy in and out per agent
         transaction_types = transactions[c.TC_TYPE_TRANSACTION].unique()
-        in_columns_to_sum = [f'{c_TOTAL}_{c.TC_ENERGY_IN}_{c.TC_TYPE_TRANSACTION}_{tx}' for tx in transaction_types]
-        out_columns_to_sum = [f'{c_TOTAL}_{c.TC_ENERGY_OUT}_{c.TC_TYPE_TRANSACTION}_{tx}' for tx in transaction_types]
-        transaction_sums = transaction_sums.with_columns([
-            pl.sum_horizontal([pl.col(col) for col in in_columns_to_sum]).alias(f'{c_TOTAL}_{c.TC_ENERGY_IN}'),
-            pl.sum_horizontal([pl.col(col) for col in out_columns_to_sum]).alias(f'{c_TOTAL}_{c.TC_ENERGY_OUT}'),
-        ])
 
-        # Calculate net energy on which the ratios will be based on
-        transaction_sums = transaction_sums.with_columns([
-            pl.when(pl.col(f'{c_TOTAL}_{c.TC_ENERGY_IN}') - pl.col(f'{c_TOTAL}_{c.TC_ENERGY_OUT}') > 0)
-            .then(pl.col(f'{c_TOTAL}_{c.TC_ENERGY_IN}') - pl.col(f'{c_TOTAL}_{c.TC_ENERGY_OUT}'))
-            .otherwise(0)
-            .alias(c.TC_ENERGY_IN),
-            pl.when(pl.col(f'{c_TOTAL}_{c.TC_ENERGY_IN}') - pl.col(f'{c_TOTAL}_{c.TC_ENERGY_OUT}') < 0)
-            .then(pl.col(f'{c_TOTAL}_{c.TC_ENERGY_OUT}') - pl.col(f'{c_TOTAL}_{c.TC_ENERGY_IN}'))
-            .otherwise(0)
-            .alias(c.TC_ENERGY_OUT),
-        ])
+        # Columns you intend to sum
+        in_columns_to_sum = [
+            f'{c_TOTAL}_{c.TC_ENERGY_IN}_{c.TC_TYPE_TRANSACTION}_{tx}' for tx in transaction_types
+        ]
+        out_columns_to_sum = [
+            f'{c_TOTAL}_{c.TC_ENERGY_OUT}_{c.TC_TYPE_TRANSACTION}_{tx}' for tx in transaction_types
+        ]
+
+        # Explicitly filter columns to ensure existence
+        existing_in_columns = [col for col in in_columns_to_sum if col in transaction_sums.columns]
+        existing_out_columns = [col for col in out_columns_to_sum if col in transaction_sums.columns]
+
+        # Prepare columns safely
+        new_columns = []
+
+        if existing_in_columns:
+            new_columns.append(
+                pl.sum_horizontal([pl.col(col) for col in existing_in_columns]).alias(f'{c_TOTAL}_{c.TC_ENERGY_IN}')
+            )
+        else:
+            # Provide zero fallback to avoid empty aggregation
+            new_columns.append(pl.lit(0).alias(f'{c_TOTAL}_{c.TC_ENERGY_IN}'))
+
+        if existing_out_columns:
+            new_columns.append(
+                pl.sum_horizontal([pl.col(col) for col in existing_out_columns]).alias(f'{c_TOTAL}_{c.TC_ENERGY_OUT}')
+            )
+        else:
+            new_columns.append(pl.lit(0).alias(f'{c_TOTAL}_{c.TC_ENERGY_OUT}'))
+
+        # Execute the aggregation safely
+        transaction_sums = transaction_sums.with_columns(new_columns)
+
+        # Calculate total energy in and out per agent
+        transaction_types = transactions[c.TC_TYPE_TRANSACTION].unique()
+
+        # Generate column names
+        in_columns_to_sum = [
+            f'{c_TOTAL}_{c.TC_ENERGY_IN}_{c.TC_TYPE_TRANSACTION}_{tx}' for tx in transaction_types
+        ]
+        out_columns_to_sum = [
+            f'{c_TOTAL}_{c.TC_ENERGY_OUT}_{c.TC_TYPE_TRANSACTION}_{tx}' for tx in transaction_types
+        ]
+
+        # Explicitly filter to only existing columns
+        existing_in_columns = [col for col in in_columns_to_sum if col in transaction_sums.columns]
+        existing_out_columns = [col for col in out_columns_to_sum if col in transaction_sums.columns]
+
+        # Critical: explicitly handle empty lists before calling sum_horizontal
+        expressions = []
+        if existing_in_columns:
+            expressions.append(
+                pl.sum_horizontal([pl.col(col) for col in existing_in_columns])
+                .alias(c.TC_ENERGY_IN)
+            )
+        else:
+            # Fallback to zeros if no columns to sum
+            expressions.append(pl.lit(0).alias(c.TC_ENERGY_IN))
+
+        if existing_out_columns:
+            expressions.append(
+                pl.sum_horizontal([pl.col(col) for col in existing_out_columns])
+                .alias(c.TC_ENERGY_OUT)
+            )
+        else:
+            # Fallback to zeros if no columns to sum
+            expressions.append(pl.lit(0).alias(c.TC_ENERGY_OUT))
+
+        # Finally, execute safely
+        transaction_sums = transaction_sums.with_columns(expressions)
 
         # Calculate the ratio for each transaction type
         transaction_sums = transaction_sums.with_columns([

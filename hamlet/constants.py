@@ -68,7 +68,7 @@ CELSIUS_TO_KELVIN = 273.15
 EUR_KWH_TO_EURe7_WH = EUR_TO_EURe7 / KWH_TO_WH  # conversion to ensure that the values are integers
 
 # ENERGY TYPES
-ET_ELECTRICITY = 'power'
+ET_ELECTRICITY = 'electricity'
 ET_HEAT = 'heat'
 ET_COOLING = 'cold'
 ET_H2 = 'h2'
