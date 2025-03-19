@@ -2,16 +2,16 @@
 ################################################### markets templates ##################################################
 ########################################################################################################################
 
-lem_continuous:                       # name of the market (must be unique in its region)
+continuous:                       # name of the market (must be unique in its region)
                                       # note: markets with the same name can trade among each other if specified
   active: True                        # is the market active?
                                       # options:
                                       #   - True: market is active
                                       #   - False: market is inactive (market is ignored in simulation)
 
-  type: lem                           # type of the market
+  type: electricity                   # type of the market
                                       # options:
-                                      #   - lem: local energy market
+                                      #   - electricity: local energy market
 
   clearing:
     type: ex-ante                     # type of market clearing
@@ -171,16 +171,16 @@ lem_continuous:                       # name of the market (must be unique in it
           file: balancing.csv         # file containing the balancing energy prices for each time step
                                       # note: columns need to match the names of the parameters in the 'fixed' section
 
-lem_intraday:                         # type and name of the market "type_name" (must be unique)
+intraday:                             # type and name of the market "type_name" (must be unique)
                                       # note: markets with the same suffix can trade among each other if specified
   active: True                        # is the market active?
                                       # options:
                                       #   - True: market is active
                                       #   - False: market is inactive (market is ignored in simulation)
 
-  type: lem                           # type of the market
+  type: electricity                   # type of the market
                                       # options:
-                                      #   - lem: local energy market
+                                      #   - electricity: local energy market
 
   clearing:
     type: ex-ante                     # type of market clearing
@@ -337,16 +337,16 @@ lem_intraday:                         # type and name of the market "type_name" 
           file: balancing.csv         # file containing the balancing energy prices for each time step
                                       # note: columns need to match the names of the parameters in the 'fixed' section
 
-lem_day-ahead:                        # type and name of the market "type_name" (must be unique)
+day-ahead:                        # type and name of the market "type_name" (must be unique)
                                       # note: markets with the same suffix can trade among each other if specified
   active: True                        # is the market active?
                                       # options:
                                       #   - True: market is active
                                       #   - False: market is inactive (market is ignored in simulation)
 
-  type: lem                           # type of the market
+  type: electricity                   # type of the market
                                       # options:
-                                      #   - lem: local energy market
+                                      #   - electricity: local energy market
 
   clearing:
     type: ex-ante                     # type of market clearing
@@ -508,7 +508,7 @@ lfm:                                  # type and name of the market "type_name" 
                                       #   - True: market is active
                                       #   - False: market is inactive (market is ignored in simulation)
 
-  type: lfm                           # type of the market
+  type: flexibility                   # type of the market
                                       # options:
                                       #   - lem: local energy market
 
@@ -518,7 +518,7 @@ lhm:                                  # type and name of the market "type_name" 
                                       #   - True: market is active
                                       #   - False: market is inactive (market is ignored in simulation)
 
-  type: lhm                           # type of the market
+  type: heat                          # type of the market
                                       # options:
                                       #   - lem: local energy market
 
@@ -528,7 +528,7 @@ lh2m:                                 # type and name of the market "type_name" 
                                       #   - True: market is active
                                       #   - False: market is inactive (market is ignored in simulation)
 
-  type: lh2m                          # type of the market
+  type: hydrogen                      # type of the market
                                       # options:
                                       #   - lem: local energy market
 
