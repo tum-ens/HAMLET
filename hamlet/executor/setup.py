@@ -26,15 +26,6 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-# TODO: Considerations
-# - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator_backup and should be continued for consistency
-# - Possible packages for multiprocessing: multiprocessing, joblib, threading (can actually be useful when using not just pure python)
-# - Decrease file size wherever possible (define data types, shorten file lengths, etc.) -> this needs to occur in the scenario creation
-# - Load all files into the RAM and not read/save as in lemlab to increase performance
-# - Use polars instead of pandas to increase performance --> finding: polars is faster as long as lazy evaluation is used. Otherwise pandas 2.0 can keep up well (depending on use case)
-# - Always check if numba can help improve performance
-
-
 class Executor:
 
     def __init__(self, path, name: str = None, num_workers: int = None, overwrite_sim: bool = True):
