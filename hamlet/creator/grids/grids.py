@@ -26,9 +26,9 @@ class Grids:
 
 
         # Load setup plus configuration and/or agent file
-        self.setup = self._load_file(path=os.path.join(self.config_root, 'config_setup.yaml'))
+        self.setup = self._load_file(path=os.path.join(self.config_root, 'setup.yaml'))
         # TODO: Change to config_grids.yaml once the files have been renamed
-        self.config = self._load_file(path=os.path.join(self.config_path, 'config_grid.yaml'))
+        self.config = self._load_file(path=os.path.join(self.config_path, 'grids.yaml'))
 
         # Available types of markets
         from hamlet.creator.grids.electricity import Electricity

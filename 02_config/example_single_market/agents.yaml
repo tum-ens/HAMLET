@@ -36,9 +36,6 @@ sfh:
                                                 #   - 100: high efficiency for existing non-renovated buildings
                                                 #   - 150: average efficiency for existing non-renovated buildings
                                                 #   - 200: low efficiency for existing non-renovated buildings
-                                                
-    market_participant_share: 1                 # share of agents that participate in the local markets
-                                                # unit: 1
 
   ################################ inflexible load ####################################
   inflexible-load:
@@ -69,108 +66,6 @@ sfh:
 
     fcast:
       method: perfect                           # forecasting method
-                                                # options:
-                                                #   - perfect:  perfect knowledge of the future
-                                                #   - naive:    today will be the same as last day with offset t
-                                                #   - average:  today will be the same as the average of the last
-                                                #               n days with offset t
-                                                #   - smoothed: prediction value is a moving mean of the future
-                                                #               values with a specified window width
-                                                #   - sarma:    seasonal autoregressive moving average model
-                                                #   - rfr:      random forest regressor
-                                                #   - cnn:      convolutional neural network
-                                                #   - rnn:      recurrent neural network
-                                                #   - arima:    autoregressive integrated moving average model
-
-      naive:                                    # naive forecasting method parameters
-        offset: 1                               # offset in days to the current day
-                                                # unit: days
-
-      average:                                  # average forecasting method parameters
-        offset: 1                               # offset in days to the current day
-                                                # unit: days
-
-        days: 2                                 # number of days to be used for averaging
-                                                # unit: days
-
-      smoothed:
-        steps: 9                                # number of future time steps to be used for smoothing (T-ts)
-                                                # unit: time steps
-
-      sarma:
-        order: [2, 0, 2, 2, 0, 0,               # order of double seasonal arma model
-                96, 2, 0, 0, 672]               # order: [s2_ar, 0, s2_ma, s2]
-
-      cnn:
-        features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 3                                # past days that are used to train the neural network
-                                                # unit: days
-                                                # note: weather data for the n previous days needs to be available
-                                                # in weather file
-        epoch: 20                               # number of epochs to fit the neural network model
-        window_length: 20                       # window length of the training data
-                                                # unit: time steps
-
-      rnn:
-        features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 3                                # past days that are used to train the neural network
-                                                # unit: days
-                                                # note: weather data for the n previous days needs to be available
-                                                # in weather file
-        epoch: 20                               # number of epochs to fit the neural network model
-        window_length: 20                       # window length of the training data
-                                                # unit: time steps
-
-      rfr:
-        features: ['temp', 'time']              # used features in weather file to fit the model
-        days: 3                                 # past days that are used to train the neural network
-                                                # unit: days
-                                                # note: weather data for the n previous days needs to be available
-                                                # in weather file
-
-      arima:
-        order: [1, 0, 0]                        # order (p,d,q) of the model for the number of AR parameters,
-                                                # differences, and MA parameters to use
-        days: 3                                 # past days that are used to train the arima model
-                                                # unit: days
-                                                # note: weather data for the n previous days needs to be available
-                                                # in weather file
-
-  ################################ flexible load ####################################
-  flexible-load:
-    share: 0                                    # share of prosumers with flexible load
-                                                # unit: 1 [0, 1]
-      
-    num: [1]                                    # number of flexible loads
-                                                # unit: 1 [1, inf)
-                                                # note: value is randomly chosen from list
-                                                # note: some agents can have more than one flexible load with 
-                                                #   differing time ranges
-
-    sizing:
-      distribution: [0.4, 0.4, 0.2]             # relative distribution of flexible loads
-                                                # unit: 1 [0, 1]
-                                                # note: number of elements must be identical to other values
-                                                # note: if sum does not equal to 1, it is adjusted accordingly
-                                                # note: to obtain a uniform value this value needs to be [1]
-
-      demand: [2.5e6, 4e6, 5.5e6]               # yearly demand
-                                                # unit: Wh/a
-                                                
-      demand_deviation: [5e5, 1e6, 5e5]         # absolute deviation  of the respective demand value
-                                                # unit: Wh/a
-                                                # example:
-                                                #   distribution: [0.2, 0.6, 0.2]
-                                                #   demand:       [2.5e6, 4e6, 5.5e6]   --> [2500, 4000, 5500] kWh/a
-                                                #   deviation:    [5e5, 1e6, 5e5]       --> [ 500, 1000,  500] kWh/a
-                                                #   --> 2000<= 20% <=3000, 3000<= 60% <=5000, 5000<= 20% <=6000  
-                                                
-      time_offset: [6, 12, 24]                  # temporal offset of each point in time
-                                                # unit: h
-                                                # note: defines the maximum amount of time a load can be shifted to the future
-
-    fcast:
-      method: rfr                           # forecasting method
                                                 # options:
                                                 #   - perfect:  perfect knowledge of the future
                                                 #   - naive:    today will be the same as last day with offset t
@@ -547,8 +442,6 @@ sfh:
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
-    quality: green_local                        # quality that the generated energy should be labelled with on the local markets
-
   ################################ small-scale wind ####################################
   wind:
     share: 0                                    # share of prosumers with wind power plant
@@ -652,8 +545,6 @@ sfh:
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
-    quality: green_local                        # quality that the generated energy should be labelled with on the local markets
-
   ################################ fixed generator ####################################
   fixed-gen:
     share: 0                                    # share of prosumers with fixed power generators
@@ -752,8 +643,6 @@ sfh:
                                                 # unit: days
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
-
-    quality: local                              # quality that the generated energy should be labelled with on the local markets
 
   ################################ heat pumps (HP) ####################################
   hp:
@@ -854,8 +743,6 @@ sfh:
                                                 # note: weather data for the n previous days needs to be available
                                                 # in weather file
 
-    quality: local                              # quality that the generated energy should be labelled with on the local markets
-
   ################################ electric vehicles (EV) ####################################
   ev:
     share: 0.5                                  # share of prosumers with EVs
@@ -938,8 +825,6 @@ sfh:
       rfr:
         features: ['time']                      # used features in weather file to fit the model
 
-    quality: local                              # quality that generated energy (V2G) should be labelled with on the local markets
-
   ################################ batteries ####################################
   battery:
     share: 0.8                                  # share of agents with batteries (if share_dependent_on applies)
@@ -972,9 +857,6 @@ sfh:
 
       b2g: [false]                              # can the battery feed into the grid?
 
-    quality: local                              # quality that the sold energy should be labelled with
-                                                # on the local markets
-
   ################################ heat storage ####################################
   heat-storage:
     share: 1                                  # share of agents with heat storage (if share_dependent_on applies)
@@ -1004,9 +886,6 @@ sfh:
       efficiency: [0.95]                        # charging and discharging efficiency
 
       soc: [0.5]                                # initial soc
-
-    quality: local                              # quality that the sold energy should be labelled with
-                                                # on the local markets
 
   ################################ energy management system (EMS) ################################
   ems:

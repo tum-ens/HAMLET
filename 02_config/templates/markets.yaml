@@ -35,10 +35,6 @@ continuous:                       # name of the market (must be unique in its re
     coupling: None                    # method of coupling market regions (are uncleared positions posted elsewhere?)
                                       # options:
                                       #   - None: unsettled bids are not offered at other markets, i.e. bids get feed-in tariff and offers pay retail wholesale price
-                                      #   - above_c: unsettled bids are continuously offered at higher market levels (if possible)
-                                      #   - above_l: unsettled bids are offered at higher market levels in the last clearing period (if possible)
-                                      #   - below_c: unsettled bids are continuously offered at lower market levels (if possible)
-                                      #   - below_l: unsettled bids are offered at lower market levels in the last clearing period (if possible)
 
 
     timing:                           # timing of the market
@@ -202,13 +198,9 @@ intraday:                             # type and name of the market "type_name" 
                                       #   - standard (ex-post): see details in the ex-post folder
                                       # note: for further information about the pricing options see the documentation
 
-    coupling: above_l                 # method of coupling market regions (are uncleared positions posted elsewhere?)
+    coupling: None                    # method of coupling market regions (are uncleared positions posted elsewhere?)
                                       # options:
                                       #   - None: unsettled bids are not offered at other markets, i.e. bids get feed-in tariff and offers pay retail wholesale price
-                                      #   - above_c: unsettled bids are continuously offered at higher market levels (if possible)
-                                      #   - above_l: unsettled bids are offered at higher market levels in the last clearing period (if possible)
-                                      #   - below_c: unsettled bids are continuously offered at lower market levels (if possible)
-                                      #   - below_l: unsettled bids are offered at lower market levels in the last clearing period (if possible)
 
     timing:                           # timing of the market
       start: 57600                    # start of the market in unix time with timezone information
@@ -368,13 +360,9 @@ day-ahead:                        # type and name of the market "type_name" (mus
                                       #   - standard (ex-post): see details in the ex-post folder
                                       # note: for further information about the pricing options see the documentation
 
-    coupling: above_l                 # method of coupling market regions (are uncleared positions posted elsewhere?)
+    coupling: None                    # method of coupling market regions (are uncleared positions posted elsewhere?)
                                       # options:
                                       #   - None: unsettled bids are not offered at other markets, i.e. bids get feed-in tariff and offers pay retail wholesale price
-                                      #   - above_c: unsettled bids are continuously offered at higher market levels (if possible)
-                                      #   - above_l: unsettled bids are offered at higher market levels in the last clearing period (if possible)
-                                      #   - below_c: unsettled bids are continuously offered at lower market levels (if possible)
-                                      #   - below_l: unsettled bids are offered at lower market levels in the last clearing period (if possible)
 
     timing:                           # timing of the market
       start: 43200                    # start of the market in unix time with timezone information

@@ -50,7 +50,7 @@ class Creator:
         # Load the config and set paths
         self.path_config = os.path.abspath(path)
         self.root_config = self.path_config.rsplit(os.sep, 1)[0]
-        self.config = self.load_config(path=os.path.join(self.path_config, 'config_setup.yaml'))
+        self.config = self.load_config(path=os.path.join(self.path_config, 'setup.yaml'))
         self.path_input = os.path.abspath(self.config['paths']['input'])
         self.path_scenarios = os.path.abspath(self.config['paths']['scenarios'])
         self.path_results = os.path.abspath(self.config['paths']['results'])

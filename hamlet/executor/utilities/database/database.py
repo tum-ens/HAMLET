@@ -471,8 +471,8 @@ class Database:
         self.__general[c.K_TASKS] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
                                                 df='polars', method='eager')
         self.__general[c.K_GENERAL] = f.load_file(path=os.path.join(self.__scenario_path, 'config',
-                                                                    'config_setup.yaml'))
-        self.__general[c.K_GRID] = f.load_file(path=os.path.join(self.__scenario_path, 'config', 'config_grid.yaml'))
+                                                                    'setup.yaml'))
+        self.__general[c.K_GRID] = f.load_file(path=os.path.join(self.__scenario_path, 'config', 'grids.yaml'))
 
     def __register_all_regions(self, structure):
         """

@@ -306,10 +306,6 @@ class Ctsp(AgentBase):
         self.df[f"{key}/parameters/area"] = self._round_to_nth_digit(
             vals=self.df[f"{key}/parameters/area"], n=self.n_digits)
 
-        # market participation
-        self.df[f"{key}/market_participant"] = self._gen_rand_bool_list(n=self.num,
-                                                                        share_ones=config["market_participant_share"])
-
         # If the method is grid, fill the name, comment, bus and type columns from grid file
         if self.method == 'config':
             self.df = self._general_config(key=key, config=config)
@@ -484,9 +480,6 @@ class Ctsp(AgentBase):
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _pv_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
@@ -557,9 +550,6 @@ class Ctsp(AgentBase):
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _wind_config(self, key: str, config: dict) -> pd.DataFrame:
@@ -596,9 +586,6 @@ class Ctsp(AgentBase):
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
-
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 
@@ -666,9 +653,6 @@ class Ctsp(AgentBase):
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _fixed_gen_config(self, key: str, config: dict) -> pd.DataFrame:
@@ -705,9 +689,6 @@ class Ctsp(AgentBase):
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
-
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 
@@ -762,9 +743,6 @@ class Ctsp(AgentBase):
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _ev_config(self, key: str, config: dict) -> pd.DataFrame:
@@ -806,9 +784,6 @@ class Ctsp(AgentBase):
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
-
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 
@@ -854,9 +829,6 @@ class Ctsp(AgentBase):
             self.df[f"{key}/sizing/v2g_{num}"] = self.df.index.map(df['v2g'])
             self.df[f"{key}/sizing/v2h_{num}"] = self.df.index.map(df['v2h'])
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _battery_config(self, key: str, config: dict) -> pd.DataFrame:
@@ -887,9 +859,6 @@ class Ctsp(AgentBase):
             self.df[f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/capacity_{num}"], n=2)
             self.df[f"{key}/sizing/capacity_{num}"] = self.df[f"{key}/sizing/capacity_{num}"].astype('Int64')
-
-        # quality
-        self.df[f"{key}/quality"] = str(config["quality"])
 
         return self.df
 
@@ -930,9 +899,6 @@ class Ctsp(AgentBase):
             self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
             self.df[f"{key}/sizing/g2b_{num}"] = self.df.index.map(df['g2b'])
             self.df[f"{key}/sizing/b2g_{num}"] = self.df.index.map(df['b2g'])
-
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 
