@@ -197,7 +197,7 @@ class Executor:
 
         # Load general information and configuration
         self.general = f.load_file(os.path.join(self.path_scenario, 'general', 'general.json'))
-        self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'config_setup.yaml'))
+        self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'setup.yaml'))
 
         # Load timetable
         self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),

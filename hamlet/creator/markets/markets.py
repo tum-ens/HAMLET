@@ -26,8 +26,8 @@ class Markets:
         self.region = self.config_path.rsplit(os.sep, 1)[1]
 
         # Load setup plus configuration and/or agent file
-        self.setup = self._load_file(path=os.path.join(self.config_root, 'config_setup.yaml'))
-        self.config = self._load_file(path=os.path.join(self.config_path, 'config_markets.yaml'))
+        self.setup = self._load_file(path=os.path.join(self.config_root, 'setup.yaml'))
+        self.config = self._load_file(path=os.path.join(self.config_path, 'markets.yaml'))
 
         # Available types of markets
         from hamlet.creator.markets.electricity import ElectricityMarket

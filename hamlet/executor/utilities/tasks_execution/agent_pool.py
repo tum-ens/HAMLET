@@ -78,7 +78,7 @@ def load_general(path):
                                        df='polars', method='eager'),
                'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
                                     df='polars', method='eager'),
-               'general': f.load_file(path=os.path.join(path, 'config', 'config_setup.yaml'))}
+               'general': f.load_file(path=os.path.join(path, 'config', 'setup.yaml'))}
     return general
 
 
