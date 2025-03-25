@@ -107,7 +107,6 @@ class AgentBase(Agents):
 
     def _structure_general(self, key, cols):
         cols[0] = f"{key}/agent_id"
-        cols[-1] = f"{key}/market_participant"
         del cols[1]
         cols.insert(1, f"{key}/name")
         cols.insert(2, f"{key}/comment")
@@ -246,7 +245,8 @@ class AgentBase(Agents):
         """
             Fills all flexible_load columns
         """
-        return self.fill_columns(c.P_FLEXIBLE_LOAD, self._flexible_load_config, self._flexible_load_grid, **kwargs)
+        pass
+        # return self.fill_columns(c.P_FLEXIBLE_LOAD, self._flexible_load_config, self._flexible_load_grid, **kwargs)
 
     def _flexible_load_config(self, key: str, config: ordereddict) -> pd.DataFrame:
         """
