@@ -37,7 +37,7 @@ class Linopy(OptimBase):
         # grid commands
         self.grid_commands = kwargs['grid_commands']
         super().__init__(**kwargs)
-        self.ems = self.ems[c.C_LINOPY]
+        self.ems = self.ems[c.C_OPTIM]
         # Save first model to file to load later
         self.save_model()
 
