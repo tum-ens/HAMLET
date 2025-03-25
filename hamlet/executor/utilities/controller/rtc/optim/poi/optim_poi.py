@@ -161,14 +161,14 @@ class POI(OptimBase):
     def run(self):
 
         # Solve the optimization problem
-        solver = self.ems[c.C_POI].get('solver')
+        solver = self.ems[c.C_OPTIM].get('solver')
         match solver:
             case 'gurobi':
                 self.model.set_model_attribute(poi.ModelAttribute.Silent, True)
                 self.model.set_raw_parameter("OutputFlag", 0)
                 self.model.set_raw_parameter("LogToConsole", 0)
-                if self.ems[c.C_POI].get('time_limit') is not None:
-                    self.model.set_raw_parameter('TimeLimit', self.ems[c.C_POI]['time_limit'] / 60)
+                if self.ems[c.C_OPTIM].get('time_limit') is not None:
+                    self.model.set_raw_parameter('TimeLimit', self.ems[c.C_OPTIM]['time_limit'] / 60)
                 self.model.optimize()
                 status = self.model.get_model_attribute(poi.ModelAttribute.TerminationStatus)
             case _:

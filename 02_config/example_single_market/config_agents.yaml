@@ -1012,49 +1012,41 @@ sfh:
   ems:
     controller:                                 # controller parameters
       rtc:                                      # real-time controller parameters (acts only at last possible timestep)
-        method: linopy                          # options:
+        method: optimization                    # options:
+                                                #   - optimization: solves optimization problem
+                                                #   - rb: rule-based (not implemented yet)
+
+        optimization:
+          framework: linopy                     # Framework used to create optimization problem
+                                                # options:
                                                 #   - linopy: linopy optimization problem is solved
-                                                #   - poi:    poi optimization problem is solved
-                                                #   - rb:     rule-based controller
+                                                #   - poi: poi optimization problem is solved
 
-        linopy:
-          solver: gurobi                        # solver used for optimization
+          solver: gurobi                        # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
 
-          time_limit: 120                       # time limit for optimization
-                                                # unit: s
-                                                # note: measure to reduce overall simulation time
-        poi:
-          solver: gurobi                        # solver used for optimization
-                                                # options:
-                                                #   - gurobi
-
-          time_limit: 120                       # time limit for optimization
+          time_limit: 120                       # time limit for optimization problem
                                                 # unit: s
                                                 # note: measure to reduce overall simulation time
 
       fbc:                                      # forecast-based controller parameters (acts into the future)
-        method: linopy                          # options:
-                                                #   - None:   no controller used for future time steps
-                                                #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    poi mpc to forecast and optimize
-                                                #   - rb:     rule-based controller
-                                                #   - rl:     reinforcement learning controller
+        method: optimization                    # options:
+                                                #   - None: no controller used for future time steps
+                                                #   - optimization: model predictive controller
+                                                #   - rb: rule-based controller (not implemented yet)
+                                                #   - rl: reinforcement learning controller (not implemented yet)
 
         horizon: 86_400                         # control horizon
                                                 # unit: s
                                                 # note: cannot exceed forecast horizon
 
-        linopy:
-          solver: gurobi                        # solver used for optimization
+        optimization:
+          framework: linopy                     # Framework used to create optimization problem
                                                 # options:
-                                                #   - gurobi
+                                                #   - linopy: linopy mpc to forecast and optimize
+                                                #   - poi:    poi mpc to forecast and optimize
 
-          time_limit: 120                       # time limit for optimization
-                                                # unit: s
-                                                # note: measure to reduce overall simulation time
-        poi:
           solver: gurobi                        # solver used for optimization
                                                 # options:
                                                 #   - gurobi

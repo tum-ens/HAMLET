@@ -35,7 +35,7 @@ class Linopy(MpcBase):
         self.loaded_model = False
         self.model_path = f"{kwargs['agent'].agent_save}/linopy_mpc.nc"
         super().__init__(**kwargs)
-        self.ems = self.ems[c.C_LINOPY]
+        self.ems = self.ems[c.C_OPTIM]
         # Save first model to file to load later
         self.save_model()
 
