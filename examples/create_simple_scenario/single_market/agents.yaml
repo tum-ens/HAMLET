@@ -935,7 +935,7 @@ sfh:
                                                 # note: measure to reduce overall simulation time
 
     market:                                     # market parameters
-      strategy: linear                          # market agent trading strategy
+      strategy: retailer                          # market agent trading strategy
                                                 # options:
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
@@ -946,7 +946,7 @@ sfh:
                                                 #                 buy price (default strategy when there is no clearing)
                                                 # note: does not apply for ex-post markets
 
-      horizon: [86_400, 72_000, 57_600, 43_200] # market agent trading horizon
+      horizon: [86_4000]                        # market agent trading horizon
                                                 # unit: s
                                                 # note: value is randomly chosen from list
                                                 # note: range is limited by the control horizon
@@ -973,7 +973,7 @@ sfh:
                                                 # unit: days
 
         wholesale:
-          method: naive                         # forecasting method for wholesale market prices
+          method: perfect                       # forecasting method for wholesale market prices
                                                 # options:
                                                 #   - flat:  no meaningful forecasting, flat price assumed
                                                 #   - naive: expected price same as previous day (initialized flat)
