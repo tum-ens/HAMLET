@@ -14,7 +14,7 @@ electricity:                          # type of grid (needs to match available g
                                       #   - False: grid is inactive and will be ignored during simulation
 
   generation:
-    method: file                      # grid creation method
+    method: topology                      # grid creation method
                                       # options:
                                       #   - file: create grid from 'electricity.xlsx'
                                       #   - topology: create scenario first, then user has to assign agent-id to bus
@@ -31,7 +31,9 @@ electricity:                          # type of grid (needs to match available g
                                       # note: needs to be in the same folder as this file
 
   restrictions:
-    apply: ['enwg_14a']               # grid restrictions to be applied
+    apply: []                         # grid restrictions to be applied
+                                      # options:
+                                      #   - enwg_14a: section 14a of Energy Industry Act (§14a EnWG in DE)
                                       # note: Empty list means don't apply any restriction
 
     max_iteration: 10                 # maximum number of iteration when iteratively applying restriction

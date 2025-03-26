@@ -19,7 +19,7 @@ continuous:                           # name of the market (must be unique in it
                                       #   - ex-ante: market clearing is done before the settlement
                                       #   - ex-post: market clearing is done after the settlement (to be implemented)
 
-    method: pda                       # method of market clearing
+    method: None                      # method of market clearing
                                       # options:
                                       #   - None: energy can only be sold to and bought from the retailer
                                       #           (practically no local market exists)
