@@ -4,13 +4,13 @@
 
 ### Checks
 - [ ] I have checked that this issue has not already been reported.
-- [ ] I have confirmed this bug exists on the latest version of HAMLET.
+- [ ] I have confirmed this bug exists on the latest version of the tool.
 
 ### System Information
 Please provide details about your environment:
 - Python version:
 - Operating System:
-- HAMLET version:
+- Tool version:
 
 ### Reproducible Example
 Please follow [this guide](https://matthewrocklin.com/blog/work/2018/02/28/minimal-bug-reports) on how to provide a minimal, copy-pastable example. Include the (wrong) output if applicable.

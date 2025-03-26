@@ -1,0 +1,39 @@
+name: '🗺️ Roadmap Suggestion'
+description: Suggest a new item for the roadmap.
+
+body:
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Roadmap Item Suggestion
+      description: >
+        Describe the feature, enhancement, or project that you think should be added to the roadmap.
+      validations:
+        required: true
+
+  - type: textarea
+    id: importance
+    attributes:
+      label: Importance and Rationale
+      description: >
+        Explain why this suggestion is important, and why it should be prioritized.
+      validations:
+        required: true
+
+  - type: textarea
+    id: timeframe
+    attributes:
+      label: Suggested Timeframe
+      description: >
+        If applicable, provide a suggested timeframe for when this item should be added to the roadmap.
+      validations:
+        required: false
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: >
+        Add any other context, links, or supporting information here.
+      validations:
+        required: false

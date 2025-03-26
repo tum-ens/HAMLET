@@ -1,0 +1,32 @@
+name: '📚 Documentation request'
+description: Suggest improvements or request new documentation.
+labels: [Type::Documentation]
+
+body:
+  - type: textarea
+    id: area
+    attributes:
+      label: Area of Documentation
+      description: >
+        Specify the area of the documentation that you think needs improvement
+        (e.g., installation guide, API reference, feature usage).
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Changes or Additions
+      description: >
+        Describe the specific changes or additions you would like to see in the documentation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: >
+        Add any other context, links, or references to help clarify the documentation request.
+    validations:
+      required: false
