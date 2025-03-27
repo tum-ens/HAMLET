@@ -19,11 +19,6 @@ from hamlet.creator.agents.agents import Agents
 from hamlet.creator.markets.markets import Markets
 from hamlet.creator.grids.grids import Grids
 
-# Principal steps:
-# 1. Identify the scenario structure
-# 2. Create the necessary folders for the scenario
-# 3. Create the locality/region for each market -> either based on config or directly from files
-
 
 class Creator:
     """Class to create a scenario from the config files

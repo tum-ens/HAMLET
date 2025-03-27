@@ -26,24 +26,15 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-# TODO: Considerations
-# - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator_backup and should be continued for consistency
-# - Possible packages for multiprocessing: multiprocessing, joblib, threading (can actually be useful when using not just pure python)
-# - Decrease file size wherever possible (define data types, shorten file lengths, etc.) -> this needs to occur in the scenario creation
-# - Load all files into the RAM and not read/save as in lemlab to increase performance
-# - Use polars instead of pandas to increase performance --> finding: polars is faster as long as lazy evaluation is used. Otherwise pandas 2.0 can keep up well (depending on use case)
-# - Always check if numba can help improve performance
-
-
 class Executor:
 
-    def __init__(self, path_scenario, name: str = None, num_workers: int = None, overwrite_sim: bool = True):
+    def __init__(self, path, name: str = None, num_workers: int = None, overwrite_sim: bool = True):
         # Progress bar
         self.pbar = tqdm()
 
         # Paths
-        self.name = name if name else os.path.basename(path_scenario)  # Name of the scenario
-        self.path_scenario = os.path.abspath(path_scenario)  # Path to the scenario folder
+        self.name = name if name else os.path.basename(path)  # Name of the scenario
+        self.path_scenario = os.path.abspath(path)  # Path to the scenario folder
         self.root_scenario = os.path.dirname(self.path_scenario)  # Path to the root folder of the scenario
         self.path_results = None  # Path to the results folder
 
@@ -61,7 +52,7 @@ class Executor:
         self.database = Database(self.path_scenario)
 
         # Scenario structure
-        self.structure = {}  # TODO: this will need to contain more information than just the path. Also: above and below markets to know where to look for the data
+        self.structure = {}
 
         # Initialize task executioners
         self.agent_task_executioner = AgentTaskExecutioner(self.database, num_workers)

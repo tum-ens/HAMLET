@@ -1,0 +1,22 @@
+cff-version: 0.0.0
+message: "If you use this software, please cite it using this metadata."
+authors:
+  - family-names: "Doepfert"
+    given-names: "Markus"
+    alias: "@mdoepfert"
+    affiliation: "Technical University of Munich"
+    orcid: "https://orcid.org/0000-0001-8720-2585"
+  - family-names: "Chu"
+    given-names: "Jiahe"
+    alias: "@jiahechu"
+    affiliation: "Technical University Ingolstadt of Applied Sciences"
+  - family-names: "Hamdy"
+    given-names: "Hoda"
+    affiliation: "Technical University of Munich"
+title: "HAMLET"
+type: software
+license: MIT
+version: 0.1.5
+doi: 
+date-released: 2025-03-26
+url: "https://github.com/tum-ens/hamlet"

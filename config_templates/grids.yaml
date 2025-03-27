@@ -1,0 +1,74 @@
+########################################################################################################################
+################################################# grid configuration ###################################################
+########################################################################################################################
+
+electricity:                          # type of grid (needs to match available grid types)
+  powerflow: dc                       # type of powerflow
+                                      # options:
+                                      #   - dc: direct current
+                                      #   - ac: alternating current (not implemented yet)
+
+  active: True                        # is the grid active?
+                                      # options:
+                                      #   - True: grid is active and will be calculated during simulation
+                                      #   - False: grid is inactive and will be ignored during simulation
+
+  generation:
+    method: topology                  # grid creation method
+                                      # options:
+                                      #   - file: create grid from 'electricity.xlsx'
+                                      #   - topology: create scenario first, then user has to assign agent-id to bus
+                                      #     in the topology Excel file
+
+    file:                             # file method settings
+      file: electricity.xlsx          # file containing the detailed agent and grid information (bus, line, load, sgen)
+                                      # file types: xlsx
+                                      # note: needs to be in the same folder as this file
+
+    topology:                         # topology method settings
+      file: topology.xlsx             # file containing the grid topology (bus, line)
+                                      # file types: xlsx
+                                      # note: needs to be in the same folder as this file
+
+  restrictions:
+    apply: ['enwg_14a']               # grid restrictions to be applied
+                                      # options:
+                                      #   - enwg_14a: section 14a of Energy Industry Act (§14a EnWG in DE)
+                                      # note: Empty list means don't apply any restriction
+
+    max_iteration: 10                 # maximum number of iteration when iteratively applying restriction
+
+    enwg_14a:                         # regulation according to section 14a of Energy Industry Act (§14a EnWG in DE)
+
+      variable_grid_fees:             # variable grid fee parameters (indirect grid control)
+                                      # https://www.bundesnetzagentur.de/DE/Beschlusskammern/1_GZ/BK8-GZ/2022/2022_4-Steller/BK8-22-0010/BK8-22-0010-A_Festlegung_Download.pdf?__blob=publicationFile&v=5
+
+        active: True                  # is the variable grid fee active?
+
+        horizon: 86400                # calculation horizon
+                                      # unit: s
+
+        update: 3600                  # update frequency
+                                      # unit: s
+
+        grid_fee_base: 0.07           # base grid fees
+                                      # unit: €/kWh
+
+      direct_power_control:           # direct grid control parameters
+                                      # https://www.bundesnetzagentur.de/DE/Beschlusskammern/1_GZ/BK6-GZ/2022/BK6-22-300/Beschluss/BK6-22-300_Beschluss_Anlage1.pdf?__blob=publicationFile&v=1
+
+        active: True                  # is the direct power control active?
+
+        method: individual            # types of direct power control
+                                      # options:
+                                      #   - individual: control individual devices
+                                      #   - ems: control via EMS (net grid connection flow relevant)
+
+        threshold: 4200               # minimum guaranteed power (according to §14a: 4200 W)
+                                      # unit: W
+
+heat:
+  active: False
+
+hydrogen:
+  active: False
