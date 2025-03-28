@@ -12,20 +12,27 @@ HAMLET is organized into three main components, each responsible for a different
    - Sets up the simulation environment by defining agents, markets, and grids.
    - Reads configuration files and initializes the required components.
 
+.. image:: ../../img/Creator.drawio.png
+   :alt: Creator Architecture
+   :align: center
+   :scale: 30
+
 2. **Executor**
    - Runs the simulation by executing interactions between agents, markets, and grids.
    - Manages the time-stepping mechanism and ensures data consistency across modules.
+
+.. image:: ../../img/Executor.drawio.png
+   :alt: Executor Architecture
+   :align: center
+   :scale: 30
 
 3. **Analyzer**
    - Processes and visualizes simulation results.
    - Allows users to extract insights from agent behaviors, market outcomes, and grid performance.
 
-Each of these components operates independently but exchanges data in a structured manner, ensuring smooth execution of scenarios.
+(image for analyzer yet to come)
 
-.. image:: ../../img/HAMLET.drawio.png
-   :alt: HAMLET Architecture
-   :align: center
-   :scale: 100
+Each of these components operates independently but exchanges data in a structured manner, ensuring smooth execution of scenarios.
 
 Data Flow in a Typical Simulation
 ---------------------------------
@@ -40,6 +47,11 @@ A HAMLET simulation follows a structured workflow:
    - The Executor processes time steps sequentially or in parallel.
    - Agents make decisions based on available information and interact with markets.
    - Market mechanisms determine energy pricing, trading, and grid constraints.
+
+.. image:: ../../img/Flowchart_executor.drawio.png
+   :alt: Data Flow in a Typical Simulation
+   :align: center
+   :scale: 50
 
 3. **Results Processing**
    - Simulation outputs (e.g., energy consumption, market clearing prices, grid congestion) are recorded.
