@@ -16,7 +16,7 @@ authors:
 title: "HAMLET"
 type: software
 license: MIT
-version: 1.0.0
+version: 1.0.1
 doi: 
 date-released: 2025-03-28
 url: "https://github.com/tum-ens/hamlet"

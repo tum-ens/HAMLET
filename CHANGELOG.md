@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [Version 1.0.1] - 2025-03-28
+### Added
+- Added the readthedocs file to generate the website on the GitHub repo (!172).
+### Fixed
+- Fixed a bug in the example `create_scenario_with_grid` (!170)
+
 ## [Version 1.0.0] - 2025-03-28
 ### Added
 - Added a changelog (mea culpa, should have done this earlier). Will be used from now on.
