@@ -1,14 +1,14 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import hamlet.constants as c
-from hamlet.analyzer.plotter_base import PlotterBase
+from hamlet.analyzer.plotter_base import PlotterBase, decorator_plot_function
 
 
 class MarketPlotter(PlotterBase):
     def __init__(self, path: dict, config: dict, data_processor):
         super().__init__(path=path, config=config, data_processor=data_processor, name_subdirectory='markets')
 
-    @PlotterBase.decorator_plot_function
+    @decorator_plot_function
     def plot_total_balancing(self, **kwargs):
         """
         Generate bar plots for total balancing data across all scenarios and markets.
@@ -50,7 +50,7 @@ class MarketPlotter(PlotterBase):
                 # Annotate the total values above each bar
                 for idx, value in enumerate(total_balancing_sum):
                     ax.annotate(
-                        int(value),
+                        "{:.2f}".format(value),
                         (idx, value),
                         textcoords="offset points",
                         xytext=(0, 7),  # Offset annotation above the bar
@@ -74,7 +74,7 @@ class MarketPlotter(PlotterBase):
 
         return result_figs
 
-    @PlotterBase.decorator_plot_function
+    @decorator_plot_function
     def plot_agent_balancing(self, **kwargs):
         """
         Plot agent balancing data for all scenarios.
@@ -118,7 +118,7 @@ class MarketPlotter(PlotterBase):
             # Annotate total values above bars
             for idx, value in enumerate(total_balancing_sum):
                 ax.annotate(
-                    int(value),
+                    "{:.2f}".format(value),
                     (idx, value),
                     textcoords="offset points",
                     xytext=(0, 7),
@@ -141,7 +141,7 @@ class MarketPlotter(PlotterBase):
 
         return fig
 
-    @PlotterBase.decorator_plot_function
+    @decorator_plot_function
     def plot_average_balancing(self, market_only=False, **kwargs):
         """
         Plot average balancing data for all scenarios. Generates line plots of average pricing data for each market

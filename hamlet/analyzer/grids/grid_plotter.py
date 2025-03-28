@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import pandapower.plotting.plotly as pplotly
 import hamlet.constants as c
-from hamlet.analyzer.plotter_base import PlotterBase
+from hamlet.analyzer.plotter_base import PlotterBase, decorator_plot_function
 
 
 class GridPlotter(PlotterBase):
@@ -34,7 +34,7 @@ class GridPlotter(PlotterBase):
                 for func in plot_functions:
                     getattr(self, func)(**kwargs)
 
-    @PlotterBase.decorator_plot_function
+    @decorator_plot_function
     def plot_electricity_transformer_loading(self, **kwargs):
         """
         Generate a plot of transformer loading percentages for all scenarios.
@@ -66,7 +66,7 @@ class GridPlotter(PlotterBase):
 
         return fig
 
-    @PlotterBase.decorator_plot_function
+    @decorator_plot_function
     def plot_electricity_grid_topology(self, **kwargs):
         """
         Plot grid topology for all scenarios as interactive html file.

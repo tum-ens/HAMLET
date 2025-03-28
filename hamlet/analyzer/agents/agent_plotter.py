@@ -1,12 +1,12 @@
 import matplotlib.pyplot as plt
-from hamlet.analyzer.plotter_base import PlotterBase
+from hamlet.analyzer.plotter_base import PlotterBase, decorator_plot_function
 
 
 class AgentPlotter(PlotterBase):
     def __init__(self, path: dict, config: dict, data_processor):
         super().__init__(path=path, config=config, data_processor=data_processor, name_subdirectory='agents')
 
-    @PlotterBase.decorator_plot_function
+    @decorator_plot_function
     def plot_all_meters_data(self, **kwargs):
         """
         Generate area plots of meter data for all scenarios.
