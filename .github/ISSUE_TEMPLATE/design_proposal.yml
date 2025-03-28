@@ -1,0 +1,39 @@
+name: '🖊️ Design Proposal'
+description: Propose a new design or architecture change.
+
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to Solve
+      description: >
+        Describe the problem or limitation you are trying to solve with this design proposal.
+      validations:
+        required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: >
+        Provide a detailed explanation of your proposed solution. Describe any architectural changes, new APIs, or changes in behavior.
+      validations:
+        required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: >
+        Discuss any alternative designs or approaches you have considered.
+      validations:
+        required: false
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and Impact
+      description: >
+        Outline any potential risks or negative impacts of this proposal. How will this affect the system and existing users?
+      validations:
+        required: false

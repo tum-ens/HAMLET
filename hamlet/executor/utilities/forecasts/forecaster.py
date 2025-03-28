@@ -159,8 +159,8 @@ class Forecaster:
         # assign market config
         market_config = self.agentDB.account['ems'][c.TC_MARKET]['fcast']  # get forecast config for market
         for market_name in self.marketsDB.keys():   # assign market config dict for each market
-            wholesale_id = market_name + '_wholesale'
-            local_id = market_name + '_local'
+            wholesale_id = f'{market_name}_{c.TT_RETAIL}'
+            local_id = f'{market_name}_{c.TT_MARKET}'
 
             # add to config dict
             self.config_dict[wholesale_id] = market_config['wholesale']
@@ -253,7 +253,7 @@ class Forecaster:
             resolution = f.calculate_time_resolution(target_wholesale)
 
             # add offset day(s) before simulation with the same data
-            offset = self.config_dict[market_name + '_wholesale']['naive']['offset']    # here method is hard-coded
+            offset = self.config_dict[f'{market_name}_{c.TT_RETAIL}']['naive']['offset']    # here method is hard-coded
 
             day_before = f.slice_dataframe_between_times(target_df=target_wholesale, reference_ts=self.start_ts,
                                                          duration=c.DAYS_TO_SECONDS * offset + resolution)
@@ -269,12 +269,12 @@ class Forecaster:
             target_wholesale = target_wholesale.drop('index', c.TC_MARKET, c.TC_NAME, c.TC_REGION, 'retailer')
 
             # initial prepare for the wholesale market
-            self.train_data[market_name + '_wholesale'] = {c.K_TARGET: target_wholesale}
+            self.train_data[f'{market_name}_{c.TT_RETAIL}'] = {c.K_TARGET: target_wholesale}
 
             # initial prepare for the local market
-            target_local = target_wholesale.select(c.TC_TIMESTAMP, 'energy_price_sell')\
-                                           .rename({'energy_price_sell': 'energy_price_local'})
-            self.train_data[market_name + '_local'] = {c.K_TARGET: target_local}
+            target_local = target_wholesale.select(c.TC_TIMESTAMP, f'{c.MCT_ENERGY}_{c.TC_PRICE}_{c.PF_IN}')\
+                                           .rename({f'{c.MCT_ENERGY}_{c.TC_PRICE}_{c.PF_IN}': 'energy_price_local'})
+            self.train_data[f'{market_name}_{c.TT_MARKET}'] = {c.K_TARGET: target_local}
 
     def __prepare_plants_target_data(self):
         """

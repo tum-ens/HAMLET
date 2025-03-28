@@ -6,13 +6,14 @@ __email__ = "jiahe.chu@tum.de"
 
 import os
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # turn off onednn for tensorflow
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # silence tensorflow logs
 from datetime import timedelta
 import ast
 import polars as pl
 import pandas as pd
 import numpy as np
-from keras.layers import Input, Dense, LSTM, Conv1D, MaxPooling1D, Flatten, Dropout
-from keras.models import Model
+from keras.api.layers import Input, Dense, LSTM, Conv1D, MaxPooling1D, Flatten, Dropout
+from keras.api.models import Model
 from sktime.forecasting.arima import ARIMA
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor

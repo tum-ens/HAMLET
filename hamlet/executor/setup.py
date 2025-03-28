@@ -5,53 +5,36 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 import os
-import sys
-from tqdm import tqdm
-import shutil
 import time
-import warnings
-import multiprocessing as mp
-import pandas as pd
-from ruamel.yaml import YAML
-from pprint import pprint
-import json
+
 import polars as pl
+from tqdm import tqdm
+
 pl.enable_string_cache(True)
 from hamlet import functions as f
+from copy import deepcopy
 # from numba import njit, jit
-import pandapower as pp
-import concurrent.futures
-from typing import Callable
 from datetime import datetime
-from hamlet.executor.agents.agent import Agent
-from hamlet.executor.markets.market import Market
-from hamlet.executor.grids.grid import Grid
 from hamlet.executor.utilities.database.database import Database
 import hamlet.constants as c
 # pl.enable_string_cache(True)
-from copy import copy
+from hamlet.executor.utilities.tasks_execution.agent_task_executioner import AgentTaskExecutioner
+from hamlet.executor.utilities.tasks_execution.market_task_executioner import MarketTaskExecutioner
+from hamlet.executor.grids.grid import Grid
 import warnings
-warnings.filterwarnings("ignore")
 
-# TODO: Considerations
-# - Use Callables to create a sequence for all agents in executor: this was similarly done in the creator_backup and should be continued for consistency
-# - Possible packages for multiprocessing: multiprocessing, joblib, threading (can actually be useful when using not just pure python)
-# - Decrease file size wherever possible (define data types, shorten file lengths, etc.) -> this needs to occur in the scenario creation
-# - Load all files into the RAM and not read/save as in lemlab to increase performance
-# - Use polars instead of pandas to increase performance --> finding: polars is faster as long as lazy evaluation is used. Otherwise pandas 2.0 can keep up well (depending on use case)
-# - Always check if numba can help improve performance
+warnings.filterwarnings("ignore")
 
 
 class Executor:
 
-    def __init__(self, path_scenario, name: str = None, num_workers: int = None, overwrite_sim: bool = True):
-
+    def __init__(self, path, name: str = None, num_workers: int = None, overwrite_sim: bool = True):
         # Progress bar
         self.pbar = tqdm()
 
         # Paths
-        self.name = name if name else os.path.basename(path_scenario)  # Name of the scenario
-        self.path_scenario = os.path.abspath(path_scenario)  # Path to the scenario folder
+        self.name = name if name else os.path.basename(path)  # Name of the scenario
+        self.path_scenario = os.path.abspath(path)  # Path to the scenario folder
         self.root_scenario = os.path.dirname(self.path_scenario)  # Path to the root folder of the scenario
         self.path_results = None  # Path to the results folder
 
@@ -69,20 +52,20 @@ class Executor:
         self.database = Database(self.path_scenario)
 
         # Scenario structure
-        self.structure = {}  # TODO: this will need to contain more information than just the path. Also: above and below markets to know where to look for the data
+        self.structure = {}
 
-        # Number of workers for parallelization
-        self.num_workers = num_workers
-
-        # Thread pool for parallelization
-        self.pool = None
+        # Initialize task executioners
+        self.agent_task_executioner = AgentTaskExecutioner(self.database, num_workers)
+        self.market_task_executioner = MarketTaskExecutioner(self.database, 1)  # use 1 worker only
 
         # Overwrites the results folder if it already exists
         self.overwrite = overwrite_sim
 
+        # Maximal number of iterations per timesteps (when direct power control is activated)
+        self.max_iteration = 1
+
     def run(self):
         """Runs the simulation"""
-
         self.setup()
 
         self.execute()
@@ -97,22 +80,7 @@ class Executor:
         self.__setup_database()
 
     def execute(self):
-        """Executes the scenario
-
-        """
-
-        # Get number of logical processors (for parallelization)
-        # TODO: Benchmark with different numbers of workers
-        if not self.num_workers:
-            self.num_workers = os.cpu_count() - 1  # logical processors (threads) - 1
-            # self.num_workers = mp.cpu_count() - 1  # physical processors - 1
-            # self.num_workers = len(os.sched_getaffinity(0))  # number of usable CPUs
-
-        # Setup up the thread pool for parallelization
-        if self.num_workers > 1:
-            # TODO: Benchmark with ProcessPoolExecutor
-            self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=self.num_workers)
-
+        """Executes the scenario"""
         # Loop through the timetable and execute the tasks for each market for each timestamp
         # Note: The design assumes that there is nothing to be gained for the simulation to run in between market
         #   timestamps. Therefore, the simulation is only executed for the market timestamps
@@ -121,53 +89,58 @@ class Executor:
         self.pbar.reset(total=len(self.timetable.partition_by('timestamp')))
         self.pbar.set_description(desc='Start execution')
 
+        # Update results path in task executioners
+        self.agent_task_executioner.set_results_path(self.path_results)
+        self.market_task_executioner.set_results_path(self.path_results)
+
         for timestamp in self.timetable.partition_by('timestamp'):
             # Wait for the timestamp to be reached if the simulation is to be carried out in real-time
             if self.type == 'rts':
                 self.__wait_for_ts(timestamp.iloc[0, 0])
 
-            # get current timestamp as string item for progress bar
-            timestamp_str = str(timestamp.select(c.TC_TIMESTAMP).sample(n=1).item())
+            # init variables for the grid simulation
+            grid_ok = False  # init variable, grid is not simulated yet
+            num_iteration = 0  # init number of iteration, max. 10
 
-            # Iterate over timestamp by region
-            for region in timestamp.partition_by(c.TC_REGION):
-                # get current region as string item for progress bar
-                region_str = str(region.select(c.TC_REGION).sample(n=1).item())
+            # get initial database at timestamp, in case this ts need to be overwritten
+            initial_db = deepcopy(self.database)
 
-                # update progress bar description
-                self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for region ' + region_str + ': ')
+            while not grid_ok:  # iterate until grid is working
+                num_iteration += 1
 
-                # Execute the agents and market in parallel or sequentially
-                if self.pool:
-                    # Execute the agents for this market
-                    self.__execute_agents_parallel(tasklist=region)
+                # get current timestamp as string item for progress bar
+                timestamp_str = str(timestamp.select(c.TC_TIMESTAMP).sample(n=1).item())
 
-                    # Execute the market
-                    # TODO: Replace this with a parallel execution once it works
-                    self.__execute_markets(tasklist=region)
-                else:
-                    # Execute the agents for this market
-                    self.__execute_agents(tasklist=region)
+                # Iterate over timestamp by region_tasks
+                for region_tasks in timestamp.partition_by(c.TC_REGION):
+                    # get current region_tasks as string item for progress bar
+                    region_name = str(region_tasks.select(c.TC_REGION).sample(n=1).item())
 
-                    # Execute the market
-                    self.__execute_markets(tasklist=region)
+                    # update progress bar description
+                    self.pbar.set_description(
+                        'Executing timestamp ' + timestamp_str + ' for region_tasks ' + region_name)
 
-            # Calculate the grids for the current timestamp (calculated together as they are connected)
-            self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid: ')
+                    # Execute agent and market tasks
+                    self.agent_task_executioner.execute(region_tasks)
+                    self.market_task_executioner.execute(region_tasks)
 
-            self.__execute_grids()
+                # Calculate the grids for the current timestamp (calculated together as they are connected)
+                self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid')
+                grid_ok = self.__execute_grids(tasklist=timestamp, initial_db=initial_db, num_iteration=num_iteration)
 
             self.pbar.update(1)
 
-        # Cleanup the thread pool
-        if self.pool:
-            self.pool.shutdown()
+        # Cleanup the parallel pool
+        self.agent_task_executioner.close_pool()
+        self.market_task_executioner.close_pool()
 
     def cleanup(self):
         """Cleans up the scenario after execution"""
-        self.database.save_database(os.path.dirname(self.path_results))
+        self.database.save_database(os.path.dirname(self.path_results), save_restriction_commands_only=False)
 
-        self.pbar.set_description('Simulation finished: ')
+        self.database.concat_market_files()
+
+        self.pbar.set_description('Simulation finished')
 
     def pause(self):
         """Pauses the simulation"""
@@ -177,152 +150,45 @@ class Executor:
         """Resumes the simulation"""
         raise NotImplementedError("Resume functionality not implemented yet")
 
-    def __execute_agents_parallel(self, tasklist: pl.DataFrame):
-        """Executes all agent tasks for all agents in parallel"""
+    def __execute_grids(self, tasklist: pl.DataFrame, initial_db: Database, num_iteration: int) -> (bool, dict):
+        """Execute grids for the given tasklist."""
+        # Only electricity grids is implemented now
+        grid_results = {}
 
-        # Define the function to be executed in parallel
-        def tasks(agent):
-            # Execute the agent
-            return agent.execute()
+        # get grid databases
+        grids_data = self.database.get_grid_data()
 
-        # Get the data of the agents that are part of the tasklist
-        region = tasklist.select(pl.first(c.TC_REGION)).item()
-        agents = self.database.get_agent_data(region=region)
+        # execute grids
+        grid_ok = True  # set a base variable for grid status
+        for grid_type, grid_db in grids_data.items():   # iterate through all grid types
+            result, single_grid_ok = Grid(grid_db=grid_db, tasks=tasklist, grid_type=grid_type,
+                                          database=self.database).execute()
 
-        # Create a list to store the agents
-        agents_list = []
+            grid_ok = grid_ok and single_grid_ok    # each grid should be ok
 
-        # Iterate over the tasklist and populate the agents_list
-        for agent_type, agent in agents.items():
-            for agent_id, data in agent.items():
-                agents_list.append(Agent(agent_type=agent_type, data=agent[agent_id], timetable=tasklist,
-                                         database=self.database))
+            grid_results[grid_type] = result
 
-        # Submit the agents for parallel execution
-        futures = [self.pool.submit(tasks, agent) for agent in agents_list]
+        # if number of iteration exceed maximal number of iteration, set grid_ok to True so that this timestep won't be
+        # simulated again
+        if num_iteration > self.max_iteration:
+            grid_ok = True
 
-        # Wait for all agents to complete
-        concurrent.futures.wait(futures)
+        # if grid status is not ok, delete all simulated data for this ts, this ts needs to be simulated again
+        if not grid_ok:
+            self.database = deepcopy(initial_db)
 
-        # Retrieve and process results from the futures
-        results = []
-        for future in futures:
-            try:
-                result = future.result()
-                results.append(result)
-                # Optionally process each result as needed
-                # e.g., logging or additional computations
-            except Exception as e:
-                # Handle exceptions (e.g., log them)
-                raise f"An error occurred when retrieving agent results: {e}"
+        # write grid results to database
+        for grid_type, grid_db in grid_results.items():
+            self.database.post_grids(grid_type=grid_type, grid=grid_db)
 
-        # Post the agent data back to the database
-        self.database.post_agents_to_region(region=region, agents=results)
-
-    def __execute_market_parallel(self, tasklist: pl.DataFrame):
-        """Executes the market tasks in parallel"""
-
-        # Define the function to be executed in parallel
-        def tasks(market):
-            # Execute the market
-            return market.execute()
-
-        # Create a list to store the markets
-        markets_list = []
-
-        # Iterate over the tasklist and populate the markets_list
-        for task in tasklist.iter_rows(named=True):
-            # Get the market data for the current market
-            market = self.database.get_market_data(region=task[c.TC_REGION],
-                                                   market_type=task[c.TC_MARKET],
-                                                   market_name=task[c.TC_NAME])
-            market = copy(market)
-            # Create an instance of the Market class and append it to the markets_list
-            markets_list.append(Market(data=market, tasks=task, database=self.database))
-
-
-        # Submit the markets for parallel execution
-        futures = [self.pool.submit(tasks, market) for market in markets_list]
-
-        # Wait for all markets to complete
-        # TODO: For some reason it gets stuck here. Investigate why.
-        concurrent.futures.wait(futures)
-
-        # Retrieve and process results from the futures
-        results = []
-        for future in futures:
-            try:
-                result = future.result(timeout=60)
-                results.append(result)
-                # Optionally process each result as needed
-                # e.g., logging or additional computations
-            except Exception as e:
-                # Handle exceptions (e.g., log them)
-                raise f"An error occurred when retrieving market results: {e}"
-
-        print(results)
-        exit()
-
-        # Post the agent data back to the database
-        self.database.post_markets_to_region(region=task[c.TC_REGION], markets=results)
-
-    def __execute_agents(self, tasklist: pl.DataFrame):
-        """Executes all agent tasks for all agents sequentially
-        """
-
-        # Get the data of the agents that are part of the tasklist
-        region = tasklist.select(pl.first(c.TC_REGION)).item()
-        agents = self.database.get_agent_data(region=region)
-
-        # Create a list to store the results
-        results = []
-
-        # Iterate over the agents and execute them sequentially
-        for agent_type, agent in agents.items():
-            for agent_id, data in agent.items():
-                # Create an instance of the Agents class and execute its tasks
-                results.append(Agent(agent_type=agent_type, data=agent[agent_id], timetable=tasklist,
-                                     database=self.database).execute())
-
-        # Post the agent data back to the database
-        self.database.post_agents_to_region(region=region, agents=results)
-
-    def __execute_markets(self, tasklist: pl.DataFrame):
-
-        # Create a list to store the results
-        results = []
-
-        # Iterate over tasklist row by row
-        for tasks in tasklist.iter_rows(named=True):
-            # Get the market data for the current market
-            market = self.database.get_market_data(region=tasks[c.TC_REGION],
-                                                   market_type=tasks[c.TC_MARKET],
-                                                   market_name=tasks[c.TC_NAME])
-            # Create an instance of the Market class and execute its tasks
-            results.append(Market(data=market, tasks=tasks, database=self.database).execute())
-
-        # counter = 0
-        # for result in results:
-        #     with pl.Config(set_tbl_width_chars=400, set_tbl_cols=25, set_tbl_rows=100):
-        #         print(result.market_transactions)
-        #     counter += 1
-        #     if counter > 1:
-        #         break
-
-        # Post the agent data back to the database
-        self.database.post_markets_to_region(region=tasks[c.TC_REGION], markets=results)
-
-    def __execute_grids(self):
-        # # Pass info to grids class and execute its tasks
-        # Grid().execute()
-        return
+        return grid_ok
 
     def __prepare_scenario(self):
         """Prepares the scenario"""
 
         # Load general information and configuration
         self.general = f.load_file(os.path.join(self.path_scenario, 'general', 'general.json'))
-        self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'config_setup.yaml'))
+        self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'setup.yaml'))
 
         # Load timetable
         self.timetable = f.load_file(os.path.join(self.path_scenario, 'general', 'timetable.ft'),
@@ -345,6 +211,10 @@ class Executor:
         """Creates a database connector object"""
 
         self.database.setup_database(self.structure)
+
+        # assign maximal number of iterations from the database
+        self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['restrictions']
+                              ['max_iteration'])
 
     @staticmethod
     def __wait_for_ts(timestamp):

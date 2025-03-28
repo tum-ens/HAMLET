@@ -4,13 +4,15 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
-from hamlet.creator.agents.agent_base import AgentBase
 import os
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 from ruamel.yaml.compat import ordereddict
-from pprint import pprint
+
 import hamlet.constants as c
+from hamlet.creator.agents.agent_base import AgentBase
+import hamlet.functions as f
 
 
 class Producer(AgentBase):
@@ -130,7 +132,6 @@ class Producer(AgentBase):
                     # Adjust the columns from "general"
                     if befkey == "general":
                         befcols[0] = f"{befkey}/agent_id"
-                        befcols[-1] = f"{befkey}/market_participant"
                         befcols.insert(1, f"{befkey}/name")
                         befcols.insert(2, f"{befkey}/comment")
                         befcols.insert(3, f"{befkey}/bus")
@@ -300,11 +301,7 @@ class Producer(AgentBase):
             self.df.loc[i] = np.nan
 
         # general
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/agent_id"] = self._gen_new_ids(n=self.num_agents)
-
-        # market participation
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/market_participant"] = self._gen_rand_bool_list(
-            n=self.num_agents, share_ones=config["market_participant_share"])
+        self.df.loc[self.idx_start:self.idx_end, f"{key}/agent_id"] = f.gen_ids(n=self.num_agents)
 
     def fill_pv(self, device: str):
         """
@@ -348,9 +345,6 @@ class Producer(AgentBase):
         self.df.loc[self.idx_start:self.idx_end] = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"],
                                                                          df=self.df[self.idx_start:self.idx_end][:])
 
-        # quality
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/quality"] = config["quality"]
-
     def fill_wind(self, device: str):
         """
             Fills all wind columns
@@ -388,9 +382,6 @@ class Producer(AgentBase):
         # forecast
         self.df.loc[self.idx_start:self.idx_end] = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"],
                                                                          df=self.df[self.idx_start:self.idx_end][:])
-
-        # quality
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/quality"] = config["quality"]
 
     def fill_fixed_gen(self, device: str):
         """
@@ -431,9 +422,6 @@ class Producer(AgentBase):
         self.df.loc[self.idx_start:self.idx_end] = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"],
                                                                          df=self.df[self.idx_start:self.idx_end][:])
 
-        # quality
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/quality"] = config["quality"]
-
     def fill_battery(self, device: str):
         """
             Fills all battery columns
@@ -464,9 +452,6 @@ class Producer(AgentBase):
                 f"{device}/sizing/power_0"]
             self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
                 vals=self.df.loc[self.idx_start:self.idx_end, f"{key}/sizing/capacity_{num}"], n=self.n_digits)
-
-        # quality
-        self.df.loc[self.idx_start:self.idx_end, f"{key}/quality"] = config["quality"]
 
     def fill_ems(self, device: str):
         """

@@ -5,7 +5,7 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 from hamlet.executor.utilities.controller.rtc.rtc import Rtc
-from hamlet.executor.utilities.controller.mpc.mpc import Mpc
+from hamlet.executor.utilities.controller.fbc.fbc import Fbc
 import hamlet.constants as c
 
 # Instructions: For a new controller type import the class here and add it to the mapping in the Controller class
@@ -20,11 +20,11 @@ class Controller:
         # Mapping of controller types to classes
         controllers = {
             c.C_RTC: Rtc,
-            c.C_MPC: Mpc,
+            c.C_FBC: Fbc,
         }
 
         # Lookup the class based on the controller_type
-        self.controller = controllers.get(controller_type.lower())
+        self.controller = controllers.get(controller_type.lower(), None)
 
         if self.controller is None:
             raise ValueError(f'Controller method {controller_type} not available. \n'

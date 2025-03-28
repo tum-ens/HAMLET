@@ -19,11 +19,6 @@ from hamlet.creator.agents.agents import Agents
 from hamlet.creator.markets.markets import Markets
 from hamlet.creator.grids.grids import Grids
 
-# Principal steps:
-# 1. Identify the scenario structure
-# 2. Create the necessary folders for the scenario
-# 3. Create the locality/region for each market -> either based on config or directly from files
-
 
 class Creator:
     """Class to create a scenario from the config files
@@ -50,7 +45,7 @@ class Creator:
         # Load the config and set paths
         self.path_config = os.path.abspath(path)
         self.root_config = self.path_config.rsplit(os.sep, 1)[0]
-        self.config = self.load_config(path=os.path.join(self.path_config, 'config_setup.yaml'))
+        self.config = self.load_config(path=os.path.join(self.path_config, 'setup.yaml'))
         self.path_input = os.path.abspath(self.config['paths']['input'])
         self.path_scenarios = os.path.abspath(self.config['paths']['scenarios'])
         self.path_results = os.path.abspath(self.config['paths']['results'])
