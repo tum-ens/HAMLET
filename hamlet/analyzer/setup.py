@@ -32,9 +32,9 @@ class Analyzer:
             self.general[key] = f.load_file(os.path.join(value, 'general', 'general.json'))
 
             # load configurations
-            self.config['setup'][key] = f.load_file(os.path.join(value, 'config', 'config_setup.yaml'))
-            self.config['markets'][key] = f.load_file(os.path.join(value, 'config', 'config_markets.yaml'))
-            self.config['grids'][key] = f.load_file(os.path.join(value, 'config', 'config_grid.yaml'))
+            self.config['setup'][key] = f.load_file(os.path.join(value, 'config', 'setup.yaml'))
+            self.config['markets'][key] = f.load_file(os.path.join(value, 'config', 'markets.yaml'))
+            self.config['grids'][key] = f.load_file(os.path.join(value, 'config', 'grids.yaml'))
 
         # init plotters
         self.agents = AgentPlotter(
