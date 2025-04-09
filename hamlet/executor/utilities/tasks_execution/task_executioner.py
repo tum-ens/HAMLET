@@ -64,6 +64,7 @@ class TaskExecutioner:
 
     def update_num_workers(self, num_tasks):
         """Updates number of workers"""
+        # self.num_workers is modified here, therefore num_workers is reduced permanently
         self.num_workers = max(1, min(num_tasks, self.num_workers))
 
     def execute_serial(self, tasks):
