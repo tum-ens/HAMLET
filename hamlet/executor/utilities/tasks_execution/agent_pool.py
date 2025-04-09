@@ -43,19 +43,6 @@ def task(agent_data):
         print(traceback.format_exc())
         return None
 
-
-def init_agentdb_full(agent_type, agent_id, region_tasks, region_path, agent_path=None):
-    """fully initializes agent database (including market + forecaster)"""
-    if not agent_path:
-        agent_path = os.path.join(region_path, 'agents', agent_type, agent_id)
-
-    agent_db = init_agentdb(agent_type, agent_id, region_path, agent_path)
-
-    market_db, market_type = get_market(region_path, region_tasks)
-    add_forecaster(agent_db, market_db, market_type, region_path)
-
-    return agent_db
-
 def init_agentdb(agent_type, agent_id, region_path, agent_path=None):
     """Initializes agent database"""
     if not agent_path:
