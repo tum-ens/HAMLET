@@ -25,7 +25,7 @@ class TaskExecutioner:
         self.database = database
         self.num_workers = num_workers
         if not self.num_workers:
-            self.num_workers = mp.cpu_count()  # physical processors -> gets updated in execute anyhow
+            self.num_workers = psutil.cpu_count(logical=False) # physical processors -> gets updated in execute anyhow
         self.pool = None
         self.results_path = None
 
