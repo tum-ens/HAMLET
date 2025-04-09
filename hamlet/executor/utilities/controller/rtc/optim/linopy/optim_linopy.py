@@ -189,12 +189,12 @@ class Linopy(OptimBase):
         # Solve the optimization problem
         solver = self.ems.get('solver')
         match solver:
-            case 'gurobi':
+            case 'gurobi' | 'highs':
                 sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
                 solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
                 if self.ems.get('time_limit') is not None:
                     solver_options.update({'TimeLimit': self.ems['time_limit'] / 60})
-                status = self.model.solve(solver_name='gurobi', **solver_options)
+                status = self.model.solve(solver_name=solver, **solver_options)
                 sys.stdout = sys.__stdout__  # re-activate printing
             case _:
                 raise ValueError(f"Unsupported solver: {solver}.")
