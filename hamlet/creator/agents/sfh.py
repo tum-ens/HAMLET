@@ -173,7 +173,6 @@ class Sfh(AgentBase):
             # Adjust the columns from "general"
             if key == c.K_GENERAL:
                 cols[0] = f"{key}/agent_id"
-                cols[-1] = f"{key}/market_participant"
                 del cols[1]
                 cols.insert(1, f"{key}/name")
                 cols.insert(2, f"{key}/comment")
@@ -284,7 +283,6 @@ class Sfh(AgentBase):
         """
             Fills all general columns
         """
-        # TODO: Change structure such as done in mfh
         # Key in the config file
         key = c.K_GENERAL
 
@@ -297,10 +295,6 @@ class Sfh(AgentBase):
         # parameters
         idx_list = self._gen_idx_list_from_distr(n=self.num, distr=config["parameters"]["distribution"])
         self._add_info_indexed(keys=[key, "parameters"], config=config["parameters"], idx_list=idx_list)
-
-        # market participation
-        self.df[f"{key}/market_participant"] = self._gen_rand_bool_list(n=self.num,
-                                                                        share_ones=config["market_participant_share"])
 
         # If the method is grid, fill the name, comment and bus columns from grid file
         if self.method == 'config':
@@ -645,9 +639,6 @@ class Sfh(AgentBase):
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _pv_grid(self, key: str, config: dict, **kwargs) -> pd.DataFrame:
@@ -729,9 +720,6 @@ class Sfh(AgentBase):
             # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _wind_config(self, key: str, config: dict) -> pd.DataFrame:
@@ -768,9 +756,6 @@ class Sfh(AgentBase):
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
-
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 
@@ -844,9 +829,6 @@ class Sfh(AgentBase):
             # forecast
         self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _fixed_gen_config(self, key: str, config: dict) -> pd.DataFrame:
@@ -883,9 +865,6 @@ class Sfh(AgentBase):
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
-
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 
@@ -946,9 +925,6 @@ class Sfh(AgentBase):
             # forecast
         self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _hp_config(self, key: str, config: dict) -> pd.DataFrame:
@@ -981,9 +957,6 @@ class Sfh(AgentBase):
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
-
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 
@@ -1038,9 +1011,6 @@ class Sfh(AgentBase):
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _ev_config(self, key: str, config: dict) -> pd.DataFrame:
@@ -1072,9 +1042,6 @@ class Sfh(AgentBase):
 
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
-
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 
@@ -1135,9 +1102,6 @@ class Sfh(AgentBase):
         # forecast
         self.df = self._add_info_simple(keys=[key, "fcast"], config=config["fcast"], df=self.df)
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _battery_config(self, key: str, config: dict) -> pd.DataFrame:
@@ -1167,9 +1131,6 @@ class Sfh(AgentBase):
             self.df[f"{key}/sizing/capacity_{num}"] *= self.df[f"{c.P_INFLEXIBLE_LOAD}/sizing/demand_0"] / 1000
             self.df[f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/capacity_{num}"], n=self.n_digits)
-
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 
@@ -1217,9 +1178,6 @@ class Sfh(AgentBase):
             self.df[f"{key}/sizing/g2b_{num}"] = self.df.index.map(df['g2b'])
             self.df[f"{key}/sizing/b2g_{num}"] = self.df.index.map(df['b2g'])
 
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
-
         return self.df
 
     def _heat_storage_config(self, key: str, config: dict) -> pd.DataFrame:
@@ -1249,9 +1207,6 @@ class Sfh(AgentBase):
             self.df[f"{key}/sizing/capacity_{num}"] *= self.df["heat/sizing/demand_0"] / 2000
             self.df[f"{key}/sizing/capacity_{num}"] = self._round_to_nth_digit(
                 vals=self.df[f"{key}/sizing/capacity_{num}"], n=self.n_digits).astype('Int64')
-
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 
@@ -1296,9 +1251,6 @@ class Sfh(AgentBase):
             self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(round(df['capacity'] * 1e6))).astype('Int64')
             self.df[f"{key}/sizing/efficiency_{num}"] = self.df.index.map(df['efficiency'])
             self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])
-
-        # quality
-        self.df[f"{key}/quality"] = config["quality"]
 
         return self.df
 

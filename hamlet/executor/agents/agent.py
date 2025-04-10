@@ -10,12 +10,12 @@ __email__ = "markus.doepfert@tum.de"
 import polars as pl
 
 import hamlet.constants as c
-from hamlet.executor.agents.ctsp.ctsp import Ctsp
-from hamlet.executor.agents.industry.industry import Industry
-from hamlet.executor.agents.mfh.mfh import Mfh
-from hamlet.executor.agents.producer.producer import Producer
-from hamlet.executor.agents.sfh.sfh import Sfh
-from hamlet.executor.agents.storage.storage import Storage
+from hamlet.executor.agents.ctsp import Ctsp
+from hamlet.executor.agents.industry import Industry
+from hamlet.executor.agents.mfh import Mfh
+from hamlet.executor.agents.producer import Producer
+from hamlet.executor.agents.sfh import Sfh
+from hamlet.executor.agents.storage import Storage
 from hamlet.executor.utilities.database.agent_db import AgentDB
 from hamlet.executor.utilities.database.market_db import MarketDB
 
@@ -42,7 +42,7 @@ class Agent:
 
     """
 
-    def __init__(self, agent_type: str, data: dict, timetable: pl.DataFrame, market: dict):
+    def __init__(self, agent_type: str, data: dict, timetable: pl.DataFrame, market: dict, grid_commands: dict):
         """
         Parameters
         ----------
@@ -60,7 +60,7 @@ class Agent:
 
         """
         # Instance of the agent class
-        self.agent = AgentFactory.create_agent(agent_type, data, timetable, market)
+        self.agent = AgentFactory.create_agent(agent_type, data, timetable, market, grid_commands)
 
     def execute(self) -> AgentDB:
         """
@@ -101,7 +101,7 @@ class AgentFactory:
     }
 
     @staticmethod
-    def create_agent(agent_type: str, agent_data: dict, timetable: pl.DataFrame, market: dict):
+    def create_agent(agent_type: str, agent_data: dict, timetable: pl.DataFrame, market: dict, grid_commands: dict):
         """Create an agent.
 
         Parameters
@@ -121,4 +121,4 @@ class AgentFactory:
             The created agent.
 
         """
-        return AgentFactory.AGENT_MAPPING[agent_type](agent_data, timetable, market)
+        return AgentFactory.AGENT_MAPPING[agent_type](agent_data, timetable, market, grid_commands)

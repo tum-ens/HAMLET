@@ -1,12 +1,9 @@
 .idea
 
 # Folders
-00_docs/*
-01_examples/*
-02_config/*
-03_input_data/*
-04_scenarios/*
-05_results/*
+input_data/*
+scenarios/*
+results/*
 
 # C extensions
 *.so

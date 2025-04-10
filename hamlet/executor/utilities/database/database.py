@@ -5,10 +5,9 @@ __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
 import os
+import pickle
 from datetime import datetime
-
 import polars as pl
-
 import hamlet.constants as c
 import hamlet.functions as f
 from hamlet.executor.utilities.database.region_db import RegionDB
@@ -426,12 +425,13 @@ class Database:
 
     """save database"""
 
-    def save_database(self, path: str):
+    def save_database(self, path: str, save_restriction_commands_only):
         """
         Save the database to the specified path.
 
         Args:
             path: The path to save the database to.
+            save_restriction_commands_only: only save grid restriction commands (for parallel execution).
 
         """
 
@@ -443,19 +443,17 @@ class Database:
         for region in self.__regions.keys():
             self.__regions[region].save_region(path=os.path.join(path, region))
 
-    def save_grid(self, path: str):
-        """
-        Save grid results to the specified path.
-
-        Args:
-            path: The path to save grid results to.
-
-        """
-
-        region = list(self.__regions)[0]    # take the most upper region folder to save
+        # save grid data
+        grid_path = os.path.join(path, list(self.__regions.keys())[0], 'grids')
 
         for grid_type, grid in self.__grids.items():
-            grid.save_grid(path=os.path.join(path, region, 'grids', grid_type))
+            if save_restriction_commands_only:      # only save restriction commands
+                file_name = grid_type + '_restriction.pickle'
+                with open(os.path.join(grid_path, file_name), 'wb') as handle:
+                    pickle.dump(grid.restriction_commands, handle)
+
+            else:   # save whole grid database
+                grid.save_grid(grid_path)
 
     ########################################## PRIVATE METHODS ##########################################
 
@@ -473,8 +471,8 @@ class Database:
         self.__general[c.K_TASKS] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
                                                 df='polars', method='eager')
         self.__general[c.K_GENERAL] = f.load_file(path=os.path.join(self.__scenario_path, 'config',
-                                                                    'config_setup.yaml'))
-        self.__general[c.K_GRID] = f.load_file(path=os.path.join(self.__scenario_path, 'config', 'config_grid.yaml'))
+                                                                    'setup.yaml'))
+        self.__general[c.K_GRID] = f.load_file(path=os.path.join(self.__scenario_path, 'config', 'grids.yaml'))
 
     def __register_all_regions(self, structure):
         """

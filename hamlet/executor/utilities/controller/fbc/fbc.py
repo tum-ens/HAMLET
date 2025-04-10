@@ -35,7 +35,9 @@ class Fbc(ControllerBase):
     def run(self, **kwargs) -> AgentDB:
         # Return if no method is specified
         if self.method is None:
-            return
+            raise ValueError("No method specified.")
+        if self.method == c.C_OPTIM:
+            self.method = self.kwargs.get('optimization').get('framework')
 
         # Use the mapping to get the class
         controller_class = self.class_mapping.get(self.method)

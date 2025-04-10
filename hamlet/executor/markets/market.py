@@ -7,13 +7,13 @@ __email__ = "markus.doepfert@tum.de"
 # This file is in charge of handling the markets in the execution of the scenario
 
 # Imports
-from copy import deepcopy, copy
+from copy import copy
 from hamlet.executor.utilities.database.market_db import MarketDB
 from hamlet.executor.utilities.database.database import Database
-from hamlet.executor.markets.lem.lem import Lem
-from hamlet.executor.markets.lfm.lfm import Lfm
-from hamlet.executor.markets.lhm.lhm import Lhm
-from hamlet.executor.markets.lh2m.lh2m import Lh2m
+from hamlet.executor.markets.electricity import ElectricityMarket
+from hamlet.executor.markets.flexibility import FlexibilityMarket
+from hamlet.executor.markets.heat import HeatMarket
+from hamlet.executor.markets.hydrogen import HydrogenMarket
 import hamlet.constants as c
 
 
@@ -97,10 +97,10 @@ class MarketFactory:
 
     """
     MARKET_MAPPING = {
-        c.MT_LEM: Lem,
-        c.MT_LFM: Lfm,
-        c.MT_LHM: Lhm,
-        c.MT_LH2M: Lh2m,
+        c.MT_ELECTRICITY: ElectricityMarket,
+        c.MT_FLEXIBILITY: FlexibilityMarket,
+        c.MT_HEAT: HeatMarket,
+        c.MT_H2: HydrogenMarket,
     }
 
     @staticmethod

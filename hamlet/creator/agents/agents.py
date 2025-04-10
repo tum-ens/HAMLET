@@ -111,12 +111,12 @@ class Agents:
         self.scenario_path = scenario_path
 
         # Load setup plus configuration and/or agent file
-        self.setup = f.load_file(path=os.path.join(self.config_root, 'config_setup.yaml'))
+        self.setup = f.load_file(path=os.path.join(self.config_root, 'setup.yaml'))
         self.grid = None  # grid file only required if agents are created from grid file
         self.config = None
         self.excel = None
         try:
-            self.config = f.load_file(path=os.path.join(self.config_path, 'config_agents.yaml'))
+            self.config = f.load_file(path=os.path.join(self.config_path, 'agents.yaml'))
         except FileNotFoundError:
             try:
                 self.excel = f.load_file(path=os.path.join(self.config_path, 'agents.xlsx'))
@@ -131,14 +131,12 @@ class Agents:
 
         # Available types of agents
         from hamlet.creator.agents.sfh import Sfh
-        from hamlet.creator.agents.mfh import Mfh
         from hamlet.creator.agents.ctsp import Ctsp
         from hamlet.creator.agents.industry import Industry
         from hamlet.creator.agents.producer import Producer
         from hamlet.creator.agents.storage import Storage
         self.types = {
             c.A_SFH: Sfh,
-            c.A_MFH: Mfh,
             c.A_CTSP: Ctsp,
             c.A_INDUSTRY: Industry,
             c.A_PRODUCER: Producer,

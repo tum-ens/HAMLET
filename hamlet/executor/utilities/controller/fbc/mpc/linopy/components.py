@@ -136,8 +136,8 @@ class Market(LinopyComps):
         self.upper = pd.Series(self.upper, index=self.timesteps)
 
         # Get market price forecasts
-        self.price_sell = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}'], index=self.timesteps)
-        self.price_buy = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
+        self.price_sell = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
+        self.price_buy = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}'], index=self.timesteps)
         self.grid_sell = pd.Series(self.fcast[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'], index=self.timesteps)
         self.grid_buy = pd.Series(self.fcast[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'], index=self.timesteps)
         self.levies_sell = pd.Series(self.fcast[f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
@@ -157,6 +157,7 @@ class Market(LinopyComps):
                                    coords=[self.timesteps], integer=False)  # outflow from the building (selling)
         self.add_variable_to_model(model, name=f'{self.name}_{self.comp_type}_{c.PF_IN}', lower=0, upper=self.upper,
                                    coords=[self.timesteps], integer=False)  # inflow into the building (buying)
+
         # Define mode flag that decides whether the market energy is bought or sold
         self.add_variable_to_model(model, name=f'{self.name}_mode', coords=[self.timesteps], binary=True)
 
@@ -225,10 +226,10 @@ class Market(LinopyComps):
         # Define the constraint for revenue
         cons_name = f'{self.name}_revenue'
         if cons_name not in model.constraints:
-            eq_revenue = (var_revenue == -var_out * dt_hours * (self.price_sell + self.grid_sell + self.levies_sell))
+            eq_revenue = (var_revenue == -var_out * dt_hours * (self.price_sell - self.grid_sell - self.levies_sell))
             model.add_constraints(eq_revenue, name=cons_name, coords=[self.timesteps])
         else:
-            model.constraints[cons_name].coeffs[:, 1] = dt_hours * (self.price_sell + self.grid_sell + self.levies_sell)
+            model.constraints[cons_name].coeffs[:, 1] = dt_hours * (self.price_sell - self.grid_sell - self.levies_sell)
         return model
 
 
@@ -239,7 +240,7 @@ class InflexibleLoad(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        self.power = pd.Series(self.fcast[f'{self.name}_power'].cast(int), index=self.timesteps, dtype='int32')
+        self.power = pd.Series(self.fcast[f'{self.name}_{c.ET_ELECTRICITY}'].cast(int), index=self.timesteps, dtype='int32')
 
     def define_variables(self, model, **kwargs):
         comp_type = kwargs['comp_type']
@@ -300,7 +301,7 @@ class SimplePlant(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        self.power = list(self.fcast[f'{self.name}_power'])
+        self.power = list(self.fcast[f'{self.name}_{c.ET_ELECTRICITY}'])
         self.controllable = self.info['sizing']['controllable']
         self.lower = [0] * len(self.power) if self.controllable else self.power
 

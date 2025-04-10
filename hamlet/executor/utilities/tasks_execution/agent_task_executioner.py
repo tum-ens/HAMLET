@@ -50,14 +50,20 @@ class AgentTaskExecutioner(TaskExecutioner):
 
         # Get the data of the markets that are part of the tasklist
         markets = self.database.get_market_data(region=region_name)
+
+        # Get grid restriction commands
+        grid_commands = {}
+        for grid_type, grid in self.database.get_grid_data().items():
+            grid_commands[grid_type] = grid.restriction_commands
+
         # Iterate over the agents and execute them sequentially
         for agent_type, agent in agents.items():
             for agent_id, agent_db in agent.items():
                 # Update save path for agent
                 agent_db.agent_save = os.path.join(self.results_path, 'agents', agent_type, agent_id)
                 # Create an instance of the Agent class and execute its tasks
-                results.append(Agent(agent_type=agent_type, data=agent_db, timetable=tasks,
-                                     market=markets).execute())
+                results.append(Agent(agent_type=agent_type, data=agent_db, timetable=tasks, market=markets,
+                                     grid_commands=grid_commands).execute())
         return results
 
     def postprocess_results(self, tasks, results):

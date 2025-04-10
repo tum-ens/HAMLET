@@ -35,7 +35,7 @@ class Linopy(MpcBase):
         self.loaded_model = False
         self.model_path = f"{kwargs['agent'].agent_save}/linopy_mpc.nc"
         super().__init__(**kwargs)
-        self.ems = self.ems[c.C_LINOPY]
+        self.ems = self.ems[c.C_OPTIM]
         # Save first model to file to load later
         self.save_model()
 
@@ -176,12 +176,12 @@ class Linopy(MpcBase):
         # Solve the optimization problem
         solver = self.ems.get('solver')
         match solver:
-            case 'gurobi':
+            case 'gurobi' | 'highs':
                 sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
                 solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
                 if self.ems.get('time_limit') is not None:
                     solver_options.update({'TimeLimit': self.ems['time_limit'] / 60})
-                status = self.model.solve(solver_name='gurobi', **solver_options)
+                status = self.model.solve(solver_name=solver, **solver_options)
                 sys.stdout = sys.__stdout__  # re-activate printing
             case _:
                 raise ValueError(f"Unsupported solver: {solver}")

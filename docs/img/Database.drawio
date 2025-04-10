@@ -1,0 +1,231 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0.1 Safari/605.1.15" version="24.8.4">
+  <diagram name="Page-1" id="6133507b-19e7-1e82-6fc7-422aa6c4b21f">
+    <mxGraphModel dx="-628" dy="1153" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="none" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-103" value="AgentDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="2610" y="479" width="170" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-104" value="+ agent_id: str&lt;div style=&quot;line-height: 140%;&quot;&gt;+ agent_type: str&lt;br&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ account: dict | str&lt;div style=&quot;line-height: 140%;&quot;&gt;+ plants: dict | str&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ timeseries: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ meters: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ socs: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ setpoints: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ forecasts: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ bids_offers: pl.DataFrame&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-103">
+          <mxGeometry y="26" width="170" height="174" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-105" value="+ register_agent()" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;gradientColor=none;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-103">
+          <mxGeometry y="200" width="170" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-100" value="AgentDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="2600" y="469" width="170" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-101" value="+ agent_id: str&lt;div style=&quot;line-height: 140%;&quot;&gt;+ agent_type: str&lt;br&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ account: dict | str&lt;div style=&quot;line-height: 140%;&quot;&gt;+ plants: dict | str&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ timeseries: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ meters: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ socs: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ setpoints: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ forecasts: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ bids_offers: pl.DataFrame&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-100">
+          <mxGeometry y="26" width="170" height="174" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-102" value="+ register_agent()" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;gradientColor=none;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-100">
+          <mxGeometry y="200" width="170" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-82" value="MarketDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="3139" y="530" width="220" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-83" value="+ config: dict | str&lt;div style=&quot;line-height: 140%;&quot;&gt;+ bids_cleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ offers_cleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ bids_uncleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ offers_uncleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ market_transactions: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ retailer_timeseries: pl.DataFrame&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-82">
+          <mxGeometry y="26" width="220" height="124" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-84" value="+ register_market()" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-82">
+          <mxGeometry y="150" width="220" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-79" value="MarketDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="3129" y="520" width="220" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-80" value="+ config: dict | str&lt;div style=&quot;line-height: 140%;&quot;&gt;+ bids_cleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ offers_cleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ bids_uncleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ offers_uncleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ market_transactions: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ retailer_timeseries: pl.DataFrame&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-79">
+          <mxGeometry y="26" width="220" height="124" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-81" value="+ register_market()" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-79">
+          <mxGeometry y="150" width="220" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-73" value="RegionDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillStyle=solid;" vertex="1" parent="1">
+          <mxGeometry x="2870" y="520" width="180" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-74" value="&lt;span style=&quot;background-color: rgb(255, 255, 255);&quot;&gt;+ agents: dict | AgentDB&lt;/span&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;&lt;span style=&quot;background-color: rgb(255, 255, 255);&quot;&gt;+ markets: dict | MarketDB&lt;/span&gt;&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;&lt;span style=&quot;background-color: rgb(255, 255, 255);&quot;&gt;+ subregions: dict | RegionDB&lt;/span&gt;&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-73">
+          <mxGeometry y="26" width="180" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-75" value="+ register_region()" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;gradientColor=none;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-73">
+          <mxGeometry y="90" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-70" value="RegionDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillStyle=solid;" vertex="1" parent="1">
+          <mxGeometry x="2860" y="510" width="180" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-71" value="&lt;span style=&quot;background-color: rgb(255, 255, 255);&quot;&gt;+ agents: dict | AgentDB&lt;/span&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;&lt;span style=&quot;background-color: rgb(255, 255, 255);&quot;&gt;+ markets: dict | MarketDB&lt;/span&gt;&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;&lt;span style=&quot;background-color: rgb(255, 255, 255);&quot;&gt;+ subregions: dict | RegionDB&lt;/span&gt;&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-70">
+          <mxGeometry y="26" width="180" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-72" value="+ register_region()" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;gradientColor=none;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-70">
+          <mxGeometry y="90" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-55" value="ElectricityGridDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="3170" y="385" width="190" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-56" value="+ type: &#39;electricity&#39;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ grid: pp.network&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;&lt;br&gt;&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-55">
+          <mxGeometry y="26" width="190" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-57" value="" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-55">
+          <mxGeometry y="70" width="190" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-58" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=default;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-55">
+          <mxGeometry y="90" width="190" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-51" value="ElectricityGridDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="3160" y="371" width="190" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-52" value="+ type: &#39;electricity&#39;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ grid: pp.network&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;&lt;br&gt;&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-51">
+          <mxGeometry y="26" width="190" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-53" value="" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-51">
+          <mxGeometry y="70" width="190" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-54" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=default;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-51">
+          <mxGeometry y="90" width="190" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-85" value="Database" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="2850" y="200" width="210" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-86" value="- general: GeneralDB&lt;div style=&quot;line-height: 140%;&quot;&gt;- regions: dict | RegionDB&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;- grids: dict | GridDB&lt;/div&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;opacity=90;" parent="It_4zOR-27pO54_r0HhA-85" vertex="1">
+          <mxGeometry y="26" width="210" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-88" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=inherit;" parent="It_4zOR-27pO54_r0HhA-85" vertex="1">
+          <mxGeometry y="80" width="210" height="8" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-89" value="+ setup_databse()&lt;div style=&quot;line-height: 140%;&quot;&gt;+ get_general_data(): GeneralDB&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ get_grid_data(): GridDB&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ get_agent_data(): AgentDB&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ get_market_data(): MarketDB&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ post_grids()&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ post_agent_to_region()&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ post_market_to_region()&lt;/div&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="It_4zOR-27pO54_r0HhA-85" vertex="1">
+          <mxGeometry y="88" width="210" height="142" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-91" value="GeneralDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="2590" y="257" width="180" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-92" value="+ general: dict | str&lt;div style=&quot;line-height: 150%;&quot;&gt;+ weather: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 150%;&quot;&gt;+ tasks: pl.DataFrame&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="It_4zOR-27pO54_r0HhA-91" vertex="1">
+          <mxGeometry y="26" width="180" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-50" value="" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="It_4zOR-27pO54_r0HhA-91">
+          <mxGeometry y="90" width="180" height="10" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-97" value="RegionDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;fillStyle=solid;" parent="1" vertex="1">
+          <mxGeometry x="2850" y="500" width="180" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-98" value="&lt;span style=&quot;background-color: rgb(255, 255, 255);&quot;&gt;+ agents: dict | AgentDB&lt;/span&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;&lt;span style=&quot;background-color: rgb(255, 255, 255);&quot;&gt;+ markets: dict | MarketDB&lt;/span&gt;&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;&lt;span style=&quot;background-color: rgb(255, 255, 255);&quot;&gt;+ subregions: dict | RegionDB&lt;/span&gt;&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="It_4zOR-27pO54_r0HhA-97" vertex="1">
+          <mxGeometry y="26" width="180" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-23" value="+ register_region()" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;gradientColor=none;" vertex="1" parent="It_4zOR-27pO54_r0HhA-97">
+          <mxGeometry y="90" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-102" value="GridDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="3150" y="200" width="210" height="134" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-103" value="+ config: dict | str&lt;div style=&quot;line-height: 150%;&quot;&gt;+ type: str&lt;/div&gt;&lt;div style=&quot;line-height: 150%;&quot;&gt;+ grid: object&lt;/div&gt;&lt;div style=&quot;line-height: 150%;&quot;&gt;+ results: dict | pl.DataFrame&lt;/div&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="It_4zOR-27pO54_r0HhA-102" vertex="1">
+          <mxGeometry y="26" width="210" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-105" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=inherit;" parent="It_4zOR-27pO54_r0HhA-102" vertex="1">
+          <mxGeometry y="100" width="210" height="8" as="geometry" />
+        </mxCell>
+        <mxCell id="It_4zOR-27pO54_r0HhA-106" value="+ register_grid()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="It_4zOR-27pO54_r0HhA-102" vertex="1">
+          <mxGeometry y="108" width="210" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-11" value="AgentDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="2590" y="459" width="170" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-12" value="+ agent_id: str&lt;div style=&quot;line-height: 140%;&quot;&gt;+ agent_type: str&lt;br&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ account: dict | str&lt;div style=&quot;line-height: 140%;&quot;&gt;+ plants: dict | str&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ timeseries: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ meters: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ socs: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ setpoints: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ forecasts: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ bids_offers: pl.DataFrame&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-11">
+          <mxGeometry y="26" width="170" height="174" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-15" value="+ register_agent()" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;gradientColor=none;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-11">
+          <mxGeometry y="200" width="170" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-16" value="MarketDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="3119" y="510" width="220" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-17" value="+ config: dict | str&lt;div style=&quot;line-height: 140%;&quot;&gt;+ bids_cleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ offers_cleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ bids_uncleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ offers_uncleared: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ market_transactions: pl.DataFrame&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ retailer_timeseries: pl.DataFrame&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-16">
+          <mxGeometry y="26" width="220" height="124" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-20" value="+ register_market()" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-16">
+          <mxGeometry y="150" width="220" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-30" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;region r = 1&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="2977" y="606" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-34" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;&amp;nbsp;r = 2&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="3008" y="618" width="40" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-63" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;endFill=0;" edge="1" parent="1" source="sbD00cTxCYsmBy_oH8-3-38" target="It_4zOR-27pO54_r0HhA-106">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="3255" y="320" />
+              <mxPoint x="3255" y="320" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-64" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=diamondThin;endFill=1;" edge="1" parent="1" source="sbD00cTxCYsmBy_oH8-3-38" target="It_4zOR-27pO54_r0HhA-89">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-38" value="ElectricityGridDB" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="3150" y="357" width="190" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-39" value="+ type: &#39;electricity&#39;&lt;div style=&quot;line-height: 140%;&quot;&gt;+ grid: pp.network&lt;/div&gt;&lt;div style=&quot;line-height: 140%;&quot;&gt;&lt;br&gt;&lt;/div&gt;" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-38">
+          <mxGeometry y="26" width="190" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-49" value="" style="text;strokeColor=default;fillColor=default;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-38">
+          <mxGeometry y="70" width="190" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-40" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=default;" vertex="1" parent="sbD00cTxCYsmBy_oH8-3-38">
+          <mxGeometry y="90" width="190" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-59" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;type = electricity&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="3268" y="423" width="80" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-60" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;type = heat&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="3294" y="437" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-61" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;type = H&lt;sub&gt;2&lt;/sub&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="3311" y="452" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-77" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;&amp;nbsp;r =&amp;nbsp;&lt;/font&gt;&lt;font style=&quot;font-size: 6.666667px;&quot;&gt;n&lt;sub&gt;r&lt;/sub&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="3018" y="628" width="40" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-78" value="&lt;span style=&quot;font-size: 8px;&quot;&gt;...&lt;/span&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="3030" y="618" width="30" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-90" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;market m = 1&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="3278" y="677" width="70" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-91" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;m = 2&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="3316" y="688" width="40" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-92" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;m = n&lt;sub&gt;m&lt;/sub&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="3320" y="698" width="50" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-93" value="&lt;span style=&quot;font-size: 8px;&quot;&gt;...&lt;/span&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="3339" y="687" width="30" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-106" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;agent a = 1&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="2707" y="675" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-107" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;a = 2&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="2737" y="686" width="40" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-108" value="&lt;font style=&quot;font-size: 8px;&quot;&gt;a = n&lt;sub&gt;a&lt;/sub&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="2743" y="696" width="50" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-109" value="&lt;span style=&quot;font-size: 8px;&quot;&gt;...&lt;/span&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="2760" y="686" width="30" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-114" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=-0.006;entryY=0.203;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=diamondThin;endFill=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="2781" y="560" as="sourcePoint" />
+            <mxPoint x="2849.92" y="559.992" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-117" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.25;exitDx=0;exitDy=0;entryX=1.001;entryY=0.183;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=diamondThin;endFill=1;" edge="1" parent="1" source="sbD00cTxCYsmBy_oH8-3-16" target="sbD00cTxCYsmBy_oH8-3-74">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-118" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.43;entryY=1;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=diamondThin;endFill=1;" edge="1" parent="1" source="It_4zOR-27pO54_r0HhA-97" target="It_4zOR-27pO54_r0HhA-89">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sbD00cTxCYsmBy_oH8-3-120" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.19;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=diamondThin;endFill=1;" edge="1" parent="1" source="It_4zOR-27pO54_r0HhA-92" target="It_4zOR-27pO54_r0HhA-89">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

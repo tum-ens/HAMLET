@@ -6,6 +6,7 @@ __email__ = "markus.doepfert@tum.de"
 
 import os
 import traceback
+import pickle
 
 import hamlet.constants as c
 from hamlet import functions as f
@@ -24,8 +25,10 @@ def task(agent_data):
         agent_db = init_agentdb(agent_type, agent_id, region_path)
         market_db, market_type = get_market(region_path, region_tasks)
         add_forecaster(agent_db, market_db, market_type, region_path)
+        grid_commands = get_grid_restriction_commands(region_path)
         # Initialize and execute the agent instance
-        agent = Agent(agent_type=agent_type, data=agent_db, timetable=region_tasks, market=market_db)
+        agent = Agent(agent_type=agent_type, data=agent_db, timetable=region_tasks, market=market_db,
+                      grid_commands=grid_commands)
         agent_db = agent.execute()
 
         folder = f"{agent_db.__hash__()}"
@@ -78,6 +81,9 @@ def add_forecaster(agent_db, market_db, market_type, region_path):
     forecaster.init_forecaster()
     # TODO if forecaster is updated during the simulation (e.g. by update_local_market_in_forecasters),
     #  we need to load it here correctly
+    with open(os.path.join(agent_db.agent_save, 'forecaster_train.pickle'), 'rb') as handle:
+        forecaster.train_data = pickle.load(handle)
+
     agent_db.forecaster = forecaster  # register
 
 
@@ -86,13 +92,27 @@ def load_general(path) -> dict:
     """Loads general information"""
     global cached_general
     if cached_general is None:
-        cached_general = {'weather': f.load_file(path=os.path.join(path, 'general', 'weather', 'weather.ft'), df='polars', method='eager', memory_map=False),
+        cached_general = {'weather': f.load_file(path=os.path.join(path, 'general', 'weather',
+                                                            'weather.ft'), df='polars', method='eager', memory_map=False),
                    'retailer': f.load_file(path=os.path.join(path, 'general', 'retailer.ft'),
                                            df='polars', method='eager'),
                    'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
                                         df='polars', method='eager'),
-                   'general': f.load_file(path=os.path.join(path, 'config', 'config_setup.yaml'))}
+                   'general': f.load_file(path=os.path.join(path, 'config', 'setup.yaml'))}
     return cached_general
+
+
+def get_grid_restriction_commands(region_path):
+    """Load grid restriction commands."""
+    grid_restriction_commands = {}
+    file_names = os.listdir(os.path.join(region_path, 'grids'))     # list all files
+    file_names = [file for file in file_names if 'restriction' in file]
+    for file in file_names:
+        grid_type = file.split("_")[0]
+        with open(os.path.join(region_path, 'grids', file), 'rb') as handle:
+            grid_restriction_commands[grid_type] = pickle.load(handle)
+
+    return grid_restriction_commands
 
 
 class AgentPool(ProcessPool):

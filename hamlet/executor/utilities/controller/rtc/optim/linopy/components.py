@@ -168,7 +168,7 @@ class InflexibleLoad(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        self.power = self.ts[f'{self.name}_power'][0]
+        self.power = self.ts[f'{self.name}_{c.ET_ELECTRICITY}'][0]
 
     def define_variables(self, model, **kwargs) -> Model:
         comp_type = kwargs['comp_type']
@@ -229,7 +229,7 @@ class SimplePlant(LinopyComps):
         super().__init__(name, **kwargs)
 
         # Get specific object attributes
-        self.power = self.ts[f'{self.name}_power'][0]
+        self.power = self.ts[f'{self.name}_{c.ET_ELECTRICITY}'][0]
         self.controllable = self.info['sizing']['controllable']
         self.lower = 0 if self.controllable else self.power
 

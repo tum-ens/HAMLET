@@ -1,0 +1,31 @@
+name: '♻️ Refactor request'
+description: Suggest a code refactor to improve maintainability or performance.
+labels: [Type::Refactor]
+
+body:
+  - type: textarea
+    id: section
+    attributes:
+      label: Code Section
+      description: >
+        Specify which section of the code you believe needs refactoring (e.g., a specific module, function, or file).
+    validations:
+      required: true
+
+  - type: textarea
+    id: justification
+    attributes:
+      label: Justification
+      description: >
+        Explain why this section of code should be refactored. Is it difficult to maintain, inefficient, or hard to read?
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Potential Impact
+      description: >
+        Describe any potential impact of this refactor, both positive and negative. Include if any performance improvements or risks are expected.
+    validations:
+      required: false

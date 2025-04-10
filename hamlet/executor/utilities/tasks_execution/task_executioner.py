@@ -38,7 +38,7 @@ class TaskExecutioner:
             # Prepare parallel tasks
             para_tasks = self.prepare_para_tasks(tasks)
             # Save database to file to allow loading inside each process
-            self.database.save_database(os.path.dirname(self.results_path))
+            self.database.save_database(os.path.dirname(self.results_path), save_restriction_commands_only=True)
             # Update workers according to number of required parallel tasks
             self.update_num_workers(len(para_tasks))
             # Also update the pool's workers
