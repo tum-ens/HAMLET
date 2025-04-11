@@ -465,7 +465,7 @@ class Database:
 
         """
         self.__general[c.K_WEATHER] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'weather',
-                                                                    'weather.ft'), df='polars', method='eager')
+                                                                    'weather.ft'), df='polars', method='eager', memory_map=False)
         self.__general[c.K_RETAILER] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'retailer.ft'),
                                                    df='polars', method='eager')
         self.__general[c.K_TASKS] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),

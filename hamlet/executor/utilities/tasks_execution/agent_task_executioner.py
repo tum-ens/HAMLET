@@ -5,12 +5,14 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 import os
+import shutil
 
 import polars as pl
 
 import hamlet.constants as c
 from hamlet.executor.agents.agent import Agent
 from hamlet.executor.utilities.tasks_execution.agent_pool import AgentPool
+from hamlet.executor.utilities.tasks_execution.agent_pool import init_agentdb, add_forecaster, get_market
 from hamlet.executor.utilities.tasks_execution.task_executioner import TaskExecutioner
 
 
@@ -69,3 +71,19 @@ class AgentTaskExecutioner(TaskExecutioner):
         region_name = tasks.select(pl.first(c.TC_REGION)).item()
         # Update agents data in database
         self.database.post_agents_to_region(region=region_name, agents=results)
+
+    def load_results_from_para(self, result_dirs: list[str]):
+        """Load results (e.g. from file) if needed"""
+        results = list()
+        for i in result_dirs:
+            agent_type, agent_id, region_tasks, region_path, agent_path = i
+            agent_db = init_agentdb(agent_type, agent_id, region_path, agent_path)
+
+            market_db, market_type = get_market(region_path, region_tasks)
+            add_forecaster(agent_db, market_db, market_type, region_path)
+
+            results.append(agent_db)
+
+        for fn in result_dirs:
+            shutil.rmtree(fn[4])
+        return results

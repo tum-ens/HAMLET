@@ -9,7 +9,6 @@ import os
 
 import psutil
 
-
 class TaskExecutioner:
     """
     A base class to manage tasks execution
@@ -26,7 +25,7 @@ class TaskExecutioner:
         self.database = database
         self.num_workers = num_workers
         if not self.num_workers:
-            self.num_workers = max(1, mp.cpu_count() - 1)  # physical processors
+            self.num_workers = psutil.cpu_count(logical=False) # physical processors -> gets updated in execute anyhow
         self.pool = None
         self.results_path = None
 
@@ -45,7 +44,8 @@ class TaskExecutioner:
             # Also update the pool's workers
             self.pool.update_num_workers(self.num_workers)
             # Execute multiprocessing pool
-            results = self.pool.execute(para_tasks)
+            result_dirs = self.pool.execute(para_tasks)
+            results = self.load_results_from_para(result_dirs)
         # Postprocess results of tasks execution
         self.postprocess_results(tasks, results)
 
@@ -64,6 +64,7 @@ class TaskExecutioner:
 
     def update_num_workers(self, num_tasks):
         """Updates number of workers"""
+        # self.num_workers is modified here, therefore num_workers is reduced permanently
         self.num_workers = max(1, min(num_tasks, self.num_workers))
 
     def execute_serial(self, tasks):
@@ -72,6 +73,10 @@ class TaskExecutioner:
 
     def postprocess_results(self, tasks, results):
         """Post-processes results"""
+        raise NotImplementedError
+
+    def load_results_from_para(self, results):
+        """Load results (e.g. from file) if needed"""
         raise NotImplementedError
 
     def set_results_path(self, results_path):
