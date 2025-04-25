@@ -160,7 +160,7 @@ class RegionDB:
                         path=os.path.join(self.region_path, 'agents', agents_type, agent),
                         agent_type=agents_type,
                         agent_id=agent)
-                    if sub_agents is None:
+                    if not sub_agents:
                         self.agents[agents_type][agent].register_agent()
                     else:
                         for sub_agent in sub_agents:
