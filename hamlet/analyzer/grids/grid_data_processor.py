@@ -21,7 +21,8 @@ class GridDataProcessor(DataProcessorBase):
 
                 # Add the grid path if the grid type is active
                 if grid_details['active']:
-                    self.specific_grid_path[grid_type][scenario_name] = os.path.join(path[scenario_name], grid_type)
+                    self.specific_grid_path[grid_type][scenario_name] = os.path.join(path[scenario_name], 'grids',
+                                                                                     grid_type)
 
     def process_electricity_transformer_loading(self):
         """
