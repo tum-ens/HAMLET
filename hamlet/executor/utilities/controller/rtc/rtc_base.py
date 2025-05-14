@@ -134,10 +134,12 @@ class RtcBase(ControllerBase):
         row_soc = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timestamp + self.dt)
 
         # Update socs
+        energy_type_suffixes = tuple(f"_{sfx}" for sfx in c.ET)
         for col in self.socs.columns[1:]:
             # Extract power from variable values
             key = next((key for key in solution
-                        if key.startswith(col) and (key.endswith('_power') or key.endswith('_heat'))),
+                        if key.startswith(col)
+                        and (key.endswith(energy_type_suffixes))),
                        None)
 
             if key:  # Check for matching key
