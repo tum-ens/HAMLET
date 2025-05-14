@@ -265,8 +265,7 @@ class Forecaster:
             target_wholesale = pl.concat([day_before, target_wholesale], how='vertical')
 
             # drop unnecessary columns
-            # TODO: update column name in constants
-            target_wholesale = target_wholesale.drop('index', c.TC_MARKET, c.TC_NAME, c.TC_REGION, 'retailer')
+            target_wholesale = target_wholesale.drop('index', c.TC_MARKET, c.TC_NAME, c.TC_REGION)
 
             # initial prepare for the wholesale market
             self.train_data[f'{market_name}_{c.TT_RETAIL}'] = {c.K_TARGET: target_wholesale}
