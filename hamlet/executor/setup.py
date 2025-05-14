@@ -10,7 +10,7 @@ import time
 import polars as pl
 from tqdm import tqdm
 
-pl.enable_string_cache(True)
+pl.enable_string_cache()
 from hamlet import functions as f
 from copy import deepcopy
 # from numba import njit, jit
