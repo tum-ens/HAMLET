@@ -47,12 +47,10 @@ class FbcBase(ControllerBase):
         # Get the timesteps and the number of timesteps in the forecast
         self.timesteps = pd.Index(self.forecasts.select(c.TC_TIMESTEP).to_pandas(), name=f'{c.TC_TIMESTEP}s')
         self.timesteps = pd.Index(range(len(self.timesteps)), name=f'{c.TC_TIMESTEP}s')
-        # Reduce the socs to the current timestamp
-        self.socs = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timestamp)
+        # Reduce the socs to the first future timestamp
+        self.socs = self.socs.filter(self.socs[c.TC_TIMESTAMP] == self.timetable[1, c.TC_TIMESTEP])
 
         # Get the market types
-        # TODO: Still needs to be done and then adjusted in the market objects (right now the names are simply
-        #  local and wholesale as this will suffice as long as there is only one market)
         # Get the market data
         # self.market = kwargs[c.TC_MARKET]
         # Get the market names and types
