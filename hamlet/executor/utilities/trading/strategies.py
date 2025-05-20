@@ -285,9 +285,6 @@ class Retailer(TradingBase):
         # Preprocess the bids and offers table
         self.bids_offers = self._preprocess_bids_offers()
 
-        # Get the length of the table
-        len_table = len(self.bids_offers)
-
         # Add columns for the price per unit
         self.bids_offers = self.bids_offers.with_columns(
             [
