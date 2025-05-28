@@ -101,7 +101,7 @@ class AgentDB:
         self.sub_agents[id] = AgentDB(path, self.agent_type, id)
         self.sub_agents[id].register_agent()
 
-    def save_agent(self, path: str, save_all: bool = False) -> None:
+    def save_agent(self, path: str, save_all: bool = False, dtype: str = 'ft') -> None:
         """
         Saves the agent's data to the agent's folder.
 
@@ -113,11 +113,11 @@ class AgentDB:
         self.agent_save = os.path.abspath(path)
 
         # Save data
-        f.save_file(path=os.path.join(self.agent_save, 'meters.ft'), data=self.meters, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'timeseries.ft'), data=self.timeseries, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'socs.ft'), data=self.socs, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'setpoints.ft'), data=self.setpoints, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'forecasts.ft'), data=self.forecasts, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, f'meters.{dtype}'), data=self.meters, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, f'timeseries.{dtype}'), data=self.timeseries, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, f'socs.{dtype}'), data=self.socs, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, f'setpoints.{dtype}'), data=self.setpoints, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, f'forecasts.{dtype}'), data=self.forecasts, df='polars')
 
         # Save forecaster train data (for multiprocessing)
         with open(os.path.join(self.agent_save, 'forecaster_train.pickle'), 'wb') as handle:
@@ -128,7 +128,7 @@ class AgentDB:
             f.save_file(path=os.path.join(self.agent_save, 'account.json'), data=self.account)
             f.save_file(path=os.path.join(self.agent_save, 'plants.json'), data=self.plants)
             f.save_file(path=os.path.join(self.agent_save, 'specs.json'), data=self.specs)
-            f.save_file(path=os.path.join(self.agent_save, 'bids_offers.ft'), data=self.bids_offers, df='polars')
+            f.save_file(path=os.path.join(self.agent_save, f'bids_offers.{dtype}'), data=self.bids_offers, df='polars')
 
     def estimated_size(self, unit:SizeUnit = "kb") -> float:
         ret = 0
