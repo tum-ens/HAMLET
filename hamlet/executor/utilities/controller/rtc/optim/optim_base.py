@@ -59,7 +59,7 @@ class OptimBase(RtcBase):
 
             # Retrieve the soc data for the plant (if applicable)
             cols = [col for col in self.socs.columns if col.startswith(plant_name)]
-            socs = self.socs.select(cols)
+            socs = self.socs.join(self.timetable, on=c.TC_TIMESTAMP, how='semi').select(cols)
 
             # Get the plant class
             plant_class = self.available_plants.get(plant_type)

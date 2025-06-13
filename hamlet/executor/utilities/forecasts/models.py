@@ -12,8 +12,6 @@ import ast
 import polars as pl
 import pandas as pd
 import numpy as np
-from keras.api.layers import Input, Dense, LSTM, Conv1D, MaxPooling1D, Flatten, Dropout
-from keras.api.models import Model
 from sktime.forecasting.arima import ARIMA
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
@@ -321,6 +319,9 @@ class CNNModel(ModelBase):
         the mean squared error loss function and the Adam optimizer.
 
         """
+        from keras.api.layers import Input, Dense, Conv1D, MaxPooling1D, Flatten
+        from keras.api.models import Model
+
         super().__init__(train_data, **kwargs)
 
         # calculate number of features
@@ -523,6 +524,9 @@ class RNNModel(ModelBase):
         It calculates the number of features, defines the model architecture, and compiles the model with
         the mean squared error loss function and the Adam optimizer.
         """
+        from keras.api.layers import Input, Dense, LSTM, Dropout
+        from keras.api.models import Model
+
         super().__init__(train_data, **kwargs)
 
         # calculate number of features

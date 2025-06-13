@@ -78,11 +78,10 @@ If using PyCharm, clone the repository, for example, to `./PyCharmProjects/hamle
 	- Follow the installation instructions under "Individual Academic Licenses" to activate your copy of Gurobi
 
 ### Test your installation
-    - Navigate to ./PycharmProjects/hamlet/01 - examples
-	- Execute 01_create_scenario.py, followed by 02_execute_scenario.py
-    - When the simulation has completed (this may take some time, depending on your system), 
-      analyze the results by executing 03_analyze_scenario.py (no analysis available yet)
-	- Look at the output plots under hamlet/05_results/example_singlemarket/analysis/ (once implemented)
+    - Navigate to ./PycharmProjects/hamlet/examples
+	- Choose one of the example scenarios (e.g. create_simple_scenario)
+    - Run the jupyter notebook `run.ipynb`
+    - If everything is installed correctly, the notebook should run without errors and you should see the results of the example scenario.
 
 ## Contact
 Feel free to contact us if you want to contribute to this project, cooperate on an interesting research question

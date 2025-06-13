@@ -64,7 +64,9 @@ class TradingBase:
         # Get the market transactions for the given market and agent for the given time horizon
         self.market_transactions = self.market_transactions.filter((pl.col(c.TC_MARKET) == self.market_type)
                                                                    & (pl.col(c.TC_NAME) == self.market_name)
-                                                                   & (pl.col(c.TC_TYPE_TRANSACTION) == c.TT_MARKET)
+                                                                   & ((pl.col(c.TC_TYPE_TRANSACTION) == c.TT_RETAIL)
+                                                                      | (pl.col(c.TC_TYPE_TRANSACTION) == c.TT_MARKET)
+                                                                      | (pl.col(c.TC_TYPE_TRANSACTION) == c.TT_BALANCING))
                                                                    & (pl.col(c.TC_ID_AGENT) == self.agent_id)
                                                                    & (pl.col(c.TC_TIMESTEP) >= self.timetable.select(pl.first(c.TC_TIMESTEP)))
                                                                    & (pl.col(c.TC_TIMESTEP) <= self.timetable.select(pl.last(c.TC_TIMESTEP)))
@@ -282,9 +284,6 @@ class Retailer(TradingBase):
     def create_bids_offers(self):
         # Preprocess the bids and offers table
         self.bids_offers = self._preprocess_bids_offers()
-
-        # Get the length of the table
-        len_table = len(self.bids_offers)
 
         # Add columns for the price per unit
         self.bids_offers = self.bids_offers.with_columns(

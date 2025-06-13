@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [Version 1.1.0] - 2025-06-13
+### Added
+- Added the analyzer architecture and a few plots (!150)
+- Added some plots to the example notebooks (!179)
+### Fixed
+- Fixed the region_db as a function returns empty list instead of None now (!180)
+- Fixed that grid results were stored in the wrong folder (!181)
+- Fixed that the storage options were not calculating the SoC properly (!182)
+- Fixed that the agents were not trading properly due to false forecasts (!183)
+### Changed
+- Changed the README as the installation is now tested using the example notebooks (!179)
+
 ## [Version 1.0.1] - 2025-03-28
 ### Added
 - Added the readthedocs file to generate the website on the GitHub repo (!172).

@@ -5,7 +5,9 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 import os
+import traceback
 import pickle
+
 import hamlet.constants as c
 from hamlet import functions as f
 from hamlet.executor.agents.agent import Agent
@@ -17,22 +19,37 @@ from hamlet.executor.utilities.tasks_execution.process_pool import ProcessPool
 
 # Define the function to be executed in parallel
 def task(agent_data):
-    # Prepare agent data
-    agent_type, agent_id, region_tasks, region_path = agent_data
-    agent_db = init_agentdb(agent_type, agent_id, region_path)
-    market_db, market_type = get_market(region_path, region_tasks)
-    add_forecaster(agent_db, market_db, market_type, region_path)
-    grid_commands = get_grid_restriction_commands(region_path)
-    # Initialize and execute the agent instance
-    agent = Agent(agent_type=agent_type, data=agent_db, timetable=region_tasks, market=market_db,
-                  grid_commands=grid_commands)
-    agent_db = agent.execute()
-    return agent_db
+    try:
+        # Prepare agent data
+        agent_type, agent_id, region_tasks, region_path = agent_data
+        agent_db = init_agentdb(agent_type, agent_id, region_path)
+        market_db, market_type = get_market(region_path, region_tasks)
+        add_forecaster(agent_db, market_db, market_type, region_path)
+        grid_commands = get_grid_restriction_commands(region_path)
+        # Initialize and execute the agent instance
+        agent = Agent(agent_type=agent_type, data=agent_db, timetable=region_tasks, market=market_db,
+                      grid_commands=grid_commands)
+        agent_db = agent.execute()
 
+        folder = f"{agent_db.__hash__()}"
+        ret_path = os.path.join(region_path, 'agents', agent_type, agent_id, folder)
+        agent_db.save_agent(ret_path, save_all=True)
+        return (agent_type, agent_id, region_tasks, region_path, ret_path)
 
-def init_agentdb(agent_type, agent_id, region_path):
+    except Exception:
+        # Exceptions from the function running inside the multiprocessing pool
+        # are not reported by python (the process silently exists and None is
+        # returned)
+        # There is not much we can do about this, but at least we can print the
+        # Exception so we see that something did go wrong (and also investigate
+        # what did go wrong)
+        print(traceback.format_exc())
+        return None
+
+def init_agentdb(agent_type, agent_id, region_path, agent_path=None):
     """Initializes agent database"""
-    agent_path = os.path.join(region_path, 'agents', agent_type, agent_id)
+    if not agent_path:
+        agent_path = os.path.join(region_path, 'agents', agent_type, agent_id)
     agent_db = AgentDB(path=agent_path,
                        agent_type=agent_type,
                        agent_id=agent_id)
@@ -70,16 +87,19 @@ def add_forecaster(agent_db, market_db, market_type, region_path):
     agent_db.forecaster = forecaster  # register
 
 
-def load_general(path):
+cached_general = None
+def load_general(path) -> dict:
     """Loads general information"""
-    general = {'weather': f.load_file(path=os.path.join(path, 'general', 'weather',
-                                                        'weather.ft'), df='polars', method='eager'),
-               'retailer': f.load_file(path=os.path.join(path, 'general', 'retailer.ft'),
-                                       df='polars', method='eager'),
-               'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
-                                    df='polars', method='eager'),
-               'general': f.load_file(path=os.path.join(path, 'config', 'setup.yaml'))}
-    return general
+    global cached_general
+    if cached_general is None:
+        cached_general = {'weather': f.load_file(path=os.path.join(path, 'general', 'weather',
+                                                            'weather.ft'), df='polars', method='eager', memory_map=False),
+                   'retailer': f.load_file(path=os.path.join(path, 'general', 'retailer.ft'),
+                                           df='polars', method='eager'),
+                   'tasks': f.load_file(path=os.path.join(path, 'general', 'timetable.ft'),
+                                        df='polars', method='eager'),
+                   'general': f.load_file(path=os.path.join(path, 'config', 'setup.yaml'))}
+    return cached_general
 
 
 def get_grid_restriction_commands(region_path):

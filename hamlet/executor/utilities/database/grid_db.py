@@ -139,15 +139,16 @@ class ElectricityGridDB(GridDB):
         """
         # save pandapower grid object (warnings are turned off due to an issue in pandapower)
         logging.getLogger("pandapower.io_utils").setLevel(logging.ERROR)
-        pp.to_excel(self.grid, os.path.join(path, self.grid_config['generation'][self.grid_config['generation']
-        ['method']]['file']))
+        pp.to_excel(self.grid,
+                    os.path.join(path, self.grid_type, self.grid_config['generation'][self.grid_config['generation']
+                    ['method']]['file']))
 
         # save grid simulation results
         for key, data in self.results.items():
             if data:
                 file_name = key + '.csv'
                 result_df = pd.concat(data)
-                result_df.to_csv(os.path.join(path, file_name))
+                result_df.to_csv(os.path.join(path, self.grid_type, file_name))
 
     def _create_grid_from_file(self, regions: dict):
         """

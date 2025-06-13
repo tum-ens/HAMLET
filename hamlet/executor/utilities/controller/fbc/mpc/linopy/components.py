@@ -143,13 +143,6 @@ class Market(LinopyComps):
         self.levies_sell = pd.Series(self.fcast[f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
         self.levies_buy = pd.Series(self.fcast[f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_IN}'], index=self.timesteps)
 
-        # TODO: Add constraint that market value becomes zero if there is no market for this energy:
-        #  One way to do this is check if market forecasts can be obtained. If that is not the case, it is assumed
-        #  that there is no market.
-
-        # TODO: Ponder how the interplay between markets should happen. In the future there will be a wholesale market
-        #  regardless if there are other markets if there are forecast values
-
     def define_variables(self, model, **kwargs):
         self.comp_type = kwargs['comp_type']
         # Define the market power variables (need to be positive and negative due to different pricing)

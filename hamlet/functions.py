@@ -80,7 +80,7 @@ def copy_folder(src: str, dst: str, only_files: bool = False, delete: bool = Tru
 
 
 def load_file(path: str, index: int = 0, df: str = 'pandas', parse_dates: bool | list | None = None,
-              method: str = 'lazy') -> object:
+              method: str = 'lazy', memory_map: bool = False) -> object:
     # Find the file type
     file_type = path.rsplit('.', 1)[-1]
 
@@ -113,11 +113,11 @@ def load_file(path: str, index: int = 0, df: str = 'pandas', parse_dates: bool |
             file = pd.read_feather(path)
         elif df == 'polars':
             if method == 'lazy':
-                file = pl.scan_ipc(path, memory_map=False)
+                file = pl.scan_ipc(path, memory_map=memory_map)
             elif method == 'eager':
                 # Workaround for polars bug
                 with pl.StringCache():
-                    file = pl.read_ipc(path, memory_map=False)
+                    file = pl.read_ipc(path, memory_map=memory_map)
         else:
             raise ValueError(f'Dataframe type "{df}" not supported')
     else:
@@ -229,7 +229,7 @@ def get_all_subdirectories(path_directory):
     if len(subdirectories) > 0:
         return subdirectories  # Return the name of the first subdirectory
     else:
-        return None  # No subdirectories found
+        return []  # No subdirectories found
 
 
 def calculate_timedelta(target_df, reference_ts, by=c.TC_TIMESTAMP):

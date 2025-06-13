@@ -7,6 +7,7 @@ __email__ = "jiahe.chu@tum.de"
 import os.path
 import pickle
 import polars as pl
+from polars.type_aliases import SizeUnit
 from hamlet import functions as f
 
 
@@ -48,6 +49,7 @@ class AgentDB:
         self.agent_type = agent_type
         self.agent_id = agent_id
         self.sub_agents = {}
+
         self.account = {}
         self.plants = {}
         self.specs = {}
@@ -74,10 +76,16 @@ class AgentDB:
         self.plants = f.load_file(path=os.path.join(self.agent_path, 'plants.json'))
         self.specs = f.load_file(path=os.path.join(self.agent_path, 'specs.json'))
         self.meters = f.load_file(path=os.path.join(self.agent_path, 'meters.ft'), df='polars', method='eager')
-        self.timeseries = f.load_file(path=os.path.join(self.agent_path, 'timeseries.ft'), df='polars', method='eager')
         self.socs = f.load_file(path=os.path.join(self.agent_path, 'socs.ft'), df='polars', method='eager')
+        self.timeseries = f.load_file(path=os.path.join(self.agent_path, 'timeseries.ft'), df='polars', method='eager')
         self.setpoints = f.load_file(path=os.path.join(self.agent_path, 'setpoints.ft'), df='polars', method='eager')
         self.forecasts = f.load_file(path=os.path.join(self.agent_path, 'forecasts.ft'), df='polars', method='eager')
+
+        fn = os.path.join(self.agent_path, 'bids_offers.ft')
+        if os.path.exists(fn):
+            self.bids_offers = f.load_file(path=fn, df='polars', method='eager')
+
+        # initialize setpoints and forecast
 
     def register_sub_agent(self, id: str, path: str) -> None:
         """
@@ -93,7 +101,7 @@ class AgentDB:
         self.sub_agents[id] = AgentDB(path, self.agent_type, id)
         self.sub_agents[id].register_agent()
 
-    def save_agent(self, path: str, save_all: bool = False) -> None:
+    def save_agent(self, path: str, save_all: bool = False, dtype: str = 'ft') -> None:
         """
         Saves the agent's data to the agent's folder.
 
@@ -105,11 +113,11 @@ class AgentDB:
         self.agent_save = os.path.abspath(path)
 
         # Save data
-        f.save_file(path=os.path.join(self.agent_save, 'meters.ft'), data=self.meters, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'timeseries.ft'), data=self.timeseries, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'socs.ft'), data=self.socs, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'setpoints.ft'), data=self.setpoints, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, 'forecasts.ft'), data=self.forecasts, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, f'meters.{dtype}'), data=self.meters, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, f'timeseries.{dtype}'), data=self.timeseries, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, f'socs.{dtype}'), data=self.socs, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, f'setpoints.{dtype}'), data=self.setpoints, df='polars')
+        f.save_file(path=os.path.join(self.agent_save, f'forecasts.{dtype}'), data=self.forecasts, df='polars')
 
         # Save forecaster train data (for multiprocessing)
         with open(os.path.join(self.agent_save, 'forecaster_train.pickle'), 'wb') as handle:
@@ -120,3 +128,14 @@ class AgentDB:
             f.save_file(path=os.path.join(self.agent_save, 'account.json'), data=self.account)
             f.save_file(path=os.path.join(self.agent_save, 'plants.json'), data=self.plants)
             f.save_file(path=os.path.join(self.agent_save, 'specs.json'), data=self.specs)
+            f.save_file(path=os.path.join(self.agent_save, f'bids_offers.{dtype}'), data=self.bids_offers, df='polars')
+
+    def estimated_size(self, unit:SizeUnit = "kb") -> float:
+        ret = 0
+        ret += self.meters.estimated_size(unit)
+        ret += self.socs.estimated_size(unit)
+        ret += self.timeseries.estimated_size(unit)
+        ret += self.setpoints.estimated_size(unit)
+        ret += self.forecasts.estimated_size(unit)
+        ret += self.bids_offers.estimated_size(unit)
+        return ret
