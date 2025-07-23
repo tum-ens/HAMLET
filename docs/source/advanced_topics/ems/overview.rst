@@ -17,8 +17,8 @@ The EMS follows a logical flow in the simulation process:
 
 This documentation section is structured to follow this simulation flow, providing detailed information about each step in the process.
 
-Contents
---------
+EMS Components
+--------------
 
 .. toctree::
    :maxdepth: 1
