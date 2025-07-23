@@ -50,9 +50,11 @@ HAMLET supports various forecasting methods with different levels of complexity 
 .. toctree::
    :maxdepth: 1
 
+   models/perfect_methods
    models/naive_methods
-   models/statistical_models
-   models/machine_learning
+   models/statistical_methods
+   models/machine_learning_methods
+   models/special_methods
 
 Forecasting in the Simulation Flow
 ---------------------------------
