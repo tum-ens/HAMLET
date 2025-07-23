@@ -112,9 +112,3 @@ Users can modify YAML files in the `configs` directory to fit their specific sim
 - Enabling/disabling market clearing mechanisms.
 - Changing forecasting models for agents and markets.
 - Defining new grid constraints.
-
-Next Steps
-----------
-- Learn more about :doc:`modules` to understand HAMLET's structure.
-- Check the :doc:`api` documentation for advanced configurations.
-- Explore :doc:`examples` for practical implementation cases.
