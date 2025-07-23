@@ -13,6 +13,7 @@ This guide will help you get up and running quickly.
    getting_started/installation
    getting_started/usage
    getting_started/examples
+   getting_started/comparison
 
 .. toctree::
    :maxdepth: 1
