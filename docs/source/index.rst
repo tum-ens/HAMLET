@@ -35,8 +35,9 @@ This guide will help you get up and running quickly.
    :maxdepth: 1
    :caption: Advanced Topics
 
-   advanced_topics/configuration_guide
-   advanced_topics/models/overview
+   advanced_topics/overview
+   advanced_topics/configuration_guide/overview
+   advanced_topics/ems/overview
 .. advanced_topics/api/overview
 
 .. toctree::
