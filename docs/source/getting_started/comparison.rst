@@ -8,13 +8,72 @@ This section provides a comprehensive comparison of HAMLET with other energy sys
 
 Energy system modeling tools vary widely in their approach, capabilities, and focus areas. Some are designed for detailed power system analysis, while others focus on long-term planning or market simulation. HAMLET's unique contribution is its agent-based approach to modeling decentralized energy markets and systems.
 
+Comparison Table
+----------------
+
+The table below provides a quick reference for comparing HAMLET with other energy modeling tools across key dimensions:
+
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| Tool           | Modeling         | Time             | Time          | Market         | Agent                | Grid             | User             |
+|                | Approach         | Horizons         | Resolution    | Mechanisms     | Behavior             | Representation   | Interface        |
++================+==================+==================+===============+================+======================+==================+==================+
+| **HAMLET**     | Agent-based      | Short to         | Hourly to     | Local markets, | Heterogeneous,       | Configurable,    | Python-based,    |
+|                |                  | medium-term      | daily         | P2P trading    | rule-based           | bus-based        | command-line     |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `AMIRIS`_      | Agent-based      | Short to         | Hourly        | Electricity    | Heterogeneous        | Simplified       | Java-based,      |
+|                |                  | medium-term      |               | markets        | with learning        |                  | command-line     |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `Calliope`_    | Optimization-    | Operational to   | Sub-hourly    | Simplified     | Limited              | Configurable     | Python-based,    |
+|                | based (LP/MILP)  | long-term        | to yearly     | markets        | agent modeling       |                  | command-line     |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `EMLab`_       | Agent-based      | Medium to        | Yearly with   | Capacity,      | Investment and       | Simplified       | Java-based,      |
+|                |                  | long-term        | rep. days     | spot markets   | operational          |                  | command-line     |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `MATPOWER`_    | Power flow,      | Primarily        | Static or     | Basic market   | Limited              | Detailed         | MATLAB-based,    |
+|                | optimal power    | operational      | hourly        | clearing       | agent modeling       | electrical       | command-line     |
+|                | flow             |                  |               | algorithms     |                      | modeling         |                  |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `MUSE`_        | Hybrid           | Long-term        | Yearly with   | Market         | Technology           | Simplified       | Python/Rust-     |
+|                |                  | (decades)        | seasons       | clearing       | investment           |                  | based, CLI       |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `oemof`_       | Component-based, | Operational to   | Flexible      | Simplified     | Limited              | Configurable     | Python-based,    |
+|                | optimization     | long-term        | time steps    | market         | agent modeling       |                  | command-line     |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `Oplem`_       | Agent-based      | Short to         | Sub-hourly    | P2P trading,   | Prosumer             | Distribution     | Python-based,    |
+|                | with opt.        | medium-term      | to hourly     | local markets  | decision-making      | network          | command-line     |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `PowerACE`_    | Agent-based      | Medium to        | Hourly        | Day-ahead,     | Strategic bidding,   | Zonal            | Java-based,      |
+|                |                  | long-term        |               | capacity       | investment           | transmission     | command-line     |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `Prescient`_   | Stochastic       | Short to         | Hourly to     | Wholesale      | Limited              | Transmission     | Python-based,    |
+|                | optimization     | medium-term      | sub-hourly    | markets, unit  | agent modeling       | network          | command-line     |
+|                |                  |                  |               | commitment     |                      |                  |                  |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `PyPSA`_       | Optimization     | Operational to   | Hourly to     | Simplified     | Limited              | Detailed         | Python-based,    |
+|                |                  | long-term        | yearly        | markets        | agent modeling       | network          | command-line     |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `SWITCH`_      | Optimization-    | Long-term        | Representative| Simplified     | Limited              | Transmission     | Command-line     |
+|                | based            | planning         | time periods  | (cost-based)   | agent modeling       | network          | interface        |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `HOMER`_       | Optimization     | Annual with      | Hourly        | Limited        | Limited              | Simplified       | User-friendly    |
+|                |                  | multi-year       |               | markets        | agent modeling       | grid             | GUI              |
+|                |                  | projections      |               |                |                      |                  |                  |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `PLEXOS`_      | Optimization     | Short-term to    | Sub-hourly    | Wholesale      | Limited              | Detailed         | GUI with         |
+|                | with agents      | long-term        | to yearly     | markets        | agent modeling       | network          | visualization    |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+| `PowerFactory`_| Power-flow,      | Operational to   | Sub-second    | None           | Limited              | Very detailed    | Professional     |
+|                | dynamic          | short-term       | to hourly     |                | agent modeling       | electrical       | GUI              |
+|                | simulations      |                  |               |                |                      | modeling         |                  |
++----------------+------------------+------------------+---------------+----------------+----------------------+------------------+------------------+
+
 Open‑Source Tools
 -----------------
 
 AMIRIS
 ^^^^^^
 
-**Overview**: `AMIRIS <https://www.dlr.de/ve/en/desktopdefault.aspx/tabid-12472/21440_read-49440/>`_ is an agent‑based simulation model for electricity markets.
+**Overview**: AMIRIS is an agent‑based simulation model for electricity markets. (`AMIRIS website <https://www.dlr.de/de/ve/forschung-und-transfer/infrastruktur/modelle/amiris>`_)
 
 **Key Characteristics**:
 
@@ -29,7 +88,7 @@ AMIRIS
 Calliope
 ^^^^^^^^
 
-**Overview**: `Calliope <https://calliope.readthedocs.io>`_ is an energy‑system‑modeling framework with multi‑scale capabilities.
+**Overview**: Calliope is an energy‑system‑modeling framework with multi‑scale capabilities. (`Calliope website <https://calliope.readthedocs.io/en/stable/>`_)
 
 **Key Characteristics**:
 
@@ -43,7 +102,7 @@ Calliope
 EMLab
 ^^^^^
 
-**Overview**: `EMLab <https://emlab.tudelft.nl>`_ is an agent‑based modeling platform for electricity markets.
+**Overview**: EMLab is an agent‑based modeling platform for electricity markets. (`EMLab website <https://emlab.tudelft.nl>`_)
 
 **Key Characteristics**:
 
@@ -58,7 +117,7 @@ EMLab
 MATPOWER
 ^^^^^^^^
 
-**Overview**: `MATPOWER <https://matpower.org>`_ is a MATLAB‑based power‑system‑simulation package.
+**Overview**: MATPOWER is a MATLAB‑based power‑system‑simulation package. (`MATPOWER website <https://matpower.org>`_)
 
 **Key Characteristics**:
 
@@ -72,7 +131,7 @@ MATPOWER
 MUSE
 ^^^^
 
-**Overview**: `MUSE <https://energysystemsmodellinglab.github.io/MUSE_2.0/>`_ is a global energy‑system model with agent‑based decision‑making.
+**Overview**: MUSE is a global energy‑system model with agent‑based decision‑making. (`MUSE website <https://energysystemsmodellinglab.github.io/MUSE_2.0/>`_)
 
 **Key Characteristics**:
 
@@ -87,7 +146,7 @@ MUSE
 oemof
 ^^^^^
 
-**Overview**: `Open Energy Modelling Framework (oemof) <https://oemof.org>`_ is a Python‑based framework for energy‑system analysis.
+**Overview**: Open Energy Modelling Framework (oemof) is a Python‑based framework for energy‑system analysis. (`oemof website <https://oemof.org>`_)
 
 **Key Characteristics**:
 
@@ -101,7 +160,7 @@ oemof
 Oplem
 ^^^^^
 
-**Overview**: `Oplem <https://github.com/PSALOxford/OPLEM>`_ is an open‑source platform for local electricity markets.
+**Overview**: Oplem is an open‑source platform for local electricity markets. (`Oplem repository <https://github.com/PSALOxford/OPLEM>`_)
 
 **Key Characteristics**:
 
@@ -116,7 +175,7 @@ Oplem
 PowerACE
 ^^^^^^^^
 
-**Overview**: `PowerACE <https://gitlab.kit.edu/kit/iip/opensource/powerace>`_ is an agent‑based model of electricity markets.
+**Overview**: PowerACE is an agent‑based model of electricity markets. (`PowerACE repository <https://gitlab.kit.edu/kit/iip/opensource/powerace>`_)
 
 **Key Characteristics**:
 
@@ -131,7 +190,7 @@ PowerACE
 Prescient
 ^^^^^^^^^
 
-**Overview**: `Prescient <https://github.com/grid-parity-exchange/Prescient>`_ is an open‑source tool developed by the U.S. National Renewable Energy Laboratory (NREL) for power‑system operations with a focus on stochastic unit‑commitment and economic‑dispatch studies.
+**Overview**: Prescient is an open‑source tool developed by the U.S. National Renewable Energy Laboratory (NREL) for power‑system operations with a focus on stochastic unit‑commitment and economic‑dispatch studies. (`Prescient repository <https://github.com/grid-parity-exchange/Prescient>`_)
 
 **Key Characteristics**:
 
@@ -145,7 +204,7 @@ Prescient
 PyPSA
 ^^^^^
 
-**Overview**: `Python for Power System Analysis (PyPSA) <https://pypsa.org>`_ is focused on power‑system optimization.
+**Overview**: Python for Power System Analysis (PyPSA) is focused on power‑system optimization. (`PyPSA website <https://pypsa.org>`_)
 
 **Key Characteristics**:
 
@@ -159,7 +218,7 @@ PyPSA
 SWITCH
 ^^^^^^
 
-**Overview**: `SWITCH <https://switch-model.org>`_ is a power‑system‑planning model with a high‑renewable‑penetration focus.
+**Overview**: SWITCH is a power‑system‑planning model with a high‑renewable‑penetration focus. (`SWITCH website <https://switch-model.org>`_)
 
 **Key Characteristics**:
 
@@ -176,7 +235,7 @@ Commercial Tools
 HOMER
 ^^^^^
 
-**Overview**: `HOMER <https://www.homerenergy.com>`_ focuses on distributed‑energy‑resource optimization and microgrid design.
+**Overview**: HOMER focuses on distributed‑energy‑resource optimization and microgrid design. (`HOMER website <https://www.homerenergy.com>`_)
 
 **Key Characteristics**:
 
@@ -190,7 +249,7 @@ HOMER
 PLEXOS
 ^^^^^^
 
-**Overview**: `PLEXOS <https://www.energyexemplar.com/plexos>`_ is an industry‑standard energy‑market‑simulation platform developed by Energy Exemplar, offering detailed power‑system and market‑modeling capabilities.
+**Overview**: PLEXOS is an industry‑standard energy‑market‑simulation platform developed by Energy Exemplar, offering detailed power‑system and market‑modeling capabilities. (`PLEXOS website <https://www.energyexemplar.com/plexos>`_)
 
 **Key Characteristics**:
 
@@ -204,7 +263,7 @@ PLEXOS
 PowerFactory
 ^^^^^^^^^^^^
 
-**Overview**: `PowerFactory <https://www.digsilent.de/en/powerfactory.html>`_ is a detailed power‑system‑analysis tool used widely for grid operation and planning.
+**Overview**: PowerFactory is a detailed power‑system‑analysis tool used widely for grid operation and planning. (`PowerFactory website <https://www.digsilent.de/en/powerfactory.html>`_)
 
 **Key Characteristics**:
 
@@ -262,49 +321,8 @@ When deciding whether to use HAMLET or another energy modeling tool, consider th
 
 HAMLET is particularly well-suited for research on decentralized energy systems, local energy markets, and the impact of diverse agent behaviors on system outcomes. It allows users to see the impact of individual agents on the whole system. For long-term planning or detailed power flow analysis, other tools might be more appropriate.
 
-Comparison Table
----------------
-
-The table below provides a quick reference for comparing HAMLET with other energy modeling tools across key dimensions:
-
-+----------------+------------------+---------------+----------------+----------------------+------------------+
-| Tool           | Modeling         | Time          | Market         | Agent                | Grid             |
-|                | Approach         | Resolution    | Mechanisms     | Behavior             | Representation   |
-+================+==================+===============+================+======================+==================+
-| **HAMLET**     | Agent-based      | Hourly to     | Local markets, | Heterogeneous,       | Configurable,    |
-|                |                  | daily         | P2P trading    | rule-based           | bus-based        |
-+----------------+------------------+---------------+----------------+----------------------+------------------+
-| PLEXOS         | Optimization     | Sub-hourly    | Wholesale      | Limited              | Detailed         |
-|                | with agents      | to yearly     | markets        | agent modeling       | network          |
-+----------------+------------------+---------------+----------------+----------------------+------------------+
-| Prescient      | Stochastic       | Hourly to     | Wholesale      | Limited              | Transmission     |
-|                | optimization     | sub-hourly    | markets, unit  | agent modeling       | network          |
-|                |                  |               | commitment     |                      |                  |
-+----------------+------------------+---------------+----------------+----------------------+------------------+
-| HOMER          | Optimization     | Hourly        | Limited        | Limited              | Simplified       |
-|                |                  |               | markets        | agent modeling       | grid             |
-+----------------+------------------+---------------+----------------+----------------------+------------------+
-| PyPSA          | Optimization     | Hourly to     | Simplified     | Limited              | Detailed         |
-|                |                  | yearly        | markets        | agent modeling       | network          |
-+----------------+------------------+---------------+----------------+----------------------+------------------+
-| AMIRIS         | Agent-based      | Hourly        | Electricity    | Heterogeneous        | Simplified       |
-|                |                  |               | markets        | with learning        |                  |
-+----------------+------------------+---------------+----------------+----------------------+------------------+
-| EMLab          | Agent-based      | Yearly with   | Capacity,      | Investment and       | Simplified       |
-|                |                  | rep. days     | spot markets   | operational          |                  |
-+----------------+------------------+---------------+----------------+----------------------+------------------+
-| MUSE           | Hybrid           | Yearly with   | Market         | Technology           | Simplified       |
-|                |                  | seasons       | clearing       | investment           |                  |
-+----------------+------------------+---------------+----------------+----------------------+------------------+
-| Oplem          | Agent-based      | Sub-hourly    | P2P trading,   | Prosumer             | Distribution     |
-|                | with opt.        | to hourly     | local markets  | decision-making      | network          |
-+----------------+------------------+---------------+----------------+----------------------+------------------+
-| PowerACE       | Agent-based      | Hourly        | Day-ahead,     | Strategic bidding,   | Zonal            |
-|                |                  |               | capacity       | investment           | transmission     |
-+----------------+------------------+---------------+----------------+----------------------+------------------+
-
 Conclusion
----------
+----------
 
 HAMLET offers a unique approach to energy system modeling with its focus on agent-based simulation of local energy markets and decentralized trading. While it has limitations in terms of time horizons and computational efficiency, its strengths in modeling heterogeneous agent behaviors and emergent system dynamics make it a valuable tool for specific research questions.
 
