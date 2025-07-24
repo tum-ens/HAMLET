@@ -13,7 +13,7 @@ HAMLET is a Python-based tool designed for easy setup. This guide explains how t
    Clone HAMLET to a local directory using Git:
 .. code-block:: bash
 
-   git clone [https://github.com/tum-ewk/hamlet.git](https://github.com/tum-ewk/hamlet.git)
+   git clone https://github.com/tum-ewk/hamlet.git
 
 3. **Set Up a Virtual Environment**:
    Use Anaconda to create and activate an environment:
