@@ -4,7 +4,7 @@ Executor API
 The Executor API provides classes and functions for running simulation scenarios created by the Creator module. It handles the time-stepping mechanism, agent interactions, market clearing, and grid operations.
 
 Module Overview
---------------
+---------------
 
 The Executor module is responsible for:
 
@@ -16,7 +16,7 @@ The Executor module is responsible for:
 - Recording simulation results for analysis
 
 Key Classes
-----------
+-----------
 
 Executor
 ~~~~~~~~
@@ -38,7 +38,7 @@ The ``Executor`` class is the main entry point for running simulations. It loads
 - ``set_num_workers(num)``: Sets the number of parallel workers for execution
 
 Agent Execution
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 The Executor module includes classes for executing different types of agent behaviors. For example:
 
@@ -57,7 +57,7 @@ Each agent executor handles:
 - Responding to grid signals and constraints
 
 Market Execution
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Market execution components include:
 
@@ -72,7 +72,7 @@ Each market executor handels:
 - Settling
 
 Grid Execution
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Grid execution components include:
 
@@ -88,10 +88,10 @@ Each grid executor handels:
 - Direct and indirect grid control
 
 Example Usage
-------------
+-------------
 
 Running a Basic Simulation
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -104,7 +104,7 @@ Running a Basic Simulation
     executor.run()
 
 Parallel Execution
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -120,116 +120,126 @@ Parallel Execution
     executor.run()
 
 Utilities
---------
+---------
 
-The Executor module includes various utility functions and classes that support the simulation process. These utilities are organized into the following categories based on their functionality:
+The Executor module includes various utility functions and classes that support the simulation process. These utilities are organized into several categories, each providing specific functionality to support agent decision-making, market operations, and grid management.
 
 Controller Utilities
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 Controller utilities help agents make decisions about energy usage and control:
 
-- ``OptimalController``: Implements optimization-based control strategies
-- ``RuleBasedController``: Implements rule-based control strategies
-- ``PIDController``: Implements PID control for energy systems
+- ``Controller``: Main entry point for controller operations
+- ``Fbc`` (Forecast-Based Control): For planning ahead with implementations:
+
+   - ``Linopy``: Model Predictive Control using the Linopy optimization framework
+   - ``POI``: Model Predictive Control using the POI (Python Optimization Interface)
+- ``Rtc`` (Real-Time Control): For immediate control with implementations:
+
+   - ``Linopy``: Optimization using the Linopy framework
+   - ``POI``: Optimization using the POI framework
 
 Database Utilities
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Database utilities handle data storage and retrieval:
 
-- ``DatabaseConnector``: Manages connections to databases
-- ``DataReader``: Reads data from databases
-- ``DataWriter``: Writes data to databases
+- ``Database``: Main entry point for database operations
+- ``AgentDB``: Manages information related to agents
+- ``MarketDB``: Manages information related to markets
+- ``GridDB``: Base class for grid databases
+
+   - ``ElectricityGridDB``: Manages information related to electricity grids
+   - ``HeatGridDB``: Manages information related to heat grids
+   - ``HydrogenGridDB``: Manages information related to hydrogen grids
+- ``RegionDB``: Manages information related to regions
 
 Forecasting Utilities
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 Forecasting utilities help agents predict future values:
 
-- ``DemandForecaster``: Predicts future energy demand
-- ``GenerationForecaster``: Predicts future energy generation
-- ``PriceForecaster``: Predicts future market prices
-- ``WeatherForecaster``: Predicts future weather conditions
+- ``Forecaster``: Main entry point for forecasting operations
+- Various forecast models that inherit from ``ModelBase``:
+
+   - ``PerfectModel``: Provides perfect forecasts (for testing/benchmarking)
+   - ``NaiveModel``: A simple forecasting model
+   - ``AverageModel``: Uses averages for forecasting
+   - ``SmoothedModel``: Uses smoothing techniques
+   - ``SARMAModel``: Uses Seasonal AutoRegressive Moving Average
+   - ``RandomForest``: Uses Random Forest algorithm
+   - ``CNNModel``: Uses Convolutional Neural Networks
+   - ``RNNModel``: Uses Recurrent Neural Networks
+   - ``ARIMAModel``: Uses AutoRegressive Integrated Moving Average
+   - ``WeatherModel``: Specialized for weather forecasting
+   - ``ArrivalModel``: For forecasting arrivals/events
 
 Grid Restriction Utilities
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Grid restriction utilities handle grid constraints:
 
-- ``GridConstraintChecker``: Checks for grid constraint violations
-- ``GridConstraintSolver``: Resolves grid constraint violations
-- ``GridRestrictionManager``: Manages grid restrictions
+- ``GridRestriction``: Main entry point for grid restriction operations
+- ``GridRestrictionBase``: Base class for grid restrictions
+- ``EnWG14a``: Implementation related to the German Energy Industry Act
 
 Tasks Execution Utilities
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Tasks execution utilities manage the execution of simulation tasks:
 
-- ``TaskScheduler``: Schedules tasks for execution
-- ``TaskExecutor``: Executes scheduled tasks
-- ``ParallelTaskManager``: Manages parallel task execution
+- ``TaskExecutioner``: Base class for task execution
+
+   - ``AgentTaskExecutioner``: Manages agent task execution
+   - ``MarketTaskExecutioner``: Manages market task execution
+- ``ProcessPool``: Base class for multiprocessing pools
+
+   - ``AgentPool``: Manages agent multiprocessing
+   - ``MarketPool``: Manages market multiprocessing
 
 Trading Utilities
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Trading utilities implement various trading strategies:
 
-- ``ZeroIntelligence``: Implements a simple random trading strategy
-- ``LinearBidding``: Implements a linear price adjustment strategy
-- ``RetailerBased``: Implements a strategy based on retailer prices
-- ``OrderBook``: Manages bids and offers in markets
+- ``Trading``: Main entry point for trading operations
+- ``TradingBase``: Base class for trading strategies
 
-.. code-block:: python
-
-    from hamlet.executor.utilities.trading.strategies import LinearBidding
-
-    # Create a linear bidding strategy
-    strategy = LinearBidding(
-        steps_to_final=10,
-        steps_from_init=5
-    )
-    
-    # Generate bids and offers
-    bids_offers = strategy.generate_bids_offers(
-        forecast_buy_prices,
-        forecast_sell_prices,
-        energy_demand,
-        energy_generation
-    )
+   - ``Linear``: Implements a linear trading strategy
+   - ``Zi``: Implements a zero intelligence trading strategy
+   - ``Retailer``: Implements a retailer-based trading strategy
 
 Example Usage of Utilities
--------------------------
+--------------------------
 
 Using Forecasting Utilities
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-    from hamlet.executor.utilities.forecasts import DemandForecaster
+    from hamlet.executor.utilities.forecasts.forecaster import Forecaster
 
-    # Create a demand forecaster
-    forecaster = DemandForecaster(
-        method="arima",
-        historical_data=historical_demand,
-        forecast_horizon=24  # hours
+    # Create a forecaster
+    forecaster = Forecaster(
+        agent_db=agent_db,
+        method="arima"
     )
     
     # Generate a forecast
-    forecast = forecaster.forecast()
+    forecast = forecaster.forecast_load()
     
-    # Plot the forecast
-    forecaster.plot_forecast()
+    # Access forecast results
+    load_forecast = forecaster.load_forecast
 
-Implementing Trading Strategies
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Using Trading Strategies
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-    from hamlet.executor.utilities.trading.strategies import ZeroIntelligence
+    from hamlet.executor.utilities.trading.strategies import Zi
 
     # Create a zero intelligence trading strategy
-    strategy = ZeroIntelligence(
+    strategy = Zi(
         min_price=0.05,  # €/kWh
         max_price=0.20,  # €/kWh
         random_seed=42
@@ -242,7 +252,7 @@ Implementing Trading Strategies
     )
 
 Extending the Executor
---------------------
+----------------------
 
 Users can extend the Executor functionality by:
 
