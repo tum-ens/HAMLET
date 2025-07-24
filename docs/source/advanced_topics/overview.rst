@@ -22,6 +22,7 @@ The following advanced topics are covered in the documentation:
 
    configuration_guide/overview
    ems/overview
+   api/overview
 
 When to Use Advanced Features
 -----------------------------
