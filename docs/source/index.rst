@@ -39,7 +39,7 @@ This guide will help you get up and running quickly.
    advanced_topics/overview
    advanced_topics/configuration_guide/overview
    advanced_topics/ems/overview
-.. advanced_topics/api/overview
+   advanced_topics/api/overview
 
 .. toctree::
    :maxdepth: 1
