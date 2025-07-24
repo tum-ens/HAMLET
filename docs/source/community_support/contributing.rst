@@ -8,7 +8,7 @@ How to Contribute
 There are multiple ways to contribute to HAMLET:
 
 1. **Report Issues**:
-   - Found a bug? Have a feature request? Open an issue in our GitLab repository.
+   - Found a bug? Have a feature request? Open an issue in our GitHub repository.
    - Clearly describe the problem and, if possible, provide a minimal example to reproduce it.
 
 2. **Improve Documentation**:
@@ -19,7 +19,7 @@ There are multiple ways to contribute to HAMLET:
    - Fork the repository and create a new branch for your changes.
    - Ensure that your code follows the project’s style guide.
    - Write tests for new functionality where applicable.
-   - Open a merge request (MR) and describe your changes clearly.
+   - Open a pull request (PR) and describe your changes clearly.
 
 4. **Enhance Testing & Validation**:
    - Help improve test coverage by adding unit tests.
@@ -33,7 +33,7 @@ To set up a development environment and contribute effectively, follow these ste
 
 .. code-block:: bash
 
-  git clone https://github.com/ens/hamlet/hamlet.git
+  git clone https://github.com/tum-ens/hamlet.git
   cd hamlet
 
 2. **Set Up the Anaconda Environment**:
@@ -44,7 +44,7 @@ To set up a development environment and contribute effectively, follow these ste
   conda env create -f env.yml
   conda activate hamlet
 
-Submitting a Merge Request (MR)
+Submitting a Pull Request (PR)
 -------------------------------
 Once your changes are ready:
 
@@ -54,9 +54,9 @@ Once your changes are ready:
 
   git push origin my-feature-branch
 
-2. Open a Merge Request (MR) on GitLab.
-3. Fill in the MR template, describing:
-   - What problem this MR addresses.
+2. Open a Pull Request (PR) on GitHub.
+3. Fill in the PR template, describing:
+   - What problem this PR addresses.
    - What changes have been made.
    - How it was tested.
 
@@ -73,8 +73,8 @@ Getting Help
 ------------
 If you have questions about contributing, reach out through:
 
-- **GitLab Issues**: Post questions or discussions.
-- **GitLab Discussions**: Join discussions on development topics.
+- **GitHub Issues**: Post questions or discussions.
+- **GitHub Discussions**: Join discussions on development topics.
 
 We appreciate your contributions to HAMLET!
 
@@ -83,4 +83,4 @@ Further Information
 For more details on contributing to HAMLET, please refer to the `contributing guide`_ and the `ci/cd guide`_ in the repository.
 
 .. _contributing guide: https://github.com/tum-ens/hamlet/blob/master/CONTRIBUTING.md
-.. _ci/cd guide: https://github.com/tum-ens/hamlet/blob/master/CONTRIBUTING.md
+.. _ci/cd guide: https://github.com/tum-ens/hamlet/blob/master/CI_CD_Guide.md
