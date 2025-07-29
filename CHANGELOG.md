@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [Version 1.2.0] - 2025-07-29
+### Added
+- Added extensive expert documentation in the "advanced topics" section (!189)
+
 ## [Version 1.1.0] - 2025-06-13
 ### Added
 - Added the analyzer architecture and a few plots (!150)

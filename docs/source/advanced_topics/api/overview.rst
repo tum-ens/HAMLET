@@ -1,5 +1,5 @@
-API Overview
-============
+API
+===
 
 HAMLET provides a well-structured API that allows users to interact with its core components programmatically. This section introduces the API, how it is structured, and how users can navigate the documentation.
 
@@ -9,9 +9,8 @@ API Structure
 The HAMLET API is divided into the following categories:
 
 - **Creator API**: Classes and functions related to setting up agents, markets, and grids.
-- **Executor API**: Components responsible for executing simulations and managing data flows.
+- **Executor API**: Components responsible for executing simulations and managing data flows, including utility functions for forecasting, database access, trading strategies, and grid management.
 - **Analyzer API**: Tools for analyzing, visualizing, and extracting insights from simulation results.
-- **Utilities**: Helper functions for forecasting, database access, trading strategies, and grid management.
 
 How to Use the API
 ------------------
@@ -19,6 +18,7 @@ How to Use the API
 Users can interact with HAMLET by importing the relevant modules in Python scripts. Here are some common use cases:
 
 - **Creating a new simulation scenario**:
+
   .. code-block:: python
 
       from hamlet.creator import Creator
@@ -27,6 +27,7 @@ Users can interact with HAMLET by importing the relevant modules in Python scrip
       creator.new_scenario_from_configs()
 
 - **Running a simulation**:
+
   .. code-block:: python
 
       from hamlet.executor import Executor
@@ -35,6 +36,7 @@ Users can interact with HAMLET by importing the relevant modules in Python scrip
       executor.run()
 
 - **Analyzing results**:
+
   .. code-block:: python
 
       from hamlet.analyzer import ScenarioAnalyzer
@@ -67,4 +69,3 @@ The API reference provides detailed descriptions of each module, class, and func
    creator
    executor
    analyzer
-   utilities
