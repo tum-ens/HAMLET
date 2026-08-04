@@ -123,9 +123,12 @@ class TestMinSocScheme:
         """Same defect, exercised across an availability gap.
 
         The car is plugged in for the first two timesteps and gone for the last two, so the
-        target must be met by timestep 1. With 11 kW over one hour only 11 kWh can still be
-        added after timestep 0, so the constraint reads [20, 40, -, -] kWh; the reversed array
-        gave [9, 29, -, -] and the car left 11 kWh short.
+        target of 40 kWh must be met by timestep 1.
+
+        At timestep 0 the soc need only be 20 kWh: the reachable ceiling there is 31 kWh
+        (20 kWh start + one hour at 11 kW) and a further 11 kWh can still be added at
+        timestep 1. The constraint therefore reads [20, 40, -, -] kWh. The reversed array gave
+        [9, 29, -, -], so the car left 11 kWh short of its minimum.
         """
         target_fraction = 0.8
         ev = make_ev(timesteps, delta,
@@ -139,5 +142,6 @@ class TestMinSocScheme:
 
         last_available = 1
         assert target_soc[last_available] == pytest.approx(CAPACITY * target_fraction)
-        # One timestep earlier the shortfall may be at most one timestep of charging.
-        assert target_soc[0] == pytest.approx(CAPACITY * target_fraction - CHARGING_POWER)
+        # One timestep earlier the soc may still be one timestep of charging below the ceiling.
+        reachable_at_0 = 20_000 + CHARGING_POWER
+        assert target_soc[0] == pytest.approx(reachable_at_0 - CHARGING_POWER)

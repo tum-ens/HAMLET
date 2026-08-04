@@ -605,11 +605,11 @@ class Ev(LinopyComps):
         # Calculate maximum and minimum state of charge at each timestep
         # Reverse the max_energy array to get the energy that can still be charged until the car leaves
         max_soc = np.minimum(max_capacity, self.soc + max_energy_cumulative)
-        # Reverse the max_energy array to get the energy that can still be charged until the car leaves
-        # self.reverse_non_zero_sequences(max_energy_cumulative)
-        max_energy_reversed = self.__reverse_non_zero_sequences(max_energy_cumulative)
+        # Energy that can still be charged after each timestep, i.e. how far below the target the
+        # soc may still be at that point and be recoverable before the car leaves
+        future_max_energy = self.__future_max_energy_exclusive(max_energy)
         # Target is the minimum soc necessary for the car to leave with the target soc
-        target_soc = pd.Series(np.maximum(max_soc - max_energy_reversed, 0),
+        target_soc = pd.Series(np.maximum(max_soc - future_max_energy, 0),
                                index=self.timesteps).astype(int)
 
         # Define the constraint
@@ -689,40 +689,27 @@ class Ev(LinopyComps):
 
         return result
 
-    @staticmethod
-    # @numba.jit(nopython=True) # TODO: Check if faster with numba
-    def __reverse_non_zero_sequences(arr):
-        """Reverse sequences of non-zero values in the given array.
+    def __future_max_energy_exclusive(self, max_energy):
+        """Energy that can still be charged strictly after each timestep.
 
-        This function identifies sequences of non-zero values in the array and
-        reverses them in place. Sequences are separated by zero values.
+        For every timestep t this returns the sum of the chargeable energy at t+1, t+2, ...
+        up to the point where the car leaves (a zero in `max_energy` resets the sum).
+        The current timestep is excluded: by the last timestep before departure no further
+        charging is possible, so the value there is zero.
 
         Args:
-            arr (list or numpy.ndarray): The input array containing sequences to be reversed.
+            max_energy (numpy.ndarray): Net energy chargeable at each timestep.
 
         Returns:
-            list or numpy.ndarray: The modified array with reversed non-zero sequences.
+            numpy.ndarray: Chargeable energy remaining after each timestep.
         """
 
-        # Starting position for a sequence
-        start = None
+        arr = np.asarray(max_energy, dtype=int)
 
-        for i, val in enumerate(arr):
-            if val != 0:
-                # If starting position is not set, set it
-                if start is None:
-                    start = i
-            else:
-                # If there was a sequence before this 0, reverse it
-                if start is not None:
-                    arr[start:i] = arr[start:i][::-1]
-                    start = None
+        # Sum from the end of each availability block, then drop the current timestep's share
+        future_inclusive = self.__cumsum_reset_at_zero(arr[::-1])[::-1]
 
-        # Handle the case where the array ends with a non-zero sequence
-        if start is not None:
-            arr[start:] = arr[start:][::-1]
-
-        return arr
+        return np.maximum(future_inclusive - arr, 0)
 
     def __energy_to_reach_target(self, target):
         """
