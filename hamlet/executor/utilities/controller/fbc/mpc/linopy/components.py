@@ -428,11 +428,14 @@ class Ev(LinopyComps):
 
         # Charging scheme
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
-        self.soc = min(self.capacity, kwargs['socs'][f'{self.name}'][0])  # soc at current timestamp (energy)
         self.scheme = self.info['charging_scheme']
 
-        # Kwargs variables
-        self.soc = [kwargs['socs'][f'{self.name}'][0]] * len(self.energy) - self.energy  # state of charge at timestep
+        # State of charge at each timestep, before any charging decision: the current soc minus
+        # the cumulative energy the forecast expects the car to consume by driving.
+        # Note: the starting soc is capped at the capacity (a stale socs entry must not create
+        # energy) and the trajectory is floored at zero (the battery cannot go negative).
+        soc_start = min(self.capacity, kwargs['socs'][f'{self.name}'][0])
+        self.soc = np.maximum(0, [soc_start] * len(self.energy) - self.energy)
 
         # Define the lower and upper bounds for the charging power based on the charging scheme
         self.lower, self.upper = [0] * len(self.availability), [0] * len(self.availability)

@@ -17,8 +17,14 @@ if str(REPO_ROOT) not in sys.path:
 
 @pytest.fixture
 def timesteps():
-    """Four hourly timesteps — the standard L2 horizon."""
-    return pd.date_range("2021-03-24 00:00", periods=4, freq="1h", tz="UTC")
+    """Four hourly timesteps — the standard L2 horizon.
+
+    The index must be named `timesteps`: the executor builds its models with
+    `linopy.Model(force_dim_names=True)`, which rejects unnamed coordinates, and the SoC
+    recursion rolls along that dimension by name (`var_soc.roll(timesteps=1)`).
+    """
+    return pd.date_range("2021-03-24 00:00", periods=4, freq="1h", tz="UTC",
+                         name="timesteps")
 
 
 @pytest.fixture
