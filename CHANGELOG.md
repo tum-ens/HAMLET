@@ -9,6 +9,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ---
 
 ## [Unreleased]
+### Fixed
+- Fixed the MPC reading the market energy prices the wrong way round, so agents saw a lower
+  price for buying than for selling and could trade against the retailer at a profit
+- Fixed grid fees and levies being charged on gross rather than net energy, which overcharged
+  every agent that both bought and sold within a timestep
+- Fixed the net energy behind grid fees and levies omitting the trades cleared in the timestep
+  being settled
+- Fixed the EV state of charge ignoring the battery capacity and being able to go negative
+- Fixed the EV `min_soc` charging scheme, which let the car leave below its minimum state of
+  charge
+- Fixed EV time series being averaged when resampled, which lost most of a trip's driving
+  energy and could truncate the availability flag to zero so the car never charged at all
+- Fixed controllers configured as off still being run when the setting came from `agents.xlsx`
+  as an empty cell rather than as `None`
+- Fixed retailer prices being broadcast as a column instead of read as a scalar, which gave
+  each transaction in a timestep a different price when the retailer table had several rows
+### Added
+- Added a test suite (`tests/`) with a layered layout: component physics, accounting
+  invariants and targeted regression tests, runnable with `python -m pytest tests`
 
 ## [Version 1.2.0] - 2025-07-29
 ### Added
