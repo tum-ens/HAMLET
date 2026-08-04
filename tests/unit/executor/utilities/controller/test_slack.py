@@ -1,10 +1,8 @@
 """L2 — the balance slack variables and their penalties.
 
 The slacks keep the balance equations solvable so a single infeasible agent cannot abort a run.
-They are off by default: with an unbounded market variable the balance is always satisfiable,
-and adding variables to an already-feasible problem changes which equally-optimal solution the
-solver returns. When enabled they must never be cheaper than serving the load, or the optimiser
-would shed demand instead of buying energy.
+They must never be cheaper than serving the load, or the optimiser would shed demand instead of
+buying energy.
 """
 import pandas as pd
 import pytest
@@ -20,14 +18,9 @@ UNIT_IN_EUR_PER_MWH = 0.1
 EXTREME_PRICE = 10_000
 
 
-def test_slacks_are_off_by_default():
-    """Default-off is what keeps this change from moving anyone's results.
-
-    Measured on the shipped example: enabling the slacks shifts cleared bids and set-points even
-    though every problem was already feasible, because the extra variables change which of
-    several equally-optimal solutions HiGHS returns.
-    """
-    assert c.DEFAULT_SLACK_ENABLED is False
+def test_slacks_are_on_by_default():
+    """A single infeasible agent must not abort a whole run."""
+    assert c.DEFAULT_SLACK_ENABLED is True
 
 
 def test_fbc_penalty_is_a_value_of_lost_load():

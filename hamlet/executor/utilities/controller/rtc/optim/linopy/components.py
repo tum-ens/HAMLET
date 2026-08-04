@@ -36,7 +36,9 @@ class LinopyComps:
         constrains a larger one.
         """
         limits = self.info.get(c.K_LIMITS) or {}
-        value = limits.get(key, c.RTC_DEFAULT_LIMITS[key])
+        # Note: look the default up lazily. Reading RTC_DEFAULT_LIMITS[key] eagerly would raise
+        # KeyError for a bound the caller configured but that has no entry in the table yet.
+        value = limits[key] if key in limits else c.RTC_DEFAULT_LIMITS[key]
 
         return inf if value is None else value
 

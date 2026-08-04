@@ -1131,9 +1131,16 @@ class Agents:
                             if str(col).endswith(EV_COL_AVAILABILITY)]
             resampled[availability] = resampled[availability].clip(upper=1)
         elif delta < original_delta:
+            # Note: append one synthetic row a full original timestep past the end before
+            # resampling, then drop it. Without it the last input row expands to a single output
+            # row instead of original_delta/delta of them, leaving the series short and the
+            # simulation without data for its final timesteps.
             # TODO: Verify this is the best method. Forward filling the driving energy repeats
             #  it across the sub-steps rather than dividing it between them.
-            resampled = timeseries.resample(delta).ffill()
+            last_row = timeseries.iloc[-1:].copy()
+            last_row.index = last_row.index + original_delta
+            extended = pd.concat([timeseries, last_row])
+            resampled = extended.resample(delta).ffill()[:-1]
         else:
             resampled = timeseries
 

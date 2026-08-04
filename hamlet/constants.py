@@ -379,17 +379,13 @@ RTC_DEFAULT_LIMITS = {
 }
 
 # Slack variables on the balance equations let a controller shed or dump energy at a heavy
-# penalty rather than fail outright. They are OFF by default: with the unbounded market variable
-# of RTC_DEFAULT_LIMITS the balance is always satisfiable, so the slacks protect against nothing,
-# and adding variables to an already-feasible problem changes which of several equally-optimal
-# solutions the solver returns -- results move for no benefit. Measured on the shipped example.
-# Turn them on where the balance genuinely can become unsatisfiable, i.e. once the market
-# variable is given a finite bound:
+# penalty rather than fail outright, so a single infeasible agent cannot abort a whole run.
+# On by default. Set to false per agent to reproduce runs made before they existed:
 #   controller:
 #     rtc:
-#       slack: true
+#       slack: false
 K_SLACK = 'slack'
-DEFAULT_SLACK_ENABLED = False
+DEFAULT_SLACK_ENABLED = True
 
 # Penalty on those slack variables.
 # The feedback controller's objective is monetary, so its penalty is a value of lost load in the

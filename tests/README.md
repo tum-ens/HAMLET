@@ -1,50 +1,63 @@
 # HAMLET test suite
 
-Layered, following the target described in the roadmap. Everything here runs in seconds and
-needs no solver licence — HiGHS only.
+Split by scope, mirroring the package layout so a test sits next to the thing it covers.
 
-| Layer | Directory | What it covers |
-|---|---|---|
-| L1 | `l1_functions/` | Pure functions: `hamlet/functions.py`, fee formulae, schema helpers |
-| L2 | `l2_components/` | **Component physics.** Per component, a short single-plant linopy model with known inputs, asserting the resulting bounds/dispatch |
-| L4 | `l4_accounting/` | Accounting invariants: net-vs-gross energy, fee and levy application, balance closure |
-| — | `regression/` | Narrow regression tests for defects that are not component physics (I/O guards, config handling) |
+```
+tests/
+  unit/          one class or function in isolation; no file I/O, no scenario
+    creator/agents/
+    executor/agents/
+    executor/markets/
+    executor/utilities/controller/{fbc,rtc}/
+    executor/utilities/database/
+    executor/utilities/grid_restrictions/
+  integration/   several components wired together and solved, still no file I/O
+    executor/
+  e2e/           the shipped example, Creator -> Executor -> Analyzer
+```
 
-L0 (contracts), L3 (market clearing) and L5 (golden-master integration) are not populated yet.
+`unit/` and `integration/` mirror `hamlet/`, so the test for
+`hamlet/executor/markets/electricity.py` lives at `tests/unit/executor/markets/`.
 
 ## Running
 
 ```bash
-python -m pytest tests -q
+python -m pytest tests
 ```
 
-Markers are declared in `pytest.ini`. `solver` marks tests that build and solve a real linopy
-model; they are slower (~1 s each) but still run by default.
+That runs unit and integration — seconds, HiGHS only, no solver licence. The end-to-end layer
+is deselected by default because it runs the whole example:
 
 ```bash
-python -m pytest tests -q -m "not solver"
+python -m pytest tests -m e2e
 ```
+
+Markers: `solver` (builds and solves a real optimisation model), `e2e` (runs the example).
 
 ## Provenance
 
-This layer was seeded by porting the bug fixes that had been stranded on the paper branch. Each
-test in `l2_components/`, `l4_accounting/` and `regression/` names the defect it pins in its
-docstring, and was verified to **fail before** the corresponding fix and **pass after**.
+This suite was seeded by porting bug fixes that had been stranded on the paper branch. Tests in
+`unit/` and `integration/` name the defect they pin in their docstring, and each was verified to
+fail before the corresponding fix and pass after — except where a fix introduced the seam the
+test uses, which the docstring says explicitly.
 
 ## The in/out convention
 
-Several tests depend on HAMLET's power-flow direction convention, which is the single most
-error-prone thing in this codebase. Stated once, here:
+The single most error-prone thing in this codebase, so it is stated once, here.
 
-- **Retailer input files** (`input_data/retailers/**/*.csv`) name their columns from the
-  **retailer's** point of view for `energy` and `balancing`: `energy_price_out` is the price at
-  which the retailer sells, i.e. what the **agent pays to buy**.
-- **Transaction and forecast columns** inside the executor are from the **agent's** point of
-  view: `energy_in` is energy flowing into the agent, i.e. the agent buying.
-- Therefore code mapping retailer columns onto transaction columns **must cross in↔out**.
+**Retailer input files** (`input_data/retailers/**/*.csv`) name every column from the
+**retailer's** point of view:
 
-`grid.csv` and `levies.csv` in the shipped example data do *not* follow the retailer convention —
-they are written from the agent's point of view (`levies_price_in` is charged on consumption).
-The code compensates by not crossing for those two. This inconsistency is a known wart; see the
-roadmap item on retailer-input normalisation. Tests here pin the behaviour that matches the
-shipped data.
+- `_out` is the retailer selling, i.e. **the agent buying**. This is the expensive direction,
+  and it is where the grid fee and the levy sit, because both are charged on consumption.
+- `_in` is the retailer buying, i.e. the agent feeding in.
+
+**Transaction and forecast columns** inside the executor are from the **agent's** point of view:
+`energy_in` is energy flowing into the agent, i.e. the agent buying.
+
+Therefore any code mapping a retailer column onto a transaction or forecast column **must cross
+in↔out**. That applies uniformly to `energy`, `balancing`, `grid` and `levies` — there is no
+per-file exception.
+
+Buying is always more expensive than selling. A test that appears to show otherwise is showing a
+convention bug, not an arbitrage opportunity.

@@ -1,6 +1,7 @@
-"""L2 — MPC `Market` component physics.
+"""Unit — MPC `Market` component price mapping.
 
-Pins the buy/sell price mapping. See `tests/README.md` for the in/out convention.
+Every retailer column is named from the retailer's point of view, so `_out` is the retailer
+selling, i.e. the direction the agent pays for. See `tests/README.md` for the convention.
 """
 import pandas as pd
 import pytest
@@ -8,21 +9,21 @@ import pytest
 import hamlet.constants as c
 from hamlet.executor.utilities.controller.fbc.mpc.linopy.components import Market
 
-# Retailer-perspective prices, in the integer units HAMLET uses (0.1 ct/kWh).
+# Retailer-perspective prices, in the integer units HAMLET uses (0.01 ct/kWh).
 RETAIL_PRICE = 3200  # what the retailer sells at  -> the agent's BUY price
 FEED_IN_PRICE = 800  # what the retailer buys at   -> the agent's SELL price
 
-GRID_FEE_CONSUMPTION = 400  # charged on consumption only
-LEVY_CONSUMPTION = 1800  # charged on consumption only
+GRID_FEE_CONSUMPTION = 400  # charged on consumption only, so it sits under `_out`
+LEVY_CONSUMPTION = 1800  # charged on consumption only, so it sits under `_out`
 
 
 @pytest.fixture
 def forecasts(timesteps):
     """A forecast frame shaped like the retailer training data the MPC actually receives.
 
-    `energy_*` follows the retailer convention (`_out` = retailer sells = agent buys).
-    `grid_*` and `levies_*` follow the agent convention (`_in` = agent consumes), matching the
-    shipped `input_data/retailers/lem/{grid,levies}.csv`.
+    All four groups follow the same retailer convention: `_out` is the retailer selling, i.e.
+    what the agent pays for. Grid fees and levies are charged on consumption only, so their
+    value sits under `_out` and `_in` is zero -- matching the shipped retailer inputs.
     """
     n = len(timesteps)
     return {
@@ -30,10 +31,10 @@ def forecasts(timesteps):
         f'{c.TC_ENERGY}_{c.TC_ENERGY}_{c.PF_OUT}': [1_000_000] * n,
         f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}': [RETAIL_PRICE] * n,
         f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}': [FEED_IN_PRICE] * n,
-        f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}': [GRID_FEE_CONSUMPTION] * n,
-        f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}': [0] * n,
-        f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_IN}': [LEVY_CONSUMPTION] * n,
-        f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_OUT}': [0] * n,
+        f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}': [GRID_FEE_CONSUMPTION] * n,
+        f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}': [0] * n,
+        f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_OUT}': [LEVY_CONSUMPTION] * n,
+        f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_IN}': [0] * n,
     }
 
 
@@ -67,8 +68,8 @@ def test_buying_is_never_cheaper_than_selling(market):
 def test_grid_and_levy_charges_fall_on_consumption(market):
     """Grid fees and levies are charged on what the agent consumes, not on what it feeds in.
 
-    These columns are *not* flipped: the shipped grid/levies inputs already use the agent
-    convention. Pinned so the energy-price fix is not over-applied to them.
+    Regression: the charge used to be read from the feed-in column, so a net exporter paid the
+    grid fee and a net importer paid nothing.
     """
     assert (market.grid_buy == GRID_FEE_CONSUMPTION).all()
     assert (market.levies_buy == LEVY_CONSUMPTION).all()

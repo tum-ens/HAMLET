@@ -6,6 +6,9 @@ __email__ = "markus.doepfert@tum.de"
 
 import os
 import sys
+import warnings
+
+import numpy as np
 
 from linopy.io import read_netcdf
 
@@ -145,11 +148,11 @@ class Linopy(OptimBase):
                 else:
                     pass
 
-        # Optionally give each balance equation a slack variable pair so the problem always has a
-        # solution. Off by default: with an unbounded market variable the balance is always
-        # satisfiable, so the slacks would protect against nothing while still moving the results
-        # (extra variables change which equally-optimal solution the solver returns).
-        # See c.DEFAULT_SLACK_ENABLED.
+        # Give each balance equation a slack variable pair so a single infeasible agent cannot
+        # abort the whole run. This matters most for the non-electricity carriers: only the
+        # electricity balance has a market term to absorb a mismatch, so a heat balance that
+        # cannot be met has no other way out.
+        # See c.DEFAULT_SLACK_ENABLED; disable per agent with `slack: false`.
         for energy_type in (balance_equations if self.slack_enabled else {}):
             balance_equations[energy_type] += self.model.add_variables(
                 name=f'{energy_type}_{c.OM_GENERATION}_slack', lower=0, integer=False)
@@ -200,6 +203,31 @@ class Linopy(OptimBase):
 
         return self.model
 
+    # Slack below this many W is solver noise rather than a real imbalance
+    SLACK_REPORTING_THRESHOLD = 1e-6
+
+    def _warn_on_slack(self):
+        """Warn when a balance was only closed by shedding or dumping energy.
+
+        The slack variables keep an infeasible agent from aborting the run, but they are not
+        written to the setpoints, so a run that used them produces results whose flows do not
+        balance. That has to be visible: an agent that shed 3 kW must not look identical to one
+        that served it.
+        """
+
+        for name, variable in self.model.variables.items():
+            if not name.endswith('_slack'):
+                continue
+            try:
+                peak = float(np.max(np.abs(variable.solution.values)))
+            except (AttributeError, ValueError):
+                continue
+            if peak > self.SLACK_REPORTING_THRESHOLD:
+                warnings.warn(
+                    f'Agent {self.agent.agent_id}: energy balance closed with {peak:.1f} W of '
+                    f'"{name}". The setpoints for this timestep do not balance.',
+                    RuntimeWarning, stacklevel=2)
+
     def run(self):
 
         # Solve the optimization problem
@@ -230,6 +258,9 @@ class Linopy(OptimBase):
             print(self.model.objective)
 
             raise ValueError(f"Optimization failed: {status}")
+
+        # Surface any energy that was shed or dumped to close the balance
+        self._warn_on_slack()
 
         # Process the solution into control commands and return
         self.agent = self.process_solution()

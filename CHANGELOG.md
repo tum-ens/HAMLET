@@ -10,8 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Fixed
+- **Fixed grid fees and levies being applied in the wrong power-flow direction.** The scenario
+  configuration lists grid fees and levies as `[buying, selling]` but energy as
+  `[selling, buying]`, and that inconsistency survived into the retailer table, so downstream
+  code had to compensate per component. The Creator now normalises both spellings to one
+  convention — `_out` is always the direction the agent pays for — and the executor crosses
+  every retailer column uniformly. Existing scenario configuration files keep their current
+  meaning and need no changes
 - Fixed the MPC reading the market energy prices the wrong way round, so agents saw a lower
   price for buying than for selling and could trade against the retailer at a profit
+- Fixed the MPC bounding the agent's purchase with the retailer's purchase quantity rather than
+  its sale quantity (no effect while the two are configured equal)
+- Fixed the PyOptInterface MPC backend reading the energy prices the wrong way round, which left
+  it inconsistent with the linopy backend
 - Fixed grid fees and levies being charged on gross rather than net energy, which overcharged
   every agent that both bought and sold within a timestep
 - Fixed the net energy behind grid fees and levies omitting the trades cleared in the timestep
@@ -20,14 +31,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Fixed the EV `min_soc` charging scheme, which let the car leave below its minimum state of
   charge
 - Fixed EV time series being averaged when resampled, which lost most of a trip's driving
-  energy and could truncate the availability flag to zero so the car never charged at all
+  energy and could truncate the availability flag to zero so the car never charged at all.
+  Resampling an EV series to a finer resolution also used to drop the end of the series
 - Fixed controllers configured as off still being run when the setting came from `agents.xlsx`
   as an empty cell rather than as `None`
 - Fixed retailer prices being broadcast as a column instead of read as a scalar, which gave
   each transaction in a timestep a different price when the retailer table had several rows
 ### Added
-- Added a test suite (`tests/`) with a layered layout: component physics, accounting
-  invariants and targeted regression tests, runnable with `python -m pytest tests`
+- Added a test suite (`tests/`) split into `unit/`, `integration/` and `e2e/`, mirroring the
+  package layout. `python -m pytest tests` runs unit and integration in seconds on HiGHS;
+  `python -m pytest tests -m e2e` runs the shipped example end to end
 ### Changed
 - Out-of-horizon market records are now split off by slicing the sorted tables instead of
   scanning them twice, and the output folder is only created when something is written
@@ -36,9 +49,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - The real-time controller's optimisation bounds (balancing power, market power and the two
   heat-pump fallbacks) are now configurable via a `limits` block under the `rtc` controller
   instead of being hard-coded. The defaults reproduce the previous behaviour exactly
-- The balance equations can optionally carry slack variables, so a controller sheds or dumps
-  energy at a value-of-lost-load penalty rather than failing outright. Off by default; enable
-  with `slack: true` under the controller when the market power is given a finite bound
+- The balance equations now carry slack variables, so a single infeasible agent no longer
+  aborts a whole run: the controller sheds or dumps energy at a value-of-lost-load penalty
+  instead. A warning is raised whenever that happens, because the shed energy is not written to
+  the setpoints and the results for that timestep therefore do not balance. Disable per agent
+  with `slack: false` under the controller
 
 ## [Version 1.2.0] - 2025-07-29
 ### Added

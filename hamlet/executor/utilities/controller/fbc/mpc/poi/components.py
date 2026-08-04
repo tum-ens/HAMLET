@@ -175,12 +175,13 @@ class Market(POIComps):
         self.lower = [int(round(x / self.dt_hours * -1)) for x in self.fcast[f'energy_quantity_buy']]
 
         # Get market price forecasts
-        self.price_sell = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
-        self.price_buy = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}'], index=self.timesteps)
-        self.grid_sell = pd.Series(self.fcast[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'], index=self.timesteps)
-        self.grid_buy = pd.Series(self.fcast[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'], index=self.timesteps)
-        self.levies_sell = pd.Series(self.fcast[f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
-        self.levies_buy = pd.Series(self.fcast[f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_IN}'], index=self.timesteps)
+        # See the linopy backend: `_out` is the retailer selling, i.e. the agent's buy price
+        self.price_sell = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_IN}'], index=self.timesteps)
+        self.price_buy = pd.Series(self.fcast[f'{c.TC_ENERGY}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
+        self.grid_sell = pd.Series(self.fcast[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'], index=self.timesteps)
+        self.grid_buy = pd.Series(self.fcast[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'], index=self.timesteps)
+        self.levies_sell = pd.Series(self.fcast[f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_IN}'], index=self.timesteps)
+        self.levies_buy = pd.Series(self.fcast[f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_OUT}'], index=self.timesteps)
 
     def define_variables(self, model, variables, **kwargs):
         self.comp_type = kwargs['comp_type']
@@ -436,11 +437,14 @@ class Ev(POIComps):
 
         # Charging scheme
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
-        self.soc = min(self.capacity, kwargs['socs'][f'{self.name}'][0])  # soc at current timestamp (energy)
         self.scheme = self.info['charging_scheme']
 
-        # Kwargs variables
-        self.soc = [kwargs['socs'][f'{self.name}'][0]] * len(self.energy) - self.energy  # state of charge at timestep
+        # State of charge at each timestep, before any charging decision: the current soc minus
+        # the cumulative energy the forecast expects the car to consume by driving.
+        # Note: the starting soc is capped at the capacity (a stale socs entry must not create
+        # energy) and the trajectory is floored at zero (the battery cannot go negative).
+        soc_start = min(self.capacity, kwargs['socs'][f'{self.name}'][0])
+        self.soc = np.maximum(0, [soc_start] * len(self.energy) - self.energy)
 
         # Define the lower and upper bounds for the charging power based on the charging scheme
         self.lower, self.upper = [0] * len(self.availability), [0] * len(self.availability)
@@ -590,7 +594,7 @@ class Ev(POIComps):
         max_soc = np.minimum(max_capacity, self.soc + max_energy_cumulative)
         # Reverse the max_energy array to get the energy that can still be charged until the car leaves
         # self.reverse_non_zero_sequences(max_energy_cumulative)
-        max_energy_reversed = self.__reverse_non_zero_sequences(max_energy_cumulative)
+        max_energy_reversed = self.__future_max_energy_exclusive(max_energy)
         # Target is the minimum soc necessary for the car to leave with the target soc
         target_soc = pd.Series(np.maximum(max_soc - max_energy_reversed, 0),
                                index=self.timesteps).astype(int)
@@ -658,40 +662,27 @@ class Ev(POIComps):
 
         return result
 
-    @staticmethod
-    # @numba.jit(nopython=True) # TODO: Check if faster with numba
-    def __reverse_non_zero_sequences(arr):
-        """Reverse sequences of non-zero values in the given array.
+    def __future_max_energy_exclusive(self, max_energy):
+        """Energy that can still be charged strictly after each timestep.
 
-        This function identifies sequences of non-zero values in the array and
-        reverses them in place. Sequences are separated by zero values.
+        For every timestep t this returns the sum of the chargeable energy at t+1, t+2, ...
+        up to the point where the car leaves (a zero in `max_energy` resets the sum).
+        The current timestep is excluded: by the last timestep before departure no further
+        charging is possible, so the value there is zero.
 
         Args:
-            arr (list or numpy.ndarray): The input array containing sequences to be reversed.
+            max_energy (numpy.ndarray): Net energy chargeable at each timestep.
 
         Returns:
-            list or numpy.ndarray: The modified array with reversed non-zero sequences.
+            numpy.ndarray: Chargeable energy remaining after each timestep.
         """
 
-        # Starting position for a sequence
-        start = None
+        arr = np.asarray(max_energy, dtype=int)
 
-        for i, val in enumerate(arr):
-            if val != 0:
-                # If starting position is not set, set it
-                if start is None:
-                    start = i
-            else:
-                # If there was a sequence before this 0, reverse it
-                if start is not None:
-                    arr[start:i] = arr[start:i][::-1]
-                    start = None
+        # Sum from the end of each availability block, then drop the current timestep's share
+        future_inclusive = self.__cumsum_reset_at_zero(arr[::-1])[::-1]
 
-        # Handle the case where the array ends with a non-zero sequence
-        if start is not None:
-            arr[start:] = arr[start:][::-1]
-
-        return arr
+        return np.maximum(future_inclusive - arr, 0)
 
     def __energy_to_reach_target(self, target):
         """
