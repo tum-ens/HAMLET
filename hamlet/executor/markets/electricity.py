@@ -602,6 +602,26 @@ class ElectricityMarket(MarketBase):
 
         return transactions, self.bids_uncleared, self.offers_uncleared
 
+    def _transactions_for_netting(self, transactions):
+        """Collects every transaction that counts towards this timestep's net energy.
+
+        Three sources contribute: the transactions already settled in earlier timesteps
+        (`transactions_prev`), the ones cleared on the market in this timestep
+        (`self.transactions`), and the balancing transactions just determined
+        (`transactions`). Omitting the middle one leaves the current timestep's market trades
+        out of the netting, so an agent's grid fees and levies are computed as though it had
+        not traded at all this timestep.
+
+        Args:
+            transactions (pl.DataFrame): The balancing transactions for this timestep.
+
+        Returns:
+            pl.DataFrame: All transactions relevant to the net energy calculation.
+        """
+
+        return pl.concat([self.transactions_prev, self.transactions, transactions],
+                         how='diagonal')
+
     @staticmethod
     def _to_net_energy(transactions):
         """Reduces the gross energy in/out columns to the net energy exchanged with the grid.
@@ -643,7 +663,7 @@ class ElectricityMarket(MarketBase):
         retailer = retailer.to_dict()
 
         # Concat all transactions for the given timestep to calculate the net energy
-        transactions = pl.concat([self.transactions_prev, transactions], how='diagonal')
+        transactions = self._transactions_for_netting(transactions)
         # Remove retailer from the transactions (as they are not subject to levies and taxes)
         transactions = transactions.filter(~pl.col(c.TC_ID_AGENT).is_in(retailer[c.TC_ID_AGENT].to_list()))
 
