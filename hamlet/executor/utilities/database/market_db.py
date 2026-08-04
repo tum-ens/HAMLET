@@ -89,27 +89,47 @@ class MarketDB:
             f.save_file(path=os.path.join(path, 'offers_uncleared.ft'), data=self.offers_uncleared, df='polars')
 
     def save_and_drop_past_records(self, timestamp, path_results):
-        """Save market data out of horizon to files and drop the past records."""
+        """Save market data out of horizon to files and drop the past records.
+
+        These tables are append-only and ordered by timestep, so the boundary between past and
+        in-horizon rows is a single index. Splitting there costs one binary search and two
+        O(1) slices, instead of two full scans with complementary filters that each materialise
+        a new frame. Frames that are not sorted fall back to filtering, since slicing would
+        then split the wrong rows.
+
+        The output folder is only created when there is something to write; it used to be
+        created for every table on every timestep, each call sleeping 10 ms.
+        """
         horizon_range = self.market_config['clearing']['timing']['horizon'][1]
         start_horizon_ts = timestamp - datetime.timedelta(seconds=horizon_range)
 
         for file_name, schema in self.files:
             attr_name, extension = file_name.rsplit('.', 1)
-            path = os.path.join(path_results, 'markets', self.market_type, self.market_name, 'past_data', attr_name)
-            # Create new folder if nonexisting
-            f.create_folder(path, delete=False)
-            # Skip saving data if all data is within horizon
             df = getattr(self, attr_name)
-            min_timestep = df.select(pl.min(c.TC_TIMESTEP)).item()
-            if min_timestep and min_timestep >= start_horizon_ts:
+
+            if df.is_empty():
                 continue
-            past_data = df.filter(pl.col(c.TC_TIMESTEP) < start_horizon_ts)
-            # Save dataframe to file if nonempty
-            if len(past_data):
-                f.save_file(path=os.path.join(path, f'{attr_name}_{start_horizon_ts.timestamp()}.{extension}'),
-                            data=past_data, df='polars')
-            # Replace with new data
-            new_data = df.filter(pl.col(c.TC_TIMESTEP) >= start_horizon_ts)
+
+            timesteps = df.get_column(c.TC_TIMESTEP)
+
+            if timesteps.is_sorted():
+                # Number of rows before the horizon, i.e. the length of the prefix to drop
+                split_idx = int(timesteps.search_sorted(start_horizon_ts, side='left'))
+                past_data, new_data = df.slice(0, split_idx), df.slice(split_idx)
+            else:
+                past_data = df.filter(pl.col(c.TC_TIMESTEP) < start_horizon_ts)
+                new_data = df.filter(pl.col(c.TC_TIMESTEP) >= start_horizon_ts)
+
+            # Skip the I/O entirely if everything is still within the horizon
+            if past_data.is_empty():
+                continue
+
+            path = os.path.join(path_results, 'markets', self.market_type, self.market_name,
+                                'past_data', attr_name)
+            f.create_folder(path, delete=False)
+            f.save_file(path=os.path.join(path, f'{attr_name}_{start_horizon_ts.timestamp()}.{extension}'),
+                        data=past_data, df='polars')
+
             setattr(self, attr_name, new_data)
 
     def concat_past_data(self, delete_dir=True):
