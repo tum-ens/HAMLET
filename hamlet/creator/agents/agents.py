@@ -36,6 +36,9 @@ from hamlet import constants as c
 warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.options.mode.chained_assignment = None  # default='warn'
 
+# Column in the EV input files that holds the availability flag rather than a quantity
+EV_COL_AVAILABILITY = 'availability'
+
 
 class Agents:
     """
@@ -166,6 +169,7 @@ class Agents:
                 'specs': self.__timeseries_from_specs_hp,
             },
             c.P_EV: {
+                'resample_ts': self.__resample_timeseries_ev,
             },
             c.P_BATTERY: {
             },
@@ -1048,7 +1052,7 @@ class Agents:
             file.columns = [f'{plant_id}_{col}' for col in file.columns]
 
         # Resample the time series data to ensure all rows are filled
-        file = self._resample_timeseries(timeseries=file, delta=delta)
+        file = self._resample_timeseries(timeseries=file, delta=delta, plant_dict=plant_dict)
 
         return file, specs
 
@@ -1097,6 +1101,43 @@ class Agents:
     def __make_timeseries_dhw(df: pd.DataFrame, plant_dict: dict) -> pd.DataFrame:
         """Ensures that values are integers and rounds them to the nearest integer."""
         return df.round().astype(int)
+
+    @staticmethod
+    def __resample_timeseries_ev(timeseries: pd.DataFrame, delta: pd.Timedelta,
+                                 original_delta: pd.Timedelta) -> pd.DataFrame:
+        """Resamples an EV time series according to what its columns actually mean.
+
+        An EV series carries an availability flag and the energy consumed by driving, and
+        neither behaves like a power series. Averaging the driving energy loses the total
+        consumed over a trip, and averaging the availability flag yields a fractional
+        availability that the controller then reads as a partial charging power limit.
+
+        When aggregating, the driving energy is summed and the availability flag is reduced to
+        "available at any point in the window". When splitting, values are carried forward.
+
+        Parameters:
+            timeseries (pd.DataFrame): The EV time series, indexed by timestamp.
+            delta (pd.Timedelta): The desired time delta between two timesteps.
+            original_delta (pd.Timedelta): The time delta of the input time series.
+
+        Returns:
+            pd.DataFrame: The resampled time series.
+        """
+
+        if delta > original_delta:
+            resampled = timeseries.resample(delta).sum()
+            # Availability is a flag, not a quantity, so bring the summed value back to [0, 1]
+            availability = [col for col in resampled.columns
+                            if str(col).endswith(EV_COL_AVAILABILITY)]
+            resampled[availability] = resampled[availability].clip(upper=1)
+        elif delta < original_delta:
+            # TODO: Verify this is the best method. Forward filling the driving energy repeats
+            #  it across the sub-steps rather than dividing it between them.
+            resampled = timeseries.resample(delta).ffill()
+        else:
+            resampled = timeseries
+
+        return resampled
 
     @staticmethod
     def __list_to_dict(input_list: list, separator: str = '/') -> dict:
@@ -1253,7 +1294,8 @@ class Agents:
 
         return plant_dict
 
-    def _resample_timeseries(self, timeseries: pd.DataFrame, delta: pd.Timedelta) -> pd.DataFrame:
+    def _resample_timeseries(self, timeseries: pd.DataFrame, delta: pd.Timedelta,
+                             plant_dict: dict) -> pd.DataFrame:
         """
         Resamples a timeseries with the index being the unix timestamp.
         The resampling method (interpolate or mean) is decided based on the comparison between
@@ -1274,7 +1316,10 @@ class Agents:
         original_delta = timeseries.index[1] - timeseries.index[0]
 
         # Resample the timeseries based on the comparison between the input delta and the time delta of the input
-        if delta > original_delta:
+        # Some plant types carry columns that do not resample like a power series and provide their own function
+        if resample_ts := self.plants[plant_dict['type']].get('resample_ts'):
+            resampled = resample_ts(timeseries, delta, original_delta)
+        elif delta > original_delta:
             # Reduce the timeseries with mean values of rows
             resampled = timeseries.resample(delta).mean()
         elif delta < original_delta:
