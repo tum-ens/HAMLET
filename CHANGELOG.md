@@ -33,6 +33,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   scanning them twice, and the output folder is only created when something is written
 - pandapower's progress bar is no longer printed once per horizon on every timestep when the
   §14a grid restriction is active
+- The real-time controller's optimisation bounds (balancing power, market power and the two
+  heat-pump fallbacks) are now configurable via a `limits` block under the `rtc` controller
+  instead of being hard-coded. The defaults reproduce the previous behaviour exactly
+- The balance equations can optionally carry slack variables, so a controller sheds or dumps
+  energy at a value-of-lost-load penalty rather than failing outright. Off by default; enable
+  with `slack: true` under the controller when the market power is given a finite bound
 
 ## [Version 1.2.0] - 2025-07-29
 ### Added
