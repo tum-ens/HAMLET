@@ -29,7 +29,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   being settled
 - Fixed the EV state of charge ignoring the battery capacity and being able to go negative
 - Fixed the EV `min_soc` charging scheme, which let the car leave below its minimum state of
-  charge
+  charge. The state-of-charge recursion now includes the energy the car spends driving; without
+  it the modelled state of charge only ever rose, so once the car had driven anywhere the
+  minimum was satisfied on paper and the car was never actually recharged
 - Fixed EV time series being averaged when resampled, which lost most of a trip's driving
   energy and could truncate the availability flag to zero so the car never charged at all.
   Resampling an EV series to a finer resolution also used to drop the end of the series

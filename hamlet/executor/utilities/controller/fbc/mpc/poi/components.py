@@ -439,12 +439,16 @@ class Ev(POIComps):
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
         self.scheme = self.info['charging_scheme']
 
-        # State of charge at each timestep, before any charging decision: the current soc minus
-        # the cumulative energy the forecast expects the car to consume by driving.
-        # Note: the starting soc is capped at the capacity (a stale socs entry must not create
-        # energy) and the trajectory is floored at zero (the battery cannot go negative).
-        soc_start = min(self.capacity, kwargs['socs'][f'{self.name}'][0])
-        self.soc = np.maximum(0, [soc_start] * len(self.energy) - self.energy)
+        # The state of charge the car actually has right now. Capped at the capacity so that a
+        # stale socs entry cannot create energy.
+        self.soc_start = min(self.capacity, kwargs['socs'][f'{self.name}'][0])
+
+        # Reference state of charge at each timestep if nothing were charged, floored at zero
+        self.soc = np.maximum(0, [self.soc_start] * len(self.energy) - self.energy)
+
+        # Energy consumed by driving in each timestep, taken as the step-to-step decrease of the
+        # reference trajectory so it is clamped to what the car can actually hold
+        self.consumption = (np.concatenate([[self.soc_start], self.soc[:-1]]) - self.soc)
 
         # Define the lower and upper bounds for the charging power based on the charging scheme
         self.lower, self.upper = [0] * len(self.availability), [0] * len(self.availability)
@@ -464,8 +468,10 @@ class Ev(POIComps):
         self.define_storage_variable(model, variables, comp_type=self.comp_type, lower=0, upper=self.capacity)
 
         # Define the soc variable for the previous timestep (thus the value of self.soc[0]) as needed for constraints
-        self.add_variable_to_model(model, variables, name=f'{self.name}_{self.comp_type}_soc_init', lower=self.soc[0],
-                                   upper=self.soc[0])
+        # Note: the soc before the horizon starts. Driving enters through the soc recursion, so
+        # subtracting it here as well would count it twice.
+        self.add_variable_to_model(model, variables, name=f'{self.name}_{self.comp_type}_soc_init',
+                                   lower=self.soc_start, upper=self.soc_start)
 
     def define_constraints(self, model, variables):
 
@@ -621,14 +627,18 @@ class Ev(POIComps):
                 f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}_{c.PF_IN}'][timestep]  # discharging
 
             # Define the constraint for charging
-            # Constraint: soc_new = soc_old + charge * efficiency * dt - discharge / efficiency * dt
-            # Note: Everything is moved to the lhs as linopy cannot handle it otherwise
+            # Constraint:
+            #   soc_new = soc_old + charge * efficiency * dt - discharge / efficiency * dt - driving
+            # Note: without the driving term the soc variable would be a charge-only trajectory
+            #  while the charging-scheme targets account for driving, so the targets would stop
+            #  binding as soon as the car had driven anywhere.
             model.add_linear_constraint(var_soc
                                         - var_soc_prev
                                         + var_charge * self.efficiency * dt_hours
                                         + var_discharge / self.efficiency * dt_hours,
                                         # negative as discharging is negative
-                                        poi.ConstraintSense.Equal, 0, name=f'{self.name}_soc_{timestep}')
+                                        poi.ConstraintSense.Equal, -self.consumption[timestep],
+                                        name=f'{self.name}_soc_{timestep}')
 
     @staticmethod
     # @numba.jit(nopython=True) # TODO: Check if faster with numba

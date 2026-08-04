@@ -430,12 +430,20 @@ class Ev(LinopyComps):
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
         self.scheme = self.info['charging_scheme']
 
-        # State of charge at each timestep, before any charging decision: the current soc minus
-        # the cumulative energy the forecast expects the car to consume by driving.
-        # Note: the starting soc is capped at the capacity (a stale socs entry must not create
-        # energy) and the trajectory is floored at zero (the battery cannot go negative).
-        soc_start = min(self.capacity, kwargs['socs'][f'{self.name}'][0])
-        self.soc = np.maximum(0, [soc_start] * len(self.energy) - self.energy)
+        # The state of charge the car actually has right now. Capped at the capacity so that a
+        # stale socs entry cannot create energy.
+        self.soc_start = min(self.capacity, kwargs['socs'][f'{self.name}'][0])
+
+        # Reference state of charge at each timestep if nothing were charged: the current soc
+        # minus the cumulative energy the forecast expects the car to consume by driving,
+        # floored at zero because the battery cannot go negative.
+        self.soc = np.maximum(0, [self.soc_start] * len(self.energy) - self.energy)
+
+        # Energy consumed by driving in each timestep, taken as the step-to-step decrease of the
+        # reference trajectory rather than straight from the forecast. That clamps a timestep's
+        # consumption to what the car can actually hold, so a forecast that would drive the soc
+        # below zero makes the car stop early instead of making the whole problem infeasible.
+        self.consumption = (np.concatenate([[self.soc_start], self.soc[:-1]]) - self.soc)
 
         # Define the lower and upper bounds for the charging power based on the charging scheme
         self.lower, self.upper = [0] * len(self.availability), [0] * len(self.availability)
@@ -454,9 +462,12 @@ class Ev(LinopyComps):
         # Define the soc variable
         model = self.define_storage_variable(model, comp_type=self.comp_type, lower=0, upper=self.capacity)
 
-        # Define the soc variable for the previous timestep (thus the value of self.soc[0]) as needed for constraints
-        self.add_variable_to_model(model, name=f'{self.name}_{self.comp_type}_soc_init', lower=self.soc[0],
-                                   upper=self.soc[0])
+        # Define the soc variable for the timestep before the horizon, as needed for constraints
+        # Note: this is the soc the car has now, before any driving in the horizon. The driving
+        # itself enters through the soc recursion, so subtracting it here as well would count it
+        # twice.
+        self.add_variable_to_model(model, name=f'{self.name}_{self.comp_type}_soc_init',
+                                   lower=self.soc_start, upper=self.soc_start)
 
         return model
 
@@ -639,21 +650,32 @@ class Ev(LinopyComps):
         var_soc_prev.upper[0] = var_soc_init.upper
         var_soc_prev.labels[0] = var_soc_init.labels
 
+        # Energy the car spends driving in each timestep, which leaves the battery without
+        # passing through the charger
+        consumption = pd.Series(self.consumption, index=self.timesteps)
+
         # Define the constraint for charging
-        # Constraint: soc_new = soc_old + charge * efficiency * dt - discharge / efficiency * dt
-        # Note: Everything is moved to the lhs as linopy cannot handle it otherwise
+        # Constraint:
+        #   soc_new = soc_old + charge * efficiency * dt - discharge / efficiency * dt - driving
+        # Note: Everything except the driving term is moved to the lhs as linopy cannot handle it
+        #  otherwise. Without that term the soc variable would be a charge-only trajectory while
+        #  the charging-scheme targets are computed from a trajectory that does account for
+        #  driving, so the two would be on different scales and the targets would stop binding
+        #  as soon as the car had driven anywhere.
         cons_name = f'{self.name}_soc'
         if cons_name not in model.constraints:
             eq = (var_soc
                   - var_soc_prev
                   + var_charge * efficiency * dt_hours
                   + var_discharge / efficiency * dt_hours  # negative as discharging is negative
-                  == 0)
+                  == -consumption)
 
             model.add_constraints(eq, name=cons_name)
         else:
             model.constraints[cons_name].coeffs[:, 2] = dt_hours * efficiency
             model.constraints[cons_name].coeffs[:, 3] = dt_hours / efficiency
+            # The horizon has moved on, so the driving profile has to move with it
+            model.constraints[cons_name].rhs = -consumption
 
         return model
 

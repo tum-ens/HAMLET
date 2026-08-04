@@ -145,3 +145,83 @@ class TestMinSocScheme:
         # One timestep earlier the soc may still be one timestep of charging below the ceiling.
         reachable_at_0 = 20_000 + CHARGING_POWER
         assert target_soc[0] == pytest.approx(reachable_at_0 - CHARGING_POWER)
+
+
+class TestDrivingEntersTheSocRecursion:
+    """The soc variable and the charging-scheme targets must be on the same scale.
+
+    The soc recursion used to model charging only, while the targets were computed from a
+    trajectory that did account for driving. The two therefore drifted apart the moment the car
+    went anywhere, and the `min_soc` constraint stopped binding for the rest of the horizon.
+    """
+
+    @pytest.mark.solver
+    def test_the_car_recharges_exactly_what_it_drove(self, timesteps, delta):
+        """Regression: after a trip the minimum-SoC constraint was satisfied by arithmetic.
+
+        The car starts full-enough at 40 kWh, spends 15 kWh driving while away, and comes back
+        to a charger with a minimum SoC of 80 % (40 kWh). It therefore has to put back exactly
+        the 15 kWh it used.
+
+        With driving missing from the recursion the soc variable never dropped, so charging
+        nothing already satisfied the constraint and the car ended the horizon 15 kWh short.
+        """
+        ev = make_ev(timesteps, delta,
+                     soc_init=40_000,
+                     energy_consumed=[0, 15_000, 0, 0],
+                     availability=[1, 0, 1, 1],
+                     scheme={'method': 'min_soc', 'min_soc': {'val': 0.8}})
+        model = build_model(ev, timesteps)
+
+        # Charging is otherwise free, so price it to make the optimiser charge as little as the
+        # constraints allow
+        charge = model.variables[f'{NAME}_{c.P_EV}_{c.ET_ELECTRICITY}_{c.PF_OUT}']
+        model.add_objective(-1 * charge.sum(), overwrite=True)
+        model.solve(solver_name='highs', output_flag=False, log_to_console=False)
+
+        assert model.status == 'ok'
+        soc = model.variables[f'{NAME}_{c.P_EV}_soc'].solution.values
+
+        # The trip shows up in the trajectory the model solves for, not just in the reference
+        assert soc[1] == pytest.approx(soc[0] - 15_000, abs=1)
+        # ... the minimum is reached before the car leaves again ...
+        assert soc[-1] == pytest.approx(CAPACITY * 0.8, abs=1)
+        # ... and it charged exactly the trip's worth, no more
+        assert -charge.solution.values.sum() == pytest.approx(15_000, abs=1)
+
+    @pytest.mark.solver
+    def test_the_soc_trajectory_matches_the_reference_when_nothing_charges(self, timesteps, delta):
+        """With the charger unavailable the soc variable must reproduce the reference exactly.
+
+        This is what "same scale" means: the trajectory the targets are built from and the one
+        the model solves for coincide when no charging is possible.
+        """
+        ev = make_ev(timesteps, delta,
+                     soc_init=40_000,
+                     energy_consumed=[5_000, 5_000, 5_000, 5_000],
+                     availability=[0, 0, 0, 0],
+                     scheme={'method': 'min_soc', 'min_soc': {'val': 0.8}})
+        model = build_model(ev, timesteps)
+        model.add_objective(0 * model.variables[f'{NAME}_{c.P_EV}_soc'].sum(), overwrite=True)
+        model.solve(solver_name='highs', output_flag=False, log_to_console=False)
+
+        assert model.status == 'ok'
+        soc = model.variables[f'{NAME}_{c.P_EV}_soc'].solution.values
+
+        assert soc == pytest.approx(list(ev.soc), abs=1)
+
+    def test_driving_is_clamped_to_what_the_battery_holds(self, timesteps, delta):
+        """A forecast that would drive the soc below zero must not make the problem infeasible.
+
+        Per-timestep consumption is taken as the decrease of the floored reference trajectory,
+        so it can never exceed what the car actually has.
+        """
+        ev = make_ev(timesteps, delta,
+                     soc_init=10_000,
+                     energy_consumed=[6_000, 6_000, 6_000, 6_000],
+                     availability=[0, 0, 0, 0],
+                     scheme={'method': 'full'})
+
+        assert ev.consumption.min() >= 0
+        assert ev.consumption.sum() == pytest.approx(10_000)  # never more than it started with
+        assert list(ev.soc) == [4_000, 0, 0, 0]
