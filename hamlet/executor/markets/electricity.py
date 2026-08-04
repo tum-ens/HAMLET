@@ -602,6 +602,31 @@ class ElectricityMarket(MarketBase):
 
         return transactions, self.bids_uncleared, self.offers_uncleared
 
+    @staticmethod
+    def _to_net_energy(transactions):
+        """Reduces the gross energy in/out columns to the net energy exchanged with the grid.
+
+        Grid fees and levies are owed on what an agent actually drew from or fed into the grid
+        over the timestep, not on the sum of its individual purchases and sales. An agent that
+        bought 5 kWh and sold 3 kWh in the same timestep nets 2 kWh of consumption; charging it
+        on 5 kWh in and 3 kWh out overcharges it on both sides.
+
+        Exactly one of the two columns is non-zero afterwards.
+
+        Args:
+            transactions (pl.DataFrame): Frame with signed `energy_in` and `energy_out` columns.
+
+        Returns:
+            pl.DataFrame: The same frame with both columns reduced to the net flow.
+        """
+
+        return transactions.with_columns([
+            (pl.col(c.TC_ENERGY_IN) - pl.col(c.TC_ENERGY_OUT)).clip(lower_bound=0)
+            .alias(c.TC_ENERGY_IN).cast(pl.UInt64),
+            (pl.col(c.TC_ENERGY_OUT) - pl.col(c.TC_ENERGY_IN)).clip(lower_bound=0)
+            .alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
+        ])
+
     def __apply_grid_levies(self, transactions):
         """Applies levies and taxes to the market"""
         # Needs to discriminate between the different types of levies and taxes (wholesale or local)
@@ -753,10 +778,13 @@ class ElectricityMarket(MarketBase):
         # TODO: Change this to how='right' once polars 1.0 is used
         transactions = transactions.join(to_join, on=c.TC_ID_AGENT, how='left', suffix=suffix, coalesce=True)
         # Replace the new energy columns with the old ones
+        # Note: signed integers here so the net difference below can be taken
         transactions = transactions.with_columns([
-            pl.col(f'{c.TC_ENERGY_IN}{suffix}').alias(c.TC_ENERGY_IN).cast(pl.UInt64),
-            pl.col(f'{c.TC_ENERGY_OUT}{suffix}').alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
+            pl.col(f'{c.TC_ENERGY_IN}{suffix}').alias(c.TC_ENERGY_IN).cast(pl.Int64),
+            pl.col(f'{c.TC_ENERGY_OUT}{suffix}').alias(c.TC_ENERGY_OUT).cast(pl.Int64),
         ])
+        # Reduce the summed (gross) energy to the net energy actually exchanged with the grid
+        transactions = self._to_net_energy(transactions)
         # Drop the unnecessary columns to finally have the transactions that are relevant for the grid fees and levies
         transactions = transactions.drop([f'{c.TC_ENERGY_IN}{suffix}', f'{c.TC_ENERGY_OUT}{suffix}'])
 
