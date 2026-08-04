@@ -7,6 +7,7 @@ __email__ = "markus.doepfert@tum.de"
 # This file is in charge of handling the agents in the execution of the scenario
 
 # Imports
+import pandas as pd
 import polars as pl
 
 from hamlet import constants as c
@@ -71,8 +72,10 @@ class AgentBase:
 
         # Loop through the ems controllers
         for controller, params in controllers.items():
-            # Skip if method is None
-            if params['method'] is None:
+            # Skip if no method is configured
+            # Note: an empty cell in agents.xlsx arrives as NaN rather than None, so checking for
+            # None alone let a disabled controller run anyway
+            if params['method'] is None or pd.isna(params['method']):
                 continue
 
             # Get the controller
