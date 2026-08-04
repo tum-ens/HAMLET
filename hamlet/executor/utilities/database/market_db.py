@@ -143,7 +143,9 @@ class MarketDB:
             # Collect dataframe parts
             df_parts = [getattr(self, attr_name)]  # initialize with current data
             # Add all saved data in files
-            for file_part in os.listdir(path):
+            # Note: the folder only exists if records were actually dropped for this table, so a
+            # missing folder simply means everything is still held in memory
+            for file_part in os.listdir(path) if os.path.isdir(path) else []:
                 df = f.load_file(path=os.path.join(path, file_part), df='polars', method='eager', parse_dates=True)
                 df = df.cast(schema)
                 df_parts.append(df)
@@ -153,7 +155,7 @@ class MarketDB:
                 df = df.sort(by=[c.TC_TIMESTAMP, c.TC_TIMESTEP]).to_pandas()
                 f.save_file(path=os.path.join(self.market_save, file_name), data=df, df='pandas')
             # Optionally delete the past data
-            if delete_dir:
+            if delete_dir and os.path.isdir(path):
                 shutil.rmtree(path)
 
     def set_market_transactions(self, data):

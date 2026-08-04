@@ -17,9 +17,14 @@ START = datetime.datetime(2021, 3, 24, 12, tzinfo=datetime.timezone.utc)
 
 
 def table(offsets_seconds):
-    """A market table with one row per offset from START."""
+    """A market table with one row per offset from START.
+
+    Carries both time columns because `concat_past_data` sorts by them.
+    """
+    stamps = [START + datetime.timedelta(seconds=s) for s in offsets_seconds]
     return pl.DataFrame({
-        c.TC_TIMESTEP: [START + datetime.timedelta(seconds=s) for s in offsets_seconds],
+        c.TC_TIMESTAMP: stamps,
+        c.TC_TIMESTEP: stamps,
         c.TC_ID_AGENT: [f'agent{i}' for i in range(len(offsets_seconds))],
     })
 
@@ -88,6 +93,23 @@ def test_empty_table_is_a_no_op(market_db, tmp_path):
 
     assert kept.is_empty()
     assert list(tmp_path.rglob('*.ft')) == []
+
+
+def test_concat_past_data_tolerates_a_missing_folder(market_db, tmp_path):
+    """Nothing dropped means no folder, and concatenating must still work.
+
+    The folder used to be created unconditionally as a side effect of dropping records, and
+    `concat_past_data` relied on that: deferring the creation made it raise FileNotFoundError
+    at the end of a run in which no table ever left the horizon.
+    """
+    market_db.market_save = str(tmp_path)
+    market_db.market_transactions = table([3600, 5400, 7200])
+
+    run(market_db, tmp_path, START + datetime.timedelta(seconds=7200))
+    market_db.concat_past_data()
+
+    written = list(tmp_path.glob(f'{c.TN_MARKET_TRANSACTIONS}.ft'))
+    assert len(written) == 1
 
 
 def test_unsorted_table_still_splits_correctly(market_db, tmp_path):
