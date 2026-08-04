@@ -145,6 +145,17 @@ class Linopy(OptimBase):
                 else:
                     pass
 
+        # Optionally give each balance equation a slack variable pair so the problem always has a
+        # solution. Off by default: with an unbounded market variable the balance is always
+        # satisfiable, so the slacks would protect against nothing while still moving the results
+        # (extra variables change which equally-optimal solution the solver returns).
+        # See c.DEFAULT_SLACK_ENABLED.
+        for energy_type in (balance_equations if self.slack_enabled else {}):
+            balance_equations[energy_type] += self.model.add_variables(
+                name=f'{energy_type}_{c.OM_GENERATION}_slack', lower=0, integer=False)
+            balance_equations[energy_type] -= self.model.add_variables(
+                name=f'{energy_type}_{c.OM_LOAD}_slack', lower=0, integer=False)
+
         # Add the constraints for each energy type
         for energy_type, equation in balance_equations.items():
             self.model.add_constraints(equation == 0, name="balance_" + energy_type)
@@ -178,6 +189,11 @@ class Linopy(OptimBase):
 
                 # Add deviation to objective function
                 objective.append(variable * weight)
+            elif variable_name.endswith('_slack'):
+                # This objective is a weighted sum of set-point deviations rather than a cost, so
+                # the slack penalty is a priority weight. It sits above every deviation weight
+                # above, making slack the least preferred way to satisfy the balance.
+                objective.append(variable * self.slack_penalty)
 
         # Set the objective function to the model with the minimize direction
         self.model.add_objective(sum(objective), overwrite=True)

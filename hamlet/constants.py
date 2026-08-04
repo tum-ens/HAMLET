@@ -349,3 +349,56 @@ COMP_MAP = {
     # Hybrid
     P_HP: {ET_ELECTRICITY: OM_LOAD, ET_HEAT: OM_GENERATION},
 }
+
+########################################################################################################################
+# Controller limits and penalties
+########################################################################################################################
+
+# Key under which per-agent overrides may be given in the controller configuration
+K_LIMITS = 'limits'
+K_PENALTIES = 'penalties'
+
+# Bounds on the real-time control optimisation variables (unit: W).
+# None means unbounded. The defaults below reproduce the historical behaviour, in which the
+# market variable and the heat-pump fallbacks are unbounded and the balancing power is set to a
+# placeholder large enough never to bind.
+# Override per agent through the `limits` block of the rtc controller configuration, e.g.
+#   controller:
+#     rtc:
+#       limits:
+#         balancing_power: 4000000
+#         market_power: 4000000
+# TODO: balancing_power should be derived from the retailer's declared balancing energy
+#  (`balancing_energy_in`/`balancing_energy_out`), converted from Wh to W by the timestep,
+#  rather than carried as a placeholder here.
+RTC_DEFAULT_LIMITS = {
+    'balancing_power': 10_000_000_000,  # upper bound on the market deviation variables
+    'market_power': None,               # bound on the market power variable (None -> unbounded)
+    'hp_power_heat': None,              # heat output fallback when sizing data is missing
+    'hp_power_electricity': None,       # electrical input fallback when the COP column is missing
+}
+
+# Slack variables on the balance equations let a controller shed or dump energy at a heavy
+# penalty rather than fail outright. They are OFF by default: with the unbounded market variable
+# of RTC_DEFAULT_LIMITS the balance is always satisfiable, so the slacks protect against nothing,
+# and adding variables to an already-feasible problem changes which of several equally-optimal
+# solutions the solver returns -- results move for no benefit. Measured on the shipped example.
+# Turn them on where the balance genuinely can become unsatisfiable, i.e. once the market
+# variable is given a finite bound:
+#   controller:
+#     rtc:
+#       slack: true
+K_SLACK = 'slack'
+DEFAULT_SLACK_ENABLED = False
+
+# Penalty on those slack variables.
+# The feedback controller's objective is monetary, so its penalty is a value of lost load in the
+# same units as the price forecasts. Prices are integers in 0.01 ct/kWh -- the shipped retailer
+# data uses 1992 for a 19.92 ct/kWh retail price -- i.e. 0.1 EUR/MWh per unit. 100_000 is
+# therefore 10,000 EUR/MWh, within the usual VOLL range and far above any wholesale price, so
+# shedding load is always dearer than serving it.
+# The real-time controller's objective is a weighted sum of set-point deviations rather than a
+# cost, so its penalty is a dimensionless priority weight. It sits above the largest deviation
+# weight (market, 4) so slack is always the least preferred option.
+FBC_DEFAULT_SLACK_PENALTY = 100_000
+RTC_DEFAULT_SLACK_PENALTY = 10

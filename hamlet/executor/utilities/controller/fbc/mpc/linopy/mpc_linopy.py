@@ -139,6 +139,18 @@ class Linopy(MpcBase):
                     # The variable is not a market or plant variable
                     pass
 
+        # Optionally give each balance equation a slack variable pair, carrying a value-of-lost-
+        # load penalty, so the problem always has a solution. Off by default because the extra
+        # variables move the results of problems that were already feasible.
+        # See c.DEFAULT_SLACK_ENABLED.
+        for energy_type in (balance_equations if self.slack_enabled else {}):
+            balance_equations[energy_type] += self.model.add_variables(
+                name=f'{energy_type}_{c.OM_GENERATION}_slack', lower=0, upper=np.inf,
+                coords=[self.timesteps], integer=False)
+            balance_equations[energy_type] -= self.model.add_variables(
+                name=f'{energy_type}_{c.OM_LOAD}_slack', lower=0, upper=np.inf,
+                coords=[self.timesteps], integer=False)
+
         # Add the constraints for each energy type
         for energy_type, equation in balance_equations.items():
             self.model.add_constraints(equation == 0, name="balance_" + energy_type)
@@ -163,6 +175,11 @@ class Linopy(MpcBase):
                     objective.append(-1 * variable)
                 else:
                     pass
+            elif variable_name.endswith('_slack'):
+                # This objective is monetary, so the slack penalty is a value of lost load in the
+                # same units as the price forecasts (0.01 ct/kWh, i.e. 0.1 EUR/MWh per unit).
+                # Shedding load must always be dearer than serving it at any market price.
+                objective.append(self.slack_penalty * variable)
             else:
                 pass
 
