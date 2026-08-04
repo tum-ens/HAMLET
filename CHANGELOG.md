@@ -28,6 +28,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - Added a test suite (`tests/`) with a layered layout: component physics, accounting
   invariants and targeted regression tests, runnable with `python -m pytest tests`
+### Changed
+- Out-of-horizon market records are now split off by slicing the sorted tables instead of
+  scanning them twice, and the output folder is only created when something is written
+- pandapower's progress bar is no longer printed once per horizon on every timestep when the
+  §14a grid restriction is active
 
 ## [Version 1.2.0] - 2025-07-29
 ### Added
