@@ -576,8 +576,8 @@ class ElectricityMarket(MarketBase):
 
         # Add price pu column information from the retailer
         transactions = transactions.with_columns([
-            pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_IN}'].alias(c.TC_PRICE_PU_OUT)).cast(pl.Int32),
-            pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_OUT}'].alias(c.TC_PRICE_PU_IN)).cast(pl.Int32),
+            pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_IN}'][0]).alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
+            pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_OUT}'][0]).alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
         ])
         # Add missing columns
         transactions = transactions.with_columns([
@@ -813,10 +813,10 @@ class ElectricityMarket(MarketBase):
 
         # Add temporary columns
         grid = grid.with_columns([
-            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'].alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_OUT}')),
-            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'].alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_IN}')),
-            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_OUT}'].alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_OUT}')),
-            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}'].alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_IN}')),
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'][0]).alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_OUT}'),
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'][0]).alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_IN}'),
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_OUT}'][0]).alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_OUT}'),
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}'][0]).alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_IN}'),
         ])
 
         # Replace price with agent forecast for variable grid fees
@@ -868,8 +868,8 @@ class ElectricityMarket(MarketBase):
         # Adjust the price and trade type columns
         levies = levies.with_columns([
             # Energy pu prices
-            pl.lit(retailer[f'{c.TT_LEVIES}_{c.TC_PRICE_OUT}'].alias(c.TC_PRICE_PU_OUT)).cast(pl.Int32),
-            pl.lit(retailer[f'{c.TT_LEVIES}_{c.TC_PRICE_IN}'].alias(c.TC_PRICE_PU_IN)).cast(pl.Int32),
+            pl.lit(retailer[f'{c.TT_LEVIES}_{c.TC_PRICE_OUT}'][0]).alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
+            pl.lit(retailer[f'{c.TT_LEVIES}_{c.TC_PRICE_IN}'][0]).alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
             # Trade type
             pl.lit(c.TT_LEVIES).alias(c.TC_TYPE_TRANSACTION).cast(pl.Categorical),
         ])
