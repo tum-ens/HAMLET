@@ -171,8 +171,13 @@ class Market(POIComps):
         self.dt_hours = kwargs['delta'].total_seconds() * c.SECONDS_TO_HOURS  # time delta in hours
 
         # Calculate the upper and lower bounds for the market power from the energy quantity
-        self.upper = [int(round(x / self.dt_hours)) for x in self.fcast[f'energy_quantity_sell']]
-        self.lower = [int(round(x / self.dt_hours * -1)) for x in self.fcast[f'energy_quantity_buy']]
+        # Note: `energy_quantity_sell`/`energy_quantity_buy` never existed in the retailer data,
+        # so this raised KeyError and made the backend unusable. The columns are named as in the
+        # linopy backend: `_out` is the retailer selling, i.e. how much the agent may buy.
+        self.upper = [int(round(x / self.dt_hours))
+                      for x in self.fcast[f'{c.TC_ENERGY}_{c.TC_ENERGY}_{c.PF_OUT}']]
+        self.lower = [int(round(x / self.dt_hours * -1))
+                      for x in self.fcast[f'{c.TC_ENERGY}_{c.TC_ENERGY}_{c.PF_IN}']]
 
         # Get market price forecasts
         # See the linopy backend: `_out` is the retailer selling, i.e. the agent's buy price

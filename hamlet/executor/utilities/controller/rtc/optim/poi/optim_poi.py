@@ -122,6 +122,16 @@ class POI(OptimBase):
                 else:
                     pass
 
+        # Give each balance equation a slack variable pair so a single infeasible agent cannot
+        # abort the whole run. This matters most for the non-electricity carriers: only the
+        # electricity balance has a market term to absorb a mismatch.
+        # See c.DEFAULT_SLACK_ENABLED; disable per agent with `slack: false`.
+        for energy_type in (balance_equations if self.slack_enabled else {}):
+            for direction, sign in ((c.OM_GENERATION, 1), (c.OM_LOAD, -1)):
+                name = f'{energy_type}_{direction}_slack'
+                self.variables[name] = self.model.add_variable(name=name, lb=0, ub=inf)
+                balance_equations[energy_type].append(sign * self.variables[name])
+
         # Add the constraints for each energy type
         for energy_type, variables in balance_equations.items():
             self.model.add_linear_constraint(sum(variables), poi.ConstraintSense.Equal, 0,
@@ -154,6 +164,10 @@ class POI(OptimBase):
 
                 # Add deviation to objective function
                 objective.append(variable * weight)
+            elif variable_name.endswith('_slack'):
+                # This objective is a weighted sum of set-point deviations rather than a cost, so
+                # the slack penalty is a priority weight, above every deviation weight above.
+                objective.append(variable * self.slack_penalty)
 
         # Set the objective function to the model with the minimize direction
         self.model.set_objective(sum(objective), poi.ObjectiveSense.Minimize)

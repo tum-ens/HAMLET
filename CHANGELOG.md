@@ -21,8 +21,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   price for buying than for selling and could trade against the retailer at a profit
 - Fixed the MPC bounding the agent's purchase with the retailer's purchase quantity rather than
   its sale quantity (no effect while the two are configured equal)
-- Fixed the PyOptInterface MPC backend reading the energy prices the wrong way round, which left
-  it inconsistent with the linopy backend
+- Fixed the PyOptInterface backends, which had drifted from the linopy ones: the MPC read the
+  energy prices the wrong way round and bounded the market power with retailer columns that do
+  not exist (so it raised `KeyError` on construction and the backend was unusable), the EV
+  state of charge and `min_soc` scheme still had their pre-fix forms, the real-time controller
+  ignored the configurable optimisation bounds, and neither controller had balance slacks
 - Fixed grid fees and levies being charged on gross rather than net energy, which overcharged
   every agent that both bought and sold within a timestep
 - Fixed the net energy behind grid fees and levies omitting the trades cleared in the timestep

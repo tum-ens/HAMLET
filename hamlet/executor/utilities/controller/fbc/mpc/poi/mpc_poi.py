@@ -113,6 +113,17 @@ class POI(MpcBase):
                     # The variable is not a market or plant variable
                     pass
 
+        # Give each balance equation a slack variable pair, carrying a value-of-lost-load
+        # penalty, so a single infeasible agent cannot abort the whole run.
+        # See c.DEFAULT_SLACK_ENABLED; disable per agent with `slack: false`.
+        for energy_type in (balance_equations if self.slack_enabled else {}):
+            for direction, sign in ((c.OM_GENERATION, 1), (c.OM_LOAD, -1)):
+                name = f'{energy_type}_{direction}_slack'
+                self.variables[name] = np.array(
+                    [self.model.add_variable(name=f'{name}_{t}', lb=0, ub=np.inf)
+                     for t in range(len(self.timesteps))])
+                balance_equations[energy_type].append(sign * self.variables[name])
+
         # Add the constraints for each energy type
         for energy_type, expressions in balance_equations.items():
             timestep_equations = np.sum(expressions, axis=0)
@@ -127,9 +138,17 @@ class POI(MpcBase):
         objective = []
 
         # Loop through the model's variables to identify the balancing variables
+        dt_hours = self.dt.total_seconds() * c.SECONDS_TO_HOURS
         for variable_name, variables in self.variables.items():
+            # Note: the slack test must come first. Market names are user-defined, so a market
+            # called `electricity` would otherwise capture `electricity_gen_slack` below and the
+            # penalty would silently never reach the objective, making slack free.
+            if variable_name.endswith('_slack'):
+                # The penalty is a value of lost load in the price unit, scaled by the timestep
+                # so that it stays a price per unit of energy.
+                objective.append(np.sum(self.slack_penalty * dt_hours * variables))
             # Only consider the cost and revenue components of the markets
-            if variable_name.startswith(tuple(self.market_names)):
+            elif variable_name.startswith(tuple(self.market_names)):
                 if variable_name.endswith('_costs'):
                     # Add the variable to the objective function
                     objective.append(variables)
