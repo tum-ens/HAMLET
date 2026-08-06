@@ -18,19 +18,32 @@ plt.style.use(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'plots.m
 
 class Analyzer:
 
-    def __init__(self, path: dict):
-        """Initializes the analyzer object."""
+    def __init__(self, path: dict, allow_incompatible_scenario: bool = False):
+        """Initializes the analyzer object.
+
+        Args:
+            path: mapping of name -> results folder.
+            allow_incompatible_scenario: plot results whose scenario format this version of
+                HAMLET does not read. Off by default; the executor copies the scenario into the
+                results folder, so results carry the stamp of the scenario that produced them.
+        """
         self.results_path = path
 
         self.general = {}  # general information
 
         self.config = {'setup': {}, 'markets': {}, 'grids': {}}    # configurations
 
+        # Load the general information and refuse any results produced from a scenario format
+        # this version does not read. Plotting is where wrong numbers become figures, so the
+        # check belongs here too and not only in the executor. Every folder is checked before
+        # anything else is loaded, because comparing several runs is the normal case and an
+        # unreadable one should be reported up front rather than after the others have loaded
+        for key, value in self.results_path.items():
+            self.general[key] = f.load_file(os.path.join(value, 'general', 'general.json'))
+            f.check_scenario_format(self.general[key], value, allow_incompatible_scenario)
+
         # Set up the analyzer before plotting
         for key, value in self.results_path.items():
-            # load general information
-            self.general[key] = f.load_file(os.path.join(value, 'general', 'general.json'))
-
             # load configurations
             self.config['setup'][key] = f.load_file(os.path.join(value, 'config', 'setup.yaml'))
             self.config['markets'][key] = f.load_file(os.path.join(value, 'config', 'markets.yaml'))

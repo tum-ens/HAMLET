@@ -18,6 +18,7 @@ from pprint import pprint
 from hamlet.creator.agents.agents import Agents
 from hamlet.creator.markets.markets import Markets
 from hamlet.creator.grids.grids import Grids
+import hamlet.constants as c
 
 
 class Creator:
@@ -392,6 +393,10 @@ class Creator:
 
         # Initialize the general file as a dictionary
         general = {}
+
+        # Stamp the on-disk scenario format so the executor and the analyzer can refuse a folder
+        # they would misread. See c.SCENARIO_FORMAT_VERSION for when this number changes.
+        general[c.K_SCENARIO_FORMAT_VERSION] = c.SCENARIO_FORMAT_VERSION
 
         # Define the structure of the simulation by flattening the scenario structure
         general['structure'] = self.flatten_dict(self.scenario_structure)
