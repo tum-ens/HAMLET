@@ -7,6 +7,7 @@ __email__ = "markus.doepfert@tum.de"
 # This file is in charge of handling the agents in the execution of the scenario
 
 # Imports
+import pandas as pd
 import polars as pl
 
 from hamlet import constants as c
@@ -71,8 +72,10 @@ class AgentBase:
 
         # Loop through the ems controllers
         for controller, params in controllers.items():
-            # Skip if method is None
-            if params['method'] is None:
+            # Skip if no method is configured
+            # Note: an empty cell in agents.xlsx arrives as NaN rather than None, so checking for
+            # None alone let a disabled controller run anyway
+            if params['method'] is None or pd.isna(params['method']):
                 continue
 
             # Get the controller
@@ -126,17 +129,19 @@ class AgentBase:
             train_data = (train_data.join(variable_grid_fees, on=c.TC_TIMESTAMP, how='left'))
 
             # adjust grid fees by replacing original grid fees with variable grid fees
-            if f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}' in train_data.columns:
+            # Note: the section 14a fee applies to what the agent draws from the grid. Retailer
+            # columns are named from the retailer's point of view, so that is the `_out` column.
+            if f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}' in train_data.columns:
                 train_data = train_data.with_columns(pl.when(pl.col(str(bus_id)).is_null())
-                                                       .then(pl.col(f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'))
+                                                       .then(pl.col(f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'))
                                                        .otherwise(pl.col(str(bus_id)))
-                                                       .alias(f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}').cast(pl.Int32))
+                                                       .alias(f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}').cast(pl.Int32))
 
-            if f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}' in train_data.columns:
+            if f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_OUT}' in train_data.columns:
                 train_data = train_data.with_columns(pl.when(pl.col(str(bus_id)).is_null())
-                                                       .then(pl.col(f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}'))
+                                                       .then(pl.col(f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_OUT}'))
                                                        .otherwise(pl.col(str(bus_id)))
-                                                       .alias(f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}').cast(pl.Int32))
+                                                       .alias(f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_OUT}').cast(pl.Int32))
 
             train_data = train_data.drop(str(bus_id))
 

@@ -89,28 +89,58 @@ class MarketDB:
             f.save_file(path=os.path.join(path, 'offers_uncleared.ft'), data=self.offers_uncleared, df='polars')
 
     def save_and_drop_past_records(self, timestamp, path_results):
-        """Save market data out of horizon to files and drop the past records."""
+        """Save market data out of horizon to files and drop the past records.
+
+        Runs on every table on every timestep, over tables that grow through the run, so the
+        cheap paths matter more than the clever ones:
+
+        1. Most calls have nothing to drop at all, because the clearing horizon is usually
+           longer than the interval at which this runs. One pass for the minimum timestep
+           settles that, and costs no allocation.
+        2. When there is something to drop, the membership test is evaluated once and reused
+           for both sides of the split, rather than scanning the frame twice with complementary
+           filters.
+
+        These tables are deliberately *not* assumed to be sorted by timestep. They are appended
+        in clearing order, and each clearing writes rows for every delivery timestep in its
+        horizon, so successive blocks overlap. Measured on the shipped example, only the very
+        first call sees a sorted table and the remaining 22 do not, which is why there is no
+        binary-search path here: it would cost a sortedness scan to almost never apply.
+
+        The output folder is only created when there is something to write; it used to be
+        created for every table on every timestep, each call sleeping 10 ms.
+        """
         horizon_range = self.market_config['clearing']['timing']['horizon'][1]
         start_horizon_ts = timestamp - datetime.timedelta(seconds=horizon_range)
 
         for file_name, schema in self.files:
             attr_name, extension = file_name.rsplit('.', 1)
-            path = os.path.join(path_results, 'markets', self.market_type, self.market_name, 'past_data', attr_name)
-            # Create new folder if nonexisting
-            f.create_folder(path, delete=False)
-            # Skip saving data if all data is within horizon
             df = getattr(self, attr_name)
-            min_timestep = df.select(pl.min(c.TC_TIMESTEP)).item()
-            if min_timestep and min_timestep >= start_horizon_ts:
+
+            if df.is_empty():
                 continue
-            past_data = df.filter(pl.col(c.TC_TIMESTEP) < start_horizon_ts)
-            # Save dataframe to file if nonempty
-            if len(past_data):
-                f.save_file(path=os.path.join(path, f'{attr_name}_{start_horizon_ts.timestamp()}.{extension}'),
-                            data=past_data, df='polars')
-            # Replace with new data
-            new_data = df.filter(pl.col(c.TC_TIMESTEP) >= start_horizon_ts)
-            setattr(self, attr_name, new_data)
+
+            # Skip the whole table if nothing has fallen out of the horizon yet
+            oldest = df.get_column(c.TC_TIMESTEP).min()
+            if oldest is not None and oldest >= start_horizon_ts:
+                continue
+
+            # One membership test, used for both sides of the split
+            # Note: a null timestep counts as not-past, so malformed rows are retained rather
+            # than silently dropped from both sides, which is what comparing them would do
+            is_past = (df.get_column(c.TC_TIMESTEP) < start_horizon_ts).fill_null(False)
+            past_data = df.filter(is_past)
+
+            if past_data.is_empty():
+                continue
+
+            path = os.path.join(path_results, 'markets', self.market_type, self.market_name,
+                                'past_data', attr_name)
+            f.create_folder(path, delete=False)
+            f.save_file(path=os.path.join(path, f'{attr_name}_{start_horizon_ts.timestamp()}.{extension}'),
+                        data=past_data, df='polars')
+
+            setattr(self, attr_name, df.filter(~is_past))
 
     def concat_past_data(self, delete_dir=True):
         """Concatenates past data saved in files"""
@@ -123,7 +153,9 @@ class MarketDB:
             # Collect dataframe parts
             df_parts = [getattr(self, attr_name)]  # initialize with current data
             # Add all saved data in files
-            for file_part in os.listdir(path):
+            # Note: the folder only exists if records were actually dropped for this table, so a
+            # missing folder simply means everything is still held in memory
+            for file_part in os.listdir(path) if os.path.isdir(path) else []:
                 df = f.load_file(path=os.path.join(path, file_part), df='polars', method='eager', parse_dates=True)
                 df = df.cast(schema)
                 df_parts.append(df)
@@ -133,7 +165,7 @@ class MarketDB:
                 df = df.sort(by=[c.TC_TIMESTAMP, c.TC_TIMESTEP]).to_pandas()
                 f.save_file(path=os.path.join(self.market_save, file_name), data=df, df='pandas')
             # Optionally delete the past data
-            if delete_dir:
+            if delete_dir and os.path.isdir(path):
                 shutil.rmtree(path)
 
     def set_market_transactions(self, data):

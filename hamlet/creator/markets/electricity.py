@@ -339,24 +339,47 @@ class ElectricityMarket(Markets):
 
         return df
 
-    @staticmethod
-    def _create_fixed_cols(df: pd.DataFrame, config: dict, commodity: str):
-        """Create fixed prices"""
+    # Components whose configuration lists the agent's buying direction first. The energy and
+    # balancing blocks list selling first, so these two have to be turned around to reach the
+    # single convention used everywhere downstream. See _create_fixed_cols.
+    _BUY_FIRST_COMPONENTS = (c.TT_GRID, c.TT_LEVIES)
+
+    @classmethod
+    def _create_fixed_cols(cls, df: pd.DataFrame, config: dict, commodity: str):
+        """Create fixed prices.
+
+        The configuration is inconsistent about which end of each two-element list is which:
+        `energy` and `balancing` are written as [selling, buying] while `grid` and `levies` are
+        written as [buying, selling]. Both spellings are kept for backwards compatibility with
+        existing scenario configs, and normalised here so that every column this emits follows
+        one convention:
+
+            `_out` is always the direction the agent pays for (the retailer selling to it),
+            `_in` is always the direction the agent is paid for (feeding in).
+
+        That is the convention the executor assumes when it maps retailer columns onto
+        transactions, and the one the retailer input CSVs use.
+        """
+
+        # Order in which to write the two list entries: (value for _in, value for _out)
+        def directed(val):
+            return (val[1], val[0]) if commodity in cls._BUY_FIRST_COMPONENTS else (val[0], val[1])
 
         # Add price information
         for key, val in config.items():
             if isinstance(val, list):
+                sell, buy = directed(val)
                 match key:
                     case c.TC_PRICE | c.TT_MARKET | c.TT_RETAIL:
-                        df[f'{commodity}_{key}_{c.PF_IN}'] = int(val[0] * c.EUR_KWH_TO_EURe7_WH)
-                        df[f'{commodity}_{key}_{c.PF_OUT}'] = int(val[1] * c.EUR_KWH_TO_EURe7_WH)
+                        df[f'{commodity}_{key}_{c.PF_IN}'] = int(sell * c.EUR_KWH_TO_EURe7_WH)
+                        df[f'{commodity}_{key}_{c.PF_OUT}'] = int(buy * c.EUR_KWH_TO_EURe7_WH)
                     case c.TC_QUANTITY:
                         # TODO: Change to conform with issue #117 once it is implemented
-                        df[f'{commodity}_{c.TC_ENERGY}_{c.PF_IN}'] = int(val[0])
-                        df[f'{commodity}_{c.TC_ENERGY}_{c.PF_OUT}'] = int(val[1])
+                        df[f'{commodity}_{c.TC_ENERGY}_{c.PF_IN}'] = int(sell)
+                        df[f'{commodity}_{c.TC_ENERGY}_{c.PF_OUT}'] = int(buy)
                     case _:
-                        df[f'{commodity}_{key}_{c.PF_IN}'] = int(val[0])
-                        df[f'{commodity}_{key}_{c.PF_OUT}'] = int(val[1])
+                        df[f'{commodity}_{key}_{c.PF_IN}'] = int(sell)
+                        df[f'{commodity}_{key}_{c.PF_OUT}'] = int(buy)
 
             else:
                 df[f'{commodity}_{key}'] = val

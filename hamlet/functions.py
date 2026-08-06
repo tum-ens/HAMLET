@@ -95,10 +95,14 @@ def load_file(path: str, index: int = 0, df: str = 'pandas', parse_dates: bool |
         if df == 'pandas':
             file = pd.read_csv(path, parse_dates=parse_dates, index_col=index)
         elif df == 'polars':
+            # Note: polars needs a bool here. The default `parse_dates=None` means "unspecified",
+            # which pandas tolerates and polars rejects with a TypeError naming an argument the
+            # caller never passed, so any csv read with default arguments used to fail.
+            try_parse_dates = bool(parse_dates)
             if method == 'lazy':
-                file = pl.scan_csv(path, try_parse_dates=parse_dates)
+                file = pl.scan_csv(path, try_parse_dates=try_parse_dates)
             elif method == 'eager':
-                file = pl.read_csv(path, try_parse_dates=parse_dates)
+                file = pl.read_csv(path, try_parse_dates=try_parse_dates)
         else:
             raise ValueError(f'Dataframe type "{df}" not supported')
     elif file_type == 'xlsx':

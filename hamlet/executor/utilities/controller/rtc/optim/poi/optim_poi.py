@@ -4,10 +4,14 @@ __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
+import logging
+
 from pyoptinterface import gurobi
 
 from hamlet.executor.utilities.controller.rtc.optim.poi.components import *
 from hamlet.executor.utilities.controller.rtc.optim.optim_base import OptimBase
+
+LOGGER = logging.getLogger(__name__)
 
 # Define all the available plants for this controller
 AVAILABLE_PLANTS = {
@@ -122,6 +126,16 @@ class POI(OptimBase):
                 else:
                     pass
 
+        # Give each balance equation a slack variable pair so a single infeasible agent cannot
+        # abort the whole run. This matters most for the non-electricity carriers: only the
+        # electricity balance has a market term to absorb a mismatch.
+        # See c.DEFAULT_SLACK_ENABLED; disable per agent with `slack: false`.
+        for energy_type in (balance_equations if self.slack_enabled else {}):
+            for direction, sign in ((c.OM_GENERATION, 1), (c.OM_LOAD, -1)):
+                name = f'{energy_type}_{direction}_slack'
+                self.variables[name] = self.model.add_variable(name=name, lb=0, ub=inf)
+                balance_equations[energy_type].append(sign * self.variables[name])
+
         # Add the constraints for each energy type
         for energy_type, variables in balance_equations.items():
             self.model.add_linear_constraint(sum(variables), poi.ConstraintSense.Equal, 0,
@@ -154,9 +168,39 @@ class POI(OptimBase):
 
                 # Add deviation to objective function
                 objective.append(variable * weight)
+            elif variable_name.endswith('_slack'):
+                # This objective is a weighted sum of set-point deviations rather than a cost, so
+                # the slack penalty is a priority weight, above every deviation weight above.
+                objective.append(variable * self.slack_penalty)
 
         # Set the objective function to the model with the minimize direction
         self.model.set_objective(sum(objective), poi.ObjectiveSense.Minimize)
+
+    # Slack below this many W is solver tolerance rather than a real imbalance
+    SLACK_REPORTING_THRESHOLD = 1e-3
+
+    def _warn_on_slack(self):
+        """Report when a balance was only closed by shedding or dumping energy.
+
+        The shed energy is never written to the setpoints, so without this an agent that shed
+        3 kW is indistinguishable in the results from one that served it.
+
+        Note: reported through `logging`, not `warnings` -- the executor installs a blanket
+        `warnings.filterwarnings("ignore")` at import time.
+        """
+
+        for name, variables in self.variables.items():
+            if not name.endswith('_slack'):
+                continue
+            try:
+                peak = float(np.max(np.abs([self.model.get_value(v)
+                                            for v in np.atleast_1d(variables)])))
+            except Exception:
+                continue
+            if peak > self.SLACK_REPORTING_THRESHOLD:
+                LOGGER.warning(
+                    'Agent %s: energy balance closed with %.1f W of "%s". The setpoints for '
+                    'this timestep do not balance.', self.agent.agent_id, peak, name)
 
     def run(self):
 
@@ -178,6 +222,9 @@ class POI(OptimBase):
         if status not in [poi.TerminationStatusCode.OPTIMAL, poi.TerminationStatusCode.TIME_LIMIT]:
             print(f'Exited with status "{status[0]}". \n')
             # raise ValueError(f"Optimization failed: {status}")
+
+        # Surface any energy that was shed or dumped to close the balance
+        self._warn_on_slack()
 
         # Process the solution into control commands and return
         self.agent = self.process_solution()

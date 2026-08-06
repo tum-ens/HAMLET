@@ -95,8 +95,10 @@ class EnWG14a(GridRestrictionBase):
         ow.log_variable('res_bus', 'vm_pu')  # notice the voltage drop is currently not considered
 
         # run time series calculation
+        # Note: verbose=False suppresses pandapower's own progress bar, which would otherwise be
+        # printed once per horizon on every timestep. It does not suppress warnings or errors.
         try:
-            run_timeseries(grid, range(int(horizon)))
+            run_timeseries(grid, range(int(horizon)), verbose=False)
         except pp.powerflow.LoadflowNotConverged:  # avoid stopping the simulation when load flow not converged
             print('Load flow not converged for timestamp: ', str(self.timestamp))
             return 0

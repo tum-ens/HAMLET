@@ -8,6 +8,7 @@ import os.path
 import pickle
 import polars as pl
 from polars.type_aliases import SizeUnit
+from hamlet import constants as c
 from hamlet import functions as f
 
 
@@ -78,6 +79,11 @@ class AgentDB:
         self.meters = f.load_file(path=os.path.join(self.agent_path, 'meters.ft'), df='polars', method='eager')
         self.socs = f.load_file(path=os.path.join(self.agent_path, 'socs.ft'), df='polars', method='eager')
         self.timeseries = f.load_file(path=os.path.join(self.agent_path, 'timeseries.ft'), df='polars', method='eager')
+        # Note: some scenarios were written with the time column named 'index' rather than
+        # 'timestamp'. Without this the forecaster fails much later with
+        # "list.remove(x): x not in list", which names neither the file nor the column.
+        if 'index' in self.timeseries.columns:
+            self.timeseries = self.timeseries.rename({'index': c.TC_TIMESTAMP})
         self.setpoints = f.load_file(path=os.path.join(self.agent_path, 'setpoints.ft'), df='polars', method='eager')
         self.forecasts = f.load_file(path=os.path.join(self.agent_path, 'forecasts.ft'), df='polars', method='eager')
 

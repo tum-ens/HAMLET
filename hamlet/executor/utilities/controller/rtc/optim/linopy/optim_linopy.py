@@ -6,11 +6,16 @@ __email__ = "markus.doepfert@tum.de"
 
 import os
 import sys
+import logging
+
+import numpy as np
 
 from linopy.io import read_netcdf
 
 from hamlet.executor.utilities.controller.rtc.optim.linopy.components import *
 from hamlet.executor.utilities.controller.rtc.optim.optim_base import OptimBase
+
+LOGGER = logging.getLogger(__name__)
 
 # Define all the available plants for this controller
 AVAILABLE_PLANTS = {
@@ -145,6 +150,17 @@ class Linopy(OptimBase):
                 else:
                     pass
 
+        # Give each balance equation a slack variable pair so a single infeasible agent cannot
+        # abort the whole run. This matters most for the non-electricity carriers: only the
+        # electricity balance has a market term to absorb a mismatch, so a heat balance that
+        # cannot be met has no other way out.
+        # See c.DEFAULT_SLACK_ENABLED; disable per agent with `slack: false`.
+        for energy_type in (balance_equations if self.slack_enabled else {}):
+            balance_equations[energy_type] += self.model.add_variables(
+                name=f'{energy_type}_{c.OM_GENERATION}_slack', lower=0, integer=False)
+            balance_equations[energy_type] -= self.model.add_variables(
+                name=f'{energy_type}_{c.OM_LOAD}_slack', lower=0, integer=False)
+
         # Add the constraints for each energy type
         for energy_type, equation in balance_equations.items():
             self.model.add_constraints(equation == 0, name="balance_" + energy_type)
@@ -178,11 +194,44 @@ class Linopy(OptimBase):
 
                 # Add deviation to objective function
                 objective.append(variable * weight)
+            elif variable_name.endswith('_slack'):
+                # This objective is a weighted sum of set-point deviations rather than a cost, so
+                # the slack penalty is a priority weight. It sits above every deviation weight
+                # above, making slack the least preferred way to satisfy the balance.
+                objective.append(variable * self.slack_penalty)
 
         # Set the objective function to the model with the minimize direction
         self.model.add_objective(sum(objective), overwrite=True)
 
         return self.model
+
+    # Slack below this many W is solver tolerance rather than a real imbalance
+    SLACK_REPORTING_THRESHOLD = 1e-3
+
+    def _warn_on_slack(self):
+        """Report when a balance was only closed by shedding or dumping energy.
+
+        The slack variables keep an infeasible agent from aborting the run, but they are not
+        written to the setpoints, so a run that used them produces results whose flows do not
+        balance. That has to be visible: an agent that shed 3 kW must not look identical to one
+        that served it.
+
+        Note: this reports through `logging` rather than `warnings`. The executor installs a
+        blanket `warnings.filterwarnings("ignore")` at import time, so a warning here would
+        never reach the user and the shed energy would be silent.
+        """
+
+        for name, variable in self.model.variables.items():
+            if not name.endswith('_slack'):
+                continue
+            try:
+                peak = float(np.max(np.abs(variable.solution.values)))
+            except (AttributeError, ValueError):
+                continue
+            if peak > self.SLACK_REPORTING_THRESHOLD:
+                LOGGER.warning(
+                    'Agent %s: energy balance closed with %.1f W of "%s". The setpoints for '
+                    'this timestep do not balance.', self.agent.agent_id, peak, name)
 
     def run(self):
 
@@ -214,6 +263,9 @@ class Linopy(OptimBase):
             print(self.model.objective)
 
             raise ValueError(f"Optimization failed: {status}")
+
+        # Surface any energy that was shed or dumped to close the balance
+        self._warn_on_slack()
 
         # Process the solution into control commands and return
         self.agent = self.process_solution()
