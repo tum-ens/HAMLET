@@ -4,6 +4,7 @@ __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
+import hamlet.constants as c
 from hamlet.executor.utilities.controller.fbc.fbc_base import FbcBase
 
 
@@ -14,6 +15,11 @@ class MpcBase(FbcBase):
         # Create the model
         self.model = self.get_model(**kwargs)
         self.ems = self.ems['controller']['fbc']
+
+        # Penalty on the slack variables that keep the balance equations feasible.
+        # Override per agent with a `penalties` block under the fbc controller configuration.
+        self.slack_enabled = self.ems.get(c.K_SLACK, c.DEFAULT_SLACK_ENABLED)
+        self.slack_penalty = (self.ems.get(c.K_PENALTIES) or {}).get('slack', c.FBC_DEFAULT_SLACK_PENALTY)
 
         # Create the market objects
         self.market_class = self.get_market_class()

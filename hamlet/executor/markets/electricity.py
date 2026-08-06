@@ -575,9 +575,10 @@ class ElectricityMarket(MarketBase):
         transactions = pl.concat([bids_uncleared, offers_uncleared], how='diagonal')
 
         # Add price pu column information from the retailer
+        self._single_retailer(retailer)
         transactions = transactions.with_columns([
-            pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_IN}'].alias(c.TC_PRICE_PU_OUT)).cast(pl.Int32),
-            pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_OUT}'].alias(c.TC_PRICE_PU_IN)).cast(pl.Int32),
+            pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_IN}'][0]).alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
+            pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_OUT}'][0]).alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
         ])
         # Add missing columns
         transactions = transactions.with_columns([
@@ -602,6 +603,74 @@ class ElectricityMarket(MarketBase):
 
         return transactions, self.bids_uncleared, self.offers_uncleared
 
+    @staticmethod
+    def _single_retailer(retailer):
+        """Returns the retailer frame, checking there is exactly one row to read prices from.
+
+        The market only supports a single retailer per timestep. Indexing row 0 of a longer
+        frame would silently price every agent off the first retailer, so this fails loudly
+        instead -- which is what indexing a multi-row frame used to do by accident.
+        """
+
+        rows = len(next(iter(retailer.values()))) if isinstance(retailer, dict) else len(retailer)
+        if rows != 1:
+            raise ValueError(f'Expected exactly one retailer row for this timestep, got {rows}. '
+                             f'Check for duplicate timestamps in the retailer data.')
+
+        return retailer
+
+    def _transactions_for_netting(self, transactions):
+        """Collects every transaction that counts towards this timestep's net energy.
+
+        Three sources contribute: the transactions already settled in earlier timesteps
+        (`transactions_prev`), the ones cleared on the market in this timestep
+        (`self.transactions`), and the balancing transactions just determined
+        (`transactions`). Omitting the middle one leaves the current timestep's market trades
+        out of the netting, so an agent's grid fees and levies are computed as though it had
+        not traded at all this timestep.
+
+        Args:
+            transactions (pl.DataFrame): The balancing transactions for this timestep.
+
+        Returns:
+            pl.DataFrame: All transactions relevant to the net energy calculation.
+        """
+
+        return pl.concat([self.transactions_prev, self.transactions, transactions],
+                         how='diagonal')
+
+    @staticmethod
+    def _to_net_energy(transactions):
+        """Reduces the gross energy in/out columns to the net energy exchanged with the grid.
+
+        Grid fees and levies are owed on what an agent actually drew from or fed into the grid
+        over the timestep, not on the sum of its individual purchases and sales. An agent that
+        bought 5 kWh and sold 3 kWh in the same timestep nets 2 kWh of consumption; charging it
+        on 5 kWh in and 3 kWh out overcharges it on both sides.
+
+        Exactly one of the two columns is non-zero afterwards.
+
+        Args:
+            transactions (pl.DataFrame): Frame with signed `energy_in` and `energy_out` columns.
+
+        Returns:
+            pl.DataFrame: The same frame with both columns reduced to the net flow.
+        """
+
+        # Guard the dtype: on unsigned columns the difference wraps instead of going negative,
+        # which would silently produce astronomically large "net" energies
+        for column in (c.TC_ENERGY_IN, c.TC_ENERGY_OUT):
+            if not transactions.schema[column].is_signed_integer():
+                raise TypeError(f'{column} must be a signed integer to be netted, '
+                                f'got {transactions.schema[column]}')
+
+        return transactions.with_columns([
+            (pl.col(c.TC_ENERGY_IN) - pl.col(c.TC_ENERGY_OUT)).clip(lower_bound=0)
+            .alias(c.TC_ENERGY_IN).cast(pl.UInt64),
+            (pl.col(c.TC_ENERGY_OUT) - pl.col(c.TC_ENERGY_IN)).clip(lower_bound=0)
+            .alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
+        ])
+
     def __apply_grid_levies(self, transactions):
         """Applies levies and taxes to the market"""
         # Needs to discriminate between the different types of levies and taxes (wholesale or local)
@@ -618,7 +687,7 @@ class ElectricityMarket(MarketBase):
         retailer = retailer.to_dict()
 
         # Concat all transactions for the given timestep to calculate the net energy
-        transactions = pl.concat([self.transactions_prev, transactions], how='diagonal')
+        transactions = self._transactions_for_netting(transactions)
         # Remove retailer from the transactions (as they are not subject to levies and taxes)
         transactions = transactions.filter(~pl.col(c.TC_ID_AGENT).is_in(retailer[c.TC_ID_AGENT].to_list()))
 
@@ -753,10 +822,13 @@ class ElectricityMarket(MarketBase):
         # TODO: Change this to how='right' once polars 1.0 is used
         transactions = transactions.join(to_join, on=c.TC_ID_AGENT, how='left', suffix=suffix, coalesce=True)
         # Replace the new energy columns with the old ones
+        # Note: signed integers here so the net difference below can be taken
         transactions = transactions.with_columns([
-            pl.col(f'{c.TC_ENERGY_IN}{suffix}').alias(c.TC_ENERGY_IN).cast(pl.UInt64),
-            pl.col(f'{c.TC_ENERGY_OUT}{suffix}').alias(c.TC_ENERGY_OUT).cast(pl.UInt64),
+            pl.col(f'{c.TC_ENERGY_IN}{suffix}').alias(c.TC_ENERGY_IN).cast(pl.Int64),
+            pl.col(f'{c.TC_ENERGY_OUT}{suffix}').alias(c.TC_ENERGY_OUT).cast(pl.Int64),
         ])
+        # Reduce the summed (gross) energy to the net energy actually exchanged with the grid
+        transactions = self._to_net_energy(transactions)
         # Drop the unnecessary columns to finally have the transactions that are relevant for the grid fees and levies
         transactions = transactions.drop([f'{c.TC_ENERGY_IN}{suffix}', f'{c.TC_ENERGY_OUT}{suffix}'])
 
@@ -764,11 +836,15 @@ class ElectricityMarket(MarketBase):
         grid = transactions.clone()
 
         # Add temporary columns
+        # Note: in and out are crossed here. The retailer files name their columns from the
+        # retailer's point of view, so `_out` is the retailer selling, i.e. the agent buying,
+        # whereas the transaction columns are from the agent's point of view.
+        self._single_retailer(retailer)
         grid = grid.with_columns([
-            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'].alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_OUT}')),
-            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'].alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_IN}')),
-            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_OUT}'].alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_OUT}')),
-            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}'].alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_IN}')),
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'][0]).alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_IN}'),
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'][0]).alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_OUT}'),
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_OUT}'][0]).alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_IN}'),
+            pl.lit(retailer[f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_IN}'][0]).alias(f'{c.TT_RETAIL}_{c.TC_PRICE_PU_OUT}'),
         ])
 
         # Replace price with agent forecast for variable grid fees
@@ -777,18 +853,23 @@ class ElectricityMarket(MarketBase):
             agent_db = self.database.get_agent_data(region=self.tasks[c.TC_REGION], agent_id=agent_id)
             agent_retailer_data = agent_db.forecaster.train_data[f'{self.market.market_name}_{c.TT_RETAIL}'][c.K_TARGET]
 
-            # iterate through different trade type and different power flow direction
-            for column_name in [[c.TT_RETAIL, c.PF_IN, c.TC_PRICE_PU_IN],[c.TT_RETAIL, c.PF_OUT, c.TC_PRICE_PU_OUT],
-                                [c.TT_MARKET, c.PF_IN, c.TC_PRICE_PU_IN],[c.TT_MARKET, c.PF_OUT, c.TC_PRICE_PU_OUT]]:
+            # iterate through trade type and power flow direction
+            # Note: the forecast direction is the opposite of the transaction direction, for the
+            # same retailer-vs-agent reason as a few lines above
+            for trade_type, forecast_dir, transaction_col in [
+                    (c.TT_RETAIL, c.PF_OUT, c.TC_PRICE_PU_IN),
+                    (c.TT_RETAIL, c.PF_IN, c.TC_PRICE_PU_OUT),
+                    (c.TT_MARKET, c.PF_OUT, c.TC_PRICE_PU_IN),
+                    (c.TT_MARKET, c.PF_IN, c.TC_PRICE_PU_OUT)]:
                 # get grid fee value from forecaster
                 grid_fee = agent_retailer_data.filter(pl.col(c.TC_TIMESTAMP) == self.tasks[c.TC_TIMESTEP]).select(
-                    pl.col(f'{c.TT_GRID}_{column_name[0]}_{column_name[1]}')).item()
+                    pl.col(f'{c.TT_GRID}_{trade_type}_{forecast_dir}')).item()
                 # write to grid transaction df
                 grid = grid.with_columns(
                     # Energy pu prices
                     pl.when(pl.col(c.TC_ID_AGENT) == agent_id).then(pl.lit(grid_fee))
-                    .otherwise(pl.col(f'{column_name[0]}_{column_name[2]}'))
-                    .alias(f'{column_name[0]}_{column_name[2]}').cast(pl.Int32)
+                    .otherwise(pl.col(f'{trade_type}_{transaction_col}'))
+                    .alias(f'{trade_type}_{transaction_col}').cast(pl.Int32)
                 )
 
         # Calculate the price pu columns (market * ratio + retail * (1 - ratio))
@@ -820,8 +901,9 @@ class ElectricityMarket(MarketBase):
         # Adjust the price and trade type columns
         levies = levies.with_columns([
             # Energy pu prices
-            pl.lit(retailer[f'{c.TT_LEVIES}_{c.TC_PRICE_OUT}'].alias(c.TC_PRICE_PU_OUT)).cast(pl.Int32),
-            pl.lit(retailer[f'{c.TT_LEVIES}_{c.TC_PRICE_IN}'].alias(c.TC_PRICE_PU_IN)).cast(pl.Int32),
+            # Note: in and out are crossed, as for the grid fees above
+            pl.lit(retailer[f'{c.TT_LEVIES}_{c.TC_PRICE_OUT}'][0]).alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
+            pl.lit(retailer[f'{c.TT_LEVIES}_{c.TC_PRICE_IN}'][0]).alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
             # Trade type
             pl.lit(c.TT_LEVIES).alias(c.TC_TYPE_TRANSACTION).cast(pl.Categorical),
         ])

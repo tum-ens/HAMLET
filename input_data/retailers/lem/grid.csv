@@ -1,4 +1,4 @@
-timestamp,grid_market_in,grid_market_out,grid_retail_in,grid_retail_out
+timestamp,grid_market_out,grid_market_in,grid_retail_out,grid_retail_in
 1616540400,400,0,800,0
 1616541300,400,0,800,0
 1616542200,400,0,800,0

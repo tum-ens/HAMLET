@@ -6,11 +6,16 @@ __email__ = "markus.doepfert@tum.de"
 
 import os
 import sys
+import logging
+
+import numpy as np
 
 from linopy.io import read_netcdf
 
 from hamlet.executor.utilities.controller.fbc.mpc.linopy.components import *
 from hamlet.executor.utilities.controller.fbc.mpc.mpc_base import MpcBase
+
+LOGGER = logging.getLogger(__name__)
 
 # Define all the available plants for this controller
 AVAILABLE_PLANTS = {
@@ -139,6 +144,17 @@ class Linopy(MpcBase):
                     # The variable is not a market or plant variable
                     pass
 
+        # Give each balance equation a slack variable pair, carrying a value-of-lost-load
+        # penalty, so a single infeasible agent cannot abort the whole run.
+        # See c.DEFAULT_SLACK_ENABLED; disable per agent with `slack: false`.
+        for energy_type in (balance_equations if self.slack_enabled else {}):
+            balance_equations[energy_type] += self.model.add_variables(
+                name=f'{energy_type}_{c.OM_GENERATION}_slack', lower=0, upper=np.inf,
+                coords=[self.timesteps], integer=False)
+            balance_equations[energy_type] -= self.model.add_variables(
+                name=f'{energy_type}_{c.OM_LOAD}_slack', lower=0, upper=np.inf,
+                coords=[self.timesteps], integer=False)
+
         # Add the constraints for each energy type
         for energy_type, equation in balance_equations.items():
             self.model.add_constraints(equation == 0, name="balance_" + energy_type)
@@ -153,8 +169,18 @@ class Linopy(MpcBase):
 
         # Loop through the model's variables to identify the balancing variables
         for variable_name, variable in self.model.variables.items():
+            # Note: the slack test must come first. Market names are user-defined, so a market
+            # called `electricity` would otherwise capture `electricity_gen_slack` in the branch
+            # below and the penalty would silently never reach the objective, making slack free.
+            if variable_name.endswith('_slack'):
+                # This objective is monetary, so the slack penalty is a value of lost load in the
+                # same units as the price forecasts (0.01 ct/kWh, i.e. 0.1 EUR/MWh per unit),
+                # scaled by the timestep so that it stays a price per unit of energy.
+                # Shedding load must always be dearer than serving it at any market price.
+                dt_hours = self.dt.total_seconds() * c.SECONDS_TO_HOURS
+                objective.append(self.slack_penalty * dt_hours * variable)
             # Only consider the cost and revenue components of the markets
-            if variable_name.startswith(tuple(self.market_names)):
+            elif variable_name.startswith(tuple(self.market_names)):
                 if variable_name.endswith('_costs'):
                     # Add the variable to the objective function
                     objective.append(variable)
@@ -170,6 +196,34 @@ class Linopy(MpcBase):
         self.model.add_objective(sum(objective), overwrite=True)
 
         return self.model
+
+    # Slack below this many W is solver tolerance rather than a real imbalance
+    SLACK_REPORTING_THRESHOLD = 1e-3
+
+    def _warn_on_slack(self):
+        """Report when a balance was only closed by shedding or dumping energy.
+
+        The slack variables keep an infeasible agent from aborting the run, but they are not
+        written to the setpoints, so a run that used them produces results whose flows do not
+        balance. That has to be visible: an agent that shed 3 kW must not look identical to one
+        that served it.
+
+        Note: this reports through `logging` rather than `warnings`. The executor installs a
+        blanket `warnings.filterwarnings("ignore")` at import time, so a warning here would
+        never reach the user and the shed energy would be silent.
+        """
+
+        for name, variable in self.model.variables.items():
+            if not name.endswith('_slack'):
+                continue
+            try:
+                peak = float(np.max(np.abs(variable.solution.values)))
+            except (AttributeError, ValueError):
+                continue
+            if peak > self.SLACK_REPORTING_THRESHOLD:
+                LOGGER.warning(
+                    'Agent %s: energy balance closed with %.1f W of "%s". The setpoints for '
+                    'this timestep do not balance.', self.agent.agent_id, peak, name)
 
     def run(self):
 
@@ -200,6 +254,9 @@ class Linopy(MpcBase):
             print(self.model.objective)
 
             raise ValueError(f"Optimization failed: {status}")
+
+        # Surface any energy that was shed or dumped to close the balance
+        self._warn_on_slack()
 
         # Process the solution into control commands and return
         self.agent = self.process_solution()
