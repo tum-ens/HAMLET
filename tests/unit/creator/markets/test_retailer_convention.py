@@ -17,9 +17,13 @@ from ruamel.yaml import YAML
 import hamlet.constants as c
 from hamlet.creator.markets.electricity import ElectricityMarket
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+# Resolved from the conftest's repo root rather than this file's depth, so moving the test
+# between layers cannot silently empty the parameter list
+REPO_ROOT = Path(__file__).resolve().parents[4]
 CONFIGS = sorted(REPO_ROOT.glob('examples/*/*/markets.yaml')) + [
     REPO_ROOT / 'config_templates' / 'markets.yaml']
+assert CONFIGS and all(p.exists() for p in CONFIGS), (
+    f'no shipped market configs found under {REPO_ROOT}; the repo root is wrong')
 
 
 def retailer_columns(pricing_config):
@@ -99,3 +103,37 @@ def test_the_config_list_order_is_preserved_per_component():
     # levies are configured [buying, selling] and are turned around
     assert value(levies, f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_IN}') == 0
     assert value(levies, f'{c.TT_LEVIES}_{c.TC_PRICE}_{c.PF_OUT}') > 0
+
+
+def test_the_file_path_agrees_with_the_fixed_path():
+    """The two configuration paths must produce identical column semantics.
+
+    `_create_fixed_cols` normalises the config's per-component list order; `_create_file_cols`
+    reads a CSV by column name and normalises nothing, so the shipped CSVs have to already be
+    labelled in the target convention. Nothing else checks that, and a mislabel there is silent.
+    """
+    import polars as pl
+
+    charged = {'grid.csv': [f'{c.TT_GRID}_{c.TT_MARKET}', f'{c.TT_GRID}_{c.TT_RETAIL}'],
+               'levies.csv': [f'{c.TT_LEVIES}_{c.TC_PRICE}']}
+
+    for file_name, prefixes in charged.items():
+        frame = pl.read_csv(REPO_ROOT / 'input_data' / 'retailers' / 'lem' / file_name)
+        for prefix in prefixes:
+            buy = frame[f'{prefix}_{c.PF_OUT}'].max()
+            sell = frame[f'{prefix}_{c.PF_IN}'].max()
+
+            assert buy > 0, f'{file_name}: {prefix} is not charged on consumption'
+            assert sell == 0, f'{file_name}: {prefix} is charged on feed-in'
+
+
+def test_the_energy_and_balancing_files_price_buying_above_selling():
+    """The same convention, on the two files that carry prices rather than charges."""
+    import polars as pl
+
+    for file_name, prefix in [('energy.csv', f'{c.TT_ENERGY}_{c.TC_PRICE}'),
+                              ('balancing.csv', f'{c.TT_BALANCING}_{c.TC_PRICE}')]:
+        frame = pl.read_csv(REPO_ROOT / 'input_data' / 'retailers' / 'lem' / file_name)
+
+        assert frame[f'{prefix}_{c.PF_OUT}'].max() > frame[f'{prefix}_{c.PF_IN}'].max(), (
+            f'{file_name}: selling is priced above buying')

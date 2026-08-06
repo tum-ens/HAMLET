@@ -573,7 +573,7 @@ class Ev(LinopyComps):
         max_capacity = self.__max_capacity_at_timesteps(energy_to_target)
 
         # Calculate target state of charge at each timestep
-        target_soc = pd.Series(np.minimum(max_capacity, self.soc + max_energy_cumulative),
+        target_soc = pd.Series(np.minimum(max_capacity, self.__reachable_soc(max_energy)),
                                index=self.timesteps).astype(int)
 
         # Define the constraint
@@ -615,7 +615,7 @@ class Ev(LinopyComps):
 
         # Calculate maximum and minimum state of charge at each timestep
         # Reverse the max_energy array to get the energy that can still be charged until the car leaves
-        max_soc = np.minimum(max_capacity, self.soc + max_energy_cumulative)
+        max_soc = np.minimum(max_capacity, self.__reachable_soc(max_energy))
         # Energy that can still be charged after each timestep, i.e. how far below the target the
         # soc may still be at that point and be recoverable before the car leaves
         future_max_energy = self.__future_max_energy_exclusive(max_energy)
@@ -710,6 +710,32 @@ class Ev(LinopyComps):
             result[i] = running_sum
 
         return result
+
+    def __reachable_soc(self, max_energy):
+        """Highest state of charge attainable at each timestep.
+
+        Runs the same recursion the model does, charging at full power throughout: capped at the
+        capacity, reduced by that timestep's driving, floored at zero. The charging-scheme
+        targets must not exceed this, or the problem is infeasible and the run aborts -- there is
+        no slack on the EV constraints.
+
+        Using the reachable ceiling rather than the no-charge reference also raises the targets
+        in later availability blocks, where energy charged in an earlier block is still held.
+
+        Args:
+            max_energy (numpy.ndarray): Net energy chargeable at each timestep.
+
+        Returns:
+            numpy.ndarray: The attainable state of charge at each timestep.
+        """
+
+        reachable = np.zeros(len(self.soc), dtype=float)
+        level = float(self.soc_start)
+        for step, (chargeable, consumed) in enumerate(zip(max_energy, self.consumption)):
+            level = max(0.0, min(self.capacity, level + chargeable) - consumed)
+            reachable[step] = level
+
+        return reachable
 
     def __future_max_energy_exclusive(self, max_energy):
         """Energy that can still be charged strictly after each timestep.

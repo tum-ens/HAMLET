@@ -15,6 +15,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
+@pytest.fixture(scope='session')
+def repo_root():
+    """The repository root, so tests do not encode their own depth in the tree."""
+    return REPO_ROOT
+
+
 @pytest.fixture
 def timesteps():
     """Four hourly timesteps — the standard L2 horizon.

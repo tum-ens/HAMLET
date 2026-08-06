@@ -95,7 +95,6 @@ class TestStateOfCharge:
 class TestMinSocScheme:
     """The `min_soc` charging scheme must actually reach the requested minimum."""
 
-    @pytest.mark.solver
     def test_min_soc_is_reached_before_departure(self, timesteps, delta):
         """Regression: the remaining-charging-energy array was reversed instead of shifted.
 
@@ -118,7 +117,6 @@ class TestMinSocScheme:
         # demand the full target.
         assert target_soc[-1] == pytest.approx(CAPACITY * target_fraction)
 
-    @pytest.mark.solver
     def test_min_soc_is_reached_when_the_car_leaves_mid_horizon(self, timesteps, delta):
         """Same defect, exercised across an availability gap.
 
@@ -225,3 +223,76 @@ class TestDrivingEntersTheSocRecursion:
         assert ev.consumption.min() >= 0
         assert ev.consumption.sum() == pytest.approx(10_000)  # never more than it started with
         assert list(ev.soc) == [4_000, 0, 0, 0]
+
+
+class TestTargetsStayReachable:
+    """A charging-scheme target must never exceed what the recursion can deliver.
+
+    There is no slack on the EV constraints, so an unreachable target does not degrade the
+    solution -- it makes the model infeasible and aborts the whole run.
+    """
+
+    @pytest.mark.solver
+    @pytest.mark.parametrize('trip', [3_000, 5_000, 20_000])
+    def test_full_scheme_survives_driving_while_plugged_in(self, timesteps, delta, trip):
+        """Regression: driving during an available timestep, at the capacity ceiling.
+
+        Adding the driving term to the recursion without adjusting the `full` target meant the
+        target asked for the ceiling while the car had just spent `trip` Wh getting there.
+        """
+        ev = make_ev(timesteps, delta,
+                     soc_init=CAPACITY,
+                     energy_consumed=[0, 0, 0, trip],
+                     availability=[1, 1, 1, 1],
+                     scheme={'method': 'full'})
+        model = build_model(ev, timesteps)
+        model.add_objective(0 * model.variables[f'{NAME}_{c.P_EV}_soc'].sum(), overwrite=True)
+        model.solve(solver_name='highs', output_flag=False, log_to_console=False)
+
+        assert model.status == 'ok', 'the full charging scheme became infeasible'
+
+    @pytest.mark.solver
+    def test_min_soc_survives_driving_while_plugged_in(self, timesteps, delta):
+        """The same mechanism reaches `min_soc` when the target pins the soc at the ceiling."""
+        ev = make_ev(timesteps, delta,
+                     soc_init=CAPACITY,
+                     energy_consumed=[0, 0, 0, 20_000],
+                     availability=[1, 1, 1, 1],
+                     scheme={'method': 'min_soc', 'min_soc': {'val': 1.0}})
+        model = build_model(ev, timesteps)
+        model.add_objective(0 * model.variables[f'{NAME}_{c.P_EV}_soc'].sum(), overwrite=True)
+        model.solve(solver_name='highs', output_flag=False, log_to_console=False)
+
+        assert model.status == 'ok'
+
+    def test_the_target_never_exceeds_the_reachable_ceiling(self, timesteps, delta):
+        """Stated directly, so the property holds regardless of which scheme is in use."""
+        ev = make_ev(timesteps, delta,
+                     soc_init=CAPACITY,
+                     energy_consumed=[0, 0, 0, 20_000],
+                     availability=[1, 1, 1, 1],
+                     scheme={'method': 'full'})
+        model = build_model(ev, timesteps)
+
+        target = model.constraints[f'{NAME}_soc_scheme'].rhs.values
+        reachable = ev._Ev__reachable_soc(ev._Ev__max_energy_at_timesteps())
+
+        assert (target <= reachable + 1).all()
+
+    def test_energy_charged_in_an_earlier_block_counts_towards_a_later_target(self,
+                                                                             timesteps, delta):
+        """The ceiling is a running recursion, not a per-block reference.
+
+        A car that charged before a trip still holds that energy afterwards, so the target in a
+        later availability block may legitimately be higher than the block alone could reach.
+        """
+        ev = make_ev(timesteps, delta,
+                     soc_init=10_000,
+                     energy_consumed=[0, 0, 0, 0],
+                     availability=[1, 0, 1, 1],
+                     scheme={'method': 'full'})
+        reachable = ev._Ev__reachable_soc(ev._Ev__max_energy_at_timesteps())
+
+        # 10 kWh + one hour at 11 kW before the gap, then two more hours after it
+        assert reachable[0] == pytest.approx(21_000)
+        assert reachable[-1] == pytest.approx(min(CAPACITY, 21_000 + 2 * CHARGING_POWER))

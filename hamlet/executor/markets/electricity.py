@@ -575,6 +575,7 @@ class ElectricityMarket(MarketBase):
         transactions = pl.concat([bids_uncleared, offers_uncleared], how='diagonal')
 
         # Add price pu column information from the retailer
+        self._single_retailer(retailer)
         transactions = transactions.with_columns([
             pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_IN}'][0]).alias(c.TC_PRICE_PU_OUT).cast(pl.Int32),
             pl.lit(retailer[f'{c.TT_BALANCING}_{c.TC_PRICE}_{c.PF_OUT}'][0]).alias(c.TC_PRICE_PU_IN).cast(pl.Int32),
@@ -601,6 +602,22 @@ class ElectricityMarket(MarketBase):
         self.offers_uncleared = offers_uncleared.clear()
 
         return transactions, self.bids_uncleared, self.offers_uncleared
+
+    @staticmethod
+    def _single_retailer(retailer):
+        """Returns the retailer frame, checking there is exactly one row to read prices from.
+
+        The market only supports a single retailer per timestep. Indexing row 0 of a longer
+        frame would silently price every agent off the first retailer, so this fails loudly
+        instead -- which is what indexing a multi-row frame used to do by accident.
+        """
+
+        rows = len(next(iter(retailer.values()))) if isinstance(retailer, dict) else len(retailer)
+        if rows != 1:
+            raise ValueError(f'Expected exactly one retailer row for this timestep, got {rows}. '
+                             f'Check for duplicate timestamps in the retailer data.')
+
+        return retailer
 
     def _transactions_for_netting(self, transactions):
         """Collects every transaction that counts towards this timestep's net energy.
@@ -822,6 +839,7 @@ class ElectricityMarket(MarketBase):
         # Note: in and out are crossed here. The retailer files name their columns from the
         # retailer's point of view, so `_out` is the retailer selling, i.e. the agent buying,
         # whereas the transaction columns are from the agent's point of view.
+        self._single_retailer(retailer)
         grid = grid.with_columns([
             pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}'][0]).alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_IN}'),
             pl.lit(retailer[f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}'][0]).alias(f'{c.TT_MARKET}_{c.TC_PRICE_PU_OUT}'),

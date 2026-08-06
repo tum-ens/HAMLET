@@ -6,7 +6,7 @@ __email__ = "markus.doepfert@tum.de"
 
 import os
 import sys
-import warnings
+import logging
 
 import numpy as np
 
@@ -14,6 +14,8 @@ from linopy.io import read_netcdf
 
 from hamlet.executor.utilities.controller.fbc.mpc.linopy.components import *
 from hamlet.executor.utilities.controller.fbc.mpc.mpc_base import MpcBase
+
+LOGGER = logging.getLogger(__name__)
 
 # Define all the available plants for this controller
 AVAILABLE_PLANTS = {
@@ -195,16 +197,20 @@ class Linopy(MpcBase):
 
         return self.model
 
-    # Slack below this many W is solver noise rather than a real imbalance
-    SLACK_REPORTING_THRESHOLD = 1e-6
+    # Slack below this many W is solver tolerance rather than a real imbalance
+    SLACK_REPORTING_THRESHOLD = 1e-3
 
     def _warn_on_slack(self):
-        """Warn when a balance was only closed by shedding or dumping energy.
+        """Report when a balance was only closed by shedding or dumping energy.
 
         The slack variables keep an infeasible agent from aborting the run, but they are not
         written to the setpoints, so a run that used them produces results whose flows do not
         balance. That has to be visible: an agent that shed 3 kW must not look identical to one
         that served it.
+
+        Note: this reports through `logging` rather than `warnings`. The executor installs a
+        blanket `warnings.filterwarnings("ignore")` at import time, so a warning here would
+        never reach the user and the shed energy would be silent.
         """
 
         for name, variable in self.model.variables.items():
@@ -215,10 +221,9 @@ class Linopy(MpcBase):
             except (AttributeError, ValueError):
                 continue
             if peak > self.SLACK_REPORTING_THRESHOLD:
-                warnings.warn(
-                    f'Agent {self.agent.agent_id}: energy balance closed with {peak:.1f} W of '
-                    f'"{name}". The setpoints for this timestep do not balance.',
-                    RuntimeWarning, stacklevel=2)
+                LOGGER.warning(
+                    'Agent %s: energy balance closed with %.1f W of "%s". The setpoints for '
+                    'this timestep do not balance.', self.agent.agent_id, peak, name)
 
     def run(self):
 

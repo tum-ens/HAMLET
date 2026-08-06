@@ -4,20 +4,19 @@ Split by scope, mirroring the package layout so a test sits next to the thing it
 
 ```
 tests/
-  unit/          one class or function in isolation; no file I/O, no scenario
-    creator/agents/
-    executor/agents/
-    executor/markets/
-    executor/utilities/controller/{fbc,rtc}/
-    executor/utilities/database/
+  unit/          one class or function in isolation; no solver, no scenario
+    creator/agents/            creator/markets/
+    executor/agents/           executor/markets/
+    executor/utilities/controller/{,fbc,rtc}/
     executor/utilities/grid_restrictions/
-  integration/   several components wired together and solved, still no file I/O
+  integration/   several components wired together, or code that touches the filesystem
     executor/
   e2e/           the shipped example, Creator -> Executor -> Analyzer
 ```
 
 `unit/` and `integration/` mirror `hamlet/`, so the test for
-`hamlet/executor/markets/electricity.py` lives at `tests/unit/executor/markets/`.
+`hamlet/executor/markets/electricity.py` lives at `tests/unit/executor/markets/`. Reading or
+writing files puts a test in `integration/` regardless of how small it is.
 
 ## Running
 
@@ -36,10 +35,19 @@ Markers: `solver` (builds and solves a real optimisation model), `e2e` (runs the
 
 ## Provenance
 
-This suite was seeded by porting bug fixes that had been stranded on the paper branch. Tests in
-`unit/` and `integration/` name the defect they pin in their docstring, and each was verified to
-fail before the corresponding fix and pass after — except where a fix introduced the seam the
-test uses, which the docstring says explicitly.
+This suite was seeded by porting bug fixes that had been stranded on the paper branch. Tests
+name the defect they pin in their docstring.
+
+The check that matters is not "does it pass" but "what would make it fail". The useful way to
+answer that is to revert one source file at a time and see which tests notice:
+
+```bash
+git show origin/develop:PATH > PATH && python -m pytest tests -q; git checkout HEAD -- PATH
+```
+
+A production change that no test notices is a coverage gap. Several tests were deleted rather
+than kept after that check showed they exercised no HAMLET code at all — they demonstrated
+polars or solver behaviour while reading as regression tests.
 
 ## The in/out convention
 

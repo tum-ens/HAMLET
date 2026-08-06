@@ -10,6 +10,7 @@ It is deliberately a smoke test rather than a golden master: it asserts that the
 and that the results are structurally sound, not that specific numbers are reproduced. A real
 golden master needs committed reference tables and a fixed seed.
 """
+import os
 import shutil
 import subprocess
 import sys
@@ -24,9 +25,8 @@ SCENARIO_NAME = 'simple_scenario'
 RUNNER = """
 import os, sys
 sys.path.insert(0, r"{repo}")
-os.chdir(r"{example}")
 from hamlet import Creator, Executor, Analyzer
-Creator(path="./{name}").new_scenario_from_configs()
+Creator(path=r"{config_dir}").new_scenario_from_configs()
 Executor(r"{scenarios}/{name}", num_workers=1).run()
 sim = Analyzer({{"{name}": r"{results}/{name}"}})
 sim.agents.plot_all_meters_data(save_path=None)
@@ -37,33 +37,48 @@ print("E2E_OK")
 
 @pytest.fixture(scope='module')
 def run_dirs(tmp_path_factory):
-    """Run the example once, with scenarios and results directed into a temp tree."""
+    """Run the example once, against a temp copy of the config so the repo is never written to.
+
+    The config tree is copied rather than patched in place. Editing the tracked `setup.yaml` and
+    restoring it in a `finally` looks equivalent, but a hard kill mid-run -- a CI timeout, a
+    power loss -- leaves the shipped example pointing at a deleted temp directory, and the next
+    run then faithfully "restores" that corruption.
+    """
     base = tmp_path_factory.mktemp('e2e')
     scenarios, results = base / 'scenarios', base / 'results'
+    config = base / SCENARIO_NAME
+    shutil.copytree(EXAMPLE / SCENARIO_NAME, config)
     scenarios.mkdir()
     results.mkdir()
 
     # The example's setup.yaml puts scenarios and results two levels above the config folder;
-    # point them at the temp tree instead so the repo is never written to.
-    setup = EXAMPLE / SCENARIO_NAME / 'setup.yaml'
+    # point the copy at the temp tree instead.
+    # All three paths in setup.yaml are relative to the config folder, so moving the config
+    # means absolutising every one of them, input data included
+    setup = config / 'setup.yaml'
     original = setup.read_text(encoding='utf-8')
-    patched = (original
-               .replace('scenarios: ../../scenarios', f'scenarios: {scenarios.as_posix()}')
-               .replace('results: ../../results', f'results: {results.as_posix()}'))
-    generated_xlsx = EXAMPLE / SCENARIO_NAME / 'agents.xlsx'
-
+    replacements = {
+        'input: ../../input_data': f'input: {(REPO_ROOT / "input_data").as_posix()}',
+        'scenarios: ../../scenarios': f'scenarios: {scenarios.as_posix()}',
+        'results: ../../results': f'results: {results.as_posix()}',
+    }
+    patched = original
+    for old_line, new_line in replacements.items():
+        assert old_line in patched, (
+            f'{old_line!r} not found in setup.yaml, so the run would have used a path outside '
+            f'the temp tree')
+        patched = patched.replace(old_line, new_line)
     setup.write_text(patched, encoding='utf-8')
+
     try:
-        script = RUNNER.format(repo=REPO_ROOT, example=EXAMPLE, name=SCENARIO_NAME,
-                               scenarios=scenarios, results=results)
+        script = RUNNER.format(repo=REPO_ROOT, config_dir=config.as_posix(),
+                               name=SCENARIO_NAME, scenarios=scenarios, results=results)
         completed = subprocess.run([sys.executable, '-c', script], capture_output=True,
                                    text=True, encoding='utf-8', errors='replace', timeout=3600,
-                                   env={**__import__('os').environ, 'MPLBACKEND': 'Agg',
+                                   env={**os.environ, 'MPLBACKEND': 'Agg',
                                         'PYTHONIOENCODING': 'utf-8'})
         yield completed, results / SCENARIO_NAME
     finally:
-        setup.write_text(original, encoding='utf-8')
-        generated_xlsx.unlink(missing_ok=True)  # Creator output, not a source file
         shutil.rmtree(base, ignore_errors=True)
 
 
@@ -105,7 +120,11 @@ def test_grid_fees_and_levies_are_charged_on_consumption(run_dirs):
 
     for trade_type in (c.TT_GRID, c.TT_LEVIES):
         rows = frame.filter(pl.col(c.TC_TYPE_TRANSACTION) == trade_type)
-        if rows.is_empty():
-            pytest.skip(f'no {trade_type} transactions in this run')
-        # Charges are levied on the consumption side, so the per-unit import price must be set
+
+        # An empty table would make every assertion below vacuous, so it is a failure and not
+        # a skip -- the shipped example always produces both
+        assert not rows.is_empty(), f'the run produced no {trade_type} transactions at all'
+        # Charged on consumption ...
         assert rows[c.TC_PRICE_PU_IN].max() > 0, f'{trade_type} is not charged on consumption'
+        # ... and on consumption only. Charging both directions would pass the check above.
+        assert rows[c.TC_PRICE_PU_OUT].max() == 0, f'{trade_type} is charged on feed-in'

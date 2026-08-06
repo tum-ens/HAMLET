@@ -10,7 +10,6 @@ import io
 import pytest
 
 
-@pytest.mark.solver
 def test_power_flow_writes_nothing_to_stdout_or_stderr():
     """The power-flow calls do not print, so they need no output suppression.
 

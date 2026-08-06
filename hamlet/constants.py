@@ -398,3 +398,21 @@ DEFAULT_SLACK_ENABLED = True
 # weight (market, 4) so slack is always the least preferred option.
 FBC_DEFAULT_SLACK_PENALTY = 100_000
 RTC_DEFAULT_SLACK_PENALTY = 10
+
+
+def resolve_limits(ems_config: dict) -> dict:
+    """Bounds for the optimisation variables, from a controller's configuration.
+
+    Unknown keys are kept, so a bound added to a component before it is added to the defaults
+    table still reaches it.
+    """
+    return {**RTC_DEFAULT_LIMITS, **((ems_config or {}).get(K_LIMITS) or {})}
+
+
+def resolve_slack(ems_config: dict, default_penalty: int) -> tuple:
+    """Whether the balance slacks are enabled, and what they cost, for a controller."""
+    ems_config = ems_config or {}
+    enabled = ems_config.get(K_SLACK, DEFAULT_SLACK_ENABLED)
+    penalty = (ems_config.get(K_PENALTIES) or {}).get('slack', default_penalty)
+
+    return bool(enabled), penalty
