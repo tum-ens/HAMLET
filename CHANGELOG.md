@@ -47,8 +47,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   package layout. `python -m pytest tests` runs unit and integration in seconds on HiGHS;
   `python -m pytest tests -m e2e` runs the shipped example end to end
 ### Changed
-- Out-of-horizon market records are now split off by slicing the sorted tables instead of
-  scanning them twice, and the output folder is only created when something is written
+- Out-of-horizon market records are dropped more cheaply: most calls have nothing to drop and
+  now exit after a single pass, and when there is, the membership test is evaluated once and
+  reused for both sides of the split instead of scanning the table twice. The output folder is
+  only created when something is written. Measured on a 20,000-row table, the case that occurs
+  in practice went from 0.097 ms to 0.010 ms
 - pandapower's progress bar is no longer printed once per horizon on every timestep when the
   §14a grid restriction is active
 - The real-time controller's optimisation bounds (balancing power, market power and the two

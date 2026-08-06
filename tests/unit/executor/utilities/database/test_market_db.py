@@ -121,3 +121,53 @@ def test_unsorted_table_still_splits_correctly(market_db, tmp_path):
     assert sorted(kept[c.TC_TIMESTEP].to_list()) == [
         START + datetime.timedelta(seconds=s) for s in (3600, 5400, 7200)
     ]
+
+
+def test_row_order_is_preserved(market_db, tmp_path):
+    """Splitting must not reshuffle the rows it keeps.
+
+    The kept rows are gathered by a single mask, so their relative order carries over. The
+    analyzer sorts at the end anyway, but a silent reordering here would make results
+    non-reproducible between runs for no reason.
+    """
+    market_db.market_transactions = table([7200, 0, 5400, 1800, 3600])
+
+    kept = run(market_db, tmp_path, START + datetime.timedelta(seconds=7200))
+
+    assert kept[c.TC_ID_AGENT].to_list() == ['agent0', 'agent2', 'agent4']
+
+
+def test_rows_with_no_timestep_are_kept_rather_than_lost(market_db, tmp_path):
+    """A null timestep must not disappear from both sides of the split.
+
+    Comparing a null yields a null, which `filter` treats as False -- so a naive split drops
+    the row from the past data *and* from the retained data, deleting it silently.
+    """
+    frame = table([0, 3600, 7200])
+    market_db.market_transactions = frame.with_columns(
+        pl.when(pl.col(c.TC_ID_AGENT) == 'agent1')
+        .then(None)
+        .otherwise(pl.col(c.TC_TIMESTEP))
+        .alias(c.TC_TIMESTEP))
+
+    kept = run(market_db, tmp_path, START + datetime.timedelta(seconds=7200))
+    written = pl.concat([pl.read_ipc(p) for p in tmp_path.rglob('*.ft')])
+
+    assert len(kept) + len(written) == 3
+    assert 'agent1' in kept[c.TC_ID_AGENT].to_list()
+
+
+def test_nothing_is_written_when_the_horizon_covers_everything(market_db, tmp_path):
+    """The common case: the clearing horizon is longer than the drop interval.
+
+    Measured on the shipped example, every one of the 69 calls is this case, so it has to be
+    the cheap one.
+    """
+    market_db.market_transactions = table([0, 1800, 3600])
+
+    # The horizon is one hour, so at START + 1 h the oldest row sits exactly on the boundary
+    # and nothing has fallen out of scope yet
+    kept = run(market_db, tmp_path, START + datetime.timedelta(seconds=HORIZON_SECONDS))
+
+    assert len(kept) == 3
+    assert list(tmp_path.iterdir()) == []

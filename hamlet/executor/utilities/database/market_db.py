@@ -91,11 +91,21 @@ class MarketDB:
     def save_and_drop_past_records(self, timestamp, path_results):
         """Save market data out of horizon to files and drop the past records.
 
-        These tables are append-only and ordered by timestep, so the boundary between past and
-        in-horizon rows is a single index. Splitting there costs one binary search and two
-        O(1) slices, instead of two full scans with complementary filters that each materialise
-        a new frame. Frames that are not sorted fall back to filtering, since slicing would
-        then split the wrong rows.
+        Runs on every table on every timestep, over tables that grow through the run, so the
+        cheap paths matter more than the clever ones:
+
+        1. Most calls have nothing to drop at all, because the clearing horizon is usually
+           longer than the interval at which this runs. One pass for the minimum timestep
+           settles that, and costs no allocation.
+        2. When there is something to drop, the membership test is evaluated once and reused
+           for both sides of the split, rather than scanning the frame twice with complementary
+           filters.
+
+        These tables are deliberately *not* assumed to be sorted by timestep. They are appended
+        in clearing order, and each clearing writes rows for every delivery timestep in its
+        horizon, so successive blocks overlap. Measured on the shipped example, only the very
+        first call sees a sorted table and the remaining 22 do not, which is why there is no
+        binary-search path here: it would cost a sortedness scan to almost never apply.
 
         The output folder is only created when there is something to write; it used to be
         created for every table on every timestep, each call sleeping 10 ms.
@@ -110,17 +120,17 @@ class MarketDB:
             if df.is_empty():
                 continue
 
-            timesteps = df.get_column(c.TC_TIMESTEP)
+            # Skip the whole table if nothing has fallen out of the horizon yet
+            oldest = df.get_column(c.TC_TIMESTEP).min()
+            if oldest is not None and oldest >= start_horizon_ts:
+                continue
 
-            if timesteps.is_sorted():
-                # Number of rows before the horizon, i.e. the length of the prefix to drop
-                split_idx = int(timesteps.search_sorted(start_horizon_ts, side='left'))
-                past_data, new_data = df.slice(0, split_idx), df.slice(split_idx)
-            else:
-                past_data = df.filter(pl.col(c.TC_TIMESTEP) < start_horizon_ts)
-                new_data = df.filter(pl.col(c.TC_TIMESTEP) >= start_horizon_ts)
+            # One membership test, used for both sides of the split
+            # Note: a null timestep counts as not-past, so malformed rows are retained rather
+            # than silently dropped from both sides, which is what comparing them would do
+            is_past = (df.get_column(c.TC_TIMESTEP) < start_horizon_ts).fill_null(False)
+            past_data = df.filter(is_past)
 
-            # Skip the I/O entirely if everything is still within the horizon
             if past_data.is_empty():
                 continue
 
@@ -130,7 +140,7 @@ class MarketDB:
             f.save_file(path=os.path.join(path, f'{attr_name}_{start_horizon_ts.timestamp()}.{extension}'),
                         data=past_data, df='polars')
 
-            setattr(self, attr_name, new_data)
+            setattr(self, attr_name, df.filter(~is_past))
 
     def concat_past_data(self, delete_dir=True):
         """Concatenates past data saved in files"""
