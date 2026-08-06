@@ -71,10 +71,22 @@ Markets can **include grid fees, levies, and balancing costs**.
    grid:
       method: fixed  # Options: fixed, file
       fixed:
-         local: [0, 0.04]   # Grid fees for local market trades (€/kWh)
-         retail: [0, 0.08]  # Grid fees for retailer transactions (€/kWh)
+         market: [0.04, 0]  # Grid fees for local market trades (€/kWh)
+         retail: [0.08, 0]  # Grid fees for retailer transactions (€/kWh)
       file:
          file: grid_fees.csv  # External grid fee file
+
+.. note::
+   Grid fees and levies are written ``[buying, selling]`` -- the opposite order from the energy
+   and balancing blocks, which are written ``[selling, buying]``. Both spellings are accepted
+   and normalised by the Creator, so existing configuration files keep their meaning. Whichever
+   order a block uses, the charge belongs on the buying side: fees and levies are owed on the
+   energy an agent draws from the grid, not on what it feeds in.
+
+   Files supplied with ``method: file`` are **not** normalised -- they are read by column name.
+   Their columns must already follow the convention the executor uses, in which ``_out`` is the
+   direction the agent pays for, and their values must be integers in 0.01 ct/kWh rather than
+   €/kWh.
 
 **Levies**
 .. code-block:: yaml
@@ -82,6 +94,6 @@ Markets can **include grid fees, levies, and balancing costs**.
    levies:
       method: fixed  # Options: fixed, file
       fixed:
-         price: [0, 0.18]  # Levies for selling and buying (€/kWh)
+         price: [0.18, 0]  # Levies, buying first (€/kWh)
       file:
          file: levie

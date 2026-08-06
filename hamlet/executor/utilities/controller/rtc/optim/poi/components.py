@@ -27,6 +27,19 @@ class POIComps:
         self.upper = None
         self.lower = None
 
+    def limit(self, key):
+        """Returns the configured bound for the given key, or inf when it is unbounded.
+
+        Mirrors the linopy backend: bounds come from the `limits` block of the rtc controller
+        configuration and fall back to `c.RTC_DEFAULT_LIMITS`.
+        """
+        limits = self.info.get(c.K_LIMITS) or {}
+        # Note: look the default up lazily, so a bound the caller configured but that has no
+        # entry in the table yet does not raise KeyError.
+        value = limits[key] if key in limits else c.RTC_DEFAULT_LIMITS[key]
+
+        return inf if value is None else value
+
     def define_variables(self, model, variables, **kwargs):
         raise NotImplementedError(f'{self.name} has not been implemented yet.')
 
@@ -118,7 +131,9 @@ class Market(POIComps):
         # Get specific object attributes
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
         self.market_power = int(round(kwargs['market_result'] * c.HOURS_TO_SECONDS / self.dt))  # from Wh to W
-        self.balancing_power = 10000000000  # TODO: This needs to be changed to the max available balancing power
+        # Upper bound on the market deviation variables. See c.RTC_DEFAULT_LIMITS.
+        # TODO: This should be derived from the retailer's declared balancing energy
+        self.balancing_power = self.limit('balancing_power')
 
         # Get the energy type
         self.energy_type = None
@@ -127,7 +142,9 @@ class Market(POIComps):
         self.energy_type = kwargs['energy_type']
 
         # Define the market power variable
-        self.add_variable_to_model(model, variables, name=f'{self.name}_{self.energy_type}', lower=-inf, upper=inf,
+        market_power = self.limit('market_power')
+        self.add_variable_to_model(model, variables, name=f'{self.name}_{self.energy_type}',
+                                   lower=-market_power, upper=market_power,
                                    integer=True)
 
         # Define the target variable (what was previously bought/sold on the market)
@@ -279,7 +296,7 @@ class Hp(POIComps):
             try:
                 self.power_heat = self.info['sizing']['power']
             except KeyError:
-                self.power_heat = inf
+                self.power_heat = self.limit('hp_power_heat')
         # self.power_dhw = max(self.info['sizing']['power'],
         #                      self.ts[f'{self.name}_{c.S_POWER}_{c.ET_HEAT}_{c.P_DHW}'][0])
 
@@ -289,7 +306,7 @@ class Hp(POIComps):
                                                     self.ts[f'{self.name}_{c.S_POWER}_{c.ET_ELECTRICITY}_{c.P_HEAT}'][
                                                         0])))
         except pl_e.ColumnNotFoundError:
-            self.power_electricity = -inf
+            self.power_electricity = -self.limit('hp_power_electricity')
 
         self.upper, self.lower = 0, self.power_electricity
 

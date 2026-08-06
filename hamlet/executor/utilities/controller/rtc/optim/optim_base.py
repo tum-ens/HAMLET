@@ -18,6 +18,14 @@ class OptimBase(RtcBase):
         self.model = self.get_model(**kwargs)
         self.ems = self.ems[c.C_CONTROLLER][c.C_RTC]
 
+        # Bounds on the optimisation variables, defaulting to the historical unbounded values.
+        # Override per agent with a `limits` block under the rtc controller configuration.
+        self.limits = {**c.RTC_DEFAULT_LIMITS, **(self.ems.get(c.K_LIMITS) or {})}
+
+        # Slack variables on the balance equations, and their penalty weight
+        self.slack_enabled = self.ems.get(c.K_SLACK, c.DEFAULT_SLACK_ENABLED)
+        self.slack_penalty = (self.ems.get(c.K_PENALTIES) or {}).get('slack', c.RTC_DEFAULT_SLACK_PENALTY)
+
         # Obtain maximum balancing power
         # TODO: Deprecate balancing market in the equations. The relevant value is the market itself.
         #  Balancing occurs in the market section of the code.
@@ -68,7 +76,8 @@ class OptimBase(RtcBase):
 
             # Create the plant object
             self.plant_objects[plant_name] = plant_class(name=plant_name, timeseries=timeseries, **plant_data,
-                                                         targets=targets, socs=socs, delta=self.dt)
+                                                         targets=targets, socs=socs, delta=self.dt,
+                                                         **{c.K_LIMITS: self.limits})
 
         return self.plant_objects
 
@@ -83,7 +92,8 @@ class OptimBase(RtcBase):
             self.market_objects[market] = self.market_class(name=market,
                                                             timeseries=self.market,
                                                             market_result=self.market_results[market],
-                                                            delta=self.dt)
+                                                            delta=self.dt,
+                                                            **{c.K_LIMITS: self.limits})
 
         return self.market_objects
 

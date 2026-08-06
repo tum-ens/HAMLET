@@ -1,0 +1,1367 @@
+{
+  "agents/sfh/forecasts.ft": {
+    "columns": {
+      "2282uhPHwyyKmOb_electricity": {
+        "max": 2357.0,
+        "min": 0.0,
+        "sum": 13120.0
+      },
+      "6nZrhjcezxykk8k_electricity": {
+        "max": 804.0,
+        "min": 93.0,
+        "sum": 6453.0
+      },
+      "Aap6N3EMAbmr8Ns_COP100_dhw": {
+        "max": 439.0,
+        "min": 331.0,
+        "sum": 9076.0
+      },
+      "Aap6N3EMAbmr8Ns_COP100_heat": {
+        "max": 595.0,
+        "min": 487.0,
+        "sum": 12828.0
+      },
+      "Aap6N3EMAbmr8Ns_P_electricity_dhw": {
+        "max": 1445.0,
+        "min": 988.0,
+        "sum": 27806.0
+      },
+      "Aap6N3EMAbmr8Ns_P_electricity_heat": {
+        "max": 877.0,
+        "min": 846.0,
+        "sum": 20389.0
+      },
+      "Aap6N3EMAbmr8Ns_P_heat_dhw": {
+        "max": 4781.0,
+        "min": 3730.0,
+        "sum": 103511.0
+      },
+      "Aap6N3EMAbmr8Ns_P_heat_heat": {
+        "max": 5040.0,
+        "min": 4150.0,
+        "sum": 108991.0
+      },
+      "BgdtLeH87ZJDwIh_electricity": {
+        "max": 528.0,
+        "min": 250.0,
+        "sum": 8112.0
+      },
+      "BxPoL5lLvP3UXWq_availability": {
+        "max": 1.0,
+        "min": 0.0,
+        "sum": 20.0
+      },
+      "BxPoL5lLvP3UXWq_energy_consumed": {
+        "max": 8317.0,
+        "min": 0.0,
+        "sum": 8317.0
+      },
+      "JmprVAPBiP8h1lE_electricity": {
+        "max": 2196.0,
+        "min": 0.0,
+        "sum": 13624.0
+      },
+      "MHHIT2EvTDkWJh2_availability": {
+        "max": 1.0,
+        "min": 0.0,
+        "sum": 17.0
+      },
+      "MHHIT2EvTDkWJh2_energy_consumed": {
+        "max": 7222.0,
+        "min": 0.0,
+        "sum": 7222.0
+      },
+      "USpzpkW21dyKD7K_heat": {
+        "max": 310.0,
+        "min": 138.0,
+        "sum": 5477.0
+      },
+      "XH9FBgR486jdI5i_COP100_dhw": {
+        "max": 439.0,
+        "min": 331.0,
+        "sum": 9076.0
+      },
+      "XH9FBgR486jdI5i_COP100_heat": {
+        "max": 595.0,
+        "min": 487.0,
+        "sum": 12828.0
+      },
+      "XH9FBgR486jdI5i_P_electricity_dhw": {
+        "max": 1445.0,
+        "min": 988.0,
+        "sum": 27806.0
+      },
+      "XH9FBgR486jdI5i_P_electricity_heat": {
+        "max": 877.0,
+        "min": 846.0,
+        "sum": 20389.0
+      },
+      "XH9FBgR486jdI5i_P_heat_dhw": {
+        "max": 4781.0,
+        "min": 3730.0,
+        "sum": 103511.0
+      },
+      "XH9FBgR486jdI5i_P_heat_heat": {
+        "max": 5040.0,
+        "min": 4150.0,
+        "sum": 108991.0
+      },
+      "YxZdGoOEwWuymtn_COP100_dhw": {
+        "max": 303.0,
+        "min": 250.0,
+        "sum": 6681.0
+      },
+      "YxZdGoOEwWuymtn_COP100_heat": {
+        "max": 467.0,
+        "min": 413.0,
+        "sum": 10594.0
+      },
+      "YxZdGoOEwWuymtn_P_electricity_dhw": {
+        "max": 1364.0,
+        "min": 379.0,
+        "sum": 22066.0
+      },
+      "YxZdGoOEwWuymtn_P_electricity_heat": {
+        "max": 935.0,
+        "min": 270.0,
+        "sum": 13635.0
+      },
+      "YxZdGoOEwWuymtn_P_heat_dhw": {
+        "max": 4141.0,
+        "min": 947.0,
+        "sum": 63162.0
+      },
+      "YxZdGoOEwWuymtn_P_heat_heat": {
+        "max": 4361.0,
+        "min": 1115.0,
+        "sum": 61444.0
+      },
+      "balancing_energy_in": {
+        "max": 1000000.0,
+        "min": 1000000.0,
+        "sum": 96000000.0
+      },
+      "balancing_energy_out": {
+        "max": 1000000.0,
+        "min": 1000000.0,
+        "sum": 96000000.0
+      },
+      "balancing_price_in": {
+        "max": 400.0,
+        "min": 400.0,
+        "sum": 38400.0
+      },
+      "balancing_price_out": {
+        "max": 1600.0,
+        "min": 1600.0,
+        "sum": 153600.0
+      },
+      "energy_energy_in": {
+        "max": 100000.0,
+        "min": 100000.0,
+        "sum": 9600000.0
+      },
+      "energy_energy_out": {
+        "max": 100000.0,
+        "min": 100000.0,
+        "sum": 9600000.0
+      },
+      "energy_price_in": {
+        "max": 500.0,
+        "min": 500.0,
+        "sum": 48000.0
+      },
+      "energy_price_local": {
+        "max": 500.0,
+        "min": 500.0,
+        "sum": 48000.0
+      },
+      "energy_price_out": {
+        "max": 1500.0,
+        "min": 1500.0,
+        "sum": 144000.0
+      },
+      "energy_quality": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "fvjQOjvDgwAJfKJ_heat": {
+        "max": 345.0,
+        "min": 46.0,
+        "sum": 5342.0
+      },
+      "grid_market_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_market_out": {
+        "max": 400.0,
+        "min": 400.0,
+        "sum": 38400.0
+      },
+      "grid_retail_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_retail_out": {
+        "max": 800.0,
+        "min": 800.0,
+        "sum": 76800.0
+      },
+      "levies_price_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "levies_price_out": {
+        "max": 1800.0,
+        "min": 1800.0,
+        "sum": 172800.0
+      },
+      "mIXWET7TFaBceBQ_electricity": {
+        "max": 3586.0,
+        "min": 0.0,
+        "sum": 22245.0
+      },
+      "tBqmhfIXCf7w91Q_COP100_dhw": {
+        "max": 439.0,
+        "min": 331.0,
+        "sum": 9076.0
+      },
+      "tBqmhfIXCf7w91Q_COP100_heat": {
+        "max": 595.0,
+        "min": 487.0,
+        "sum": 12828.0
+      },
+      "tBqmhfIXCf7w91Q_P_electricity_dhw": {
+        "max": 1445.0,
+        "min": 988.0,
+        "sum": 27806.0
+      },
+      "tBqmhfIXCf7w91Q_P_electricity_heat": {
+        "max": 877.0,
+        "min": 846.0,
+        "sum": 20389.0
+      },
+      "tBqmhfIXCf7w91Q_P_heat_dhw": {
+        "max": 4781.0,
+        "min": 3730.0,
+        "sum": 103511.0
+      },
+      "tBqmhfIXCf7w91Q_P_heat_heat": {
+        "max": 5040.0,
+        "min": 4150.0,
+        "sum": 108991.0
+      },
+      "uGejQ42KN5P08ul_heat": {
+        "max": 1334.0,
+        "min": 117.0,
+        "sum": 18617.0
+      },
+      "xgh4MjjaY0vzizn_electricity": {
+        "max": 882.0,
+        "min": 78.0,
+        "sum": 8387.0
+      },
+      "zKsB8TK57QzbU9e_heat": {
+        "max": 1138.0,
+        "min": 455.0,
+        "sum": 18375.0
+      },
+      "znqoDt4dfrsFVd7_electricity": {
+        "max": 1508.0,
+        "min": 256.0,
+        "sum": 13149.0
+      }
+    },
+    "files": 4,
+    "rows": 96
+  },
+  "agents/sfh/meters.ft": {
+    "columns": {
+      "2282uhPHwyyKmOb_pv_electricity": {
+        "max": 13120.0,
+        "min": 0.0,
+        "sum": 155492.0
+      },
+      "6nZrhjcezxykk8k_inflexible-load_electricity": {
+        "max": 0.0,
+        "min": -6878.0,
+        "sum": -64228.0
+      },
+      "Aap6N3EMAbmr8Ns_hp_electricity": {
+        "max": 0.0,
+        "min": -3476.0,
+        "sum": -37445.0
+      },
+      "Aap6N3EMAbmr8Ns_hp_heat": {
+        "max": 20270.0,
+        "min": 0.0,
+        "sum": 217039.0
+      },
+      "BgdtLeH87ZJDwIh_inflexible-load_electricity": {
+        "max": 0.0,
+        "min": -8491.0,
+        "sum": -109394.0
+      },
+      "BxPoL5lLvP3UXWq_ev_electricity": {
+        "max": 0.0,
+        "min": -366.0,
+        "sum": -5124.0
+      },
+      "JmprVAPBiP8h1lE_pv_electricity": {
+        "max": 13624.0,
+        "min": 0.0,
+        "sum": 169405.0
+      },
+      "MHHIT2EvTDkWJh2_ev_electricity": {
+        "max": 0.0,
+        "min": -373.0,
+        "sum": -2154.0
+      },
+      "NM8yjx266keGQjn_battery_electricity": {
+        "max": 342.0,
+        "min": -3307.0,
+        "sum": -35552.0
+      },
+      "USpzpkW21dyKD7K_heat_heat": {
+        "max": 0.0,
+        "min": -5421.0,
+        "sum": -75038.0
+      },
+      "WAvCGhwEtmUtnae_heat-storage_heat": {
+        "max": 8850.0,
+        "min": -5670.0,
+        "sum": 41383.0
+      },
+      "XH9FBgR486jdI5i_hp_electricity": {
+        "max": 0.0,
+        "min": -3613.0,
+        "sum": -42148.0
+      },
+      "XH9FBgR486jdI5i_hp_heat": {
+        "max": 19551.0,
+        "min": 0.0,
+        "sum": 223166.0
+      },
+      "YxZdGoOEwWuymtn_hp_electricity": {
+        "max": 0.0,
+        "min": -815.0,
+        "sum": -12344.0
+      },
+      "YxZdGoOEwWuymtn_hp_heat": {
+        "max": 3673.0,
+        "min": 0.0,
+        "sum": 56212.0
+      },
+      "aqbiQlTWoVQnNgA_heat-storage_heat": {
+        "max": 1708.0,
+        "min": 0.0,
+        "sum": 18423.0
+      },
+      "eaeyiqJ8wQZPnbA_battery_electricity": {
+        "max": 522.0,
+        "min": -5430.0,
+        "sum": -64572.0
+      },
+      "fvjQOjvDgwAJfKJ_heat_heat": {
+        "max": 0.0,
+        "min": -5293.0,
+        "sum": -74635.0
+      },
+      "mIXWET7TFaBceBQ_pv_electricity": {
+        "max": 22245.0,
+        "min": 0.0,
+        "sum": 276603.0
+      },
+      "oL8eCt0IDsmSfoZ_heat-storage_heat": {
+        "max": 5708.0,
+        "min": -1149.0,
+        "sum": 46838.0
+      },
+      "tBqmhfIXCf7w91Q_hp_electricity": {
+        "max": 0.0,
+        "min": -1051.0,
+        "sum": -11765.0
+      },
+      "tBqmhfIXCf7w91Q_hp_heat": {
+        "max": 6116.0,
+        "min": 0.0,
+        "sum": 68071.0
+      },
+      "uGejQ42KN5P08ul_heat_heat": {
+        "max": 0.0,
+        "min": -18406.0,
+        "sum": -270088.0
+      },
+      "xfQ5sPV3ZiaAoh6_heat-storage_heat": {
+        "max": 2399.0,
+        "min": -2056.0,
+        "sum": 6967.0
+      },
+      "xgh4MjjaY0vzizn_inflexible-load_electricity": {
+        "max": 0.0,
+        "min": -4638.0,
+        "sum": -47817.0
+      },
+      "zKsB8TK57QzbU9e_heat_heat": {
+        "max": 0.0,
+        "min": -18172.0,
+        "sum": -258422.0
+      },
+      "znqoDt4dfrsFVd7_inflexible-load_electricity": {
+        "max": 0.0,
+        "min": -13842.0,
+        "sum": -173612.0
+      }
+    },
+    "files": 4,
+    "rows": 192
+  },
+  "agents/sfh/setpoints.ft": {
+    "columns": {
+      "2282uhPHwyyKmOb_pv_electricity": {
+        "max": 2357.0,
+        "min": 0.0,
+        "sum": 13120.0
+      },
+      "6nZrhjcezxykk8k_inflexible-load_electricity": {
+        "max": -93.0,
+        "min": -804.0,
+        "sum": -6453.0
+      },
+      "Aap6N3EMAbmr8Ns_hp_electricity": {
+        "max": 0.0,
+        "min": -841.0,
+        "sum": -1389.0
+      },
+      "Aap6N3EMAbmr8Ns_hp_heat": {
+        "max": 5006.0,
+        "min": 0.0,
+        "sum": 8110.0
+      },
+      "BgdtLeH87ZJDwIh_inflexible-load_electricity": {
+        "max": -250.0,
+        "min": -528.0,
+        "sum": -8112.0
+      },
+      "BxPoL5lLvP3UXWq_ev_electricity": {
+        "max": 0.0,
+        "min": -2840.0,
+        "sum": -12298.0
+      },
+      "JmprVAPBiP8h1lE_pv_electricity": {
+        "max": 2196.0,
+        "min": 0.0,
+        "sum": 13624.0
+      },
+      "MHHIT2EvTDkWJh2_ev_electricity": {
+        "max": 0.0,
+        "min": -7200.0,
+        "sum": -17980.0
+      },
+      "NM8yjx266keGQjn_battery_electricity": {
+        "max": 1508.0,
+        "min": -1458.0,
+        "sum": 1224.0
+      },
+      "USpzpkW21dyKD7K_heat_heat": {
+        "max": -138.0,
+        "min": -310.0,
+        "sum": -5421.0
+      },
+      "WAvCGhwEtmUtnae_heat-storage_heat": {
+        "max": 1138.0,
+        "min": -4537.0,
+        "sum": 10062.0
+      },
+      "XH9FBgR486jdI5i_hp_electricity": {
+        "max": 0.0,
+        "min": -361.0,
+        "sum": -1606.0
+      },
+      "XH9FBgR486jdI5i_hp_heat": {
+        "max": 2146.0,
+        "min": 0.0,
+        "sum": 8858.0
+      },
+      "YxZdGoOEwWuymtn_hp_electricity": {
+        "max": 0.0,
+        "min": -181.0,
+        "sum": -977.0
+      },
+      "YxZdGoOEwWuymtn_hp_heat": {
+        "max": 766.0,
+        "min": 0.0,
+        "sum": 4316.0
+      },
+      "aqbiQlTWoVQnNgA_heat-storage_heat": {
+        "max": 271.0,
+        "min": -594.0,
+        "sum": 977.0
+      },
+      "continuous_electricity": {
+        "max": 7727.0,
+        "min": -2572.0,
+        "sum": 18641.0
+      },
+      "eaeyiqJ8wQZPnbA_battery_electricity": {
+        "max": 2360.0,
+        "min": -3362.0,
+        "sum": 1916.0
+      },
+      "fvjQOjvDgwAJfKJ_heat_heat": {
+        "max": -46.0,
+        "min": -345.0,
+        "sum": -5293.0
+      },
+      "mIXWET7TFaBceBQ_pv_electricity": {
+        "max": 3586.0,
+        "min": 0.0,
+        "sum": 22245.0
+      },
+      "oL8eCt0IDsmSfoZ_heat-storage_heat": {
+        "max": 1334.0,
+        "min": -1994.0,
+        "sum": 9548.0
+      },
+      "tBqmhfIXCf7w91Q_hp_electricity": {
+        "max": 0.0,
+        "min": -236.0,
+        "sum": -417.0
+      },
+      "tBqmhfIXCf7w91Q_hp_heat": {
+        "max": 1403.0,
+        "min": 0.0,
+        "sum": 2443.0
+      },
+      "uGejQ42KN5P08ul_heat_heat": {
+        "max": -117.0,
+        "min": -1334.0,
+        "sum": -18406.0
+      },
+      "xfQ5sPV3ZiaAoh6_heat-storage_heat": {
+        "max": 310.0,
+        "min": -1257.0,
+        "sum": 2978.0
+      },
+      "xgh4MjjaY0vzizn_inflexible-load_electricity": {
+        "max": -78.0,
+        "min": -882.0,
+        "sum": -8387.0
+      },
+      "zKsB8TK57QzbU9e_heat_heat": {
+        "max": -455.0,
+        "min": -1138.0,
+        "sum": -18172.0
+      },
+      "znqoDt4dfrsFVd7_inflexible-load_electricity": {
+        "max": -256.0,
+        "min": -1508.0,
+        "sum": -13149.0
+      }
+    },
+    "files": 4,
+    "rows": 96
+  },
+  "agents/sfh/socs.ft": {
+    "columns": {
+      "BxPoL5lLvP3UXWq": {
+        "max": 40329.0,
+        "min": 0.0,
+        "sum": 976877.0
+      },
+      "MHHIT2EvTDkWJh2": {
+        "max": 60053.0,
+        "min": 0.0,
+        "sum": 1446422.0
+      },
+      "NM8yjx266keGQjn": {
+        "max": 3439.0,
+        "min": 0.0,
+        "sum": 39983.0
+      },
+      "WAvCGhwEtmUtnae": {
+        "max": 14229.0,
+        "min": 0.0,
+        "sum": 184893.0
+      },
+      "aqbiQlTWoVQnNgA": {
+        "max": 2750.0,
+        "min": 0.0,
+        "sum": 47181.0
+      },
+      "eaeyiqJ8wQZPnbA": {
+        "max": 5500.0,
+        "min": 0.0,
+        "sum": 70553.0
+      },
+      "oL8eCt0IDsmSfoZ": {
+        "max": 10255.0,
+        "min": 0.0,
+        "sum": 187053.0
+      },
+      "xfQ5sPV3ZiaAoh6": {
+        "max": 4458.0,
+        "min": 0.0,
+        "sum": 56585.0
+      }
+    },
+    "files": 4,
+    "rows": 192
+  },
+  "agents/sfh/timeseries.ft": {
+    "columns": {
+      "2282uhPHwyyKmOb_electricity": {
+        "max": 3199.0,
+        "min": 0.0,
+        "sum": 50049.0
+      },
+      "6nZrhjcezxykk8k_electricity": {
+        "max": 3899.0,
+        "min": 93.0,
+        "sum": 55152.0
+      },
+      "Aap6N3EMAbmr8Ns_COP100_dhw": {
+        "max": 463.0,
+        "min": 331.0,
+        "sum": 35928.0
+      },
+      "Aap6N3EMAbmr8Ns_COP100_heat": {
+        "max": 620.0,
+        "min": 487.0,
+        "sum": 50926.0
+      },
+      "Aap6N3EMAbmr8Ns_P_electricity_dhw": {
+        "max": 1445.0,
+        "min": 988.0,
+        "sum": 109453.0
+      },
+      "Aap6N3EMAbmr8Ns_P_electricity_heat": {
+        "max": 877.0,
+        "min": 846.0,
+        "sum": 81305.0
+      },
+      "Aap6N3EMAbmr8Ns_P_heat_dhw": {
+        "max": 4781.0,
+        "min": 3710.0,
+        "sum": 405571.0
+      },
+      "Aap6N3EMAbmr8Ns_P_heat_heat": {
+        "max": 5245.0,
+        "min": 4150.0,
+        "sum": 431518.0
+      },
+      "BgdtLeH87ZJDwIh_electricity": {
+        "max": 598.0,
+        "min": 232.0,
+        "sum": 33952.0
+      },
+      "BxPoL5lLvP3UXWq_availability": {
+        "max": 1.0,
+        "min": 0.0,
+        "sum": 75.0
+      },
+      "BxPoL5lLvP3UXWq_energy_consumed": {
+        "max": 8317.0,
+        "min": 0.0,
+        "sum": 17097.0
+      },
+      "JmprVAPBiP8h1lE_electricity": {
+        "max": 3476.0,
+        "min": 0.0,
+        "sum": 53778.0
+      },
+      "MHHIT2EvTDkWJh2_availability": {
+        "max": 1.0,
+        "min": 0.0,
+        "sum": 57.0
+      },
+      "MHHIT2EvTDkWJh2_energy_consumed": {
+        "max": 9253.0,
+        "min": 0.0,
+        "sum": 24148.0
+      },
+      "USpzpkW21dyKD7K_heat": {
+        "max": 310.0,
+        "min": 89.0,
+        "sum": 22013.0
+      },
+      "XH9FBgR486jdI5i_COP100_dhw": {
+        "max": 463.0,
+        "min": 331.0,
+        "sum": 35928.0
+      },
+      "XH9FBgR486jdI5i_COP100_heat": {
+        "max": 620.0,
+        "min": 487.0,
+        "sum": 50926.0
+      },
+      "XH9FBgR486jdI5i_P_electricity_dhw": {
+        "max": 1445.0,
+        "min": 988.0,
+        "sum": 109453.0
+      },
+      "XH9FBgR486jdI5i_P_electricity_heat": {
+        "max": 877.0,
+        "min": 846.0,
+        "sum": 81305.0
+      },
+      "XH9FBgR486jdI5i_P_heat_dhw": {
+        "max": 4781.0,
+        "min": 3710.0,
+        "sum": 405571.0
+      },
+      "XH9FBgR486jdI5i_P_heat_heat": {
+        "max": 5245.0,
+        "min": 4150.0,
+        "sum": 431518.0
+      },
+      "YxZdGoOEwWuymtn_COP100_dhw": {
+        "max": 303.0,
+        "min": 239.0,
+        "sum": 26811.0
+      },
+      "YxZdGoOEwWuymtn_COP100_heat": {
+        "max": 467.0,
+        "min": 402.0,
+        "sum": 42466.0
+      },
+      "YxZdGoOEwWuymtn_P_electricity_dhw": {
+        "max": 1364.0,
+        "min": 369.0,
+        "sum": 92057.0
+      },
+      "YxZdGoOEwWuymtn_P_electricity_heat": {
+        "max": 935.0,
+        "min": 261.0,
+        "sum": 55454.0
+      },
+      "YxZdGoOEwWuymtn_P_heat_dhw": {
+        "max": 4141.0,
+        "min": 880.0,
+        "sum": 261826.0
+      },
+      "YxZdGoOEwWuymtn_P_heat_heat": {
+        "max": 4361.0,
+        "min": 1050.0,
+        "sum": 248582.0
+      },
+      "fvjQOjvDgwAJfKJ_heat": {
+        "max": 345.0,
+        "min": 46.0,
+        "sum": 21571.0
+      },
+      "mIXWET7TFaBceBQ_electricity": {
+        "max": 5675.0,
+        "min": 0.0,
+        "sum": 87808.0
+      },
+      "tBqmhfIXCf7w91Q_COP100_dhw": {
+        "max": 463.0,
+        "min": 331.0,
+        "sum": 35928.0
+      },
+      "tBqmhfIXCf7w91Q_COP100_heat": {
+        "max": 620.0,
+        "min": 487.0,
+        "sum": 50926.0
+      },
+      "tBqmhfIXCf7w91Q_P_electricity_dhw": {
+        "max": 1445.0,
+        "min": 988.0,
+        "sum": 109453.0
+      },
+      "tBqmhfIXCf7w91Q_P_electricity_heat": {
+        "max": 877.0,
+        "min": 846.0,
+        "sum": 81305.0
+      },
+      "tBqmhfIXCf7w91Q_P_heat_dhw": {
+        "max": 4781.0,
+        "min": 3710.0,
+        "sum": 405571.0
+      },
+      "tBqmhfIXCf7w91Q_P_heat_heat": {
+        "max": 5245.0,
+        "min": 4150.0,
+        "sum": 431518.0
+      },
+      "uGejQ42KN5P08ul_heat": {
+        "max": 1334.0,
+        "min": 0.0,
+        "sum": 83950.0
+      },
+      "xgh4MjjaY0vzizn_electricity": {
+        "max": 882.0,
+        "min": 77.0,
+        "sum": 30657.0
+      },
+      "zKsB8TK57QzbU9e_heat": {
+        "max": 1138.0,
+        "min": 296.0,
+        "sum": 75996.0
+      },
+      "znqoDt4dfrsFVd7_electricity": {
+        "max": 1721.0,
+        "min": 148.0,
+        "sum": 54452.0
+      }
+    },
+    "files": 4,
+    "rows": 384
+  },
+  "general/retailer.ft": {
+    "columns": {
+      "balancing_energy_in": {
+        "max": 1000000.0,
+        "min": 1000000.0,
+        "sum": 47000000.0
+      },
+      "balancing_energy_out": {
+        "max": 1000000.0,
+        "min": 1000000.0,
+        "sum": 47000000.0
+      },
+      "balancing_price_in": {
+        "max": 400.0,
+        "min": 400.0,
+        "sum": 18800.0
+      },
+      "balancing_price_out": {
+        "max": 1600.0,
+        "min": 1600.0,
+        "sum": 75200.0
+      },
+      "energy_energy_in": {
+        "max": 100000.0,
+        "min": 100000.0,
+        "sum": 4700000.0
+      },
+      "energy_energy_out": {
+        "max": 100000.0,
+        "min": 100000.0,
+        "sum": 4700000.0
+      },
+      "energy_price_in": {
+        "max": 500.0,
+        "min": 500.0,
+        "sum": 23500.0
+      },
+      "energy_price_out": {
+        "max": 1500.0,
+        "min": 1500.0,
+        "sum": 70500.0
+      },
+      "energy_quality": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_market_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_market_out": {
+        "max": 400.0,
+        "min": 400.0,
+        "sum": 18800.0
+      },
+      "grid_retail_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_retail_out": {
+        "max": 800.0,
+        "min": 800.0,
+        "sum": 37600.0
+      },
+      "levies_price_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "levies_price_out": {
+        "max": 1800.0,
+        "min": 1800.0,
+        "sum": 84600.0
+      }
+    },
+    "files": 1,
+    "rows": 47
+  },
+  "general/timetable.ft": {
+    "columns": {},
+    "files": 1,
+    "rows": 576
+  },
+  "general/weather/weather.ft": {
+    "columns": {
+      "cloud_cover": {
+        "max": 100.0,
+        "min": 0.0,
+        "sum": 43954938.1
+      },
+      "dhi": {
+        "max": 419.0,
+        "min": 0.0,
+        "sum": 3652525.0
+      },
+      "ghi": {
+        "max": 1035.6,
+        "min": 0.0,
+        "sum": 118350995.17156257
+      },
+      "humidity": {
+        "max": 100.0,
+        "min": 22.0,
+        "sum": 59730829.8
+      },
+      "pop": {
+        "max": 1.0,
+        "min": 0.0,
+        "sum": 130179.66
+      },
+      "pressure": {
+        "max": 1072.0,
+        "min": 944.9,
+        "sum": 830907053.0
+      },
+      "sunrise": {
+        "max": 1617252704.0,
+        "min": 0.0,
+        "sum": 35010825383100.0
+      },
+      "sunset": {
+        "max": 1617298984.0,
+        "min": 0.0,
+        "sum": 35011754317682.0
+      },
+      "temp": {
+        "max": 295.74,
+        "min": 260.83,
+        "sum": 226227127.54000002
+      },
+      "temp_feels_like": {
+        "max": 294.89,
+        "min": 256.4,
+        "sum": 223326436.12
+      },
+      "temp_max": {
+        "max": 295.93,
+        "min": 263.15,
+        "sum": 13363085.989999998
+      },
+      "temp_min": {
+        "max": 294.82,
+        "min": 258.15,
+        "sum": 13281008.849999998
+      },
+      "visibility": {
+        "max": 10000.0,
+        "min": 29.0,
+        "sum": 7789771332.0
+      },
+      "wind_dir": {
+        "max": 360.0,
+        "min": 0.0,
+        "sum": 163067025.0
+      },
+      "wind_speed": {
+        "max": 10.07,
+        "min": 0.03,
+        "sum": 2161935.7
+      }
+    },
+    "files": 1,
+    "rows": 813100
+  },
+  "markets/electricity/continuous/bids_cleared.ft": {
+    "columns": {
+      "energy_in": {
+        "max": 7873.0,
+        "min": 1.0,
+        "sum": 578144.0
+      },
+      "index": {
+        "max": 498.0,
+        "min": 0.0,
+        "sum": 124251.0
+      },
+      "price_in": {
+        "max": 11809500.0,
+        "min": 500.0,
+        "sum": 585715000.0
+      },
+      "price_pu_in": {
+        "max": 1500.0,
+        "min": 500.0,
+        "sum": 547500.0
+      }
+    },
+    "files": 1,
+    "rows": 499
+  },
+  "markets/electricity/continuous/bids_uncleared.ft": {
+    "columns": {},
+    "files": 1,
+    "rows": 0
+  },
+  "markets/electricity/continuous/market_transactions.ft": {
+    "columns": {
+      "energy_in": {
+        "max": 7873.0,
+        "min": 0.0,
+        "sum": 619825.0
+      },
+      "energy_out": {
+        "max": 7873.0,
+        "min": 0.0,
+        "sum": 625594.0
+      },
+      "index": {
+        "max": 1192.0,
+        "min": 0.0,
+        "sum": 711028.0
+      },
+      "price_in": {
+        "max": 11809500.0,
+        "min": 0.0,
+        "sum": 640718400.0
+      },
+      "price_out": {
+        "max": 11809500.0,
+        "min": 0.0,
+        "sum": 586821400.0
+      },
+      "price_pu_in": {
+        "max": 1800.0,
+        "min": 500.0,
+        "sum": 806700.0
+      },
+      "price_pu_out": {
+        "max": 1500.0,
+        "min": 0.0,
+        "sum": 555100.0
+      }
+    },
+    "files": 1,
+    "rows": 1193
+  },
+  "markets/electricity/continuous/offers_cleared.ft": {
+    "columns": {
+      "energy_out": {
+        "max": 7873.0,
+        "min": 1.0,
+        "sum": 578144.0
+      },
+      "index": {
+        "max": 498.0,
+        "min": 0.0,
+        "sum": 124251.0
+      },
+      "price_out": {
+        "max": 11809500.0,
+        "min": 500.0,
+        "sum": 585715000.0
+      },
+      "price_pu_out": {
+        "max": 1500.0,
+        "min": 500.0,
+        "sum": 547500.0
+      }
+    },
+    "files": 1,
+    "rows": 499
+  },
+  "markets/electricity/continuous/offers_uncleared.ft": {
+    "columns": {},
+    "files": 1,
+    "rows": 0
+  },
+  "markets/electricity/continuous/retailer.ft": {
+    "columns": {
+      "balancing_energy_in": {
+        "max": 1000000.0,
+        "min": 1000000.0,
+        "sum": 47000000.0
+      },
+      "balancing_energy_out": {
+        "max": 1000000.0,
+        "min": 1000000.0,
+        "sum": 47000000.0
+      },
+      "balancing_price_in": {
+        "max": 400.0,
+        "min": 400.0,
+        "sum": 18800.0
+      },
+      "balancing_price_out": {
+        "max": 1600.0,
+        "min": 1600.0,
+        "sum": 75200.0
+      },
+      "energy_energy_in": {
+        "max": 100000.0,
+        "min": 100000.0,
+        "sum": 4700000.0
+      },
+      "energy_energy_out": {
+        "max": 100000.0,
+        "min": 100000.0,
+        "sum": 4700000.0
+      },
+      "energy_price_in": {
+        "max": 500.0,
+        "min": 500.0,
+        "sum": 23500.0
+      },
+      "energy_price_out": {
+        "max": 1500.0,
+        "min": 1500.0,
+        "sum": 70500.0
+      },
+      "energy_quality": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_market_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_market_out": {
+        "max": 400.0,
+        "min": 400.0,
+        "sum": 18800.0
+      },
+      "grid_retail_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_retail_out": {
+        "max": 800.0,
+        "min": 800.0,
+        "sum": 37600.0
+      },
+      "index": {
+        "max": 46.0,
+        "min": 0.0,
+        "sum": 1081.0
+      },
+      "levies_price_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "levies_price_out": {
+        "max": 1800.0,
+        "min": 1800.0,
+        "sum": 84600.0
+      }
+    },
+    "files": 1,
+    "rows": 47
+  },
+  "markets/electricity/continuous/timetable.ft": {
+    "columns": {
+      "index": {
+        "max": 575.0,
+        "min": 0.0,
+        "sum": 165600.0
+      }
+    },
+    "files": 1,
+    "rows": 576
+  },
+  "markets/timetable.ft": {
+    "columns": {
+      "index": {
+        "max": 575.0,
+        "min": 0.0,
+        "sum": 165600.0
+      }
+    },
+    "files": 1,
+    "rows": 576
+  },
+  "retailers/electricity/continuous/retailer.ft": {
+    "columns": {
+      "balancing_energy_in": {
+        "max": 1000000.0,
+        "min": 1000000.0,
+        "sum": 47000000.0
+      },
+      "balancing_energy_out": {
+        "max": 1000000.0,
+        "min": 1000000.0,
+        "sum": 47000000.0
+      },
+      "balancing_price_in": {
+        "max": 400.0,
+        "min": 400.0,
+        "sum": 18800.0
+      },
+      "balancing_price_out": {
+        "max": 1600.0,
+        "min": 1600.0,
+        "sum": 75200.0
+      },
+      "energy_energy_in": {
+        "max": 100000.0,
+        "min": 100000.0,
+        "sum": 4700000.0
+      },
+      "energy_energy_out": {
+        "max": 100000.0,
+        "min": 100000.0,
+        "sum": 4700000.0
+      },
+      "energy_price_in": {
+        "max": 500.0,
+        "min": 500.0,
+        "sum": 23500.0
+      },
+      "energy_price_out": {
+        "max": 1500.0,
+        "min": 1500.0,
+        "sum": 70500.0
+      },
+      "energy_quality": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_market_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_market_out": {
+        "max": 400.0,
+        "min": 400.0,
+        "sum": 18800.0
+      },
+      "grid_retail_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_retail_out": {
+        "max": 800.0,
+        "min": 800.0,
+        "sum": 37600.0
+      },
+      "index": {
+        "max": 46.0,
+        "min": 0.0,
+        "sum": 1081.0
+      },
+      "levies_price_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "levies_price_out": {
+        "max": 1800.0,
+        "min": 1800.0,
+        "sum": 84600.0
+      }
+    },
+    "files": 1,
+    "rows": 47
+  },
+  "retailers/retailers.ft": {
+    "columns": {
+      "balancing_energy_in": {
+        "max": 1000000.0,
+        "min": 1000000.0,
+        "sum": 47000000.0
+      },
+      "balancing_energy_out": {
+        "max": 1000000.0,
+        "min": 1000000.0,
+        "sum": 47000000.0
+      },
+      "balancing_price_in": {
+        "max": 400.0,
+        "min": 400.0,
+        "sum": 18800.0
+      },
+      "balancing_price_out": {
+        "max": 1600.0,
+        "min": 1600.0,
+        "sum": 75200.0
+      },
+      "energy_energy_in": {
+        "max": 100000.0,
+        "min": 100000.0,
+        "sum": 4700000.0
+      },
+      "energy_energy_out": {
+        "max": 100000.0,
+        "min": 100000.0,
+        "sum": 4700000.0
+      },
+      "energy_price_in": {
+        "max": 500.0,
+        "min": 500.0,
+        "sum": 23500.0
+      },
+      "energy_price_out": {
+        "max": 1500.0,
+        "min": 1500.0,
+        "sum": 70500.0
+      },
+      "energy_quality": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_market_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_market_out": {
+        "max": 400.0,
+        "min": 400.0,
+        "sum": 18800.0
+      },
+      "grid_retail_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "grid_retail_out": {
+        "max": 800.0,
+        "min": 800.0,
+        "sum": 37600.0
+      },
+      "index": {
+        "max": 46.0,
+        "min": 0.0,
+        "sum": 1081.0
+      },
+      "levies_price_in": {
+        "max": 0.0,
+        "min": 0.0,
+        "sum": 0.0
+      },
+      "levies_price_out": {
+        "max": 1800.0,
+        "min": 1800.0,
+        "sum": 84600.0
+      }
+    },
+    "files": 1,
+    "rows": 47
+  }
+}

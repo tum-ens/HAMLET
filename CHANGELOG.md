@@ -9,6 +9,87 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ---
 
 ## [Unreleased]
+### Fixed
+- **Fixed grid fees and levies being applied in the wrong power-flow direction.** The scenario
+  configuration lists grid fees and levies as `[buying, selling]` but energy as
+  `[selling, buying]`, and that inconsistency survived into the retailer table, so downstream
+  code had to compensate per component. The Creator now normalises both spellings to one
+  convention — `_out` is always the direction the agent pays for — and the executor crosses
+  every retailer column uniformly. Existing scenario **configuration** files keep their current
+  meaning and need no changes -- but see the migration note below, because generated scenarios
+  and user-supplied retailer CSVs do not
+- Fixed the MPC reading the market energy prices the wrong way round, so agents saw a lower
+  price for buying than for selling and could trade against the retailer at a profit
+- Fixed the MPC bounding the agent's purchase with the retailer's purchase quantity rather than
+  its sale quantity (no effect while the two are configured equal)
+- Fixed the PyOptInterface backends, which had drifted from the linopy ones: the MPC read the
+  energy prices the wrong way round and bounded the market power with retailer columns that do
+  not exist (so it raised `KeyError` on construction and the backend was unusable), the EV
+  state of charge and `min_soc` scheme still had their pre-fix forms, the real-time controller
+  ignored the configurable optimisation bounds, and neither controller had balance slacks
+- Fixed grid fees and levies being charged on gross rather than net energy, which overcharged
+  every agent that both bought and sold within a timestep
+- Fixed the net energy behind grid fees and levies omitting the trades cleared in the timestep
+  being settled
+- Fixed the EV state of charge ignoring the battery capacity and being able to go negative
+- Fixed the EV `min_soc` charging scheme, which let the car leave below its minimum state of
+  charge. The state-of-charge recursion now includes the energy the car spends driving; without
+  it the modelled state of charge only ever rose, so once the car had driven anywhere the
+  minimum was satisfied on paper and the car was never actually recharged
+- Fixed EV time series being averaged when resampled, which lost most of a trip's driving
+  energy and could truncate the availability flag to zero so the car never charged at all.
+  Resampling an EV series to a finer resolution also used to drop the end of the series
+- Fixed controllers configured as off still being run when the setting came from `agents.xlsx`
+  as an empty cell rather than as `None`
+- Fixed retailer prices being broadcast as a column instead of read as a scalar, which gave
+  each transaction in a timestep a different price when the retailer table had several rows
+- Fixed the weather file name being hard-coded in the executor rather than read from the
+  scenario's `setup.yaml`, so a scenario declaring `weather.csv` failed with a
+  FileNotFoundError naming a file the user never asked for
+- Fixed `load_file` being unable to read any CSV with default arguments: polars rejected the
+  default `parse_dates=None` with a TypeError naming an argument the caller never passed
+- Fixed the forecaster failing with `list.remove(x): x not in list` on scenarios whose agent
+  time series name the time column `index` rather than `timestamp`
+### Added
+- Added a test suite (`tests/`) split into `unit/`, `integration/` and `e2e/`, mirroring the
+  package layout. `python -m pytest tests` runs unit and integration in seconds on HiGHS;
+  `python -m pytest tests -m e2e` runs the shipped example end to end
+- Added a golden-master test (`python -m pytest tests -m golden`) that runs the shipped example
+  under a fixed seed and compares per-table row counts and per-column statistics against a
+  committed reference, so a change that moves results has to be acknowledged rather than noticed
+  later. Regenerate the reference with `HAMLET_UPDATE_GOLDEN=1` and commit it with the change
+### Changed
+- Out-of-horizon market records are dropped more cheaply: most calls have nothing to drop and
+  now exit after a single pass, and when there is, the membership test is evaluated once and
+  reused for both sides of the split instead of scanning the table twice. The output folder is
+  only created when something is written. Measured on a 20,000-row table, the case that occurs
+  in practice went from 0.097 ms to 0.010 ms
+- pandapower's progress bar is no longer printed once per horizon on every timestep when the
+  §14a grid restriction is active
+- The real-time controller's optimisation bounds (balancing power, market power and the two
+  heat-pump fallbacks) are now configurable via a `limits` block under the `rtc` controller
+  instead of being hard-coded. The defaults reproduce the previous behaviour exactly
+- **The balance equations now carry slack variables, on by default**, so a single infeasible
+  agent no longer aborts a whole run: the controller sheds or dumps energy at a
+  value-of-lost-load penalty instead. This changes what a previously-infeasible scenario does --
+  it now completes instead of raising. Every use is logged at WARNING, because the shed energy
+  is not written to the setpoints and the results for that timestep therefore do not balance.
+  Disable per agent with `slack: false` under the controller to get the old behaviour back
+
+### Migration
+- **Re-create your scenarios.** The power-flow direction fix spans the Creator and the Executor,
+  so a scenario folder generated by an earlier version and executed by this one has its grid
+  fees and levies applied to feed-in instead of consumption. Nothing detects the mismatch:
+  scenario folders carry no version stamp. Re-run the Creator for any scenario you intend to
+  keep using
+- **Relabel your own retailer CSVs.** Scenarios using `method: file` read retailer columns by
+  name and no normalisation is applied to them. In `grid.csv` and `levies.csv` the charged value
+  must now sit in the `_out` column rather than `_in`; the two files shipped under
+  `input_data/retailers/lem/` have been relabelled accordingly. `energy.csv` and `balancing.csv`
+  are unaffected
+- `Agents._resample_timeseries` takes an additional `plant_dict` argument, and
+  `ElectricityMarket._create_fixed_cols` became a classmethod. Both are internal, but anything
+  calling them from outside the package needs updating
 
 ## [Version 1.2.0] - 2025-07-29
 ### Added

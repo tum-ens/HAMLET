@@ -464,14 +464,19 @@ class Database:
         Get all general information from files in scenario path and write them to self.__general dict.
 
         """
-        self.__general[c.K_WEATHER] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'weather',
-                                                                    'weather.ft'), df='polars', method='eager', memory_map=False)
+        self.__general[c.K_GENERAL] = f.load_file(path=os.path.join(self.__scenario_path, 'config',
+                                                                    'setup.yaml'))
+        # Note: the weather file name is read from the scenario's own setup, which is where the
+        # user declares it. Hard-coding the extension here meant a scenario declaring the other
+        # one failed with a FileNotFoundError naming a file the user never asked for.
+        weather_file = self.__general[c.K_GENERAL]['location'].get('weather', 'weather.ft')
+        self.__general[c.K_WEATHER] = f.load_file(
+            path=os.path.join(self.__scenario_path, 'general', 'weather', weather_file),
+            df='polars', method='eager', memory_map=False, parse_dates=True)
         self.__general[c.K_RETAILER] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'retailer.ft'),
                                                    df='polars', method='eager')
         self.__general[c.K_TASKS] = f.load_file(path=os.path.join(self.__scenario_path, 'general', 'timetable.ft'),
                                                 df='polars', method='eager')
-        self.__general[c.K_GENERAL] = f.load_file(path=os.path.join(self.__scenario_path, 'config',
-                                                                    'setup.yaml'))
         self.__general[c.K_GRID] = f.load_file(path=os.path.join(self.__scenario_path, 'config', 'grids.yaml'))
 
     def __register_all_regions(self, structure):
