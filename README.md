@@ -83,6 +83,28 @@ If using PyCharm, clone the repository, for example, to `./PyCharmProjects/hamle
     - Run the jupyter notebook `run.ipynb`
     - If everything is installed correctly, the notebook should run without errors and you should see the results of the example scenario.
 
+## Citing HAMLET
+If you use HAMLET in your research, please cite the following publication:
+
+- M. Doepfert, J. Chu, T. Hamacher, [HAMLET: A modular agent-based Python framework for energy markets and
+systems](https://www.sciencedirect.com/science/article/pii/S2352711025003127), 2025, [SoftwareX](https://www.sciencedirect.com/journal/softwarex), Volume 32, 12346, ISSN 2352-7110, [DOI:10.1016/j.softx.2025.102346](https://doi.org/10.1016/j.softx.2025.102346).
+
+Please use the following BibTeX:
+
+```
+@article{HAMLET,
+  author={Doepfert, Markus and Chu, Jiahe and Hamacher, Thomas},
+  title={HAMLET: A modular agent-based Python framework for energy markets and systems},
+  journal={SoftwareX},
+  volume={32},
+  pages={102346},
+  year={2025},
+  issn={2352-7110},
+  doi={10.1016/j.softx.2025.102346},
+  url={https://doi.org/10.1016/j.softx.2025.102346},
+}
+```
+
 ## Contact
 Feel free to contact us if you want to contribute to this project, cooperate on an interesting research question
 or just to ask about the project.
