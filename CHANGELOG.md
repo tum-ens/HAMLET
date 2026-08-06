@@ -47,6 +47,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added a test suite (`tests/`) split into `unit/`, `integration/` and `e2e/`, mirroring the
   package layout. `python -m pytest tests` runs unit and integration in seconds on HiGHS;
   `python -m pytest tests -m e2e` runs the shipped example end to end
+- Added a golden-master test (`python -m pytest tests -m golden`) that runs the shipped example
+  under a fixed seed and compares per-table row counts and per-column statistics against a
+  committed reference, so a change that moves results has to be acknowledged rather than noticed
+  later. Regenerate the reference with `HAMLET_UPDATE_GOLDEN=1` and commit it with the change
 ### Changed
 - Out-of-horizon market records are dropped more cheaply: most calls have nothing to drop and
   now exit after a single pass, and when there is, the membership test is evaluated once and

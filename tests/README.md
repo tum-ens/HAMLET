@@ -12,6 +12,7 @@ tests/
   integration/   several components wired together, or code that touches the filesystem
     executor/
   e2e/           the shipped example, Creator -> Executor -> Analyzer
+    golden/                    committed reference numbers
 ```
 
 `unit/` and `integration/` mirror `hamlet/`, so the test for
@@ -28,10 +29,34 @@ That runs unit and integration — seconds, HiGHS only, no solver licence. The e
 is deselected by default because it runs the whole example:
 
 ```bash
-python -m pytest tests -m e2e
+python -m pytest tests -m e2e      # smoke: does the example still run
+python -m pytest tests -m golden   # golden master: does it still produce the same numbers
 ```
 
-Markers: `solver` (builds and solves a real optimisation model), `e2e` (runs the example).
+Markers: `solver` (builds and solves a real optimisation model), `e2e` (runs the example),
+`golden` (compares against committed reference numbers). The last two take a couple of minutes
+each and are deselected by default.
+
+## The golden master
+
+Every other test pins a property someone thought to check. `tests/e2e/test_golden_master.py`
+pins the numbers themselves, so a change that moves results has to be acknowledged rather than
+noticed later. It runs the shipped example under a fixed seed and compares per-table row counts
+and per-column sum/min/max against `tests/e2e/golden/simple_scenario.json`.
+
+**When it fails**, the message names the tables and columns that moved and by how much. Decide
+whether that is the change you meant. If it is, regenerate the reference and commit it *with*
+the change, so the review sees the numbers move:
+
+```bash
+HAMLET_UPDATE_GOLDEN=1 python -m pytest tests -m golden
+```
+
+Reproducibility rests on seeding `random` and `numpy.random` and pinning `PYTHONHASHSEED`; the
+Creator draws agent ids, plant ownership and sizings from all three. Two seeded runs were
+verified to produce byte-identical scenarios and identical results. The column names in the
+reference contain those seeded agent and plant ids, so changing how ids are generated will fail
+this test — correctly, since agent identities would genuinely have changed.
 
 ## Provenance
 
