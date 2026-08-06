@@ -28,7 +28,8 @@ warnings.filterwarnings("ignore")
 
 class Executor:
 
-    def __init__(self, path, name: str = None, num_workers: int = None, overwrite_sim: bool = True):
+    def __init__(self, path, name: str = None, num_workers: int = None, overwrite_sim: bool = True,
+                 allow_incompatible_scenario: bool = False):
         # Progress bar
         self.pbar = tqdm()
 
@@ -60,6 +61,11 @@ class Executor:
 
         # Overwrites the results folder if it already exists
         self.overwrite = overwrite_sim
+
+        # Runs a scenario whose format this version of HAMLET does not read. Off by default: the
+        # mismatch it guards against changes results without raising anything (see
+        # c.SCENARIO_FORMAT_VERSION)
+        self.allow_incompatible_scenario = allow_incompatible_scenario
 
         # Maximal number of iterations per timesteps (when direct power control is activated)
         self.max_iteration = 1
@@ -188,6 +194,12 @@ class Executor:
 
         # Load general information and configuration
         self.general = f.load_file(os.path.join(self.path_scenario, 'general', 'general.json'))
+
+        # Check the scenario format before anything is read out of the folder. A scenario written
+        # by a different Creator is not read wrongly here -- it is read successfully and produces
+        # different numbers, so this has to be a refusal rather than a warning
+        f.check_scenario_format(self.general, self.path_scenario, self.allow_incompatible_scenario)
+
         self.config = f.load_file(os.path.join(self.path_scenario, 'config', 'setup.yaml'))
 
         # Load timetable
