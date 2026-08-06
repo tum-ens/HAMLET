@@ -43,6 +43,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   as an empty cell rather than as `None`
 - Fixed retailer prices being broadcast as a column instead of read as a scalar, which gave
   each transaction in a timestep a different price when the retailer table had several rows
+- Fixed the weather file name being hard-coded in the executor rather than read from the
+  scenario's `setup.yaml`, so a scenario declaring `weather.csv` failed with a
+  FileNotFoundError naming a file the user never asked for
+- Fixed `load_file` being unable to read any CSV with default arguments: polars rejected the
+  default `parse_dates=None` with a TypeError naming an argument the caller never passed
+- Fixed the forecaster failing with `list.remove(x): x not in list` on scenarios whose agent
+  time series name the time column `index` rather than `timestamp`
 ### Added
 - Added a test suite (`tests/`) split into `unit/`, `integration/` and `e2e/`, mirroring the
   package layout. `python -m pytest tests` runs unit and integration in seconds on HiGHS;
