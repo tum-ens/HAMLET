@@ -50,6 +50,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   default `parse_dates=None` with a TypeError naming an argument the caller never passed
 - Fixed the forecaster failing with `list.remove(x): x not in list` on scenarios whose agent
   time series name the time column `index` rather than `timestamp`
+- **Fixed generated scenarios depending on the filesystem, so the same configuration and seed
+  produced different scenarios on different machines.** The Creator picks each agent's load, PV,
+  heat and EV profile by drawing an index from a seeded random number generator and using it to
+  index `os.listdir()`. The seed fixed the index, but the *order* came from the filesystem —
+  alphabetical on NTFS, hash order on ext4 — so Windows and Linux assigned different profiles to
+  the same agent. Agent ids, plant counts and sizings matched, which made it easy to believe the
+  scenarios were identical when they were not. The listings are now sorted. On Windows the results
+  are unchanged, because NTFS already returned sorted order; on Linux they change to match
 - **Fixed `env.yml` not producing a working installation.** It pins only HAMLET's direct
   dependencies, so `xarray` — which arrives transitively through linopy — was resolved to the
   newest release, and linopy 0.3.11 then failed at import with
