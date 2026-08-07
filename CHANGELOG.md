@@ -63,6 +63,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   solving a two-variable problem, and prefer HiGHS, so that a developer with a Gurobi licence
   and a machine without one exercise the same backend
 ### Added
+- **Added continuous integration** (`.gitlab-ci.yml`). Every push and merge request runs the unit
+  and integration suite, the shipped example end to end, and the golden master against its
+  committed reference — as three separate jobs, so a failure names which layer broke. No solver
+  licence is needed. A lint job runs `ruff` restricted to genuine errors (undefined names, broken
+  syntax and asserts) rather than style, because the repository has no agreed style yet
+- Added `ci/requirements_from_env.py`, which derives CI's pip requirements from `env.yml` so that
+  there is still only one dependency definition. It omits `tensorflow`, `psycopg2` and `jupyter`
+  from the CI environment, and `--verify` re-checks the two omissions that are claims about the
+  source rather than about download size
+- Added `pytest` to `env.yml`. It was in no environment definition at all, so an environment built
+  as the documentation describes could not run the test suite
 - Added a test suite (`tests/`) split into `unit/`, `integration/` and `e2e/`, mirroring the
   package layout. `python -m pytest tests` runs unit and integration in seconds on HiGHS;
   `python -m pytest tests -m e2e` runs the shipped example end to end
