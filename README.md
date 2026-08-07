@@ -39,13 +39,18 @@ so you only need to adapt the components you want to investigate and/or improve 
 
 ## Installation
 HAMLET is completely based on Python to keep the installation process simple. This installation guide will
-explain how to get HAMLET to run using PyCharm, Gurobi and Anaconda as example. However, other IDEs and package managers
+explain how to get HAMLET to run using PyCharm and Anaconda as example. However, other IDEs and package managers
 are perfectly suitable as well.
 
 #### Install the following software:
 	- IDE: e.g. PyCharm
 	- Package Manager: e.g. Anaconda
-	- Solver: e.g. Gurobi* or CPLEX. GLPK can be used although this is non-ideal.
+
+No solver installation is required to get started: HAMLET installs the open-source solver HiGHS as
+part of its environment, and `examples/create_simple_scenario` — the example used to test your
+installation below — is configured to use it. A commercial solver such as Gurobi* or CPLEX is
+optional and is usually faster on larger scenarios; the remaining examples are configured for
+Gurobi.
 
     *Installation explained later in this README
 
@@ -70,7 +75,11 @@ If using PyCharm, clone the repository, for example, to `./PyCharmProjects/hamle
          `File->Settings->Project->Python Interpreter->Show all->Add->Conda Environment
           ->Existing environment->Select folder->OK`
 
-#### Install a solver (we recommend Gurobi)
+#### Optional: install a commercial solver (e.g. Gurobi)
+Skip this step unless you need it — the examples run on HiGHS, which is already installed. To use
+Gurobi instead, install it as below and set `solver: gurobi` under `optimization` in the
+scenario's `agents.yaml`.
+
 	- Go to gurobi.com
 	- Create an account with your university email 
 	- When the account has been activated, log in and download the newest Gurobi solver.
@@ -79,7 +88,7 @@ If using PyCharm, clone the repository, for example, to `./PyCharmProjects/hamle
 
 ### Test your installation
     - Navigate to ./PycharmProjects/hamlet/examples
-	- Choose one of the example scenarios (e.g. create_simple_scenario)
+	- Choose `create_simple_scenario`, which needs no solver licence (the other examples are configured for Gurobi)
     - Run the jupyter notebook `run.ipynb`
     - If everything is installed correctly, the notebook should run without errors and you should see the results of the example scenario.
 
