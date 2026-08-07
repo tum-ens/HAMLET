@@ -901,9 +901,10 @@ sfh:
                                                 #   - linopy: linopy optimization problem is solved
                                                 #   - poi: poi optimization problem is solved
 
-          solver: gurobi                        # solver used for optimization problem
+          solver: highs                         # solver used for optimization problem
                                                 # options:
-                                                #   - gurobi
+                                                #   - highs: open source, installed with HAMLET
+                                                #   - gurobi: commercial, needs a licence
 
           time_limit: 120                       # time limit for optimization problem
                                                 # unit: s
@@ -926,9 +927,10 @@ sfh:
                                                 #   - linopy: linopy mpc to forecast and optimize
                                                 #   - poi:    poi mpc to forecast and optimize
 
-          solver: gurobi                        # solver used for optimization
+          solver: highs                         # solver used for optimization
                                                 # options:
-                                                #   - gurobi
+                                                #   - highs: open source, installed with HAMLET
+                                                #   - gurobi: commercial, needs a licence
 
           time_limit: 120                       # time limit for optimization
                                                 # unit: s
