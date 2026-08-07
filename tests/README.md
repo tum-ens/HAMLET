@@ -23,16 +23,20 @@ writing files puts a test in `integration/` regardless of how small it is.
 ## Running
 
 ```bash
-python -m pytest tests
+uv sync                 # once: installs pytest and HAMLET itself, from uv.lock
+uv run python -m pytest tests
 ```
 
 That runs unit and integration — seconds, HiGHS only, no solver licence. The end-to-end layer
 is deselected by default because it runs the whole example:
 
 ```bash
-python -m pytest tests -m e2e      # smoke: does the example still run
-python -m pytest tests -m golden   # golden master: does it still produce the same numbers
+uv run python -m pytest tests -m e2e      # smoke: does the example still run
+uv run python -m pytest tests -m golden   # golden master: does it still produce the same numbers
 ```
+
+The `uv run` prefix is dropped in the rest of this file for readability; if you have activated
+`.venv` yourself, `python -m pytest` is the same thing.
 
 Markers: `solver` (builds and solves a real optimisation model), `e2e` (runs the example),
 `golden` (compares against committed reference numbers). The last two take a couple of minutes

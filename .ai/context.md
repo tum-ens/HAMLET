@@ -29,21 +29,33 @@ object. Splitting them is planned, not done.
 
 ## Environment
 
-`env.yml` is the only environment definition. There is no `pyproject.toml`, no lockfile and no
-`requirements.txt`, and nothing is installed — `run.py` and `tests/conftest.py` put the repository
-root on `sys.path`.
+`pyproject.toml` declares the dependencies and `uv.lock` pins them, transitives included. Those two
+files are the only dependency definition in the tree — `env.yml`, `requirements.txt`,
+`docs/requirements.txt` and `ci/requirements_from_env.py` are all gone, and CI installs from the
+same lock a contributor does. HAMLET is installed rather than reached through `sys.path`; nothing
+tracked appends to it any more.
 
 ```bash
-conda env create -f env.yml
+uv sync                     # the environment; also installs Python 3.11 if needed
+uv run python -m pytest     # the fast tier
 ```
 
-The pins are load-bearing rather than tidy. `xarray==2024.6.0` especially: linopy 0.3.11 imports
-`xarray.core.rolling`, which xarray removed after 2024.6.0, so with xarray unpinned pip resolves
-the newest one and `import hamlet` fails outright. The reasoning is at `env.yml:37-41`. Do not
-relax it without replacing linopy.
+Three things about it are load-bearing:
 
-A `venv/` directory in your working tree is not this project's environment. It is gitignored
-(`.gitignore:110`) and nothing tracked refers to it.
+- **`xarray==2024.6.0`** is not HAMLET's dependency; it arrives through linopy. linopy 0.3.11
+  imports `xarray.core.rolling`, which xarray removed after 2024.6.0, so with xarray unconstrained
+  a resolver takes the newest and `import hamlet` fails outright, with a traceback naming neither
+  package. It is stated in `pyproject.toml` rather than left to the lock precisely so that
+  `uv lock --upgrade` cannot move it. Do not relax it without replacing linopy.
+- **Every version is exact**, matching the environment the committed golden master was measured
+  in. That is a deliberate stage, not the end state: it keeps a change in *results* attributable.
+  Relaxing the pins to ranges, and moving off Python 3.11 (`requires-python = ">=3.11,<3.12"`),
+  are separate measured steps — see ROADMAP item #4.
+- **`tensorflow` and `gurobipy` are extras**, so the default environment has neither. Nothing under
+  `hamlet/` may import them at module scope; `fast` fails if that changes.
+
+A `venv/` directory in your working tree is not this project's environment — `uv sync` creates
+`.venv/`. Both are gitignored and nothing tracked refers to either.
 
 ## Solver
 
@@ -126,7 +138,7 @@ with an exit criterion you can run. Read the one that matches before you start.
 | [`verify-a-claim`](skills/verify-a-claim.md) | writing a factual claim into a tracked file, a commit message or an MR |
 | [`golden-master-failed`](skills/golden-master-failed.md) | `pytest -m golden` fails, or you expect it to |
 | [`write-a-regression-test`](skills/write-a-regression-test.md) | fixing a defect, or adding coverage |
-| [`change-a-dependency`](skills/change-a-dependency.md) | touching a pin in `env.yml` |
+| [`change-a-dependency`](skills/change-a-dependency.md) | touching a pin in `pyproject.toml` |
 | [`review-a-change`](skills/review-a-change.md) | a branch is ready — the reviewer panel, scaled to what the diff touches |
 | [`open-a-merge-request`](skills/open-a-merge-request.md) | work is finished and needs to reach `develop` |
 

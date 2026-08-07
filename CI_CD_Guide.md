@@ -10,13 +10,12 @@ the one that does.
 
 ## The pipeline
 
-Two stages, five jobs. GitLab CI only; there are no GitHub Actions workflows, and the GitHub
+Two stages, four jobs. GitLab CI only; there are no GitHub Actions workflows, and the GitHub
 repository is a push mirror rather than a second CI target.
 
 | Stage | Job | What it does |
 |---|---|---|
-| `lint` | `lint` | `ruff check --select E9,F63,F7,F82` over `hamlet/`, `tests/`, `ci/` |
-| `lint` | `dependency-exclusions` | re-checks the three packages CI omits from `env.yml` |
+| `lint` | `lint` | `ruff check --select E9,F63,F7,F82` over `hamlet/` and `tests/` |
 | `test` | `fast` | unit + integration, no simulation |
 | `test` | `e2e` | the shipped example, Creator → Executor → Analyzer |
 | `test` | `golden` | the same example against committed reference numbers |
@@ -35,21 +34,31 @@ other two pass `-m`. See `tests/README.md` for what each tier covers.
 `E9,F63,F7,F82` is syntax errors, undefined names, and mistakes like `assert (x, y)` — things that
 are wrong regardless of taste. The repository has no linter configuration and no agreed style, so
 a full rule set would report thousands of findings that say nothing about correctness and would
-train everyone to ignore the pipeline. Widen it when a `pyproject.toml` exists and the rules can
-live in the repository rather than in the CI file.
+train everyone to ignore the pipeline. `pyproject.toml` now exists, so moving the rules there and
+widening them is unblocked — but that changes what the pipeline enforces, which is its own commit.
 
-### Dependencies are derived, never copied
+### Dependencies come from the lockfile
 
-`ci/requirements_from_env.py` generates the CI requirements from `env.yml`. A second dependency
-list is precisely how `develop` once shipped an `env.yml` that could not import hamlet. CI omits
-`tensorflow`, `psycopg2` and `jupyter`; two of those omissions are claims about the source rather
-than about size, so `dependency-exclusions` fails if either stops being true.
+CI runs `uv sync --locked`, installing the exact versions in `uv.lock` — the same ones a
+contributor gets from `uv sync`. There is no CI dependency list and no script that generates one:
+`env.yml` and `ci/requirements_from_env.py` are both gone, and a second list is precisely how
+`develop` once shipped an `env.yml` that could not import hamlet.
 
-### Two environment variables are load-bearing
+`--locked` rather than `--frozen` on purpose. It fails the job when `pyproject.toml` and `uv.lock`
+disagree, so a dependency edited without re-locking cannot reach `develop` and surface later on
+somebody else's fresh install.
+
+`tensorflow`, `gurobipy` and `jupyter` are extras, and no job installs them. The
+`dependency-exclusions` job that used to assert this is gone, because the claim is now structural
+rather than asserted: `fast` imports `hamlet` in an environment without them, so a module-scope
+`import tensorflow` under `hamlet/` fails on the commit that introduces it, not in review.
+
+### Three environment variables are load-bearing
 
 `PYTHONHASHSEED=0`, because the golden master compares committed numbers and the Creator draws
 agent ids and plant sizings from seeded `random`. `MPLBACKEND=Agg`, because a runner has no
-display and the analyzer imports matplotlib.
+display and the analyzer imports matplotlib. `UV_PROJECT_ENVIRONMENT`, because `uv sync` otherwise
+creates `.venv` inside the checkout — see the next section for why that costs three minutes.
 
 ## The runner is a laptop
 
@@ -82,6 +91,12 @@ pip was never network-bound here — every trace showed a full cache hit and zer
 cost was writing 1.2 GB across ~24,000 files, so the fix is to stop writing them. **The venv's
 location is the mechanism, not uv alone**: uv hardlinks out of its cache only when the target is on
 the same filesystem, and `--system` writes into the image layer, which is a different one.
+
+This is why `.python` exports `UV_PROJECT_ENVIRONMENT="/cache/venv-$CI_JOB_ID"` before running
+`uv sync`. Left to itself, `uv sync` puts the environment at `.venv` in the checkout — a different
+filesystem from `UV_CACHE_DIR`, which is exactly the 1 s → 223 s case in the table. Anything that
+"simplifies" that export away silently gives back the win. Per job id, so concurrent jobs cannot
+race over one venv; the files are hardlinks, so the duplication costs almost no disk.
 
 So `UV_CACHE_DIR` and the venv both live on `/cache`, a volume the runner mounts into every job
 container. That is a per-runner cache rather than a GitLab `cache:` entry, which would tar and
