@@ -50,6 +50,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   default `parse_dates=None` with a TypeError naming an argument the caller never passed
 - Fixed the forecaster failing with `list.remove(x): x not in list` on scenarios whose agent
   time series name the time column `index` rather than `timestamp`
+- **Fixed `env.yml` not producing a working installation.** It pins only HAMLET's direct
+  dependencies, so `xarray` — which arrives transitively through linopy — was resolved to the
+  newest release, and linopy 0.3.11 then failed at import with
+  `ModuleNotFoundError: No module named 'xarray.core.rolling'`. A fresh environment could not
+  `import hamlet` at all. `xarray` is now pinned to the version HAMLET is developed against.
+  This is a stopgap; the durable fix is a lockfile, so that no transitive dependency is left for
+  the resolver to pick
+- Fixed the PyOptInterface tests reporting a missing Gurobi licence as two failures rather than
+  as skips. They asked whether the solver's shared library was loadable, which Gurobi's is even
+  without a licence — the licence is only checked at `optimize()`. They now probe by actually
+  solving a two-variable problem, and prefer HiGHS, so that a developer with a Gurobi licence
+  and a machine without one exercise the same backend
 ### Added
 - Added a test suite (`tests/`) split into `unit/`, `integration/` and `e2e/`, mirroring the
   package layout. `python -m pytest tests` runs unit and integration in seconds on HiGHS;
@@ -88,6 +100,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   it now completes instead of raising. Every use is logged at WARNING, because the shed energy
   is not written to the setpoints and the results for that timestep therefore do not balance.
   Disable per agent with `slack: false` under the controller to get the old behaviour back
+- **The shipped example `examples/create_simple_scenario` now solves with HiGHS instead of
+  Gurobi, and its results change as a result.** HAMLET's own example should not require a
+  commercial licence to run: HiGHS is installed with HAMLET, Gurobi is not, and the example is
+  what the README names as the installation test. Gurobi remains fully supported — set
+  `solver: gurobi` under `optimization` in `agents.yaml`, as the other examples and the config
+  templates still do.
+
+  The two solvers do not return the same dispatch. The model is degenerate enough that they pick
+  different, equally optimal solutions: 84 more bids and offers clear (499 → 583), 168 more
+  market transactions (1,193 → 1,361), and 76 per-column statistics move — most of them small
+  (heat-pump heat by 0.04 %, heat-pump electricity by 0.7 %), a few large where an EV or battery
+  is charged on a different schedule for the same cost. No table and no column appears or
+  disappears, and total traded energy is unchanged in character. The committed golden-master
+  reference has been regenerated accordingly, so anyone comparing against previously published
+  example numbers should expect this shift. Verified to be solver-only and not
+  platform-dependent: the same example under HiGHS produces identical results on Windows and in
+  a Linux container
 
 ### Migration
 - **Re-create your scenarios — HAMLET now tells you when you have to.** The power-flow direction
