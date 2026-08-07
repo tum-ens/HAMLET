@@ -109,6 +109,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ordering hazard, the branch and mirror rules, and why the paper lineage cannot be reproduced
   from `develop`. It links `tests/README.md` and `CONTRIBUTING.md` rather than restating them,
   and is deliberately short: a long document that drifts is worse than none
+- Added `.ai/skills/`, one card per recurring task where doing the obvious thing produces a
+  plausible but wrong result: writing a factual claim into a tracked file, a golden-master
+  failure, a regression test, an `env.yml` change, and opening a merge request. Each names
+  the situation, points at the canonical procedure rather than restating it, and ends with
+  an exit criterion that can be run. Every rule in them is traceable to something that
+  actually went wrong here
 ### Changed
 - Out-of-horizon market records are dropped more cheaply: most calls have nothing to drop and
   now exit after a single pass, and when there is, the membership test is evaluated once and

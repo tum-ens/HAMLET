@@ -115,6 +115,20 @@ interoperability; making the two lineages interoperate would be its own project.
 - If something looks strange, ask rather than guessing. Most of what is written above was learned
   by not doing that.
 
+## Skill cards
+
+`.ai/skills/` holds one card per recurring task where doing the obvious thing produces a
+plausible, wrong result. Each names the situation, points at the canonical procedure, and ends
+with an exit criterion you can run. Read the one that matches before you start.
+
+| Card | Use when |
+|---|---|
+| [`verify-a-claim`](skills/verify-a-claim.md) | writing a factual claim into a tracked file, a commit message or an MR |
+| [`golden-master-failed`](skills/golden-master-failed.md) | `pytest -m golden` fails, or you expect it to |
+| [`write-a-regression-test`](skills/write-a-regression-test.md) | fixing a defect, or adding coverage |
+| [`change-a-dependency`](skills/change-a-dependency.md) | touching a pin in `env.yml` |
+| [`open-a-merge-request`](skills/open-a-merge-request.md) | work is finished and needs to reach `develop` |
+
 ## Read next
 
 This file deliberately does not restate what is documented elsewhere.
