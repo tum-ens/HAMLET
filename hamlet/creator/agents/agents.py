@@ -1550,8 +1550,12 @@ class Agents:
     def __get_types(path: str, idx: int = 0, sep: str = '_') -> list:
         """Returns a list of all types of a specific agent type"""
 
-        # Return the unique types from the files in the directory
-        return list(set([file.split(sep)[idx] for file in os.listdir(path)]))
+        # Return the unique types from the files in the directory.
+        # sorted() because both os.listdir and set are unordered: listdir returns whatever order
+        # the filesystem gives (alphabetical on NTFS, hash order on ext4/overlayfs) and set
+        # iteration compounds it. Callers index into the result, so an unstable order silently
+        # yields a different scenario from the same seed. See _pick_files_from_distr.
+        return sorted({file.split(sep)[idx] for file in os.listdir(path)})
     @staticmethod
     def _gen_rand_bool_list(n: int, share_ones: float) -> list:
         """generates a randomly ordered boolean list of specified length and share of ones
@@ -1698,8 +1702,13 @@ class Agents:
         # Assign values to each owner
         list_idxs = cls._gen_idx_list_from_distr(n=sum(list_owner), distr=distr)
 
-        # Pick values based on variance
-        input_files = [file for file in os.listdir(input_path) if os.path.isfile(os.path.join(input_path, file))]
+        # Pick values based on variance.
+        # sorted() is load-bearing: the seeded random.choice below picks an *index* into this
+        # list, so the file it lands on is only reproducible if the order is. os.listdir gives
+        # filesystem order -- alphabetical on NTFS, hash order on ext4 -- which made the same
+        # seed generate different scenarios on Windows and Linux.
+        input_files = sorted(file for file in os.listdir(input_path)
+                             if os.path.isfile(os.path.join(input_path, file)))
         try:
             input_vals = [int(val.split("_")[input_idx]) for val in input_files]
         except IndexError:
@@ -1726,8 +1735,11 @@ class Agents:
 
     @classmethod
     def _pick_files_by_values(cls, vals: list, input_path: str, input_idx: int = 1) -> list:
-        # Load input files and their values
-        input_files = [file for file in os.listdir(input_path) if os.path.isfile(os.path.join(input_path, file))]
+        # Load input files and their values. sorted() so the index returned by _get_closest maps
+        # to the same file everywhere -- os.listdir order is filesystem-dependent, and ties in
+        # _get_closest are resolved by position.
+        input_files = sorted(file for file in os.listdir(input_path)
+                             if os.path.isfile(os.path.join(input_path, file)))
         input_vals = [int(val.split("_")[input_idx]) for val in input_files]
 
         # Get indices (first value of tuple [0]) of values that are closest to the desired values
@@ -1742,9 +1754,11 @@ class Agents:
         """
             Generates a random list from files in input folder
         """
-        # Pick values based on variance
-        input_files = [file for file in os.listdir(input_path)
-                       if os.path.isfile(os.path.join(input_path, file)) and file.split(".")[-1] == file_type]
+        # Pick values based on variance. sorted() so the seeded random.choice below is
+        # reproducible: it selects an index, and os.listdir order is filesystem-dependent.
+        input_files = sorted(file for file in os.listdir(input_path)
+                             if os.path.isfile(os.path.join(input_path, file))
+                             and file.split(".")[-1] == file_type)
 
         # Get only files with the correct key if provided
         if key:

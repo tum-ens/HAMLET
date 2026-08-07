@@ -1,0 +1,140 @@
+# HAMLET CI — see CI_CD_Guide.md for the general shape, and issue #200 for why this exists.
+#
+# The suite is layered and the layers are run as separate jobs on purpose, so a failure says
+# which kind of thing broke rather than just "tests failed":
+#
+#   fast    unit + integration, no simulation            ~1 min
+#   e2e     the shipped example, end to end              ~3 min
+#   golden  the same example against committed numbers   ~3 min
+#
+# `golden` is the one that catches a change in *results* rather than in behaviour someone thought
+# to assert. Of the defects found while assembling !195, most were caught by review or ad-hoc
+# measurement rather than by a test; this is the job that would have caught them.
+#
+# No solver licence is required: the example runs on HiGHS, which is installed with HAMLET.
+#
+# Requires a registered runner with the Docker executor, and CI/CD enabled for the project
+# (Settings -> General -> Visibility). Neither is on by default; both are in place as of 2026-08-07.
+
+stages:
+  - lint
+  - test
+
+default:
+  # NOT -slim. The slim image has no compiler, and psutil==5.9.0 predates cp311 manylinux wheels
+  # so it is built from source; installing gcc per job cost 4 minutes of a 20-minute budget on the
+  # first pipeline. python:3.11 ships gcc 14 and git 2.47, is pulled once and then cached by the
+  # runner, and needs no apt step at all.
+  image: python:3.11
+  interruptible: true
+  # Transient network and registry failures are not signal.
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+variables:
+  # The golden master compares committed numbers, and the Creator draws agent ids and plant
+  # sizings from seeded `random`. Hash randomisation would move them.
+  PYTHONHASHSEED: "0"
+  # No display on a runner; matplotlib is imported by the analyzer.
+  MPLBACKEND: "Agg"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GIT_DEPTH: "20"
+
+# One pipeline per change: on the merge request while one is open, on the branch otherwise.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+# ----------------------------------------------------------------------------------------------
+# Shared setup
+# ----------------------------------------------------------------------------------------------
+# HAMLET has no pyproject.toml, so nothing is installed: `tests/conftest.py` puts the repository
+# root on sys.path the same way `run.py` does. Dependencies come from env.yml via
+# `ci/requirements_from_env.py`, so this file never carries a second copy of the list — that
+# duplication is how `develop` ended up with an env.yml that could not import hamlet.
+.python:
+  before_script:
+    - python ci/requirements_from_env.py env.yml -o requirements-ci.txt
+    - cat requirements-ci.txt
+    - pip install --quiet -r requirements-ci.txt
+  cache:
+    # Keyed on env.yml, so the cache is dropped exactly when the dependencies change.
+    key:
+      files:
+        - env.yml
+    # `when: always` because the first pipeline is the slow one and the job most likely to run out
+    # of time is the one whose cache the others need. On success only, a job that times out during
+    # `pip install` leaves the next run to download everything again.
+    when: always
+    paths:
+      - .cache/pip
+
+# ----------------------------------------------------------------------------------------------
+# Lint
+# ----------------------------------------------------------------------------------------------
+# Deliberately errors only: undefined names, broken syntax, `assert (x, y)` and friends. The
+# repository has no linter configuration and no agreed style, so a full rule set would report
+# thousands of findings that say nothing about correctness and would train everyone to ignore the
+# pipeline. Widen this when pyproject.toml lands (roadmap item #4) and the rules can live in the
+# repository rather than here.
+lint:
+  stage: lint
+  script:
+    # Pinned like everything else here: an unpinned linter turns an upstream release into a red
+    # pipeline on a commit that changed nothing.
+    - pip install --quiet ruff==0.16.1
+    - ruff check --select E9,F63,F7,F82 --output-format=full hamlet/ tests/ ci/
+
+# The CI environment omits three packages from env.yml, and two of those omissions are claims
+# about the source rather than about size. This fails if either stops being true.
+dependency-exclusions:
+  stage: lint
+  script:
+    - python ci/requirements_from_env.py env.yml --verify
+
+# ----------------------------------------------------------------------------------------------
+# Test
+# ----------------------------------------------------------------------------------------------
+# pytest.ini deselects e2e and golden by default, so this needs no marker.
+fast:
+  stage: test
+  extends: .python
+  script:
+    - python -m pytest -q --junitxml=report-fast.xml
+  timeout: 40 minutes
+  artifacts:
+    when: always
+    reports:
+      junit: report-fast.xml
+    expire_in: 1 week
+
+e2e:
+  stage: test
+  extends: .python
+  script:
+    - python -m pytest -q -m e2e --junitxml=report-e2e.xml
+  timeout: 40 minutes
+  artifacts:
+    when: always
+    reports:
+      junit: report-e2e.xml
+    expire_in: 1 week
+
+golden:
+  stage: test
+  extends: .python
+  script:
+    - python -m pytest -q -m golden --junitxml=report-golden.xml
+  timeout: 40 minutes
+  artifacts:
+    when: always
+    reports:
+      junit: report-golden.xml
+    expire_in: 1 week

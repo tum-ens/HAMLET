@@ -50,6 +50,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   default `parse_dates=None` with a TypeError naming an argument the caller never passed
 - Fixed the forecaster failing with `list.remove(x): x not in list` on scenarios whose agent
   time series name the time column `index` rather than `timestamp`
+- **Fixed generated scenarios depending on the filesystem, so the same configuration and seed
+  produced different scenarios on different machines.** The Creator picks each agent's load, PV,
+  heat and EV profile by drawing an index from a seeded random number generator and using it to
+  index `os.listdir()`. The seed fixed the index, but the *order* came from the filesystem —
+  alphabetical on NTFS, hash order on ext4 — so Windows and Linux assigned different profiles to
+  the same agent. Agent ids, plant counts and sizings matched, which made it easy to believe the
+  scenarios were identical when they were not. The listings are now sorted. On Windows the results
+  are unchanged, because NTFS already returned sorted order; on Linux they change to match
 - **Fixed `env.yml` not producing a working installation.** It pins only HAMLET's direct
   dependencies, so `xarray` — which arrives transitively through linopy — was resolved to the
   newest release, and linopy 0.3.11 then failed at import with
@@ -63,6 +71,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   solving a two-variable problem, and prefer HiGHS, so that a developer with a Gurobi licence
   and a machine without one exercise the same backend
 ### Added
+- **Added continuous integration** (`.gitlab-ci.yml`). Every push and merge request runs the unit
+  and integration suite, the shipped example end to end, and the golden master against its
+  committed reference — as three separate jobs, so a failure names which layer broke. No solver
+  licence is needed. A lint job runs `ruff` restricted to genuine errors (undefined names, broken
+  syntax and asserts) rather than style, because the repository has no agreed style yet
+- Added `ci/requirements_from_env.py`, which derives CI's pip requirements from `env.yml` so that
+  there is still only one dependency definition. It omits `tensorflow`, `psycopg2` and `jupyter`
+  from the CI environment, and `--verify` re-checks the two omissions that are claims about the
+  source rather than about download size
+- Added `pytest` to `env.yml`. It was in no environment definition at all, so an environment built
+  as the documentation describes could not run the test suite
 - Added a test suite (`tests/`) split into `unit/`, `integration/` and `e2e/`, mirroring the
   package layout. `python -m pytest tests` runs unit and integration in seconds on HiGHS;
   `python -m pytest tests -m e2e` runs the shipped example end to end
