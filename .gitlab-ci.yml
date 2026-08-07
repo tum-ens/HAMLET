@@ -40,8 +40,18 @@ variables:
   PYTHONHASHSEED: "0"
   # No display on a runner; matplotlib is imported by the analyzer.
   MPLBACKEND: "Agg"
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  # Only pip left is the one that installs uv itself; point it at the same persistent volume so
+  # even that one wheel stops being fetched every job.
+  PIP_CACHE_DIR: "/cache/pip"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  # A single PyPI read timeout failed the `lint` job on 2026-08-07 and needed a human to retry it.
+  # The runner is a laptop on a shared connection, so transient timeouts are expected rather than
+  # exceptional; pip should ride them out instead of reddening the pipeline.
+  PIP_RETRIES: "5"
+  PIP_DEFAULT_TIMEOUT: "30"
+  # A volume the runner mounts into every job (config.toml: volumes = ["/cache"]), so uv's cache
+  # survives between jobs and pipelines without GitLab archiving it.
+  UV_CACHE_DIR: "/cache/uv"
   GIT_DEPTH: "20"
 
 # One pipeline per change: on the merge request while one is open, on the branch otherwise.
@@ -59,22 +69,42 @@ workflow:
 # root on sys.path the same way `run.py` does. Dependencies come from env.yml via
 # `ci/requirements_from_env.py`, so this file never carries a second copy of the list — that
 # duplication is how `develop` ended up with an env.yml that could not import hamlet.
+#
+# Installs run through `uv` into a venv on /cache. Measured on this runner, same 24 packages, warm
+# cache, one timed install per fresh container:
+#
+#   pip install                     1005 s   <- 1.2 GB across 23,868 files, copied one at a time
+#   uv pip install --system          223 s   <- still copies: cache and target are different
+#                                               filesystems, so uv cannot link
+#   uv venv on /cache + install         1 s   <- same filesystem, so uv hardlinks
+#
+# pip was never network-bound here: every trace shows a 100 % cache hit, zero downloads and zero
+# wheel builds. The cost was purely writing files, which is why the fix is to stop writing them.
+#
+# UV_CACHE_DIR points at /cache, a volume the runner mounts into every job container
+# (config.toml: volumes = ["/cache"]), rather than at a GitLab `cache:` entry. GitLab's cache would
+# tar and untar 1.2 GB per job (79 s + 88 s measured) to protect an install that now takes a
+# second. The trade is that the cache is per-runner and not portable; a fresh runner repopulates it
+# once -- that first job pays ~1240 s, every job afterwards does not.
 .python:
   before_script:
+    - pip install --quiet uv==0.12.2
     - python ci/requirements_from_env.py env.yml -o requirements-ci.txt
     - cat requirements-ci.txt
-    - pip install --quiet -r requirements-ci.txt
-  cache:
-    # Keyed on env.yml, so the cache is dropped exactly when the dependencies change.
-    key:
-      files:
-        - env.yml
-    # `when: always` because the first pipeline is the slow one and the job most likely to run out
-    # of time is the one whose cache the others need. On success only, a job that times out during
-    # `pip install` leaves the next run to download everything again.
-    when: always
-    paths:
-      - .cache/pip
+    # The venv lives on /cache, the same filesystem as UV_CACHE_DIR, which is the whole point:
+    # uv hardlinks out of its cache when it can and copies when it cannot. Installing into the
+    # image's site-packages puts target and cache on different filesystems and forces the copy.
+    #
+    # Per job id rather than shared, so three concurrent jobs cannot race to create or replace one
+    # venv. This costs almost no disk: the files are hardlinks into the cache, not copies.
+    - export VIRTUAL_ENV="/cache/venv-$CI_JOB_ID"
+    - uv venv --quiet "$VIRTUAL_ENV"
+    - uv pip install --quiet -r requirements-ci.txt
+    - export PATH="$VIRTUAL_ENV/bin:$PATH"
+    - python -c "import sys; print('python:', sys.executable)"
+  after_script:
+    # $VIRTUAL_ENV is not carried into after_script's shell, so spell the path out again.
+    - rm -rf "/cache/venv-$CI_JOB_ID"
 
 # ----------------------------------------------------------------------------------------------
 # Lint
@@ -89,7 +119,11 @@ lint:
   script:
     # Pinned like everything else here: an unpinned linter turns an upstream release into a red
     # pipeline on a commit that changed nothing.
-    - pip install --quiet ruff==0.16.1
+    # Through uv and its persistent /cache, so this job no longer reaches PyPI on every run. It
+    # did before, with no cache at all, and a single read timeout from files.pythonhosted.org
+    # failed the pipeline on 2026-08-07 and needed a human to retry it.
+    - pip install --quiet uv==0.12.2
+    - uv pip install --system --quiet ruff==0.16.1
     - ruff check --select E9,F63,F7,F82 --output-format=full hamlet/ tests/ ci/
 
 # The CI environment omits three packages from env.yml, and two of those omissions are claims
