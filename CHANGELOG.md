@@ -102,6 +102,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   under a fixed seed and compares per-table row counts and per-column statistics against a
   committed reference, so a change that moves results has to be acknowledged rather than noticed
   later. Regenerate the reference with `HAMLET_UPDATE_GOLDEN=1` and commit it with the change
+- Added `.ai/context.md`, one orientation document for AI coding agents, with `CLAUDE.md`,
+  `GEMINI.md` and `AGENTS.md` as pointers to it so that every tool reads the same text rather
+  than three copies that drift apart. It covers the Creator → Executor → Analyzer flow, the
+  load-bearing environment pins, the solver-coupling of the golden reference, the seeded-RNG
+  ordering hazard, the branch and mirror rules, and why the paper lineage cannot be reproduced
+  from `develop`. It links `tests/README.md` and `CONTRIBUTING.md` rather than restating them,
+  and is deliberately short: a long document that drifts is worse than none
+- Added `.ai/skills/`, one card per recurring task where doing the obvious thing produces a
+  plausible but wrong result: writing a factual claim into a tracked file, a golden-master
+  failure, a regression test, an `env.yml` change, and opening a merge request. Each names
+  the situation, points at the canonical procedure rather than restating it, and ends with
+  an exit criterion that can be run. Every rule in them is traceable to something that
+  actually went wrong here
+- Added a reviewer-panel card (`.ai/skills/review-a-change.md`): independent reviewers, one per
+  lens, each blind to the others, followed by an adversarial pass that tries to refute what
+  they found. The panel scales to what the diff *touches* rather than to how large it is,
+  because a three-line change to an optimisation bound moves every scenario and a large
+  plotter change cannot. It exists because the defects that mattered here were caught by
+  review and by measurement, and not once by the suite going green
 ### Changed
 - Out-of-horizon market records are dropped more cheaply: most calls have nothing to drop and
   now exit after a single pass, and when there is, the membership test is evaluated once and
@@ -136,6 +155,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   example numbers should expect this shift. Verified to be solver-only and not
   platform-dependent: the same example under HiGHS produces identical results on Windows and in
   a Linux container
+- **Corrected the clone URL in the README**, which named `github.com/tum-ewk/hamlet` — the wrong
+  organisation, so a newcomer following the installation guide failed at its first step. The
+  README also said documentation was "currently being developed"; it has been published at
+  <https://hamlet-ens.readthedocs.io> for some time and is now linked
+- **Rewrote `CI_CD_Guide.md`.** It was generic template boilerplate describing install / lint /
+  test / build / scan / deploy / notify stages, none of which this project has, sitting next to a
+  real `.gitlab-ci.yml` it did not describe. It now documents the pipeline that exists: the five
+  jobs, why lint is restricted to genuine errors, why dependencies are derived from `env.yml`
+  rather than copied, why installs go through uv into a venv on `/cache`, and why a pipeline
+  running on a single laptop runner is informational rather than a merge blocker
+
+### Removed
+- Removed `TEMPLATE_USAGE_GUIDE.md`, scaffolding inherited from the repository template this
+  project was started from. It described a `/src` layout, a `requirements.txt`, MkDocs and
+  `bump2version`, and a `main` branch — none of which exist here. What of it applies is in
+  `CONTRIBUTING.md`
 
 ### Migration
 - **Re-create your scenarios — HAMLET now tells you when you have to.** The power-flow direction

@@ -1,4 +1,4 @@
-# HAMLET CI — see CI_CD_Guide.md for the general shape, and issue #200 for why this exists.
+# HAMLET CI — see CI_CD_Guide.md for the overview, and issue #200 for why this exists.
 #
 # The suite is layered and the layers are run as separate jobs on purpose, so a failure says
 # which kind of thing broke rather than just "tests failed":

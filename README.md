@@ -19,7 +19,8 @@ another to test, for example, other market clearing algorithms, trading strategi
 the tool is to provide a common platform for researchers to develop and test their own market designs and to compare 
 their results with other market designs.
 
-A documentation is currently being developed and will be available soon.
+The documentation is available at [hamlet-ens.readthedocs.io](https://hamlet-ens.readthedocs.io); its
+sources live in `docs/`.
 
 HAMLET was developed and is maintained by the 
 [Chair of Renewable and Sustainable Energy Systems](https://www.epe.ed.tum.de/en/ens/homepage/) of the [Technical
@@ -58,7 +59,10 @@ Gurobi.
 You can download or clone the repository to a local directory of your choice. You can use version control tools such as 
 GitHub Desktop, Sourcetree, GitKraken or pure Git. The link for pure Git is: 
 
-`git clone https://github.com/tum-ewk/hamlet.git`
+`git clone https://github.com/tum-ens/HAMLET.git`
+
+Development happens on GitLab at [gitlab.lrz.de/tum-ens/HAMLET](https://gitlab.lrz.de/tum-ens/HAMLET);
+the GitHub repository above is a mirror of it.
 
 If using PyCharm, clone the repository, for example, to `./PyCharmProjects/hamlet/`
 ###
