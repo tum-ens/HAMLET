@@ -16,6 +16,7 @@ generic good advice trains people to skip cards.
 | [`golden-master-failed.md`](golden-master-failed.md) | `pytest -m golden` fails, or you expect it to |
 | [`write-a-regression-test.md`](write-a-regression-test.md) | fixing a defect, or adding a test to an existing one |
 | [`change-a-dependency.md`](change-a-dependency.md) | adding, removing, or moving a pin in `env.yml` |
+| [`review-a-change.md`](review-a-change.md) | a branch is ready — run the reviewer panel before opening |
 | [`open-a-merge-request.md`](open-a-merge-request.md) | work is finished and needs to reach `develop` |
 
 ## Adding a card

@@ -127,6 +127,7 @@ with an exit criterion you can run. Read the one that matches before you start.
 | [`golden-master-failed`](skills/golden-master-failed.md) | `pytest -m golden` fails, or you expect it to |
 | [`write-a-regression-test`](skills/write-a-regression-test.md) | fixing a defect, or adding coverage |
 | [`change-a-dependency`](skills/change-a-dependency.md) | touching a pin in `env.yml` |
+| [`review-a-change`](skills/review-a-change.md) | a branch is ready — the reviewer panel, scaled to what the diff touches |
 | [`open-a-merge-request`](skills/open-a-merge-request.md) | work is finished and needs to reach `develop` |
 
 ## Read next

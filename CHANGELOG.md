@@ -115,6 +115,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   the situation, points at the canonical procedure rather than restating it, and ends with
   an exit criterion that can be run. Every rule in them is traceable to something that
   actually went wrong here
+- Added a reviewer-panel card (`.ai/skills/review-a-change.md`): independent reviewers, one per
+  lens, each blind to the others, followed by an adversarial pass that tries to refute what
+  they found. The panel scales to what the diff *touches* rather than to how large it is,
+  because a three-line change to an optimisation bound moves every scenario and a large
+  plotter change cannot. It exists because the defects that mattered here were caught by
+  review and by measurement, and not once by the suite going green
 ### Changed
 - Out-of-horizon market records are dropped more cheaply: most calls have nothing to drop and
   now exit after a single pass, and when there is, the membership test is evaluated once and

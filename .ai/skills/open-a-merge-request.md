@@ -6,6 +6,9 @@
 the workflow. `.ai/context.md` §"Branches and propagation" for what is protected and what is
 mirrored.
 
+**First:** run [`review-a-change`](review-a-change.md). The panel is read-only and fixing
+invalidates it, so it belongs before the MR exists rather than after.
+
 **`master` and `develop` are protected with push access "No one".** There is no fallback path;
 everything lands by merge request. Branch off `origin/develop`, never off a paper branch.
 
