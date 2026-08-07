@@ -13,15 +13,19 @@
 #
 # No solver licence is required: the example runs on HiGHS, which is installed with HAMLET.
 #
-# Requires a registered runner with the Docker executor. CI/CD must also be enabled for the
-# project (Settings -> General -> Visibility -> CI/CD), which it is not by default.
+# Requires a registered runner with the Docker executor, and CI/CD enabled for the project
+# (Settings -> General -> Visibility). Neither is on by default; both are in place as of 2026-08-07.
 
 stages:
   - lint
   - test
 
 default:
-  image: python:3.11-slim
+  # NOT -slim. The slim image has no compiler, and psutil==5.9.0 predates cp311 manylinux wheels
+  # so it is built from source; installing gcc per job cost 4 minutes of a 20-minute budget on the
+  # first pipeline. python:3.11 ships gcc 14 and git 2.47, is pulled once and then cached by the
+  # runner, and needs no apt step at all.
+  image: python:3.11
   interruptible: true
   # Transient network and registry failures are not signal.
   retry:
@@ -57,9 +61,6 @@ workflow:
 # duplication is how `develop` ended up with an env.yml that could not import hamlet.
 .python:
   before_script:
-    # psutil==5.9.0 predates cp311 manylinux wheels and is built from source. Installing the
-    # toolchain is cheaper than relaxing a pin to suit the image.
-    - apt-get update -qq && apt-get install -y -qq --no-install-recommends gcc python3-dev git
     - python ci/requirements_from_env.py env.yml -o requirements-ci.txt
     - cat requirements-ci.txt
     - pip install --quiet -r requirements-ci.txt
@@ -68,6 +69,10 @@ workflow:
     key:
       files:
         - env.yml
+    # `when: always` because the first pipeline is the slow one and the job most likely to run out
+    # of time is the one whose cache the others need. On success only, a job that times out during
+    # `pip install` leaves the next run to download everything again.
+    when: always
     paths:
       - .cache/pip
 
@@ -92,7 +97,6 @@ lint:
 dependency-exclusions:
   stage: lint
   script:
-    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git
     - python ci/requirements_from_env.py env.yml --verify
 
 # ----------------------------------------------------------------------------------------------
@@ -104,7 +108,7 @@ fast:
   extends: .python
   script:
     - python -m pytest -q --junitxml=report-fast.xml
-  timeout: 20 minutes
+  timeout: 40 minutes
   artifacts:
     when: always
     reports:
@@ -116,7 +120,7 @@ e2e:
   extends: .python
   script:
     - python -m pytest -q -m e2e --junitxml=report-e2e.xml
-  timeout: 30 minutes
+  timeout: 40 minutes
   artifacts:
     when: always
     reports:
@@ -128,7 +132,7 @@ golden:
   extends: .python
   script:
     - python -m pytest -q -m golden --junitxml=report-golden.xml
-  timeout: 30 minutes
+  timeout: 40 minutes
   artifacts:
     when: always
     reports:
