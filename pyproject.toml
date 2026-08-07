@@ -89,8 +89,14 @@ dependencies = [
     # neither package. This happened, twice.
     #
     # Being stated here rather than only in uv.lock is the point: `uv lock --upgrade` cannot move
-    # it, and raising the linopy pin to a release that needs a newer xarray fails resolution
-    # loudly instead of quietly reproducing the bug. Do not relax it without replacing linopy.
+    # it, so the resolver can no longer reproduce the bug on its own.
+    #
+    # It will not catch a *linopy* bump for you, though, and that is worth being exact about:
+    # linopy declares only a floor. Every release from 0.3.13 to 0.9.0 asks for `xarray>=2024.2.0`
+    # and never an upper bound, so raising the linopy pin conflicts with nothing and resolves
+    # cleanly. This ceiling is one HAMLET carries on linopy's behalf. What enforces it is
+    # `tests/unit/test_dependency_constraints.py`, which fails on the commit that relaxes either
+    # pin. Do not relax them without replacing linopy.
     "xarray==2024.6.0",
     "xlsxwriter==3.2.0",     # pandas' engine for the agents.xlsx the Creator writes
 ]

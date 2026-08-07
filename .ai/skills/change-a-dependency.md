@@ -12,8 +12,13 @@ lock a contributor does. Each of those files existed once, and a second list is 
 all; it arrives through linopy. linopy 0.3.11 imports `xarray.core.rolling`, removed after
 2024.6.0, so unpinning it means `import hamlet` fails outright — with a traceback pointing at
 neither package. It is written into `pyproject.toml` rather than left to the lock so that
-`uv lock --upgrade` cannot move it and a linopy bump fails resolution loudly. The comment above the
-pin says so; do not silence it.
+`uv lock --upgrade` cannot move it.
+
+**Do not expect the resolver to catch the other half.** linopy declares only a floor —
+`xarray>=2024.2.0` in every release from 0.3.13 to 0.9.0, never an upper bound — so raising the
+linopy pin conflicts with nothing and resolves cleanly. The ceiling is one HAMLET carries on
+linopy's behalf. `tests/unit/test_dependency_constraints.py` is what enforces it; if that test
+fails, read it before changing it.
 
 ## Rules
 

@@ -135,10 +135,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   unconstrained transitive `xarray` could break `import hamlet` on a fresh install; the lock pins
   all 195 packages, and `uv sync --locked` in CI fails if the lock and `pyproject.toml` ever
   disagree
-- `linopy`'s xarray ceiling is a real constraint rather than a coincidence of resolution:
-  `xarray==2024.6.0` is declared in `pyproject.toml`, so `uv lock --upgrade` cannot move it and
-  raising the linopy pin to a release needing a newer xarray fails resolution instead of
-  reproducing the import failure silently
+- The linopy/xarray ceiling is a declared constraint rather than a coincidence of resolution:
+  `xarray==2024.6.0` sits in `pyproject.toml`, so `uv lock --upgrade` can no longer move it. A
+  resolver will never enforce it on its own, because linopy declares only a floor
+  (`xarray>=2024.2.0` in every release from 0.3.13 to 0.9.0) — so
+  `tests/unit/test_dependency_constraints.py` enforces it instead, failing on the commit that
+  relaxes either pin rather than on whoever next builds a fresh environment
 - TensorFlow, Gurobi and Jupyter are optional extras (`uv sync --extra tensorflow`, `--extra
   gurobi`, `--extra notebooks`); pytest, ruff and Sphinx are dependency groups. The default
   environment is ~600 MB smaller and needs no solver licence. `sktime` stays core: unlike

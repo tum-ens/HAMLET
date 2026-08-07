@@ -45,8 +45,11 @@ Three things about it are load-bearing:
 - **`xarray==2024.6.0`** is not HAMLET's dependency; it arrives through linopy. linopy 0.3.11
   imports `xarray.core.rolling`, which xarray removed after 2024.6.0, so with xarray unconstrained
   a resolver takes the newest and `import hamlet` fails outright, with a traceback naming neither
-  package. It is stated in `pyproject.toml` rather than left to the lock precisely so that
-  `uv lock --upgrade` cannot move it. Do not relax it without replacing linopy.
+  package. It is stated in `pyproject.toml` rather than left to the lock so that
+  `uv lock --upgrade` cannot move it. **The resolver will not catch a linopy bump for you** —
+  linopy declares only `xarray>=2024.2.0`, never a ceiling — so
+  `tests/unit/test_dependency_constraints.py` enforces the pair instead. Do not relax either
+  without replacing linopy.
 - **Every version is exact**, matching the environment the committed golden master was measured
   in. That is a deliberate stage, not the end state: it keeps a change in *results* attributable.
   Relaxing the pins to ranges, and moving off Python 3.11 (`requires-python = ">=3.11,<3.12"`),
