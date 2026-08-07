@@ -5,7 +5,9 @@ same model. The POI backends previously had no slack at all: an infeasible agent
 run under `poi` and was absorbed under `linopy`, with no warning either way.
 
 PyOptInterface needs a solver shared library, which is not always present (`highspy` bundles
-HiGHS inside its extension rather than exposing a .dll). These tests skip when none is loadable.
+HiGHS inside its extension rather than exposing a .dll). These tests skip when no backend can
+actually solve -- which is not the same as "no library loaded": Gurobi's library loads without a
+licence and only fails at `optimize()`. See `available_backend`.
 """
 import numpy as np
 import pytest
@@ -15,14 +17,38 @@ import hamlet.constants as c
 poi = pytest.importorskip('pyoptinterface')
 
 
+def can_solve(module):
+    """Whether this backend can actually solve, not merely link.
+
+    `is_library_loaded()` answers a narrower question than it looks like it does. Gurobi's shared
+    library loads perfectly well without a valid licence and raises `GurobiError: License expired`
+    at `optimize()` -- so a loadable-only check turns "no licence" into two test *failures* rather
+    than skips, which is exactly what CI hits. Solving a two-variable LP is the honest probe.
+    """
+    try:
+        model = module.Model()
+        x = model.add_variable(lb=0, ub=1)
+        model.set_objective(1.0 * x, poi.ObjectiveSense.Maximize)
+        model.optimize()
+        return model.get_value(x) is not None
+    except Exception:
+        return False
+
+
 def available_backend():
-    """The first PyOptInterface solver whose shared library is actually loadable."""
-    for name in ('gurobi', 'highs', 'copt'):
+    """The first PyOptInterface solver that is present, loadable and able to solve.
+
+    HiGHS is tried first because it is what HAMLET ships and what CI runs; preferring Gurobi
+    would mean a developer with a licence and CI silently exercise different backends.
+    """
+    for name in ('highs', 'gurobi', 'copt'):
         try:
             module = __import__(f'pyoptinterface.{name}', fromlist=[name])
         except ImportError:
             continue
-        if getattr(module, 'is_library_loaded', lambda: False)():
+        if not getattr(module, 'is_library_loaded', lambda: False)():
+            continue
+        if can_solve(module):
             return module
     return None
 
