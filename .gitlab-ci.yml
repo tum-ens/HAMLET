@@ -82,7 +82,9 @@ workflow:
 lint:
   stage: lint
   script:
-    - pip install --quiet ruff
+    # Pinned like everything else here: an unpinned linter turns an upstream release into a red
+    # pipeline on a commit that changed nothing.
+    - pip install --quiet ruff==0.16.1
     - ruff check --select E9,F63,F7,F82 --output-format=full hamlet/ tests/ ci/
 
 # The CI environment omits three packages from env.yml, and two of those omissions are claims
