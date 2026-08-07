@@ -1,217 +1,98 @@
-# CI/CD Guide for GitLab
+# CI/CD
 
-This document serves as a guide to the stages and jobs defined in the .gitlab-ci.yml file for Python projects. It also provides best practices for each stage to help you set up a robust, maintainable CI/CD pipeline.
+What `.gitlab-ci.yml` actually does, and what its results mean. The file itself carries the
+reasoning behind each decision inline; this is the overview.
 
-## Overview of CI/CD Stages
-A typical CI/CD pipeline for Python projects may include the following stages:
+Until 2026-08-07 this document was a generic template describing install / lint / test / build /
+scan / deploy / notify stages. HAMLET has never had a build, a deployment or a security scan, so
+the template described a pipeline that did not exist. It has been replaced with a description of
+the one that does.
 
-1. Install – Prepares the environment by installing dependencies.
-2. Lint – Checks code style and quality.
-3. Test – Runs automated tests to verify functionality.
-4. Build – (Optional) Packages the code into a deployable artifact.
-5. Code Quality and Security Scanning – (Optional) Scans for vulnerabilities and potential issues.
-6. Staging/Pre-Deployment Testing – (Optional) Tests in an environment similar to production.
-7. Deployment – (Optional) Deploys the code to production.
-8. Notification and Reporting – Sends updates on build status and results.
+## The pipeline
 
-Not all stages are necessary for every project. Choose the stages based on the project's complexity, team size, and requirements.
+Two stages, five jobs. GitLab CI only; there are no GitHub Actions workflows, and the GitHub
+repository is a push mirror rather than a second CI target.
 
-## Detailed Stages and Best Practices
-### 1. Install
-- **Purpose**: Sets up the environment by installing dependencies.
-- **Why Important**: Ensures that the project can build and run successfully.
-- **Typical Jobs**:
-  - Installing project dependencies using `pip install -r requirements.txt`
-  - Setting up virtual environments and caching for faster builds
-- **Best Practices**:
-  - Use a base image with the necessary tools and dependencies.
-  - Cache dependencies to speed up subsequent builds.
-  - Use virtual environments to isolate dependencies.
+| Stage | Job | What it does |
+|---|---|---|
+| `lint` | `lint` | `ruff check --select E9,F63,F7,F82` over `hamlet/`, `tests/`, `ci/` |
+| `lint` | `dependency-exclusions` | re-checks the three packages CI omits from `env.yml` |
+| `test` | `fast` | unit + integration, no simulation |
+| `test` | `e2e` | the shipped example, Creator → Executor → Analyzer |
+| `test` | `golden` | the same example against committed reference numbers |
 
-#### Example
-```yaml
-install_dependencies:
-  stage: install
-  image: python:3.12
-  script:
-    - python -m venv venv
-    - source venv/bin/activate
-    - pip install -r requirements.txt
-  cache:
-    paths:
-      - .cache/pip
-  artifacts:
-    paths:
-      - venv
-```
+The test tiers are separate jobs on purpose, so a failure says which *kind* of thing broke rather
+than just "tests failed". `golden` is the one that catches a change in results rather than in
+behaviour someone thought to assert.
 
-### 2. Linting/Static Analysis
-- **Purpose**: Checks code quality and adherence to style guidelines.
-- **Why Important**: Helps catch errors early, enforces code consistency, and maintains readability.
-- **Typical Tools**:
-  - `flake8` for code quality and PEP 8 compliance
-  - `black` in `--check` mode to enforce code formatting without making changes
-  - `mypy` for static type checking
-- **Best Practices**:
-  - Run linters on every commit to catch issues early.
-  - Configure linters to match the project's style guide.
-  - Use pre-commit hooks to enforce linting before committing code.
+`pytest.ini` deselects `e2e` and `golden` by default, which is why `fast` needs no marker and the
+other two pass `-m`. See `tests/README.md` for what each tier covers.
 
-#### Example
-```yaml
-lint:
-  stage: lint
-  image: python:3.12
-  script:
-    - source venv/bin/activate
-    - flake8 path/to/your/code
-    - black --check path/to/your/code
-    - mypy path/to/your/code
-```
+**No solver licence is required.** The example runs on HiGHS, which is installed with HAMLET.
 
-### 3. Testing (Unit, Integration, End-to-End)
-- **Purpose**: Runs automated tests to verify that the code behaves as expected.
-- **Why Important**: Ensures reliability and catches bugs before code reaches production.
-- **Typical Tools**:
-  - `pytest` for unit and integration tests
-  - `selenium` for end-to-end tests
-- **Best Practices**:
-  - Use `pytest` to run tests with options for test reports and code coverage.
-  - Run tests in parallel for multiple Python versions by leveraging GitLab’s `matrix` feature.
+### Lint is deliberately narrow
 
-#### Example
-```yaml
-test:
-  stage: test
-  image: python:$PYTHON_VERSION
-  variables:
-    PYTHON_VERSION: $PYTHON_VERSIONS
-  parallel:
-    matrix:
-      - PYTHON_VERSION: ["3.10", "3.11", "3.12", "3.13"]
-  script:
-    - python -m venv venv
-    - source venv/bin/activate
-    - pip install -r requirements.txt
-    - pytest tests/ --junitxml=junit/test-report.xml --cov=path/to/your/code
-  artifacts:
-    reports:
-      junit: junit/test-report.xml
-      coverage_report:
-        coverage_format: cobertura
-        path: coverage.xml
-```
+`E9,F63,F7,F82` is syntax errors, undefined names, and mistakes like `assert (x, y)` — things that
+are wrong regardless of taste. The repository has no linter configuration and no agreed style, so
+a full rule set would report thousands of findings that say nothing about correctness and would
+train everyone to ignore the pipeline. Widen it when a `pyproject.toml` exists and the rules can
+live in the repository rather than in the CI file.
 
-### 4. Build (Optional)
-- **Purpose**: Packages the code into a deployable artifact.
-- **Why Important**: Standardizes the packaging process, making deployments predictable.
-- **Typical Tools**:
-  - `docker build` for containerized applications
-  - `setuptools` for Python packages
-  - `poetry` for Python packaging and dependency management
-- **Best Practices**:
-  - Use a consistent build process across environments.
-  - Automate the build process to reduce manual errors.
+### Dependencies are derived, never copied
 
-#### Example
-```yaml
-build:
-  stage: build
-  image: python:3.12
-  script:
-    - echo "Building project artifacts..."
-    # Add build commands here, such as `docker build` or package creation
-```
+`ci/requirements_from_env.py` generates the CI requirements from `env.yml`. A second dependency
+list is precisely how `develop` once shipped an `env.yml` that could not import hamlet. CI omits
+`tensorflow`, `psycopg2` and `jupyter`; two of those omissions are claims about the source rather
+than about size, so `dependency-exclusions` fails if either stops being true.
 
-### 5. Code Quality and Security Scanning (Optional)
-- **Purpose**: Scans for vulnerabilities and potential issues in the code.
-- **Why Important**: Identifies technical debt, improves maintainability, and protects against security risks.
-- **Typical Tools**:
-  - `bandit` for security scanning
-  - `safety` for dependency security checks
-  - `pylint` for code quality checks
-  - `sonarqube` for comprehensive code analysis
-- **Best Practices**:
-  - Integrate security scanning into the CI/CD pipeline to catch issues early.
-  - Use static code analysis tools to identify potential bugs and security vulnerabilities.
+### Two environment variables are load-bearing
 
-#### Example
-```yaml
-code_quality:
-  stage: code_quality
-  image: python:3.12
-  script:
-    - bandit -r path/to/your/code
-    - safety check
-    - pylint path/to/your/code
-```
+`PYTHONHASHSEED=0`, because the golden master compares committed numbers and the Creator draws
+agent ids and plant sizings from seeded `random`. `MPLBACKEND=Agg`, because a runner has no
+display and the analyzer imports matplotlib.
 
-### 6. Staging/Pre-Deployment Testing (Optional)
-- **Purpose**: Tests the application in an environment similar to production.
-- **Why Important**: Reduces the risk of production issues by validating code in a staging environment.
-- **Typical Jobs**:
-  - Deploying the application to a staging environment
-  - Running integration and UI tests on the staging environment
-- **Best Practices**:
-  - Use a separate staging environment to mimic production as closely as possible.
-  - Automate the deployment and testing process to ensure consistency.
+## The runner is a laptop
 
-#### Example
-```yaml
-staging_deployment:
-  stage: staging
-  script:
-    - echo "Deploying to staging environment..."
-    # Add staging deployment commands
-```
+There is one runner, registered to this project, with the Docker executor. Its GitLab description
+is "My laptop (pipeline only works if it is running)", and that is accurate: LRZ does not give
+this project shared runners, and no group runner is registered.
 
-### 7. Deployment (Production/Release) (Optional)
-- **Purpose**: Deploys the code to production or releases it to users.
-- **Why Important**: Delivers features and updates to end-users in a controlled manner.
-- **Typical Jobs**:
-  - Deploying the application to production servers
-  - Updating servers, pushing to app stores, or publishing packages
-  - Tagging the release in the version control system
-- **Best Practices**:
-  - Use automated deployment scripts to reduce manual errors.
-  - Implement blue-green deployments or canary releases for zero-downtime deployments.
+Two consequences worth stating plainly:
 
-#### Example
-```yaml
-deploy:
-  stage: deploy
-  image: alpine:latest
-  script:
-    - echo "Deploying application..."
-    # Add deployment commands here
-  only:
-    - main  # Only deploy from main branch
-```
+1. **Pipelines are informational, not required.** A pipeline that cannot start when the laptop is
+   closed must not be a merge blocker, or work stops for reasons unrelated to the work. Read a red
+   pipeline; do not treat a missing one as a verdict.
+2. **Job durations are not comparable between runs.** Across four consecutive pipelines on
+   2026-08-07 the `fast` job took 184 s, 1466 s, 1936 s and 2067 s — the same commit range, the
+   same warm cache, an order of magnitude apart. The variance is disk contention on a laptop that
+   is also doing other things. Use durations to spot a job that hangs, not to detect a performance
+   regression.
 
-### 8. Notification and Reporting
-- **Purpose**: Sends updates on build status and results.
-- **Why Important**: Keeps the team informed about the progress and status of the CI/CD pipeline.
-- **Typical Tools**:
-  - Email notifications
-  - Slack notifications
-  - GitLab pipeline status badges
-- **Best Practices**:
-  - Notify team members of build failures or successes.
-  - Use status badges to display the build status in the project repository.
+## Why installs go through uv
 
-#### Example
-```yaml
-notify:
-  stage: notify
-  script:
-    - echo "Sending notification..."
-    # Add Slack or email notification commands
-```
+Measured on this runner, same packages, warm cache, one timed install per fresh container:
 
-## CI/CD Pipeline Best Practices
+| | |
+|---|---|
+| `pip install` | 1005 s |
+| `uv pip install --system` | 223 s |
+| `uv venv` on `/cache` + install | 1 s |
 
-1. **Use Version Pinning**: Pin dependencies in requirements.txt to ensure reproducibility.
-2. **Fail Fast**: Place critical stages (e.g., install, lint) early in the pipeline so failures are detected quickly.
-3. **Leverage Caching**: Cache dependencies to speed up builds and minimize network usage.
-4. **Parallelize Tests**: Use parallel and matrix configurations to test across Python versions or run independent test suites concurrently.
-5. **Store Artifacts**: Save important artifacts (e.g., test results, coverage reports) to help with debugging and quality assurance.
+pip was never network-bound here — every trace showed a full cache hit and zero downloads. The
+cost was writing 1.2 GB across ~24,000 files, so the fix is to stop writing them. **The venv's
+location is the mechanism, not uv alone**: uv hardlinks out of its cache only when the target is on
+the same filesystem, and `--system` writes into the image layer, which is a different one.
+
+So `UV_CACHE_DIR` and the venv both live on `/cache`, a volume the runner mounts into every job
+container. That is a per-runner cache rather than a GitLab `cache:` entry, which would tar and
+untar 1.2 GB per job to protect an install that now takes a second. A fresh runner pays the full
+cost once; every job afterwards does not.
+
+Each venv is keyed by `$CI_JOB_ID` so concurrent jobs cannot race, and removed in `after_script`.
+This costs almost no disk, because its contents are hardlinks into the cache.
+
+## Requirements
+
+CI/CD must be enabled for the project (Settings → General → Visibility) and a runner with the
+Docker executor must be registered. Neither is on by default. Both have been in place since
+2026-08-07.
