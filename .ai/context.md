@@ -78,6 +78,21 @@ HiGHS is installed with HAMLET and is what `examples/create_simple_scenario` use
 CI. Gurobi is optional and fully supported — set `solver: gurobi` under `optimization`; the other
 three examples and `config_templates/` still specify it.
 
+**Two solver libraries ship, deliberately.** `highspy` is the one linopy talks to. It bundles
+HiGHS inside its `_core` extension and exposes no shared library, which PyOptInterface needs — so
+`highsbox`, the same HiGHS build packaged as a plain `highs.dll` / `libhighs.so`, is also a
+dependency. Both are pinned to `1.10.0` so the two backends solve with an identical solver; keep
+them equal, or a backend comparison stops being a comparison.
+`hamlet/executor/utilities/controller/poi_solver.py` is the only place that selects or loads
+either, and `framework: poi` works on HiGHS because of it — before that it imported Gurobi
+unconditionally and silently required a system Gurobi installation.
+
+**PyOptInterface crashes the interpreter on Windows under pytest** — an access violation, from the
+second HiGHS solve onward within one pytest process. This is a test-harness limitation only: the
+backend runs fine on Windows outside pytest, and does not crash on Linux at all. The affected
+tests carry `skip_on_windows` from `tests/poi_support.py`, where the evidence and the ruled-out
+causes are recorded. CI is Linux, so no coverage is lost.
+
 **The golden reference is solver-coupled.** Running under a different solver moves the numbers.
 Measured when the example switched Gurobi → HiGHS (commit `f65edf0`): structure unchanged — same
 18 tables, no column added or dropped — but 3 row counts and 76 per-column statistics moved, e.g.

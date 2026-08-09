@@ -9,6 +9,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ---
 
 ## [Unreleased]
+### Added
+- **The PyOptInterface backend now runs on HiGHS, so it no longer needs a Gurobi licence.**
+  `framework: poi` imported `pyoptinterface.gurobi` unconditionally and accepted only
+  `solver: gurobi`. Because PyOptInterface links a *system* Gurobi installation directly, without
+  `gurobipy` being installed, this looked like it worked on a developer machine that had one and
+  was unusable everywhere else. Solver selection now lives in
+  `hamlet/executor/utilities/controller/poi_solver.py` and honours `solver: highs` as well. HiGHS
+  needs a shared library, which `highspy` does not expose — it bundles HiGHS inside its `_core`
+  extension — so `highsbox` is a new dependency, pinned to `highspy`'s exact version so that both
+  backends solve with an identical solver. Closes #198
+- **A backend speed benchmark, `tests/benchmarks/test_backend_speed.py`.** It builds the same
+  agent-MPC-shaped MILP through linopy and through PyOptInterface, hands both to the same HiGHS,
+  and asserts they reach the same optimum before reporting the build/solve split. Deselected by
+  default; run it with `pytest -m benchmark -s`. In a Linux container: **2.68 ms** per solve for
+  PyOptInterface against **191.76 ms** for linopy, and the split shows why — linopy spends 138.89
+  ms building a model that HiGHS then solves in 52.86 ms
+
 ### Fixed
 - **Fixed new files under `input_data/` being silently ignored.** `.gitignore` carried
   `input_data/*` while the 152 files under it were tracked anyway, so adding an input left

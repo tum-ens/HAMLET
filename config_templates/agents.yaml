@@ -905,7 +905,7 @@ sfh:
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization problem
                                                 # unit: s
@@ -931,7 +931,7 @@ sfh:
           solver: gurobi                        # solver used for optimization
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization
                                                 # unit: s
@@ -1578,7 +1578,7 @@ ctsp:
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization problem
                                                 # unit: s
@@ -1604,7 +1604,7 @@ ctsp:
           solver: gurobi                        # solver used for optimization
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization
                                                 # unit: s
@@ -2257,7 +2257,7 @@ industry:
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization problem
                                                 # unit: s
@@ -2283,7 +2283,7 @@ industry:
           solver: gurobi                        # solver used for optimization
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization
                                                 # unit: s
@@ -2553,7 +2553,7 @@ producer:
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -2579,7 +2579,7 @@ producer:
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -2826,7 +2826,7 @@ producer:
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -2852,7 +2852,7 @@ producer:
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3096,7 +3096,7 @@ producer:
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3122,7 +3122,7 @@ producer:
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3286,7 +3286,7 @@ storage:
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3312,7 +3312,7 @@ storage:
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3471,7 +3471,7 @@ storage:
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3497,7 +3497,7 @@ storage:
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3656,7 +3656,7 @@ storage:
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3682,7 +3682,7 @@ storage:
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s

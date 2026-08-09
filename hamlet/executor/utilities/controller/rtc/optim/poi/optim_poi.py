@@ -6,8 +6,7 @@ __email__ = "markus.doepfert@tum.de"
 
 import logging
 
-from pyoptinterface import gurobi
-
+from hamlet.executor.utilities.controller.poi_solver import create_model, set_time_limit
 from hamlet.executor.utilities.controller.rtc.optim.poi.components import *
 from hamlet.executor.utilities.controller.rtc.optim.optim_base import OptimBase
 
@@ -33,14 +32,9 @@ AVAILABLE_PLANTS = {
 
 class POI(OptimBase):
     def get_model(self, **kwargs):
-        env = gurobi.Env(empty=True)
-        env.set_raw_parameter("OutputFlag", 0)
-        env.start()
-        model = gurobi.Model(env)
-        model.set_model_attribute(poi.ModelAttribute.Silent, True)
-        model.set_raw_parameter("OutputFlag", 0)
-        model.set_raw_parameter("LogToConsole", 0)
-        return model
+        # `self.ems` is still the whole ems block here; the base narrows it to the rtc controller
+        # only after the model exists.
+        return create_model(self.ems[c.C_CONTROLLER][c.C_RTC][c.C_OPTIM].get('solver'))
 
     def get_available_plants(self):
         return AVAILABLE_PLANTS
@@ -204,23 +198,16 @@ class POI(OptimBase):
 
     def run(self):
 
-        # Solve the optimization problem
+        # Solve the optimization problem. The model was already created and silenced for this
+        # solver in `get_model`, so only the time limit is left to apply.
         solver = self.ems[c.C_OPTIM].get('solver')
-        match solver:
-            case 'gurobi':
-                self.model.set_model_attribute(poi.ModelAttribute.Silent, True)
-                self.model.set_raw_parameter("OutputFlag", 0)
-                self.model.set_raw_parameter("LogToConsole", 0)
-                if self.ems[c.C_OPTIM].get('time_limit') is not None:
-                    self.model.set_raw_parameter('TimeLimit', self.ems[c.C_OPTIM]['time_limit'] / 60)
-                self.model.optimize()
-                status = self.model.get_model_attribute(poi.ModelAttribute.TerminationStatus)
-            case _:
-                raise ValueError(f"Unsupported solver: {solver}")
+        set_time_limit(self.model, solver, self.ems[c.C_OPTIM].get('time_limit'))
+        self.model.optimize()
+        status = self.model.get_model_attribute(poi.ModelAttribute.TerminationStatus)
 
         # Check if the solution is optimal
         if status not in [poi.TerminationStatusCode.OPTIMAL, poi.TerminationStatusCode.TIME_LIMIT]:
-            print(f'Exited with status "{status[0]}". \n')
+            print(f'Exited with status "{status}". \n')
             # raise ValueError(f"Optimization failed: {status}")
 
         # Surface any energy that was shed or dumped to close the balance

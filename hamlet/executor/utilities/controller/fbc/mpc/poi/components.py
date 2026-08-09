@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 import polars.exceptions as pl_e
 import pyoptinterface as poi
-from pyoptinterface import gurobi
 
 import hamlet.constants as c
 
@@ -63,7 +62,7 @@ class POIComps:
             return f'{name}_{component_type}_{energy_type}_{direction}'
         return f'{name}_{component_type}_{energy_type}'
 
-    def define_electricity_variable(self, model: gurobi.Model, variables, comp_type: str, lower, upper,
+    def define_electricity_variable(self, model, variables, comp_type: str, lower, upper,
                                     direction: str = None, integer=False):
         """Creates the electricity variable for the component. The direction is either in or out.
 
@@ -79,7 +78,7 @@ class POIComps:
         self.add_variable_to_model(model, variables, name=name, lower=lower, upper=upper, coords=[self.timesteps],
                                    integer=integer)
 
-    def define_heat_variable(self, model: gurobi.Model, variables, comp_type: str, lower, upper, direction: str = None,
+    def define_heat_variable(self, model, variables, comp_type: str, lower, upper, direction: str = None,
                              integer=False):
         """Creates the heat variable for the component. The direction is either in or out.
 
@@ -96,7 +95,7 @@ class POIComps:
                                    coords=[self.timesteps],
                                    integer=integer)
 
-    def define_cool_variable(self, model: gurobi.Model, variables, comp_type: str, lower, upper, direction: str = None,
+    def define_cool_variable(self, model, variables, comp_type: str, lower, upper, direction: str = None,
                              integer=False):
         """Creates the cooling variable for the component. The direction is either in or out.
 
@@ -113,7 +112,7 @@ class POIComps:
                                    coords=[self.timesteps],
                                    integer=integer)
 
-    def define_h2_variable(self, model: gurobi.Model, variables, comp_type: str, lower, upper, direction: str = None,
+    def define_h2_variable(self, model, variables, comp_type: str, lower, upper, direction: str = None,
                            integer=False):
         """Creates the hydrogen variable for the component. The direction is either in or out.
 
@@ -130,7 +129,7 @@ class POIComps:
                                    coords=[self.timesteps],
                                    integer=integer)
 
-    def define_storage_variable(self, model: gurobi.Model, variables, comp_type: str, lower, upper, integer=False):
+    def define_storage_variable(self, model, variables, comp_type: str, lower, upper, integer=False):
         """Creates the state-of-charge variable for the component.
 
         Parameters
@@ -146,7 +145,7 @@ class POIComps:
                                    coords=[self.timesteps],
                                    integer=integer)
 
-    def define_mode_flag(self, model: gurobi.Model, variables, comp_type: str):
+    def define_mode_flag(self, model, variables, comp_type: str):
         """Creates the mode flag variable for the component. This is used to decide whether the component is charging
         or discharging.
 
@@ -809,7 +808,7 @@ class SimpleStorage(POIComps):
         self.add_variable_to_model(model, variables, name=f'{self.name}_{self.comp_type}_soc_init', lower=self.soc,
                                    upper=self.soc)
 
-    def _define_power_variables(self, model: gurobi.Model, variables,
+    def _define_power_variables(self, model, variables,
                                 energy_type: str = c.ET_ELECTRICITY):
 
         # Define the power variables depending on the energy type
@@ -849,7 +848,7 @@ class SimpleStorage(POIComps):
         #   times the efficiency and the time delta
         self._constraint_soc(model, variables)
 
-    def _constraint_operation_mode(self, model: gurobi.Model, variables,
+    def _constraint_operation_mode(self, model, variables,
                                    energy_type: str = c.ET_ELECTRICITY):
         """Adds the constraint that the battery can either charge or discharge but not both at the same time."""
 
@@ -870,10 +869,10 @@ class SimpleStorage(POIComps):
             model.add_linear_constraint(var_discharge - mode_var * self.upper, poi.ConstraintSense.LessEqual, 0,
                                         name=f'{self.name}_dischargingflag_{timestep}')
 
-    def _constraint_power_limits(self, model: gurobi.Model, variables):
+    def _constraint_power_limits(self, model, variables):
         pass
 
-    def _constraint_soc(self, model: gurobi.Model, variables, energy_type: str = c.ET_ELECTRICITY):
+    def _constraint_soc(self, model, variables, energy_type: str = c.ET_ELECTRICITY):
         """Adds the constraint that the soc of the battery is that of the previous timestep plus dis-/charging power"""
 
         dt_hours = self.dt * c.SECONDS_TO_HOURS  # time in h
