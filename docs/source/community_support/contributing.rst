@@ -36,13 +36,17 @@ To set up a development environment and contribute effectively, follow these ste
   git clone https://github.com/tum-ens/hamlet.git
   cd hamlet
 
-2. **Set Up the Anaconda Environment**:
-   HAMLET uses an Anaconda environment defined in `env.yml`. To set it up:
+2. **Set Up the Environment**:
+   HAMLET's dependencies are defined in ``pyproject.toml`` and pinned in the committed
+   ``uv.lock``. With `uv <https://docs.astral.sh/uv/getting-started/installation/>`_ installed:
 
 .. code-block:: bash
 
-  conda env create -f env.yml
-  conda activate hamlet
+  uv sync
+
+This installs the exact tested versions, the development tools (pytest, ruff), and HAMLET itself
+in editable mode. Run the test suite with ``uv run python -m pytest``; ``tests/README.md``
+describes the other tiers.
 
 Submitting a Pull Request (PR)
 -------------------------------

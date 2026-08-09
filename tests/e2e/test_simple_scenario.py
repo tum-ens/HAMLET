@@ -23,8 +23,7 @@ EXAMPLE = REPO_ROOT / 'examples' / 'create_simple_scenario'
 SCENARIO_NAME = 'simple_scenario'
 
 RUNNER = """
-import os, sys
-sys.path.insert(0, r"{repo}")
+import os
 from hamlet import Creator, Executor, Analyzer
 Creator(path=r"{config_dir}").new_scenario_from_configs()
 Executor(r"{scenarios}/{name}", num_workers=1).run()
@@ -71,7 +70,7 @@ def run_dirs(tmp_path_factory):
     setup.write_text(patched, encoding='utf-8')
 
     try:
-        script = RUNNER.format(repo=REPO_ROOT, config_dir=config.as_posix(),
+        script = RUNNER.format(config_dir=config.as_posix(),
                                name=SCENARIO_NAME, scenarios=scenarios, results=results)
         completed = subprocess.run([sys.executable, '-c', script], capture_output=True,
                                    text=True, encoding='utf-8', errors='replace', timeout=3600,

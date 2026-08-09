@@ -39,13 +39,8 @@ HAMLET offers...
 so you only need to adapt the components you want to investigate and/or improve on
 
 ## Installation
-HAMLET is completely based on Python to keep the installation process simple. This installation guide will
-explain how to get HAMLET to run using PyCharm and Anaconda as example. However, other IDEs and package managers
-are perfectly suitable as well.
-
-#### Install the following software:
-	- IDE: e.g. PyCharm
-	- Package Manager: e.g. Anaconda
+HAMLET is completely based on Python to keep the installation process simple. Its dependencies are
+defined once, in `pyproject.toml`, and pinned to exact versions in the committed `uv.lock`.
 
 No solver installation is required to get started: HAMLET installs the open-source solver HiGHS as
 part of its environment, and `examples/create_simple_scenario` — the example used to test your
@@ -64,20 +59,57 @@ GitHub Desktop, Sourcetree, GitKraken or pure Git. The link for pure Git is:
 Development happens on GitLab at [gitlab.lrz.de/tum-ens/HAMLET](https://gitlab.lrz.de/tum-ens/HAMLET);
 the GitHub repository above is a mirror of it.
 
-If using PyCharm, clone the repository, for example, to `./PyCharmProjects/hamlet/`
-###
-#### Create a virtual python environment
-	- Open the AnacondaPrompt.
-	- Type `conda env create -f ./PycharmProjects/hamlet/env.yml`
-	- Take care to set the correct (absolute) path to your cloned repository.
+#### Create the environment
 
-#### Activate the environment
-	- Open PyCharm
-	- Go to 'File->Open'
-	- Navigate to PyCharmProjects and open hamlet
-	- When the project has opened, go to 
-         `File->Settings->Project->Python Interpreter->Show all->Add->Conda Environment
-          ->Existing environment->Select folder->OK`
+HAMLET uses [uv](https://docs.astral.sh/uv/) ([installation
+instructions](https://docs.astral.sh/uv/getting-started/installation/)). From the repository root:
+
+```bash
+uv sync
+```
+
+That is the whole installation. It creates `.venv/`, fetches Python 3.11 if you do not already
+have it, installs the exact versions recorded in `uv.lock`, and installs HAMLET itself in editable
+mode — so `import hamlet` works from any directory, with no `PYTHONPATH` and no `sys.path` lines
+in your scripts.
+
+Run things through `uv run`, which uses that environment without your having to activate it:
+
+```bash
+uv run python -m pytest        # the fast test tier
+uv run python run.py
+```
+
+Optional components are extras, installed only if you ask for them:
+
+```bash
+uv sync --extra tensorflow     # the two neural-network forecast models (~600 MB)
+uv sync --extra gurobi         # the Gurobi backend; see the next section
+uv sync --extra notebooks      # Jupyter, for examples/*/run.ipynb
+```
+
+<details>
+<summary>Prefer conda, or plain pip?</summary>
+
+Both work. Neither reads `uv.lock`, so they resolve whatever is current rather than what was
+tested — use `uv sync` if you want the environment this repository is developed against.
+
+```bash
+conda create -n hamlet python=3.11 && conda activate hamlet && pip install -e .
+```
+
+```bash
+python3.11 -m venv .venv && . .venv/bin/activate && pip install -e .
+```
+
+The `env.yml` that used to be here is gone. It was a second dependency list alongside the code,
+and a version it failed to pin is what once made `import hamlet` fail outright on a fresh install.
+</details>
+
+#### Point your IDE at it
+	- Open the repository in your IDE.
+	- Select the interpreter at `.venv/` in the repository root. In PyCharm:
+	  `File->Settings->Project->Python Interpreter->Add->Existing environment`.
 
 #### Optional: install a commercial solver (e.g. Gurobi)
 Skip this step unless you need it — the examples run on HiGHS, which is already installed. To use

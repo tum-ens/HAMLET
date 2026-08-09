@@ -1,18 +1,16 @@
 """Shared fixtures for the HAMLET test suite.
 
-The package is not installable yet (no pyproject.toml), so make the repository root importable
-the same way `run.py` does.
+`hamlet` is imported as an installed package (`uv sync` installs the project in editable mode),
+so nothing here touches `sys.path`. If an import fails, the environment is not set up -- see the
+Installation section of `README.md` -- rather than the test being run from the wrong directory.
 """
 import datetime
-import sys
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 
 @pytest.fixture(scope='session')

@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Fixed
+- **Fixed the flexibility, heat and hydrogen market modules being unimportable.** All three did
+  `from markets import Markets`, a top-level module that does not exist, so importing any of them
+  raised `ModuleNotFoundError` — they could never have been used. They now import
+  `hamlet.creator.markets.markets`, which works from anywhere now that the package is installed
+  rather than reached through `sys.path`. An unused `import pandas as pd` went with it
+- **Fixed `load_file` being unable to read an XLSX as a polars frame.** `pl.read_excel` needs
+  `xlsx2csv`, which was in no environment this repository ever shipped, so
+  `load_file(path, df='polars')` raised `ModuleNotFoundError: required package 'xlsx2csv' not
+  found` instead of reading anything (`hamlet/functions.py:189`). Nothing in the suite touched the
+  branch, so it stayed broken silently; `xlsx2csv` is now a declared dependency and
+  `tests/integration/test_load_file_xlsx.py` covers both frame types
 - **Fixed grid fees and levies being applied in the wrong power-flow direction.** The scenario
   configuration lists grid fees and levies as `[buying, selling]` but energy as
   `[selling, buying]`, and that inconsistency survived into the retailer table, so downstream
@@ -122,6 +133,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   plotter change cannot. It exists because the defects that mattered here were caught by
   review and by measurement, and not once by the suite going green
 ### Changed
+- **HAMLET is an installable package, defined by `pyproject.toml` and a committed `uv.lock`.**
+  `uv sync` builds the environment — including Python 3.11 itself — installs the exact versions
+  in the lock, and installs HAMLET in editable mode. `import hamlet` therefore works from any
+  directory: the `sys.path` lines in `run.py` and `tests/conftest.py`, and the two that were
+  generated into the e2e subprocess scripts, are gone, and so is the `PYTHONPATH` a benchmark
+  used to need. `run.py`'s first two lines also contained a mangled statement
+  (`...outside an IDEimport sys`) in which a missing newline had swallowed an `import`
+- **There is now exactly one dependency definition.** `env.yml`, `docs/requirements.txt` and
+  `ci/requirements_from_env.py` are removed; CI, Read the Docs and contributors all install from
+  the same lock. `env.yml` pinned only HAMLET's *direct* dependencies, which is why an
+  unconstrained transitive `xarray` could break `import hamlet` on a fresh install; the lock pins
+  all 195 packages, and `uv sync --locked` in CI fails if the lock and `pyproject.toml` ever
+  disagree
+- The linopy/xarray ceiling is a declared constraint rather than a coincidence of resolution:
+  `xarray==2024.6.0` sits in `pyproject.toml`, so `uv lock --upgrade` can no longer move it. A
+  resolver will never enforce it on its own, because linopy declares only a floor
+  (`xarray>=2024.2.0` in every release from 0.3.13 to 0.9.0) — so
+  `tests/unit/test_dependency_constraints.py` enforces it instead, failing on the commit that
+  relaxes either pin rather than on whoever next builds a fresh environment
+- TensorFlow, Gurobi and Jupyter are optional extras (`uv sync --extra tensorflow`, `--extra
+  gurobi`, `--extra notebooks`); pytest, ruff and Sphinx are dependency groups. The default
+  environment is ~600 MB smaller and needs no solver licence. `sktime` stays core: unlike
+  TensorFlow it is imported at module scope
+- `psutil` moved from 5.9.0 to 5.9.4, the one pin this change had to alter. 5.9.0 predates
+  Python 3.11 and ships no cp311 wheel for any platform, so installing it from PyPI meant
+  compiling it — the reason CI ran the 900 MB `python:3.11` image rather than `-slim`, and an
+  outright failure on Windows without MSVC. It is numerically inert: its only use,
+  `TaskExecutioner.enough_memory`, has no callers
+- All other versions are unchanged from the environment the golden master was measured in, and
+  every pin is exact. That is a stage rather than an end state: it keeps this change attributable,
+  so relaxing the pins to ranges and moving off Python 3.11 stay separate, measured steps
 - Out-of-horizon market records are dropped more cheaply: most calls have nothing to drop and
   now exit after a single pass, and when there is, the membership test is evaluated once and
   reused for both sides of the split instead of scanning the table twice. The output folder is
@@ -167,6 +209,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   running on a single laptop runner is informational rather than a merge blocker
 
 ### Removed
+- Removed `env.yml`, `docs/requirements.txt` and `ci/requirements_from_env.py`, superseded by
+  `pyproject.toml` and `uv.lock`. Contributors using conda are not stranded — see the README —
+  but the conda path is no longer version-locked, and `uv sync` is
+- Removed the `dependency-exclusions` CI job with the script it ran. It asserted that nothing
+  under `hamlet/` imported `tensorflow` or `psycopg2` at module scope, because CI installed a
+  hand-maintained subset of `env.yml`. The claim is now structural: `fast` imports `hamlet` in an
+  environment with neither installed, so a module-scope import fails on the commit that adds it
+- Removed `psycopg2` and `numba` from the dependencies. Neither is used: `psycopg2` has no
+  occurrence anywhere in the tree, and `numba` appears only in three commented-out lines
+  (`executor/setup.py:16`, `linopy/components.py:683`, `poi/components.py:649`)
 - Removed `TEMPLATE_USAGE_GUIDE.md`, scaffolding inherited from the repository template this
   project was started from. It described a `/src` layout, a `requirements.txt`, MkDocs and
   `bump2version`, and a `main` branch — none of which exist here. What of it applies is in

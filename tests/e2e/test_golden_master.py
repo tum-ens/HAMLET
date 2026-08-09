@@ -42,9 +42,8 @@ SEED = 20260804
 RELATIVE_TOLERANCE = 1e-6
 
 RUNNER = """
-import os, random, sys
+import os, random
 import numpy as np
-sys.path.insert(0, r"{repo}")
 random.seed({seed})
 np.random.seed({seed})
 from hamlet import Creator, Executor
@@ -107,7 +106,7 @@ def actual(tmp_path_factory):
         text = text.replace(old, new)
     setup.write_text(text, encoding='utf-8')
 
-    script = RUNNER.format(repo=REPO_ROOT, config_dir=config.as_posix(), seed=SEED,
+    script = RUNNER.format(config_dir=config.as_posix(), seed=SEED,
                            scenarios=scenarios, name=SCENARIO_NAME)
     completed = subprocess.run(
         [sys.executable, '-c', script], capture_output=True, text=True,

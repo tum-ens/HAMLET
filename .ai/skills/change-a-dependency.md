@@ -1,41 +1,61 @@
 # Skill: change-a-dependency
 
-**Use when:** adding, removing, upgrading or unpinning anything in `env.yml`.
+**Use when:** adding, removing, upgrading or unpinning anything in `pyproject.toml`, or moving a
+package between core, an extra and a dependency group.
 
-**`env.yml` is the only dependency definition.** There is no lockfile, no `pyproject.toml` and no
-`requirements.txt`. CI does not carry a second list — `ci/requirements_from_env.py` derives its
-requirements from the same file a contributor installs from, because a second list is exactly how
-`develop` came to ship an `env.yml` that could not `import hamlet`.
+**`pyproject.toml` plus `uv.lock` are the only dependency definition.** There is no `env.yml`, no
+`requirements.txt`, no `docs/requirements.txt` and no generator script; CI installs from the same
+lock a contributor does. Each of those files existed once, and a second list is exactly how
+`develop` came to ship an environment that could not `import hamlet`.
 
-**Some pins are load-bearing and do not look it.** `xarray==2024.6.0` is not HAMLET's dependency
-at all; it arrives through linopy. linopy 0.3.11 imports `xarray.core.rolling`, removed after
+**Some pins are load-bearing and do not look it.** `xarray==2024.6.0` is not HAMLET's dependency at
+all; it arrives through linopy. linopy 0.3.11 imports `xarray.core.rolling`, removed after
 2024.6.0, so unpinning it means `import hamlet` fails outright — with a traceback pointing at
-neither package. The comment at `env.yml:37-41` says so; do not silence it by relaxing the pin.
+neither package. It is written into `pyproject.toml` rather than left to the lock so that
+`uv lock --upgrade` cannot move it.
+
+**Do not expect the resolver to catch the other half.** linopy declares only a floor —
+`xarray>=2024.2.0` in every release from 0.3.13 to 0.9.0, never an upper bound — so raising the
+linopy pin conflicts with nothing and resolves cleanly. The ceiling is one HAMLET carries on
+linopy's behalf. `tests/unit/test_dependency_constraints.py` is what enforces it; if that test
+fails, read it before changing it.
 
 ## Rules
 
-1. **Pin exactly.** Everything in `env.yml` is `==`. An unpinned dependency turns an upstream
-   release into a red pipeline on a commit that changed nothing.
+1. **Pin exactly.** Everything in `[project.dependencies]` is `==`, matching the environment the
+   committed golden master was measured in. This is a deliberate stage, not tidiness: it means a
+   change in *results* has one candidate cause. Relaxing the pins to ranges is its own measured
+   step, and so is moving off `requires-python = ">=3.11,<3.12"`.
 2. **Read the comment above the pin before touching it.** Where a pin has a reason, the reason is
-   written there.
-3. **A transitive dependency that breaks an import belongs in `env.yml`,** even though it is not
-   a direct dependency. That is a stopgap for the missing lockfile, and the comment should say so.
-4. **If you touch the CI exclusion list**, `tensorflow` / `psycopg2` / `jupyter`, note that two of
-   the three exclusions are *claims about the source* — that TensorFlow is imported only inside
-   functions, and that `psycopg2` has no usages under `hamlet/`. Breaking either claim breaks CI
-   correctly. Verify with `--verify`, not by reasoning.
-5. **Verify in a fresh environment, not in yours.** The environment that has worked for a year has
-   worked by historical accident at least once already: `hamlet311` carried a working `xarray`
-   that a fresh `conda env create` did not resolve to.
+   written there — `xarray` and `psutil` both have one.
+3. **Edit `pyproject.toml`, then `uv lock`, and commit the lock in the same commit.** CI runs
+   `uv sync --locked` and fails if the two disagree, which is the point; do not work around it with
+   `--frozen`.
+4. **A transitive dependency that breaks an import belongs in `[project.dependencies]`,** even
+   though nothing in `hamlet/` imports it. The lock alone would record the working version without
+   preventing the broken one.
+5. **Ask whether it is core at all.** If it is imported only inside a function it is an extra
+   (`tensorflow`); if only tests or tooling need it, it is a dependency group (`test`, `lint`,
+   `docs`). Anything imported at module scope under `hamlet/` is core, including `sktime`.
+6. **A wheel must exist for cp311 on Linux and Windows.** `psutil==5.9.0` had none, so installing
+   it meant compiling it — which is why it moved to 5.9.4. Check before pinning something old.
+7. **Verify in a fresh environment, not in yours.** A long-lived environment has worked by
+   historical accident here at least once: `hamlet311` carried a working `xarray` that a fresh
+   install did not resolve to.
 
 ## Checks
 
 ```bash
-python ci/requirements_from_env.py env.yml --verify   # the three exclusions still hold
-python -c "import hamlet"                             # the thing that actually broke
-python -m pytest tests -q                             # fast suite
+uv lock                                  # regenerate; commit the diff
+uv sync --locked                         # the environment CI will build
+uv run python -c "import hamlet"         # the thing that actually broke
+uv run python -m pytest -q               # fast tier
+uv run python -m pytest -q -m golden     # results unchanged
 ```
 
-**Exit criterion:** all three pass in an environment created from the edited `env.yml`, the
-`dependency-exclusions` and `fast` CI jobs are green, and any new pin whose reason is not obvious
+Read `uv.lock`'s diff, not just `pyproject.toml`'s. Bumping one direct pin can move a dozen
+transitives, and the golden master is the only thing that will tell you whether that mattered.
+
+**Exit criterion:** all of the above pass in an environment created from the edited files, the
+`lint`, `fast`, `e2e` and `golden` CI jobs are green, and any new pin whose reason is not obvious
 carries a comment saying what breaks without it.
