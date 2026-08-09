@@ -25,9 +25,10 @@ everything lands by merge request. Branch off `origin/develop`, never off a pape
 4. **CHANGELOG entry, under `[Unreleased]`,** in the section that fits — and a `### Migration`
    note if a user has to do something. Two breaking changes have shipped here that were not
    runtime-detectable; that is why the section exists.
-5. **Never commit** `scenarios/`, `results/`, zip archives, or generated figures. Check the diff
-   for them rather than trusting `.gitignore`, which has been outrun before — `input_data/*` is
-   ignored and 152 files under it are tracked anyway (`git ls-files input_data | wc -l`).
+5. **Never commit** `scenarios/`, `results/`, zip archives, or generated figures. Read the diff
+   for them rather than trusting `.gitignore` — it has been outrun before. Conversely,
+   `input_data/` **is** tracked source and is no longer ignored, so a new input file there is
+   supposed to appear in `git status`; commit it rather than assuming it is noise.
 6. **Use a worktree** for anything that takes more than one commit, so the branch you were on
    keeps its working tree. Uncommitted parked work is easy to destroy from an adjacent task.
 7. **A pipeline is informational.** The only runner is a laptop, so a missing pipeline is not a
