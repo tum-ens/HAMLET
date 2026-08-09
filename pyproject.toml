@@ -98,6 +98,12 @@ dependencies = [
     # `tests/unit/test_dependency_constraints.py`, which fails on the commit that relaxes either
     # pin. Do not relax them without replacing linopy.
     "xarray==2024.6.0",
+    # polars' engine for `pl.read_excel`, which `hamlet.functions.read_file` calls for any xlsx
+    # requested as a polars frame (functions.py:189). It was in neither env.yml nor the conda
+    # environment, so that branch raised `ModuleNotFoundError: required package 'xlsx2csv' not
+    # found` rather than reading anything -- a latent break, not a regression. Pure Python, no
+    # build step.
+    "xlsx2csv==0.8.6",
     "xlsxwriter==3.2.0",     # pandas' engine for the agents.xlsx the Creator writes
 ]
 

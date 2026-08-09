@@ -610,6 +610,7 @@ dependencies = [
     { name = "tqdm" },
     { name = "windpowerlib" },
     { name = "xarray" },
+    { name = "xlsx2csv" },
     { name = "xlsxwriter" },
 ]
 
@@ -666,6 +667,7 @@ requires-dist = [
     { name = "tqdm", specifier = "==4.66.4" },
     { name = "windpowerlib", specifier = "==0.2.2" },
     { name = "xarray", specifier = "==2024.6.0" },
+    { name = "xlsx2csv", specifier = "==0.8.6" },
     { name = "xlsxwriter", specifier = "==3.2.0" },
 ]
 provides-extras = ["gurobi", "notebooks", "tensorflow"]
@@ -2705,6 +2707,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/33/54/332e40049e9fbe566f4e36a5a779a81b9d353fe73cfbd59273c80e69418f/xarray-2024.6.0.tar.gz", hash = "sha256:0b91e0bc4dc0296947947640fe31ec6e867ce258d2f7cbc10bedf4a6d68340c7", size = 3715179, upload-time = "2024-06-13T13:08:43.728Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ce/78/7a78d5197e409371c4fd9734ad9ab41ed6f9147b3ac23256c4e6c81295f2/xarray-2024.6.0-py3-none-any.whl", hash = "sha256:721a7394e8ec3d592b2d8ebe21eed074ac077dc1bb1bd777ce00e41700b4866c", size = 1168522, upload-time = "2024-06-13T13:08:41.204Z" },
+]
+
+[[package]]
+name = "xlsx2csv"
+version = "0.8.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/62/36/9d53c4a72dcdc08fcf46f3d02f71f22bc693bb66e87bd935e0c9668500ad/xlsx2csv-0.8.6.tar.gz", hash = "sha256:618fc502612860de8ab8e3d6195e99ef332fffc68337f6b89e59690aad0d20b5", size = 228308, upload-time = "2026-01-30T15:59:08.47Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f4/d6/9fd7e753a927cb11d039848a659124e6ec4cfe008704bb2790df7712c36d/xlsx2csv-0.8.6-py3-none-any.whl", hash = "sha256:415341e348b4c474cc84a4c23c4d116e0be07c89be6a84c5fde5e4c948db1943", size = 17204, upload-time = "2026-01-31T10:35:20.653Z" },
 ]
 
 [[package]]

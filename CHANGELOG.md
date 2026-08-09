@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Fixed
+- **Fixed the flexibility, heat and hydrogen market modules being unimportable.** All three did
+  `from markets import Markets`, a top-level module that does not exist, so importing any of them
+  raised `ModuleNotFoundError` — they could never have been used. They now import
+  `hamlet.creator.markets.markets`, which works from anywhere now that the package is installed
+  rather than reached through `sys.path`. An unused `import pandas as pd` went with it
+- **Fixed `load_file` being unable to read an XLSX as a polars frame.** `pl.read_excel` needs
+  `xlsx2csv`, which was in no environment this repository ever shipped, so
+  `load_file(path, df='polars')` raised `ModuleNotFoundError: required package 'xlsx2csv' not
+  found` instead of reading anything (`hamlet/functions.py:189`). Nothing in the suite touched the
+  branch, so it stayed broken silently; `xlsx2csv` is now a declared dependency and
+  `tests/integration/test_load_file_xlsx.py` covers both frame types
 - **Fixed grid fees and levies being applied in the wrong power-flow direction.** The scenario
   configuration lists grid fees and levies as `[buying, selling]` but energy as
   `[selling, buying]`, and that inconsistency survived into the retailer table, so downstream
