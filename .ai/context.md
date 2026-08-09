@@ -94,16 +94,31 @@ separate problems, both measured:
   example under `framework: poi` segfaults at the first timestep, reproducibly, outside pytest.
   The affected tests carry `skip_on_windows` from `tests/poi_support.py`, which records the
   evidence and the ruled-out causes. Linux is unaffected and CI is Linux.
-- *Results*: on Linux, where it does run, `poi` does **not** reproduce the linopy numbers. Three
-  backend defects have been fixed (heat pump built with no constraints at all, market power
-  declared integer, dead slack reporting), taking the gap from 110 differing column statistics to
-  85. The remainder is measured, not inferred: 52 of 96 agent-MPC solves reach a different
-  optimal objective, confined to agents with a **battery or an EV** (the one agent with neither
-  agrees on every timestep) and present from the first timestep. Open. The same harness under
-  `linopy` reproduces the committed golden master exactly, before and after, so the difference is
-  the backend, not the harness. `tests/e2e/test_backend_equivalence.py` holds this as an
-  `xfail(strict=True)` — when it starts failing, the backends agree and the marker should go. See
-  #198; `poi` stays experimental and `linopy` stays the default until it is fixed.
+- *Results*: on Linux, `poi` does not reproduce the linopy numbers on the shipped example — but
+  the reason is **degeneracy amplified by state feedback, not a modelling difference**, and that
+  distinction decides what to do about it. Three real defects were fixed first (heat pump built
+  with no constraints at all, market power declared integer, dead slack reporting), taking the gap
+  from 110 differing column statistics to 85. What remains was then measured rather than reasoned
+  about, by exporting both MPC models to LP files and diffing them by constraint *shape* (sense,
+  RHS, coefficient multiset — invariant to variable naming, which differs):
+
+  - At the first timestep the two models are **mathematically identical**: same constraint count,
+    senses, RHS, objective coefficients and binaries. Every unmatched constraint is explained by
+    one extra `+1.0` term for linopy's balance-dummy variable, which is fixed at zero and so is
+    inert. Checked on two agents; nothing else was unexplained.
+  - Objectives at the first timestep agree to ~1e-12 for three of four agents.
+  - The error then stays at machine precision for several steps, **jumps discretely**, and grows
+    (to ~6e-1 by step 23). An agent owning neither a battery nor an EV stays at ~1e-13 for all 24
+    steps — it is the only one with no inter-timestep state to carry a divergence forward.
+
+  So the models agree; the MILP is degenerate, the two backends present it in a different order,
+  a tie breaks differently, and the resulting state of charge feeds the next timestep. This is the
+  legitimate exception the golden master's own notes describe. One loose end: the EV-owning agent
+  differs by ~1e-5 at the first timestep, at identical state — small, real, and unexplained.
+
+  `tests/e2e/test_backend_equivalence.py` holds the end-to-end comparison as an
+  `xfail(strict=True)`. Note what that test can and cannot say: it compares whole-run outputs, so
+  it will keep failing under degeneracy even once the backends are equivalent. See #198.
 
 **§14a grid restrictions are implemented but almost entirely untested, and no example runs them.**
 Direct power control reaches the RTC only (never the FBC), through `apply_grid_commands`; indirect

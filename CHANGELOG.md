@@ -31,14 +31,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   shipped example was run under both frameworks and compared for the first time — the comparison
   #198 asks for. They do not agree: same 18 tables and no column added or dropped, but 3 row
   counts and 110 column statistics moved, by up to 100 %. Three backend defects were found and
-  fixed (below), which brings that to 85. The remainder was measured rather than inferred: per
-  agent, per timestep, 52 of 96 MPC solves reach a *different optimal objective*, so the models
-  genuinely differ rather than picking different equally-optimal vertices. It is confined to
-  agents owning a **battery or an EV** — the one agent with neither matches on all 24 timesteps —
-  and it is present from the first timestep, so it is not the linopy model cache. Still open.
-  The same harness under `linopy` reproduces the committed golden master exactly, before and
-  after, so the difference is the backend rather than the comparison. `linopy` remains the default
-  and the config comments now say so. See #198
+  fixed (below), which brings that to 85. **What remains is degeneracy, not a modelling
+  difference.** Both MPC models were exported to LP files and compared by constraint shape (sense,
+  RHS and coefficient multiset, so variable naming does not matter): at the first timestep they
+  are mathematically identical, every unmatched constraint being explained by one extra `+1.0`
+  term for linopy's balance-dummy variable, which is fixed at zero and therefore inert. Objectives
+  agree to ~1e-12 there. The error then holds at machine precision for several steps, jumps
+  discretely, and grows — and the one agent owning neither a battery nor an EV stays at ~1e-13 for
+  all 24 steps, being the only one with no state of charge to carry a divergence forward. So a tie
+  in a degenerate MILP breaks differently and feeds the next timestep. One loose end: the
+  EV-owning agent differs by ~1e-5 at the first timestep at identical state. `linopy` remains the
+  default. See #198
 - **`framework: poi` does not run on Windows at all.** The shipped example segfaults at the first
   timestep, reproducibly, with no pytest involved; Linux is unaffected. Recorded with the
   ruled-out causes in `tests/poi_support.py`
