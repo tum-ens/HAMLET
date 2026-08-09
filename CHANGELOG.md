@@ -26,6 +26,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   PyOptInterface against **191.76 ms** for linopy, and the split shows why — linopy spends 138.89
   ms building a model that HiGHS then solves in 52.86 ms
 
+### Changed
+- **`framework: poi` is documented as experimental.** With a HiGHS library finally available, the
+  shipped example was run under both frameworks and compared for the first time — the comparison
+  #198 asks for. They do not agree. Same 18 tables and no column added or dropped, but 3 row
+  counts and 110 column statistics move, by up to 100 %: an EV that barely charges
+  (`ev_electricity.sum` −163,584 vs −592) and a heat pump off by 3×. The same harness under
+  `linopy` reproduces the committed golden master exactly, so the difference is the backend rather
+  than the comparison. `linopy` remains the default and the config comments now say so. The POI
+  components' `__init__` matches linopy's after !195, so the divergence is in the constraint and
+  objective construction downstream — see #198
+- **`framework: poi` does not run on Windows at all.** The shipped example segfaults at the first
+  timestep, reproducibly, with no pytest involved; Linux is unaffected. Recorded with the
+  ruled-out causes in `tests/poi_support.py`
+
 ### Fixed
 - **Fixed new files under `input_data/` being silently ignored.** `.gitignore` carried
   `input_data/*` while the 152 files under it were tracked anyway, so adding an input left

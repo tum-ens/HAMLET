@@ -12,23 +12,26 @@ import pytest
 # (0xC0000005) at a moving, unrelated location (ast, pathlib, pytest internals), which is the
 # signature of memory corruption rather than a fault where it is reported.
 #
-# What it takes to reproduce, measured: two or more HiGHS solves inside one pytest process. A
-# single solve always passes, and 200 consecutive solves *outside* pytest are fine -- which is why
-# this is a test-harness limitation and not a runtime one. Windows simulations run normally, and
-# so does the POI backend itself.
+# **This is not only a test problem.** Running the shipped example under `framework: poi` on
+# Windows segfaults at the first timestep, reproducibly, outside pytest entirely. So `poi` is
+# unusable on Windows, full stop, and these skips only keep the suite from taking the process down
+# with it. On Linux the same example runs to completion.
+#
+# What it takes to reproduce in-process: two or more HiGHS solves. A single solve always passes,
+# and 200 consecutive solves of a small synthetic MILP are fine -- so it depends on what is being
+# solved, not merely on how many times.
 #
 # Ruled out: pytest's output capture (`-s` still crashes, and silencing the solver does not help),
 # `np.inf` bounds, HAMLET's own code (it reproduces on an unmodified tree with only `highsbox`
 # installed), and either dependency's version alone. It does not reproduce on Linux at any version
 # tested, and CI is Linux, so these tests keep their coverage where it counts.
 #
-# There is an escape -- pyoptinterface >= 0.5.1 with highsbox >= 1.12.0 does not crash -- but that
-# HiGHS is 3-5x slower on HAMLET-shaped models, which is most of the speedup this backend exists
-# to deliver. Skipping on one platform is the cheaper trade. Revisit if the cause is found.
+# There is an escape -- pyoptinterface >= 0.5.1 with highsbox >= 1.12.0 does not crash the suite --
+# but that HiGHS is 3-5x slower on HAMLET-shaped models, which is most of the speedup this backend
+# exists to deliver, and it was not checked against the example run. Revisit with the root cause.
 skip_on_windows = pytest.mark.skipif(
     sys.platform == 'win32',
-    reason='PyOptInterface + highsbox crash the interpreter on Windows under pytest; '
-           'the backend itself works there, and CI covers these tests on Linux')
+    reason='PyOptInterface + highsbox crash the interpreter on Windows; CI covers this on Linux')
 
 
 def can_solve(module):

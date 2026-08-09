@@ -900,7 +900,8 @@ sfh:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy optimization problem is solved
-                                                #   - poi: poi optimization problem is solved
+                                                #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
@@ -926,7 +927,8 @@ sfh:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    poi mpc to forecast and optimize
+                                                #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
@@ -1573,7 +1575,8 @@ ctsp:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy optimization problem is solved
-                                                #   - poi: poi optimization problem is solved
+                                                #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
@@ -1599,7 +1602,8 @@ ctsp:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    poi mpc to forecast and optimize
+                                                #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
@@ -2252,7 +2256,8 @@ industry:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy optimization problem is solved
-                                                #   - poi: poi optimization problem is solved
+                                                #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
@@ -2278,7 +2283,8 @@ industry:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    poi mpc to forecast and optimize
+                                                #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
@@ -2548,7 +2554,8 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -2574,7 +2581,8 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
@@ -2821,7 +2829,8 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -2847,7 +2856,8 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
@@ -3091,7 +3101,8 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -3117,7 +3128,8 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
@@ -3281,7 +3293,8 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -3307,7 +3320,8 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
@@ -3466,7 +3480,8 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -3492,7 +3507,8 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
@@ -3651,7 +3667,8 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -3677,7 +3694,8 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:

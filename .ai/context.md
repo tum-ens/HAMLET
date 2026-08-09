@@ -87,11 +87,18 @@ them equal, or a backend comparison stops being a comparison.
 either, and `framework: poi` works on HiGHS because of it — before that it imported Gurobi
 unconditionally and silently required a system Gurobi installation.
 
-**PyOptInterface crashes the interpreter on Windows under pytest** — an access violation, from the
-second HiGHS solve onward within one pytest process. This is a test-harness limitation only: the
-backend runs fine on Windows outside pytest, and does not crash on Linux at all. The affected
-tests carry `skip_on_windows` from `tests/poi_support.py`, where the evidence and the ruled-out
-causes are recorded. CI is Linux, so no coverage is lost.
+**`framework: poi` does not work on Windows, and is not numerically validated anywhere.** Two
+separate problems, both measured:
+
+- *Windows*: PyOptInterface + highsbox crash the interpreter with an access violation. The shipped
+  example under `framework: poi` segfaults at the first timestep, reproducibly, outside pytest.
+  The affected tests carry `skip_on_windows` from `tests/poi_support.py`, which records the
+  evidence and the ruled-out causes. Linux is unaffected and CI is Linux.
+- *Results*: on Linux, where it does run, `poi` does **not** reproduce the linopy numbers. Same 18
+  tables and no column added or dropped, but 3 row counts and 110 column statistics move, by up to
+  100 % — an EV that barely charges, a heat pump off by 3×. The same harness under `linopy`
+  reproduces the committed golden master exactly, so the difference is the backend, not the
+  harness. See #198; `poi` stays experimental and `linopy` stays the default until it is fixed.
 
 **The golden reference is solver-coupled.** Running under a different solver moves the numbers.
 Measured when the example switched Gurobi → HiGHS (commit `f65edf0`): structure unchanged — same
