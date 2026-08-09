@@ -56,9 +56,9 @@ GitHub Desktop, Sourcetree, GitKraken or pure Git. The link for pure Git is:
 
 `git clone https://github.com/tum-ens/HAMLET.git`
 
-If you only want to run HAMLET rather than work on its history, add `--depth=1`: the repository
-carries large input time series and a long history, so a full clone fetches a few hundred MB where
-a shallow one fetches about 18 MB of git metadata.
+If you only want to run HAMLET rather than work on its history, add `--depth=1`: a full clone
+fetches about 350 MB of history, a shallow one about 13 MB. Either way the working tree is the
+same, so the checkout is ~90 MB rather than ~430 MB.
 
 `git clone --depth=1 https://github.com/tum-ens/HAMLET.git`
 
