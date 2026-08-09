@@ -31,8 +31,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   shipped example was run under both frameworks and compared for the first time — the comparison
   #198 asks for. They do not agree: same 18 tables and no column added or dropped, but 3 row
   counts and 110 column statistics moved, by up to 100 %. Three backend defects were found and
-  fixed (below), which brings that to 85; the remainder is concentrated in the EV and is still
-  open. The same harness under `linopy` reproduces the committed golden master exactly, before and
+  fixed (below), which brings that to 85. The remainder was measured rather than inferred: per
+  agent, per timestep, 52 of 96 MPC solves reach a *different optimal objective*, so the models
+  genuinely differ rather than picking different equally-optimal vertices. It is confined to
+  agents owning a **battery or an EV** — the one agent with neither matches on all 24 timesteps —
+  and it is present from the first timestep, so it is not the linopy model cache. Still open.
+  The same harness under `linopy` reproduces the committed golden master exactly, before and
   after, so the difference is the backend rather than the comparison. `linopy` remains the default
   and the config comments now say so. See #198
 - **`framework: poi` does not run on Windows at all.** The shipped example segfaults at the first

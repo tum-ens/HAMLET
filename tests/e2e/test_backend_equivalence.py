@@ -35,7 +35,7 @@ not_on_windows = pytest.mark.skipif(
 known_divergence = pytest.mark.xfail(
     strict=True,
     reason='the POI backend does not reproduce linopy (#198): 3 row counts and 85 column '
-           'statistics still move, concentrated in the EV. Remove this marker when fixed.')
+           'statistics still move, on agents owning a battery or an EV. Remove this when fixed.')
 
 
 @pytest.fixture(scope='module')

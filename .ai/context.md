@@ -97,9 +97,11 @@ separate problems, both measured:
 - *Results*: on Linux, where it does run, `poi` does **not** reproduce the linopy numbers. Three
   backend defects have been fixed (heat pump built with no constraints at all, market power
   declared integer, dead slack reporting), taking the gap from 110 differing column statistics to
-  85; the remainder is concentrated in the EV and is open. The same harness under `linopy`
-  reproduces the committed golden master exactly, before and after, so the difference is the
-  backend, not the harness. `tests/e2e/test_backend_equivalence.py` holds this as an
+  85. The remainder is measured, not inferred: 52 of 96 agent-MPC solves reach a different
+  optimal objective, confined to agents with a **battery or an EV** (the one agent with neither
+  agrees on every timestep) and present from the first timestep. Open. The same harness under
+  `linopy` reproduces the committed golden master exactly, before and after, so the difference is
+  the backend, not the harness. `tests/e2e/test_backend_equivalence.py` holds this as an
   `xfail(strict=True)` — when it starts failing, the backends agree and the marker should go. See
   #198; `poi` stays experimental and `linopy` stays the default until it is fixed.
 
