@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Fixed
+- **Fixed new files under `input_data/` being silently ignored.** `.gitignore` carried
+  `input_data/*` while the 152 files under it were tracked anyway, so adding an input left
+  `git status` clean and needed `git add -f` — that is how the benchmark input `energy_da_raw.csv`
+  was lost. `input_data/` is tracked source, so the rule is gone and a new file there now shows up
+  like any other; no tracked file changed. Archives (`*.zip`, `*.rar`, `*.7z`, `*.tar.gz`,
+  `*.tgz`) are ignored repository-wide instead, which is what the rule was really guarding against
 - **Fixed the flexibility, heat and hydrogen market modules being unimportable.** All three did
   `from markets import Markets`, a top-level module that does not exist, so importing any of them
   raised `ModuleNotFoundError` — they could never have been used. They now import

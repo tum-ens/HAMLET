@@ -27,6 +27,17 @@ Live simulation state and the append-only results log both live in one in-memory
 Most of the executor's performance workarounds follow from those two responsibilities sharing an
 object. Splitting them is planned, not done.
 
+## Repository data
+
+Of those three directories **only `input_data/` is tracked** — 152 files, ~159 MB. `scenarios/`
+and `results/` are run output and are gitignored. Nothing under `hamlet/` writes into
+`input_data/`; the package reads it through the `input:` path in a scenario's `setup.yaml`.
+
+So `input_data/` is source and is **not** ignored: a file added there shows up in `git status` like
+any other. Do not re-add a blanket rule over it — that hid a needed input once already, and
+`tests/unit/test_gitignore_input_data.py` fails if you do. Bulk data belongs outside the
+repository; archives (`*.zip`, `*.rar`, `*.7z`, `*.tar.gz`) are ignored everywhere.
+
 ## Environment
 
 `pyproject.toml` declares the dependencies and `uv.lock` pins them, transitives included. Those two
@@ -127,6 +138,12 @@ interoperability; making the two lineages interoperate would be its own project.
   more are to be added.
 - **Never commit** `scenarios/`, `results/`, zip archives, or generated figures.
 - **Never start a full-year or other multi-hour simulation without asking first.**
+- **Document only what the code cannot say, and only if it will still matter later.** A constraint,
+  a measured number, a rejected alternative, a trap — yes. A restatement of what the function
+  already does — no; it goes stale and then it lies. **One fact, one home:** if a paragraph exists
+  in a tracked file, link to it rather than repeat it. Comments in config files get two lines and a
+  pointer. Long-form reasoning belongs in the merge request, which is read once and never has to
+  stay true.
 - If something looks strange, ask rather than guessing. Most of what is written above was learned
   by not doing that.
 
