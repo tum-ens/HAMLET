@@ -14,6 +14,11 @@ class OptimBase(RtcBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        # Grid operator commands (§14a EnWG), consumed by `apply_grid_commands` at the end of
+        # construction. Held here rather than in each backend so that a backend cannot forget to
+        # store them and then silently discard every cap -- which is what the POI one did.
+        self.grid_commands = kwargs.get('grid_commands') or {}
+
         # Create the model
         self.model = self.get_model(**kwargs)
         self.ems = self.ems[c.C_CONTROLLER][c.C_RTC]

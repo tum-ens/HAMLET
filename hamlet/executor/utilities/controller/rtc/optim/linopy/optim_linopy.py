@@ -39,8 +39,7 @@ class Linopy(OptimBase):
     def __init__(self, **kwargs):
         self.loaded_model = False
         self.model_path = f"{kwargs['agent'].agent_save}/linopy_rtc.nc"
-        # grid commands
-        self.grid_commands = kwargs['grid_commands']
+        # `grid_commands` is stored by OptimBase, for both backends alike.
         super().__init__(**kwargs)
         self.ems = self.ems[c.C_OPTIM]
         # Save first model to file to load later

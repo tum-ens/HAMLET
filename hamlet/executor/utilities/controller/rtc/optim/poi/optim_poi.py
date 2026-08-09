@@ -36,10 +36,108 @@ AVAILABLE_PLANTS = {
 
 
 class POI(OptimBase):
+    # The variable the EMS-level cap is imposed through, shared with the linopy backend so a
+    # scenario reads the same whichever framework produced it.
+    EMS_CONTROL_VARIABLE = 'direct_power_control_ems'
+
     def get_model(self, **kwargs):
         # `self.ems` is still the whole ems block here; the base narrows it to the rtc controller
         # only after the model exists.
         return create_model(self.ems[c.C_CONTROLLER][c.C_RTC][c.C_OPTIM].get('solver'))
+
+    def apply_grid_commands(self):
+        """Impose the grid operator's direct power control (§14a EnWG) on the model.
+
+        Mirrors the linopy backend method by method. Without it this inherited the base class's
+        no-op, so an agent on `framework: poi` accepted every cap and then ignored it -- silently,
+        because the grid stage has no way to tell that its commands were discarded.
+
+        Two control methods, matching the `direct_power_control.method` configuration:
+        `individual` tightens the bounds of one plant's power variable, `ems` caps the agent's
+        whole electrical connection by constraining the sum of its plant powers.
+        """
+        commands = (self.grid_commands.get(c.G_ELECTRICITY, {})
+                    .get('current_direct_power_control', {})
+                    .get(self.agent.agent_id))
+        if not commands:
+            return
+
+        for plant_id, plant_power in commands.items():
+            if plant_id == 'ems':
+                self.__apply_ems_control(plant_power)
+            else:
+                self.__apply_individual_control(plant_id, plant_power)
+
+    def __apply_individual_control(self, plant_id, plant_power):
+        """Cap a single plant, and move its target with it.
+
+        The target has to follow the cap: it is the reference the deviation term is priced
+        against, so leaving it at a now-unreachable setpoint would charge the agent for obeying
+        the grid operator.
+        """
+        plant_type = self.plants[plant_id]['type']
+        power_name = '_'.join([plant_id, plant_type, c.ET_ELECTRICITY])
+        target_name = '_'.join([plant_id, plant_type, 'target'])
+
+        lower, upper = self.__bounds(power_name)
+        # A positive command is a load limit and a negative one a generation limit, so which
+        # bound binds depends on the sign. The other is widened rather than left alone, so a cap
+        # can never produce an empty interval.
+        if plant_power > 0:
+            self.__set_bounds(power_name, min(lower, plant_power), plant_power)
+        else:
+            self.__set_bounds(power_name, plant_power, max(upper, plant_power))
+
+        if target_name in self.variables:
+            self.__set_bounds(target_name, plant_power, plant_power)
+
+    def __apply_ems_control(self, plant_power):
+        """Cap the agent's whole electrical connection rather than one device."""
+        if self.EMS_CONTROL_VARIABLE in self.variables:
+            # Already built this timestep; only the bound moves.
+            if plant_power > 0:
+                self.__set_bounds(self.EMS_CONTROL_VARIABLE,
+                                  self.__bounds(self.EMS_CONTROL_VARIABLE)[0], plant_power)
+            else:
+                self.__set_bounds(self.EMS_CONTROL_VARIABLE, plant_power,
+                                  self.__bounds(self.EMS_CONTROL_VARIABLE)[1])
+            return
+
+        if plant_power > 0:
+            slack = self.model.add_variable(lb=-inf, ub=plant_power, name=self.EMS_CONTROL_VARIABLE)
+        else:
+            slack = self.model.add_variable(lb=plant_power, ub=inf, name=self.EMS_CONTROL_VARIABLE)
+        self.variables[self.EMS_CONTROL_VARIABLE] = slack
+
+        # Same selection as the balance equation: every plant variable carrying electricity, for a
+        # component whose mapping declares an electricity mode.
+        terms = [slack]
+        for variable_name, variable in self.variables.items():
+            if not (variable_name.startswith(tuple(self.plant_objects))
+                    and variable_name.endswith(c.ET_ELECTRICITY)):
+                continue
+            component_name = variable_name.split('_', 1)[0]
+            component_type = [vals['type'] for plant, vals in self.plants.items()
+                              if plant == component_name][0]
+            if c.ET_ELECTRICITY not in self.mapping[component_type]:
+                continue
+            mode = self.mapping[component_type][c.ET_ELECTRICITY]
+            if mode not in (c.OM_GENERATION, c.OM_LOAD, c.OM_STORAGE):
+                raise ValueError(f"Unsupported operation mode: {mode}")
+            terms.append(variable)
+
+        self.model.add_linear_constraint(sum(terms), poi.ConstraintSense.Equal, 0,
+                                         name=self.EMS_CONTROL_VARIABLE)
+
+    def __bounds(self, name):
+        variable = self.variables[name]
+        return (self.model.get_variable_attribute(variable, poi.VariableAttribute.LowerBound),
+                self.model.get_variable_attribute(variable, poi.VariableAttribute.UpperBound))
+
+    def __set_bounds(self, name, lower, upper):
+        variable = self.variables[name]
+        self.model.set_variable_attribute(variable, poi.VariableAttribute.LowerBound, float(lower))
+        self.model.set_variable_attribute(variable, poi.VariableAttribute.UpperBound, float(upper))
 
     def get_available_plants(self):
         return AVAILABLE_PLANTS

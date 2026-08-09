@@ -40,6 +40,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ruled-out causes in `tests/poi_support.py`
 
 ### Fixed
+- **Fixed the PyOptInterface backend ignoring direct power control (§14a EnWG).** The real-time
+  controller never overrode `OptimBase.apply_grid_commands`, which is a bare `pass`, and never
+  stored `grid_commands` at all — so an agent on `framework: poi` accepted the grid operator's
+  power caps and then discarded them. Nothing raised and nothing warned: the grid stage cannot
+  observe that its commands had no effect, so it re-simulated the timestep, got the same answer
+  and converged on an uncapped grid. Both control methods now match the linopy backend —
+  `individual` tightens a plant's power variable and moves its target with it, `ems` constrains
+  the sum of the agent's plant powers. `grid_commands` moved to `OptimBase`, so a backend cannot
+  silently forget to store it again, and `tests/unit/.../rtc/test_direct_power_control.py` pins
+  the behaviour across both backends
 - **Fixed the POI real-time controller applying no heat-pump constraints at all.** `Hp` had its
   `define_constraints` and `__constraint_cop` written at module scope rather than inside the class
   (`rtc/optim/poi/components.py`), so the lookup fell through to the base class's `pass` and the

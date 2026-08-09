@@ -65,13 +65,17 @@ def fingerprint(results_root):
     return {kind: entry for kind, entry in sorted(grouped.items())}
 
 
-def run_example(base, example_dir, scenario_name, framework=None, edits=()):
+def run_example(base, example_dir, scenario_name, framework=None, edits=(), config_edits=None):
     """Run one example end to end under `base`, and return the fingerprint of its results.
 
     `framework` switches `framework: linopy` to another backend everywhere it appears; None leaves
     the config as shipped. `edits` is a sequence of (old, new) string replacements applied to
-    `agents.yaml` afterwards, for scenarios that need a feature turned on -- each must match at
-    least once, so a renamed config key fails the test instead of silently changing nothing.
+    `agents.yaml`, and `config_edits` is a {filename: [(old, new), ...]} mapping for any other
+    config file -- `grids.yaml`, say, to switch a grid restriction on.
+
+    Every replacement must match at least once. That is deliberate: a renamed config key then
+    fails the test loudly, instead of the test quietly running an unmodified scenario and passing
+    for the wrong reason.
     """
     scenarios, results = base / 'scenarios', base / 'results'
     config = base / scenario_name
@@ -97,6 +101,15 @@ def run_example(base, example_dir, scenario_name, framework=None, edits=()):
         assert old in agents_text, f'{old!r} not found in agents.yaml'
         agents_text = agents_text.replace(old, new)
     agents.write_text(agents_text, encoding='utf-8')
+
+    for filename, replacements in (config_edits or {}).items():
+        target = config / filename
+        assert target.exists(), f'{filename} not found in {scenario_name}'
+        content = target.read_text(encoding='utf-8')
+        for old, new in replacements:
+            assert old in content, f'{old!r} not found in {filename}'
+            content = content.replace(old, new)
+        target.write_text(content, encoding='utf-8')
 
     script = RUNNER.format(config_dir=config.as_posix(), seed=SEED,
                            scenarios=scenarios, name=scenario_name)

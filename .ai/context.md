@@ -94,11 +94,25 @@ separate problems, both measured:
   example under `framework: poi` segfaults at the first timestep, reproducibly, outside pytest.
   The affected tests carry `skip_on_windows` from `tests/poi_support.py`, which records the
   evidence and the ruled-out causes. Linux is unaffected and CI is Linux.
-- *Results*: on Linux, where it does run, `poi` does **not** reproduce the linopy numbers. Same 18
-  tables and no column added or dropped, but 3 row counts and 110 column statistics move, by up to
-  100 % — an EV that barely charges, a heat pump off by 3×. The same harness under `linopy`
-  reproduces the committed golden master exactly, so the difference is the backend, not the
-  harness. See #198; `poi` stays experimental and `linopy` stays the default until it is fixed.
+- *Results*: on Linux, where it does run, `poi` does **not** reproduce the linopy numbers. Three
+  backend defects have been fixed (heat pump built with no constraints at all, market power
+  declared integer, dead slack reporting), taking the gap from 110 differing column statistics to
+  85; the remainder is concentrated in the EV and is open. The same harness under `linopy`
+  reproduces the committed golden master exactly, before and after, so the difference is the
+  backend, not the harness. `tests/e2e/test_backend_equivalence.py` holds this as an
+  `xfail(strict=True)` — when it starts failing, the backends agree and the marker should go. See
+  #198; `poi` stays experimental and `linopy` stays the default until it is fixed.
+
+**§14a grid restrictions are implemented but almost entirely untested, and no example runs them.**
+Direct power control reaches the RTC only (never the FBC), through `apply_grid_commands`; indirect
+control (variable grid fees) is applied outside the solver in `agent_base.py`, so it is
+backend-agnostic and both MPC backends pick it up. Nothing in `tests/` executes `EnWG14a`, and no
+shipped example enables the mechanism: the two scenarios that set `restrictions.apply:
+['enwg_14a']` have `electricity.active: False`, and the two with a live grid have an empty
+restriction list. An end-to-end test needs a new fixture — and note that
+`examples/create_scenario_with_grid` currently **cannot run at all**, on `develop` as well: it
+raises `TypeError: cannot unpack non-iterable NoneType` in `grid_db._create_grid_from_file`,
+because `__assign_inflexible_load_for_agent` returns `None` when no load matches.
 
 **The golden reference is solver-coupled.** Running under a different solver moves the numbers.
 Measured when the example switched Gurobi → HiGHS (commit `f65edf0`): structure unchanged — same
