@@ -215,6 +215,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   running on a single laptop runner is informational rather than a merge blocker
 
 ### Removed
+- **Removed `input_data/general/weather/weather.csv` (91 MiB), which nothing referenced.** Every
+  shipped `setup.yaml`, `config_templates/`, the documentation and the executor default all name
+  `weather.ft` — the same data, verified identical (813,100 rows, 17 columns, all 15 numeric
+  columns equal and both timestamps equal once parsed) at a 24th of the size. A fresh checkout's
+  `input_data/` drops from ~160 MB to 69 MB. If you have a hand-edited `setup.yaml` naming
+  `weather.csv`, change it to `weather.ft`; the repository history still carries the file
 - Removed `env.yml`, `docs/requirements.txt` and `ci/requirements_from_env.py`, superseded by
   `pyproject.toml` and `uv.lock`. Contributors using conda are not stranded — see the README —
   but the conda path is no longer version-locked, and `uv sync` is
