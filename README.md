@@ -56,6 +56,12 @@ GitHub Desktop, Sourcetree, GitKraken or pure Git. The link for pure Git is:
 
 `git clone https://github.com/tum-ens/HAMLET.git`
 
+If you only want to run HAMLET rather than work on its history, add `--depth=1`: the repository
+carries large input time series and a long history, so a full clone fetches a few hundred MB where
+a shallow one fetches about 18 MB of git metadata.
+
+`git clone --depth=1 https://github.com/tum-ens/HAMLET.git`
+
 Development happens on GitLab at [gitlab.lrz.de/tum-ens/HAMLET](https://gitlab.lrz.de/tum-ens/HAMLET);
 the GitHub repository above is a mirror of it.
 
