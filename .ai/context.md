@@ -113,8 +113,17 @@ separate problems, both measured:
 
   So the models agree; the MILP is degenerate, the two backends present it in a different order,
   a tie breaks differently, and the resulting state of charge feeds the next timestep. This is the
-  legitimate exception the golden master's own notes describe. One loose end: the EV-owning agent
-  differs by ~1e-5 at the first timestep, at identical state — small, real, and unexplained.
+  legitimate exception the golden master's own notes describe.
+
+  The one first-timestep difference (~1e-5 on a single agent) was chased to the end and is the
+  same story a layer up, **not** a second defect. Dumping every MPC variable's bounds by name
+  showed exactly one differing input: `<plant>_heat-storage_soc_init`, 8470 under linopy against
+  8469 under poi — one Wh, in a value the MPC *reads* rather than computes. Controllers run RTC
+  first and FBC second within a timestep (`agent_base.set_controllers` iterates the configured
+  controllers in order), and the RTC writes the state of charge the MPC then starts from, through
+  `rtc_base.update_socs`, which quantises to the socs column dtype. So the MPC model is not
+  implicated: its input had already moved by one quantisation step. Note it is **heat storage**,
+  not the EV — the agent merely happens to own an EV as well.
 
   `tests/e2e/test_backend_equivalence.py` holds the end-to-end comparison as an
   `xfail(strict=True)`. Note what that test can and cannot say: it compares whole-run outputs, so
