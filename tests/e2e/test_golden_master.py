@@ -13,6 +13,27 @@ so the review sees the numbers move:
 
     HAMLET_UPDATE_GOLDEN=1 python -m pytest tests -m golden
 
+**One legitimate cause of movement is not a defect: a different equally-optimal solution.** The
+agent models are degenerate MILPs -- a battery or EV can very often shift charging between
+timesteps at identical cost -- so changing the solver, or the *modelling backend* that presents
+the same model to it, can break a tie the other way. The chosen state of charge then feeds the
+next timestep, and a receding-horizon run amplifies one tie into visibly different trajectories.
+Measured for `framework: linopy` vs `poi`: the two MPC models are mathematically identical
+(verified by exporting both to LP and matching constraints by shape) and their first-timestep
+objectives agree to ~1e-12, yet by step 23 the run-level numbers differ by tens of percent. An
+agent owning neither a battery nor an EV stays at ~1e-13 throughout, having no state to carry a
+divergence forward.
+
+Telling the two apart, when the numbers move:
+
+- *Degeneracy* leaves the objective unchanged at equal state. Structure holds (same tables, same
+  row counts, no column added or dropped) and the divergence appears as a discrete jump at some
+  timestep rather than from the first one.
+- *A defect* shows a difference from the first timestep at identical state, or moves structure.
+
+So a solver or backend change may be re-baselined once the movement is shown to be of the first
+kind; a change that was meant to be numerically inert may not.
+
 Reproducibility rests on seeding `random` and `numpy.random` and pinning `PYTHONHASHSEED`. The
 Creator draws agent ids, plant ownership and sizings from all three. Verified: two seeded runs
 produce byte-identical scenarios and identical results.
