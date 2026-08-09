@@ -192,10 +192,10 @@ class Market(POIComps):
         # Define the market power variables (need to be positive and negative due to different pricing)
         self.add_variable_to_model(model, variables, name=f'{self.name}_{self.comp_type}_{c.PF_OUT}', lower=self.lower,
                                    upper=0, coords=[self.timesteps],
-                                   integer=True)  # outflow from the building (selling)
+                                   integer=False)  # outflow from the building (selling)
         self.add_variable_to_model(model, variables, name=f'{self.name}_{self.comp_type}_{c.PF_IN}', lower=0,
                                    upper=self.upper, coords=[self.timesteps],
-                                   integer=True)  # inflow into the building (buying)
+                                   integer=False)  # inflow into the building (buying)
 
         # Define mode flag that decides whether the market energy is bought or sold
         self.add_variable_to_model(model, variables, name=f'{self.name}_mode', coords=[self.timesteps], binary=True)

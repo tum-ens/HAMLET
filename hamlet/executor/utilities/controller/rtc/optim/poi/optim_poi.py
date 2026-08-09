@@ -6,6 +6,11 @@ __email__ = "markus.doepfert@tum.de"
 
 import logging
 
+# Used by the slack reporting in `run`. It was missing, and the bare `except Exception` around
+# that block turned every call into a silently swallowed NameError -- so a POI run that closed its
+# balance with slack reported nothing while the linopy run warned.
+import numpy as np
+
 from hamlet.executor.utilities.controller.poi_solver import create_model, set_time_limit
 from hamlet.executor.utilities.controller.rtc.optim.poi.components import *
 from hamlet.executor.utilities.controller.rtc.optim.optim_base import OptimBase

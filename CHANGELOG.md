@@ -18,7 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `hamlet/executor/utilities/controller/poi_solver.py` and honours `solver: highs` as well. HiGHS
   needs a shared library, which `highspy` does not expose — it bundles HiGHS inside its `_core`
   extension — so `highsbox` is a new dependency, pinned to `highspy`'s exact version so that both
-  backends solve with an identical solver. Closes #198
+  backends solve with an identical solver. Unblocks #198
 - **A backend speed benchmark, `tests/benchmarks/test_backend_speed.py`.** It builds the same
   agent-MPC-shaped MILP through linopy and through PyOptInterface, hands both to the same HiGHS,
   and asserts they reach the same optimum before reporting the build/solve split. Deselected by
@@ -29,18 +29,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - **`framework: poi` is documented as experimental.** With a HiGHS library finally available, the
   shipped example was run under both frameworks and compared for the first time — the comparison
-  #198 asks for. They do not agree. Same 18 tables and no column added or dropped, but 3 row
-  counts and 110 column statistics move, by up to 100 %: an EV that barely charges
-  (`ev_electricity.sum` −163,584 vs −592) and a heat pump off by 3×. The same harness under
-  `linopy` reproduces the committed golden master exactly, so the difference is the backend rather
-  than the comparison. `linopy` remains the default and the config comments now say so. The POI
-  components' `__init__` matches linopy's after !195, so the divergence is in the constraint and
-  objective construction downstream — see #198
+  #198 asks for. They do not agree: same 18 tables and no column added or dropped, but 3 row
+  counts and 110 column statistics moved, by up to 100 %. Three backend defects were found and
+  fixed (below), which brings that to 85; the remainder is concentrated in the EV and is still
+  open. The same harness under `linopy` reproduces the committed golden master exactly, before and
+  after, so the difference is the backend rather than the comparison. `linopy` remains the default
+  and the config comments now say so. See #198
 - **`framework: poi` does not run on Windows at all.** The shipped example segfaults at the first
   timestep, reproducibly, with no pytest involved; Linux is unaffected. Recorded with the
   ruled-out causes in `tests/poi_support.py`
 
 ### Fixed
+- **Fixed the POI real-time controller applying no heat-pump constraints at all.** `Hp` had its
+  `define_constraints` and `__constraint_cop` written at module scope rather than inside the class
+  (`rtc/optim/poi/components.py`), so the lookup fell through to the base class's `pass` and the
+  heat pump lost both its COP coupling (`heat + electricity * cop == 0`) and its target-deviation
+  constraint. `hp_electricity` was left free within its bounds and decoupled from `hp_heat`,
+  making it a costless sink the solver used to absorb market deviations — which is why the heat
+  pump was off by 3x and other components appeared not to deviate at all. Nothing raised, because
+  the base `define_constraints` is a `@staticmethod` with a matching signature
+- **Fixed the POI backends declaring market power as integer.** All four market variables in the
+  real-time controller and both in the MPC were `integer=True` where linopy has `integer=False`,
+  turning an LP into a mixed-integer problem — and, since `market_power` defaults to unbounded, an
+  integer variable with infinite bounds. Any fractional optimum resolved differently
+- **Fixed the POI real-time controller never reporting balance slack.** The slack warning used
+  `np` without importing it, and the bare `except Exception` around it swallowed the resulting
+  `NameError` on every call, so a POI run that shed or dumped energy to close its balance said
+  nothing while the linopy run warned
 - **Fixed new files under `input_data/` being silently ignored.** `.gitignore` carried
   `input_data/*` while the 152 files under it were tracked anyway, so adding an input left
   `git status` clean and needed `git add -f` — that is how the benchmark input `energy_da_raw.csv`
