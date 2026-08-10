@@ -42,6 +42,63 @@ Markers: `solver` (builds and solves a real optimisation model), `e2e` (runs the
 `golden` (compares against committed reference numbers). The last two take a couple of minutes
 each and are deselected by default.
 
+## The solver x framework matrix
+
+`framework` (`linopy` | `poi`) and `solver` (`highs` | `gurobi`) are independent per-agent options,
+so there are four supported combinations. Every run of the suite opens with a header line saying
+which of them this machine can exercise:
+
+```
+solver x framework matrix: linopy+highs=ok  linopy+gurobi=SKIP  poi+highs=ok  poi+gurobi=SKIP
+```
+
+Two tests cover them, and `-rs` names every cell that skipped:
+
+| Test | Asks |
+|---|---|
+| `integration/executor/test_solver_backend_matrix.py` | do all four reach the same optimum, on one MPC-shaped and one RTC-shaped model |
+| `e2e/test_solver_backend_smoke.py` | does the shipped example run end to end under each |
+
+**Objective values are compared, and nothing else.** Equally-optimal vertices differ between
+solvers and between backends — !201 measured 3 row counts and 76 column statistics moving on a
+Gurobi → HiGHS switch. An equality assertion on setpoints or result tables would be wrong and would
+flake. Whole-run divergence between the two frameworks is degeneracy, is expected, and is closed as
+#198; `e2e/test_backend_equivalence.py` holds that comparison as a permanent strict xfail.
+
+**The tolerance is the MIP gap, not machine epsilon.** Both models carry a binary and both solvers
+default to a 1e-4 *relative* MIP gap, so each is only obliged to return an incumbent within that of
+the true optimum, and two incumbents can differ by twice it. The band is therefore `2e-4`, about
+eight orders looser than the ~1e-12 the cells actually agree to. That is deliberate: it states what
+the solver guarantees rather than what it happened to deliver, so a solver version changing its
+branching does not send someone looking for a number to loosen.
+
+**Both Gurobi cells skip on most machines, and that is the normal case.** The two frameworks do not
+reach Gurobi the same way, so they fail independently:
+
+- **`poi` + `gurobi`** links a *system* Gurobi installation through PyOptInterface's C API. No
+  Python package is involved — `gurobipy` need not be installed at all.
+- **`linopy` + `gurobi`** goes through `gurobipy`, which is an optional extra. Without
+  `uv sync --extra gurobi` this cell skips even on a machine with a valid licence — and when both
+  are available they may be running different Gurobi *versions*, since `gurobipy` carries its own.
+
+Availability is decided by **solving a small model, never by importing one**. Gurobi's shared
+library loads perfectly well without a licence and only fails at `optimize()`, so an import check —
+`linopy.available_solvers` included — turns "no licence" into test *failures* rather than skips.
+That is what `poi_support.can_solve` exists for, and `backend_matrix` reuses it rather than
+restating it.
+
+**Neither test can pass by doing nothing.** All four combinations are always parametrised and an
+unavailable one skips from inside the test, so it appears in the report rather than vanishing from
+it; `test_at_least_one_combination_is_available` fails rather than skips if the whole matrix is
+empty; and every assertion checks *what actually solved* before it looks at a number, because a
+comparison whose two arms have silently collapsed into one is the failure mode that matters here
+(`backend_models.identify` for the models, `scenario_run.BACKEND_PROBE` for the example run).
+
+Timings printed by these tests with `-s` are informational and gate nothing. Speed lives in
+`benchmarks/test_backend_speed.py`, which holds the solver fixed, perturbs the model between
+repetitions and reports medians; the two share their model definitions through
+`tests/backend_models.py` so they cannot drift apart.
+
 ## The golden master
 
 Every other test pins a property someone thought to check. `tests/e2e/test_golden_master.py`

@@ -25,6 +25,23 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def pytest_report_header(config):
+    """State which solver x framework combinations will run, at the top of every run.
+
+    Skip counts are load-bearing in this project -- !212 used the +5/+3 split across platforms as
+    evidence that a fix had landed -- and a Gurobi cell that skips is the normal case rather than
+    an anomaly. Printing the matrix in the header means a reader sees which of the four cells ran
+    without having to remember `-rs`, and an environment that lost a cell is noticed on the run
+    that lost it rather than three merge requests later.
+
+    The probes are cached, so the cost is paid once per session and the matrix tests reuse the
+    answers instead of re-probing.
+    """
+    from tests.backend_matrix import describe
+
+    return describe()
+
+
 @pytest.fixture(scope='session')
 def repo_root():
     """The repository root, so tests do not encode their own depth in the tree."""

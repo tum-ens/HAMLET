@@ -28,10 +28,52 @@ import numpy as np
 random.seed({seed})
 np.random.seed({seed})
 from hamlet import Creator, Executor
+{probe}
 Creator(path=r"{config_dir}").new_scenario_from_configs()
 Executor(r"{scenarios}/{name}", num_workers=1).run()
 print("RUN_OK")
 """
+
+# Records every (framework, solver) pair that actually built or solved a model during the run, so
+# a caller can assert the run used what it asked for instead of trusting that a config edit took.
+#
+# This is not defensiveness. In !212 the `framework:` switch below matched a literal shipped value
+# and silently became a no-op when the default flipped, which would have made both arms of a
+# backend comparison run the same backend and agree with each other. A config edit is a *request*;
+# this is the receipt. `num_workers=1` is what makes it work: every solve happens in this process.
+#
+# The two POI modules are patched by name rather than `poi_solver.create_model`, because each does
+# `from ... import create_model`, which binds the function into its own namespace -- rebinding it
+# on `poi_solver` afterwards would patch nothing, record an empty set, and fail open.
+BACKEND_PROBE = '''
+import atexit, json
+import linopy
+from hamlet.executor.utilities.controller.fbc.mpc.poi import mpc_poi
+from hamlet.executor.utilities.controller.rtc.optim.poi import optim_poi
+
+_used = set()
+
+for _module in (mpc_poi, optim_poi):
+    _original_create = _module.create_model
+
+    def _create_model(solver, _original_create=_original_create):
+        _used.add(('poi', solver))
+        return _original_create(solver)
+
+    _module.create_model = _create_model
+
+_original_solve = linopy.Model.solve
+
+
+def _solve(self, *args, **kwargs):
+    _used.add(('linopy', kwargs.get('solver_name') or (args[0] if args else None)))
+    return _original_solve(self, *args, **kwargs)
+
+
+linopy.Model.solve = _solve
+
+atexit.register(lambda: open(r"{record}", "w", encoding="utf-8").write(json.dumps(sorted(_used))))
+'''
 
 
 def table_kind(path, root):
@@ -66,20 +108,26 @@ def fingerprint(results_root):
     return {kind: entry for kind, entry in sorted(grouped.items())}
 
 
-def run_example(base, example_dir, scenario_name, framework=None, edits=(), config_edits=None):
+def run_example(base, example_dir, scenario_name, framework=None, solver=None, edits=(),
+                config_edits=None, record_backends=None):
     """Run one example end to end under `base`, and return the fingerprint of its results.
 
-    `framework` switches every `framework:` key to the named backend, whatever the config ships;
-    None leaves it alone. It matches the *key* rather than the shipped value on purpose -- it used
-    to look for the literal `framework: linopy`, which silently became a no-op the moment the
-    default flipped to `poi`, and a no-op here means both arms of a backend comparison run the
-    same backend and agree. `edits` is a sequence of (old, new) string replacements applied to
-    `agents.yaml`, and `config_edits` is a {filename: [(old, new), ...]} mapping for any other
-    config file -- `grids.yaml`, say, to switch a grid restriction on.
+    `framework` switches every `framework:` key to the named backend and `solver` every `solver:`
+    key to the named solver, whatever the config ships; None leaves either alone. Both match the
+    *key* rather than the shipped value on purpose -- the framework switch used to look for the
+    literal `framework: linopy`, which silently became a no-op the moment the default flipped to
+    `poi`, and a no-op here means both arms of a backend comparison run the same backend and
+    agree. `edits` is a sequence of (old, new) string replacements applied to `agents.yaml`, and
+    `config_edits` is a {filename: [(old, new), ...]} mapping for any other config file --
+    `grids.yaml`, say, to switch a grid restriction on.
 
     Every replacement must match at least once. That is deliberate: a renamed config key then
     fails the test loudly, instead of the test quietly running an unmodified scenario and passing
     for the wrong reason.
+
+    `record_backends` is a path to write the JSON list of (framework, solver) pairs the run
+    actually used. Matching the key is what stops the *request* being lost; this is what proves it
+    was honoured. See `BACKEND_PROBE`.
     """
     scenarios, results = base / 'scenarios', base / 'results'
     config = base / scenario_name
@@ -102,6 +150,10 @@ def run_example(base, example_dir, scenario_name, framework=None, edits=(), conf
         agents_text, switched = re.subn(r'^(\s*)framework: *\w+', rf'\g<1>framework: {framework}',
                                         agents_text, flags=re.MULTILINE)
         assert switched, 'no framework key to switch'
+    if solver is not None:
+        agents_text, switched = re.subn(r'^(\s*)solver: *\w+', rf'\g<1>solver: {solver}',
+                                        agents_text, flags=re.MULTILINE)
+        assert switched, 'no solver key to switch'
     for old, new in edits:
         assert old in agents_text, f'{old!r} not found in agents.yaml'
         agents_text = agents_text.replace(old, new)
@@ -116,8 +168,9 @@ def run_example(base, example_dir, scenario_name, framework=None, edits=(), conf
             content = content.replace(old, new)
         target.write_text(content, encoding='utf-8')
 
+    probe = '' if record_backends is None else BACKEND_PROBE.format(record=record_backends)
     script = RUNNER.format(config_dir=config.as_posix(), seed=SEED,
-                           scenarios=scenarios, name=scenario_name)
+                           scenarios=scenarios, name=scenario_name, probe=probe)
     completed = subprocess.run(
         [sys.executable, '-c', script], capture_output=True, text=True,
         encoding='utf-8', errors='replace', timeout=3600,
