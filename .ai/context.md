@@ -87,8 +87,9 @@ them equal, or a backend comparison stops being a comparison.
 either, and `framework: poi` works on HiGHS because of it — before that it imported Gurobi
 unconditionally and silently required a system Gurobi installation.
 
-**`framework: poi` does not work on Windows, and is not numerically validated anywhere.** Two
-separate problems, both measured:
+**`framework: poi` is validated against linopy but does not work on Windows.** Both controllers'
+models have been shown equivalent to their linopy counterparts (below); what is left is a platform
+problem and a consequence of degeneracy, not an unvalidated backend:
 
 - *Windows*: PyOptInterface + highsbox crash the interpreter with an access violation. The shipped
   example under `framework: poi` segfaults at the first timestep, reproducibly, outside pytest.
@@ -96,7 +97,8 @@ separate problems, both measured:
   evidence and the ruled-out causes. Linux is unaffected and CI is Linux.
 - *Results*: on Linux, `poi` does not reproduce the linopy numbers on the shipped example — but
   the reason is **degeneracy amplified by state feedback, not a modelling difference**, and that
-  distinction decides what to do about it. Three real defects were fixed first (heat pump built
+  distinction decides what to do about it. Both the MPC and the RTC models were compared directly
+  and are equivalent; the run-level difference arises downstream of them. Three real defects were fixed first (heat pump built
   with no constraints at all, market power declared integer, dead slack reporting), taking the gap
   from 110 differing column statistics to 85. What remains was then measured rather than reasoned
   about, by exporting both MPC models to LP files and diffing them by constraint *shape* (sense,
@@ -124,6 +126,24 @@ separate problems, both measured:
   `rtc_base.update_socs`, which quantises to the socs column dtype. So the MPC model is not
   implicated: its input had already moved by one quantisation step. Note it is **heat storage**,
   not the EV — the agent merely happens to own an EV as well.
+
+**The RTC was then compared the same way, and it is the cleaner test.** The RTC runs *first* in a
+timestep, so at the first timestep both backends are handed provably identical inputs — no state
+feedback to confound the result. On all four agents of the shipped example:
+
+- **Objectives at the first timestep agree exactly** — `0.0e+00` for three agents and `1.3e-16`
+  for the fourth.
+- **Variable bounds are identical** for every shared variable. The only extras are linopy's
+  `balance_electricity` and `balance_heat`, and those are fixed at `[0.0, 0.0]`, so they cannot
+  affect a solution whatever coefficient they carry.
+- **Constraint counts match** (6/6, 8/8, 7/7, 7/7), and every unmatched constraint shape is
+  accounted for by those same zero-fixed dummies.
+
+So both controllers are equivalent across the backends, and the 1 Wh above is settled: the RTC
+reaches the *same optimum* at the first timestep and simply lands on a different vertex of it, so
+the difference is degeneracy rather than an RTC defect. Over the run the RTC mismatches 14 of 96
+solves, appearing and disappearing rather than growing monotonically — its objective is a
+deviation from target that is re-anchored each timestep, unlike the MPC's.
 
   `tests/e2e/test_backend_equivalence.py` holds the end-to-end comparison as an
   `xfail(strict=True)`. Note what that test can and cannot say: it compares whole-run outputs, so
