@@ -27,7 +27,7 @@ import warnings
 
 import pytest
 
-from tests.poi_support import available_backend, skip_on_windows
+from tests.poi_support import available_backend
 
 CAP, PMAX, ETA = 10_000.0, 5_000.0, 0.95
 HORIZON, REPS = 24, 100
@@ -139,7 +139,6 @@ def measure(build, solve, horizon, reps):
     return statistics.median(builds), statistics.median(solves), objective
 
 
-@skip_on_windows
 @pytest.mark.benchmark
 @pytest.mark.solver
 def test_poi_is_faster_than_linopy_on_the_same_model():

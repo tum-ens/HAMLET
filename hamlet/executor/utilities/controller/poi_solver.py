@@ -24,6 +24,8 @@ import logging
 import os
 import sys
 
+from hamlet import msvc_runtime
+
 LOGGER = logging.getLogger(__name__)
 
 # Solvers selectable via `controller.<rtc|fbc>.optimization.solver`.
@@ -71,6 +73,15 @@ def _load_highs_library():
     global _highs_loaded
     if _highs_loaded is not None:
         return _highs_loaded
+
+    # Before the import, not after: `pyoptinterface.highs` loads `highs.dll` at *import* time, so
+    # this is the last moment at which we can refuse. A too-old C++ runtime does not make the
+    # library fail to load -- it makes the first solve corrupt the process, at a location that
+    # moves between runs. Raising here converts that into a message naming the culprit. See
+    # `hamlet/msvc_runtime.py` and issue #202.
+    unsupported = msvc_runtime.describe_unsupported_msvcp140()
+    if unsupported is not None:
+        raise RuntimeError(unsupported)
 
     from pyoptinterface import highs
 

@@ -25,7 +25,7 @@ import hamlet.constants as c
 from hamlet.executor.utilities.controller.rtc.optim.linopy.optim_linopy import Linopy
 from hamlet.executor.utilities.controller.rtc.optim.optim_base import OptimBase
 from hamlet.executor.utilities.controller.rtc.optim.poi.optim_poi import POI
-from tests.poi_support import available_backend, skip_on_windows
+from tests.poi_support import available_backend
 
 AGENT = 'agent1'
 PLANT = 'hp1'
@@ -118,7 +118,6 @@ class TestLinopy:
         assert float(model.variables[POWER].lower) == FULL_POWER
 
 
-@skip_on_windows
 class TestPoi:
     """The same behaviour, expressed against PyOptInterface's model API."""
 
@@ -231,7 +230,6 @@ class TestEmsControlLinopy:
         assert EMS_VARIABLE in model.constraints, 'the EMS variable constrains nothing'
 
 
-@skip_on_windows
 class TestEmsControlPoi:
     """The same cap, and it must exist under PyOptInterface too."""
 

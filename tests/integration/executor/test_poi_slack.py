@@ -8,15 +8,12 @@ PyOptInterface needs a solver shared library, which `highspy` does not provide -
 inside its extension rather than exposing a .dll, so HAMLET ships `highsbox` for this. These tests
 skip when no backend can actually solve, which is not the same as "no library loaded": Gurobi's
 library loads without a licence and only fails at `optimize()`. See `available_backend`.
-
-They also skip on Windows, where the library crashes the interpreter under pytest. See
-`skip_on_windows` for what was measured and what was ruled out.
 """
 import numpy as np
 import pytest
 
 import hamlet.constants as c
-from tests.poi_support import available_backend, skip_on_windows
+from tests.poi_support import available_backend
 
 # Safe to import the helpers above first: they touch `pyoptinterface` only inside their bodies.
 poi = pytest.importorskip('pyoptinterface')
@@ -36,7 +33,6 @@ def backend():
     return module
 
 
-@skip_on_windows
 @pytest.mark.solver
 def test_slack_closes_an_otherwise_infeasible_balance(backend):
     """A demand the bounded market cannot cover must be shed, not raised as infeasible.
@@ -67,7 +63,6 @@ def test_slack_closes_an_otherwise_infeasible_balance(backend):
     assert model.get_value(load_slack) == pytest.approx(0)
 
 
-@skip_on_windows
 @pytest.mark.solver
 def test_slack_stays_at_zero_when_the_market_can_cover_the_load(backend):
     """Adding a penalised slack must not change a problem that was already feasible."""
