@@ -133,7 +133,10 @@ lint:
     - export UV_PROJECT_ENVIRONMENT="/cache/venv-$CI_JOB_ID"
     - uv sync --locked --quiet --only-group lint
     - export PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH"
-    - ruff check --select E9,F63,F7,F82 --output-format=full hamlet/ tests/
+    # `packaging/` is linted too: it is not imported by `hamlet`, so nothing else would catch a
+    # syntax error in it -- and it runs at interpreter startup in every environment HAMLET is
+    # installed into, which is the worst place to discover one.
+    - ruff check --select E9,F63,F7,F82 --output-format=full hamlet/ tests/ packaging/
   after_script:
     - rm -rf "/cache/venv-$CI_JOB_ID"
 

@@ -1,0 +1,12 @@
+# Runs inside `site` at interpreter startup, before any user import can claim MSVCP140.dll for
+# an older private copy. See `hamlet_msvcp140_hook.py`, next to this file, and issue #202.
+#
+# Constraints this line is shaped by, all of them the consequence of running in EVERY Python
+# process in the environment rather than only HAMLET's:
+#   - the `sys.platform` test comes first, so a non-Windows interpreter pays one string compare
+#     and never touches the disk;
+#   - the body is wrapped in try/except because `site.addpackage` prints a traceback and keeps
+#     going, so a missing or half-uninstalled hook would spew on every interpreter start;
+#   - `exec` takes an explicit namespace so nothing is left bound in `site`'s globals.
+# A `.pth` line must be a single physical line, which is why the body is an escaped string.
+import sys; sys.platform == 'win32' and exec("try:\n import hamlet_msvcp140_hook\n hamlet_msvcp140_hook.claim()\nexcept Exception:\n pass\n", {})

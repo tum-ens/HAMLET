@@ -166,11 +166,29 @@ pattern = "(?P<version>[^\\s]+)"
 [tool.hatch.build.targets.wheel]
 packages = ["hamlet"]
 
+# Two files land at the *top level* of site-packages rather than inside the package, and both have
+# to: a `.pth` is only executed by `site` if it sits directly in a site directory, and the module
+# it calls must be importable without importing `hamlet` -- which would drag `pandas` into every
+# Python process in the environment. Together they close the "import `hamlet` before `pandas`"
+# rule that #202's fix imposed on Windows callers, which had to go before `poi` could be the
+# default. See `packaging/hamlet_msvcp140_hook.py`.
+[tool.hatch.build.targets.wheel.force-include]
+"packaging/hamlet_msvcp140_hook.py" = "hamlet_msvcp140_hook.py"
+"packaging/hamlet-msvcp140.pth" = "hamlet-msvcp140.pth"
+
+# The editable install must carry the hook too, or the environment this repository is developed
+# and tested in would be the one configuration where it is absent -- and `tests/unit/
+# test_msvcp140_hook.py` would be asserting something no contributor actually runs.
+[tool.hatch.build.targets.editable.force-include]
+"packaging/hamlet_msvcp140_hook.py" = "hamlet_msvcp140_hook.py"
+"packaging/hamlet-msvcp140.pth" = "hamlet-msvcp140.pth"
+
 # The sdist carries what is needed to build and to check the build: the package, the suite, and
 # the metadata. Not the input data, not the examples' outputs.
 [tool.hatch.build.targets.sdist]
 include = [
     "/hamlet",
+    "/packaging",
     "/tests",
     "/pytest.ini",
     "/VERSION",
