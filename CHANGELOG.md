@@ -9,7 +9,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ---
 
 ## [Unreleased]
+### Added
+- **The PyOptInterface backend now runs on HiGHS, so it no longer needs a Gurobi licence.**
+  `framework: poi` imported `pyoptinterface.gurobi` unconditionally and accepted only
+  `solver: gurobi`. Because PyOptInterface links a *system* Gurobi installation directly, without
+  `gurobipy` being installed, this looked like it worked on a developer machine that had one and
+  was unusable everywhere else. Solver selection now lives in
+  `hamlet/executor/utilities/controller/poi_solver.py` and honours `solver: highs` as well. HiGHS
+  needs a shared library, which `highspy` does not expose — it bundles HiGHS inside its `_core`
+  extension — so `highsbox` is a new dependency, pinned to `highspy`'s exact version so that both
+  backends solve with an identical solver. Unblocks #198
+- **A backend speed benchmark, `tests/benchmarks/test_backend_speed.py`.** It builds the same
+  agent-MPC-shaped MILP through linopy and through PyOptInterface, hands both to the same HiGHS,
+  and asserts they reach the same optimum before reporting the build/solve split. Deselected by
+  default; run it with `pytest -m benchmark -s`. In a Linux container: **2.68 ms** per solve for
+  PyOptInterface against **191.76 ms** for linopy, and the split shows why — linopy spends 138.89
+  ms building a model that HiGHS then solves in 52.86 ms
+
+### Changed
+- **`framework: poi` is documented as experimental.** With a HiGHS library finally available, the
+  shipped example was run under both frameworks and compared for the first time — the comparison
+  #198 asks for. They do not agree: same 18 tables and no column added or dropped, but 3 row
+  counts and 110 column statistics moved, by up to 100 %. Three backend defects were found and
+  fixed (below), which brings that to 85. **What remains is degeneracy, not a modelling
+  difference.** Both MPC models were exported to LP files and compared by constraint shape (sense,
+  RHS and coefficient multiset, so variable naming does not matter): at the first timestep they
+  are mathematically identical, every unmatched constraint being explained by one extra `+1.0`
+  term for linopy's balance-dummy variable, which is fixed at zero and therefore inert. Objectives
+  agree to ~1e-12 there. The error then holds at machine precision for several steps, jumps
+  discretely, and grows — and the one agent owning neither a battery nor an EV stays at ~1e-13 for
+  all 24 steps, being the only one with no state of charge to carry a divergence forward. So a tie
+  in a degenerate MILP breaks differently and feeds the next timestep. One loose end: the
+  EV-owning agent differs by ~1e-5 at the first timestep at identical state. `linopy` remains the
+  default. See #198
+- **`framework: poi` does not run on Windows at all.** The shipped example segfaults at the first
+  timestep, reproducibly, with no pytest involved; Linux is unaffected. Recorded with the
+  ruled-out causes in `tests/poi_support.py`
+
 ### Fixed
+- **Fixed the PyOptInterface backend ignoring direct power control (§14a EnWG).** The real-time
+  controller never overrode `OptimBase.apply_grid_commands`, which is a bare `pass`, and never
+  stored `grid_commands` at all — so an agent on `framework: poi` accepted the grid operator's
+  power caps and then discarded them. Nothing raised and nothing warned: the grid stage cannot
+  observe that its commands had no effect, so it re-simulated the timestep, got the same answer
+  and converged on an uncapped grid. Both control methods now match the linopy backend —
+  `individual` tightens a plant's power variable and moves its target with it, `ems` constrains
+  the sum of the agent's plant powers. `grid_commands` moved to `OptimBase`, so a backend cannot
+  silently forget to store it again, and `tests/unit/.../rtc/test_direct_power_control.py` pins
+  the behaviour across both backends
+- **Fixed the POI real-time controller applying no heat-pump constraints at all.** `Hp` had its
+  `define_constraints` and `__constraint_cop` written at module scope rather than inside the class
+  (`rtc/optim/poi/components.py`), so the lookup fell through to the base class's `pass` and the
+  heat pump lost both its COP coupling (`heat + electricity * cop == 0`) and its target-deviation
+  constraint. `hp_electricity` was left free within its bounds and decoupled from `hp_heat`,
+  making it a costless sink the solver used to absorb market deviations — which is why the heat
+  pump was off by 3x and other components appeared not to deviate at all. Nothing raised, because
+  the base `define_constraints` is a `@staticmethod` with a matching signature
+- **Fixed the POI backends declaring market power as integer.** All four market variables in the
+  real-time controller and both in the MPC were `integer=True` where linopy has `integer=False`,
+  turning an LP into a mixed-integer problem — and, since `market_power` defaults to unbounded, an
+  integer variable with infinite bounds. Any fractional optimum resolved differently
+- **Fixed the POI real-time controller never reporting balance slack.** The slack warning used
+  `np` without importing it, and the bare `except Exception` around it swallowed the resulting
+  `NameError` on every call, so a POI run that shed or dumped energy to close its balance said
+  nothing while the linopy run warned
 - **Fixed new files under `input_data/` being silently ignored.** `.gitignore` carried
   `input_data/*` while the 152 files under it were tracked anyway, so adding an input left
   `git status` clean and needed `git add -f` — that is how the benchmark input `energy_da_raw.csv`

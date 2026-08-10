@@ -4,69 +4,47 @@ Both backends are selectable per agent, so a scenario that switches `framework` 
 same model. The POI backends previously had no slack at all: an infeasible agent aborted the
 run under `poi` and was absorbed under `linopy`, with no warning either way.
 
-PyOptInterface needs a solver shared library, which is not always present (`highspy` bundles
-HiGHS inside its extension rather than exposing a .dll). These tests skip when no backend can
-actually solve -- which is not the same as "no library loaded": Gurobi's library loads without a
-licence and only fails at `optimize()`. See `available_backend`.
+PyOptInterface needs a solver shared library, which `highspy` does not provide -- it bundles HiGHS
+inside its extension rather than exposing a .dll, so HAMLET ships `highsbox` for this. These tests
+skip when no backend can actually solve, which is not the same as "no library loaded": Gurobi's
+library loads without a licence and only fails at `optimize()`. See `available_backend`.
+
+They also skip on Windows, where the library crashes the interpreter under pytest. See
+`skip_on_windows` for what was measured and what was ruled out.
 """
 import numpy as np
 import pytest
 
 import hamlet.constants as c
+from tests.poi_support import available_backend, skip_on_windows
 
+# Safe to import the helpers above first: they touch `pyoptinterface` only inside their bodies.
 poi = pytest.importorskip('pyoptinterface')
 
 
-def can_solve(module):
-    """Whether this backend can actually solve, not merely link.
+@pytest.fixture(scope='session')
+def backend():
+    """The solver these tests run against, resolved on first use rather than at import.
 
-    `is_library_loaded()` answers a narrower question than it looks like it does. Gurobi's shared
-    library loads perfectly well without a valid licence and raises `GurobiError: License expired`
-    at `optimize()` -- so a loadable-only check turns "no licence" into two test *failures* rather
-    than skips, which is exactly what CI hits. Solving a two-variable LP is the honest probe.
+    Deliberately a fixture and not a module-level constant, so that importing this file never
+    loads a solver library. Collection then stays clean even on a platform where loading one is
+    hazardous, and a machine with no solver at all skips rather than errors.
     """
-    try:
-        model = module.Model()
-        x = model.add_variable(lb=0, ub=1)
-        model.set_objective(1.0 * x, poi.ObjectiveSense.Maximize)
-        model.optimize()
-        return model.get_value(x) is not None
-    except Exception:
-        return False
+    module = available_backend()
+    if module is None:
+        pytest.skip('no PyOptInterface solver library is loadable')
+    return module
 
 
-def available_backend():
-    """The first PyOptInterface solver that is present, loadable and able to solve.
-
-    HiGHS is tried first because it is what HAMLET ships and what CI runs; preferring Gurobi
-    would mean a developer with a licence and CI silently exercise different backends.
-    """
-    for name in ('highs', 'gurobi', 'copt'):
-        try:
-            module = __import__(f'pyoptinterface.{name}', fromlist=[name])
-        except ImportError:
-            continue
-        if not getattr(module, 'is_library_loaded', lambda: False)():
-            continue
-        if can_solve(module):
-            return module
-    return None
-
-
-BACKEND = available_backend()
-requires_poi = pytest.mark.skipif(BACKEND is None,
-                                  reason='no PyOptInterface solver library is loadable')
-
-
-@requires_poi
+@skip_on_windows
 @pytest.mark.solver
-def test_slack_closes_an_otherwise_infeasible_balance():
+def test_slack_closes_an_otherwise_infeasible_balance(backend):
     """A demand the bounded market cannot cover must be shed, not raised as infeasible.
 
     Mirrors what the POI controllers now build: a balance equation with a `gen`/`load` slack
     pair, each penalised at the value of lost load.
     """
-    model = BACKEND.Model()
+    model = backend.Model()
 
     # Market able to supply at most 2 kW against a 5 kW load
     market = model.add_variable(name='market', lb=0, ub=2000)
@@ -89,11 +67,11 @@ def test_slack_closes_an_otherwise_infeasible_balance():
     assert model.get_value(load_slack) == pytest.approx(0)
 
 
-@requires_poi
+@skip_on_windows
 @pytest.mark.solver
-def test_slack_stays_at_zero_when_the_market_can_cover_the_load():
+def test_slack_stays_at_zero_when_the_market_can_cover_the_load(backend):
     """Adding a penalised slack must not change a problem that was already feasible."""
-    model = BACKEND.Model()
+    model = backend.Model()
 
     market = model.add_variable(name='market', lb=0, ub=10_000)
     gen_slack = model.add_variable(name='gen_slack', lb=0, ub=np.inf)

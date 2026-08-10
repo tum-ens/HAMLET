@@ -1,0 +1,163 @@
+__author__ = "MarkusDoepfert"
+__license__ = ""
+__maintainer__ = "MarkusDoepfert"
+__email__ = "markus.doepfert@tum.de"
+
+"""Solver selection for the PyOptInterface backends.
+
+PyOptInterface reaches a solver through its C API, so a backend works only once the solver's
+*shared library* is loaded. That is the whole reason this module exists:
+
+- **Gurobi** loads itself. `pyoptinterface.gurobi` finds a system Gurobi installation without
+  `gurobipy` being installed, which is why the POI backends appeared to work while being
+  unusable for anyone without that installation.
+- **HiGHS** does not. `highspy` bundles HiGHS inside its `_core` extension module and exposes no
+  shared library, so `pyoptinterface.highs` has nothing to find. `highsbox` ships the same HiGHS
+  build as a plain `highs.dll` / `libhighs.so`; it is pinned to `highspy`'s version so that the
+  linopy and POI backends solve with an identical solver.
+
+Loading is idempotent and lazy -- importing HAMLET must not require any solver to be present.
+"""
+
+import glob
+import logging
+import os
+import sys
+
+LOGGER = logging.getLogger(__name__)
+
+# Solvers selectable via `controller.<rtc|fbc>.optimization.solver`.
+SUPPORTED_SOLVERS = ('highs', 'gurobi')
+
+# Set once `_load_highs_library` has run, so repeated model creation does not re-probe the disk.
+_highs_loaded = None
+
+
+def _highs_library_candidates():
+    """Paths that may hold the HiGHS shared library shipped by `highsbox`.
+
+    `highsbox` exposes its distribution directory but not the library itself, and the two
+    platforms disagree about where it lives: Windows puts the loadable `highs.dll` in `bin/` and
+    leaves only the `highs.lib` import stub in `lib/`, while Linux and macOS put the real object
+    in `lib/`. Both are searched rather than branching on `os.name`, so a layout change in
+    `highsbox` degrades to "not found" instead of a wrong path.
+    """
+    try:
+        import highsbox
+    except ImportError:
+        return []
+
+    dist = highsbox.highs_dist_dir()
+    if sys.platform == 'win32':
+        patterns = ('highs*.dll',)
+    elif sys.platform == 'darwin':
+        patterns = ('libhighs*.dylib',)
+    else:
+        patterns = ('libhighs*.so*',)
+
+    candidates = []
+    for sub in ('bin', 'lib'):
+        for pattern in patterns:
+            candidates.extend(sorted(glob.glob(os.path.join(dist, sub, pattern))))
+    return candidates
+
+
+def _load_highs_library():
+    """Make `pyoptinterface.highs` usable, returning whether it is.
+
+    Returns True if the library was already loaded (a system HiGHS on the loader path) or if one
+    of the `highsbox` candidates loaded successfully.
+    """
+    global _highs_loaded
+    if _highs_loaded is not None:
+        return _highs_loaded
+
+    from pyoptinterface import highs
+
+    if highs.is_library_loaded():
+        _highs_loaded = True
+        return True
+
+    for path in _highs_library_candidates():
+        try:
+            if highs.load_library(path):
+                LOGGER.debug('Loaded the HiGHS shared library from %s', path)
+                _highs_loaded = True
+                return True
+        except Exception:  # a wrong-architecture or truncated library must not abort the run
+            LOGGER.debug('Could not load a HiGHS shared library from %s', path, exc_info=True)
+
+    _highs_loaded = False
+    return False
+
+
+def get_solver_module(solver):
+    """The `pyoptinterface` submodule for `solver`, with its shared library loaded.
+
+    Raises ValueError for an unknown solver name and RuntimeError when the solver is known but
+    its library cannot be loaded -- the two failures have different fixes, so they are not
+    collapsed into one message.
+    """
+    if solver not in SUPPORTED_SOLVERS:
+        raise ValueError(f"Unsupported solver: {solver}. "
+                         f"Supported solvers are {', '.join(SUPPORTED_SOLVERS)}.")
+
+    if solver == 'highs':
+        if not _load_highs_library():
+            raise RuntimeError(
+                "The HiGHS shared library could not be loaded, so the 'poi' framework cannot "
+                "use it. HAMLET installs `highsbox` for exactly this purpose -- `highspy` alone "
+                "is not enough, as it bundles HiGHS inside its extension module and exposes no "
+                "shared library. Run `uv sync`, or select `solver: gurobi`.")
+        from pyoptinterface import highs
+        return highs
+
+    from pyoptinterface import gurobi
+    if not gurobi.is_library_loaded():
+        raise RuntimeError(
+            "The Gurobi shared library could not be loaded. Install Gurobi and its licence, or "
+            "select `solver: highs`, which ships with HAMLET and needs no licence.")
+    return gurobi
+
+
+def create_model(solver):
+    """A silenced, empty model for `solver`.
+
+    Both solvers are silenced, but not by the same means: Gurobi has to be quietened on the
+    environment *before* the model exists, because it prints its licence banner at model
+    creation, whereas HiGHS is configured on the model itself. `set_raw_parameter` is also
+    type-strict for HiGHS -- it dispatches to `set_raw_option_bool`, which rejects `0`/`1`.
+    """
+    module = get_solver_module(solver)
+
+    if solver == 'gurobi':
+        env = module.Env(empty=True)
+        env.set_raw_parameter("OutputFlag", 0)
+        env.start()
+        model = module.Model(env)
+        model.set_raw_parameter("OutputFlag", 0)
+        model.set_raw_parameter("LogToConsole", 0)
+    else:
+        model = module.Model()
+        model.set_raw_parameter("output_flag", False)
+        model.set_raw_parameter("log_to_console", False)
+
+    import pyoptinterface as poi
+    model.set_model_attribute(poi.ModelAttribute.Silent, True)
+    return model
+
+
+def set_time_limit(model, solver, seconds):
+    """Apply a wall-clock limit, named per solver.
+
+    Gurobi's `TimeLimit` and HiGHS' `time_limit` are both in seconds. HAMLET has always passed
+    `time_limit / 60` to Gurobi, which is a unit bug rather than a deliberate choice; it is kept
+    here so this change moves no results, since at HAMLET's model sizes (single-digit ms) neither
+    value ever binds. Correcting it belongs with the solver-options cleanup, roadmap item #11.
+    """
+    if seconds is None:
+        return
+    if solver == 'gurobi':
+        model.set_raw_parameter('TimeLimit', seconds / 60)
+    else:
+        model.set_raw_parameter('time_limit', float(seconds) / 60)

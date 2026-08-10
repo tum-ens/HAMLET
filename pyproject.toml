@@ -56,6 +56,13 @@ requires-python = ">=3.11,<3.12"
 # ----------------------------------------------------------------------------------------------
 dependencies = [
     "highspy==1.10.0",       # the solver HAMLET ships; the example and the whole suite run on it
+    # The same HiGHS as `highspy`, shipped as a loadable `highs.dll` / `libhighs.so`. Separate
+    # package because `highspy` bundles HiGHS inside its `_core` extension and exposes no shared
+    # library, which is what PyOptInterface needs -- without this, `solver: highs` is unavailable
+    # under `framework: poi` and POI silently requires a system Gurobi. Keep this equal to the
+    # `highspy` pin above: it is what makes the linopy and POI backends solve with an identical
+    # solver, which is the premise of their equivalence test.
+    "highsbox==1.10.0",
     "hplib==1.9",
     "linopy==0.3.11",
     "matplotlib==3.9.0",

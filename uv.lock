@@ -589,6 +589,7 @@ wheels = [
 name = "hamlet"
 source = { editable = "." }
 dependencies = [
+    { name = "highsbox" },
     { name = "highspy" },
     { name = "hplib" },
     { name = "linopy" },
@@ -644,6 +645,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "gurobipy", marker = "extra == 'gurobi'", specifier = "==11.0.2" },
+    { name = "highsbox", specifier = "==1.10.0" },
     { name = "highspy", specifier = "==1.10.0" },
     { name = "hplib", specifier = "==1.9" },
     { name = "jupyter", marker = "extra == 'notebooks'", specifier = "==1.1.1" },
@@ -683,6 +685,18 @@ docs = [
 ]
 lint = [{ name = "ruff", specifier = "==0.16.1" }]
 test = [{ name = "pytest", specifier = "==8.3.5" }]
+
+[[package]]
+name = "highsbox"
+version = "1.10.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a4/aa/2428f82a82e30e3af52882fca8a476e7ac7f201d4a32ecd34281683f88ec/highsbox-1.10.0-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:56739ebf201409b39b16549e6444b578048cf9dd9feadc992803a894d24d81da", size = 6874773, upload-time = "2025-03-20T16:19:21.63Z" },
+    { url = "https://files.pythonhosted.org/packages/63/78/7dfda1e8f207705d808c8b5c054417221866ed5673012da75bfce415ac25/highsbox-1.10.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:56ef05961bfd60b1300aa8c0740ed0d65231b26eb8c86f8f39b3f939f4adc13b", size = 5865823, upload-time = "2025-03-20T16:19:24.362Z" },
+    { url = "https://files.pythonhosted.org/packages/f3/32/b75f7357489b7657c99887170d831af61d0dc08f4dee20054b953530037b/highsbox-1.10.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:0519ebc2ba672d8774957943d4e92ea69944c4c6eec7bd39f6595d8a77ccfd95", size = 5988173, upload-time = "2025-03-20T16:19:26.136Z" },
+    { url = "https://files.pythonhosted.org/packages/00/c5/bce9d99b198565ce8a7b3a20cf55097e2bfb09fe711d2eb82ba5a15f7b61/highsbox-1.10.0-py3-none-manylinux2014_x86_64.whl", hash = "sha256:baa294c7d164fd96731bd968f0e76f75e567516854e91b229389a821aba1aebd", size = 6457772, upload-time = "2025-03-20T16:19:27.895Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/ee/9fb65a9e527eadfca5a4e39917c35fd5b3278b1a670d160fa2773ce82f63/highsbox-1.10.0-py3-none-win_amd64.whl", hash = "sha256:d1cd87965832c51ea7561cb269d5f5116c8fbc8ac0edaac1166ff6f82a66ea79", size = 2608391, upload-time = "2025-03-20T16:19:29.53Z" },
+]
 
 [[package]]
 name = "highspy"

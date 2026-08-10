@@ -13,6 +13,27 @@ so the review sees the numbers move:
 
     HAMLET_UPDATE_GOLDEN=1 python -m pytest tests -m golden
 
+**One legitimate cause of movement is not a defect: a different equally-optimal solution.** The
+agent models are degenerate MILPs -- a battery or EV can very often shift charging between
+timesteps at identical cost -- so changing the solver, or the *modelling backend* that presents
+the same model to it, can break a tie the other way. The chosen state of charge then feeds the
+next timestep, and a receding-horizon run amplifies one tie into visibly different trajectories.
+Measured for `framework: linopy` vs `poi`: the two MPC models are mathematically identical
+(verified by exporting both to LP and matching constraints by shape) and their first-timestep
+objectives agree to ~1e-12, yet by step 23 the run-level numbers differ by tens of percent. An
+agent owning neither a battery nor an EV stays at ~1e-13 throughout, having no state to carry a
+divergence forward.
+
+Telling the two apart, when the numbers move:
+
+- *Degeneracy* leaves the objective unchanged at equal state. Structure holds (same tables, same
+  row counts, no column added or dropped) and the divergence appears as a discrete jump at some
+  timestep rather than from the first one.
+- *A defect* shows a difference from the first timestep at identical state, or moves structure.
+
+So a solver or backend change may be re-baselined once the movement is shown to be of the first
+kind; a change that was meant to be numerically inert may not.
+
 Reproducibility rests on seeding `random` and `numpy.random` and pinning `PYTHONHASHSEED`. The
 Creator draws agent ids, plant ownership and sizings from all three. Verified: two seeded runs
 produce byte-identical scenarios and identical results.
@@ -24,99 +45,33 @@ moment the physics does.
 """
 import json
 import os
-import subprocess
-import sys
-from collections import defaultdict
+import shutil
 from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests.scenario_run import REPO_ROOT, run_example
+
 EXAMPLE = REPO_ROOT / 'examples' / 'create_simple_scenario'
 SCENARIO_NAME = 'simple_scenario'
 REFERENCE = Path(__file__).parent / 'golden' / f'{SCENARIO_NAME}.json'
 
-SEED = 20260804
 # Solver output is bit-stable on a fixed platform, but HiGHS and polars versions move; this is
 # loose enough to survive that and far tighter than any real modelling change.
 RELATIVE_TOLERANCE = 1e-6
 
-RUNNER = """
-import os, random
-import numpy as np
-random.seed({seed})
-np.random.seed({seed})
-from hamlet import Creator, Executor
-Creator(path=r"{config_dir}").new_scenario_from_configs()
-Executor(r"{scenarios}/{name}", num_workers=1).run()
-print("RUN_OK")
-"""
-
-
-def table_kind(path, root):
-    """The table's identity, with the random agent id replaced by its type."""
-    parts = Path(path).relative_to(root).parts
-    # agents/<type>/<random id>/<table>.ft  ->  agents/<type>/<table>.ft
-    if parts and parts[0] == 'agents' and len(parts) == 4:
-        return f'agents/{parts[1]}/{parts[3]}'
-    return '/'.join(parts)
-
-
-def fingerprint(results_root):
-    """Row counts and per-column statistics, grouped by table kind."""
-    import polars as pl
-
-    grouped = defaultdict(lambda: {'files': 0, 'rows': 0, 'columns': {}})
-    for path in sorted(Path(results_root).rglob('*.ft')):
-        frame = pl.read_ipc(path, memory_map=False)
-        entry = grouped[table_kind(path, results_root)]
-        entry['files'] += 1
-        entry['rows'] += len(frame)
-        for column, dtype in zip(frame.columns, frame.dtypes):
-            if not dtype.is_numeric() or frame[column].null_count() == len(frame):
-                continue
-            stats = entry['columns'].setdefault(column, {'sum': 0.0, 'min': None, 'max': None})
-            stats['sum'] += float(frame[column].sum() or 0)
-            low, high = frame[column].min(), frame[column].max()
-            if low is not None:
-                stats['min'] = float(low) if stats['min'] is None else min(stats['min'], float(low))
-                stats['max'] = float(high) if stats['max'] is None else max(stats['max'], float(high))
-
-    return {kind: entry for kind, entry in sorted(grouped.items())}
-
 
 @pytest.fixture(scope='module')
 def actual(tmp_path_factory):
-    """Run the example once, seeded, against a temp copy of the config."""
-    import shutil
+    """Run the example once, seeded, against a temp copy of the config.
 
+    The run and the fingerprint live in `tests/scenario_run.py`, shared with the backend
+    equivalence tests -- those compare their linopy arm against this reference, which only means
+    anything if both reduce results the same way.
+    """
     base = tmp_path_factory.mktemp('golden')
-    scenarios, results = base / 'scenarios', base / 'results'
-    config = base / SCENARIO_NAME
-    shutil.copytree(EXAMPLE / SCENARIO_NAME, config)
-    scenarios.mkdir()
-    results.mkdir()
-
-    setup = config / 'setup.yaml'
-    text = setup.read_text(encoding='utf-8')
-    for old, new in (('input: ../../input_data', f'input: {(REPO_ROOT / "input_data").as_posix()}'),
-                     ('scenarios: ../../scenarios', f'scenarios: {scenarios.as_posix()}'),
-                     ('results: ../../results', f'results: {results.as_posix()}')):
-        assert old in text, f'{old!r} not found in setup.yaml'
-        text = text.replace(old, new)
-    setup.write_text(text, encoding='utf-8')
-
-    script = RUNNER.format(config_dir=config.as_posix(), seed=SEED,
-                           scenarios=scenarios, name=SCENARIO_NAME)
-    completed = subprocess.run(
-        [sys.executable, '-c', script], capture_output=True, text=True,
-        encoding='utf-8', errors='replace', timeout=3600,
-        env={**os.environ, 'MPLBACKEND': 'Agg', 'PYTHONIOENCODING': 'utf-8',
-             'PYTHONHASHSEED': '0'})
-    assert 'RUN_OK' in completed.stdout, completed.stderr[-4000:]
-
     try:
-        yield fingerprint(results / SCENARIO_NAME)
+        yield run_example(base, EXAMPLE, SCENARIO_NAME)
     finally:
         shutil.rmtree(base, ignore_errors=True)
 

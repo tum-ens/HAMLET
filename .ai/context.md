@@ -78,6 +78,95 @@ HiGHS is installed with HAMLET and is what `examples/create_simple_scenario` use
 CI. Gurobi is optional and fully supported — set `solver: gurobi` under `optimization`; the other
 three examples and `config_templates/` still specify it.
 
+**Two solver libraries ship, deliberately.** `highspy` is the one linopy talks to. It bundles
+HiGHS inside its `_core` extension and exposes no shared library, which PyOptInterface needs — so
+`highsbox`, the same HiGHS build packaged as a plain `highs.dll` / `libhighs.so`, is also a
+dependency. Both are pinned to `1.10.0` so the two backends solve with an identical solver; keep
+them equal, or a backend comparison stops being a comparison.
+`hamlet/executor/utilities/controller/poi_solver.py` is the only place that selects or loads
+either, and `framework: poi` works on HiGHS because of it — before that it imported Gurobi
+unconditionally and silently required a system Gurobi installation.
+
+**`framework: poi` is validated against linopy but does not work on Windows.** Both controllers'
+models have been shown equivalent to their linopy counterparts (below); what is left is a platform
+problem and a consequence of degeneracy, not an unvalidated backend:
+
+- *Windows*: PyOptInterface + highsbox crash the interpreter with an access violation. The shipped
+  example under `framework: poi` segfaults at the first timestep, reproducibly, outside pytest.
+  The affected tests carry `skip_on_windows` from `tests/poi_support.py`, which records the
+  evidence and the ruled-out causes. Linux is unaffected and CI is Linux.
+- *Results*: on Linux, `poi` does not reproduce the linopy numbers on the shipped example — but
+  the reason is **degeneracy amplified by state feedback, not a modelling difference**, and that
+  distinction decides what to do about it. Both the MPC and the RTC models were compared directly
+  and are equivalent; the run-level difference arises downstream of them. Three real defects were fixed first (heat pump built
+  with no constraints at all, market power declared integer, dead slack reporting), taking the gap
+  from 110 differing column statistics to 85. What remains was then measured rather than reasoned
+  about, by exporting both MPC models to LP files and diffing them by constraint *shape* (sense,
+  RHS, coefficient multiset — invariant to variable naming, which differs):
+
+  - At the first timestep the two models are **mathematically identical**: same constraint count,
+    senses, RHS, objective coefficients and binaries. Every unmatched constraint is explained by
+    one extra `+1.0` term for linopy's balance-dummy variable, which is fixed at zero and so is
+    inert. Checked on two agents; nothing else was unexplained.
+  - Objectives at the first timestep agree to ~1e-12 for three of four agents.
+  - The error then stays at machine precision for several steps, **jumps discretely**, and grows
+    (to ~6e-1 by step 23). An agent owning neither a battery nor an EV stays at ~1e-13 for all 24
+    steps — it is the only one with no inter-timestep state to carry a divergence forward.
+
+  So the models agree; the MILP is degenerate, the two backends present it in a different order,
+  a tie breaks differently, and the resulting state of charge feeds the next timestep. This is the
+  legitimate exception the golden master's own notes describe.
+
+  The one first-timestep difference (~1e-5 on a single agent) was chased to the end and is the
+  same story a layer up, **not** a second defect. Dumping every MPC variable's bounds by name
+  showed exactly one differing input: `<plant>_heat-storage_soc_init`, 8470 under linopy against
+  8469 under poi — one Wh, in a value the MPC *reads* rather than computes. Controllers run RTC
+  first and FBC second within a timestep (`agent_base.set_controllers` iterates the configured
+  controllers in order), and the RTC writes the state of charge the MPC then starts from, through
+  `rtc_base.update_socs`, which quantises to the socs column dtype. So the MPC model is not
+  implicated: its input had already moved by one quantisation step. Note it is **heat storage**,
+  not the EV — the agent merely happens to own an EV as well.
+
+**The RTC was then compared the same way, and it is the cleaner test.** The RTC runs *first* in a
+timestep, so at the first timestep both backends are handed provably identical inputs — no state
+feedback to confound the result. On all four agents of the shipped example:
+
+- **Objectives at the first timestep agree exactly** — `0.0e+00` for three agents and `1.3e-16`
+  for the fourth.
+- **Variable bounds are identical** for every shared variable. The only extras are linopy's
+  `balance_electricity` and `balance_heat`, and those are fixed at `[0.0, 0.0]`, so they cannot
+  affect a solution whatever coefficient they carry.
+- **Constraint counts match** (6/6, 8/8, 7/7, 7/7), and every unmatched constraint shape is
+  accounted for by those same zero-fixed dummies.
+
+So both controllers are equivalent across the backends, and the 1 Wh above is settled: the RTC
+reaches the *same optimum* at the first timestep and simply lands on a different vertex of it, so
+the difference is degeneracy rather than an RTC defect. Over the run the RTC mismatches 14 of 96
+solves, appearing and disappearing rather than growing monotonically — its objective is a
+deviation from target that is re-anchored each timestep, unlike the MPC's.
+
+  `tests/e2e/test_backend_equivalence.py` holds the end-to-end comparison as an
+  `xfail(strict=True)`. Note what that test can and cannot say: it compares whole-run outputs, so
+  it will keep failing under degeneracy even once the backends are equivalent. See #198.
+
+**Decided 2026-08-09: `linopy` stays the default until `poi` runs on Windows.** Not for
+correctness reasons — those are settled above — but because flipping it would make the shipped
+example segfault on every Windows machine, and `pytest -m golden` with it, while CI stayed green
+because CI is Linux. The golden master is deliberately **not** re-baselined: re-baselining is what
+the flip would require, and it would leave the reference reproducible on Linux only. `poi` remains
+selectable per agent and is documented as experimental wherever it is offered.
+
+**§14a grid restrictions are implemented but almost entirely untested, and no example runs them.**
+Direct power control reaches the RTC only (never the FBC), through `apply_grid_commands`; indirect
+control (variable grid fees) is applied outside the solver in `agent_base.py`, so it is
+backend-agnostic and both MPC backends pick it up. Nothing in `tests/` executes `EnWG14a`, and no
+shipped example enables the mechanism: the two scenarios that set `restrictions.apply:
+['enwg_14a']` have `electricity.active: False`, and the two with a live grid have an empty
+restriction list. An end-to-end test needs a new fixture — and note that
+`examples/create_scenario_with_grid` currently **cannot run at all**, on `develop` as well: it
+raises `TypeError: cannot unpack non-iterable NoneType` in `grid_db._create_grid_from_file`,
+because `__assign_inflexible_load_for_agent` returns `None` when no load matches.
+
 **The golden reference is solver-coupled.** Running under a different solver moves the numbers.
 Measured when the example switched Gurobi → HiGHS (commit `f65edf0`): structure unchanged — same
 18 tables, no column added or dropped — but 3 row counts and 76 per-column statistics moved, e.g.

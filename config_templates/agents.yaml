@@ -900,12 +900,13 @@ sfh:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy optimization problem is solved
-                                                #   - poi: poi optimization problem is solved
+                                                #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization problem
                                                 # unit: s
@@ -926,12 +927,13 @@ sfh:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    poi mpc to forecast and optimize
+                                                #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization
                                                 # unit: s
@@ -1573,12 +1575,13 @@ ctsp:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy optimization problem is solved
-                                                #   - poi: poi optimization problem is solved
+                                                #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization problem
                                                 # unit: s
@@ -1599,12 +1602,13 @@ ctsp:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    poi mpc to forecast and optimize
+                                                #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization
                                                 # unit: s
@@ -2252,12 +2256,13 @@ industry:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy optimization problem is solved
-                                                #   - poi: poi optimization problem is solved
+                                                #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization problem
                                                 # unit: s
@@ -2278,12 +2283,13 @@ industry:
           framework: linopy                     # Framework used to create optimization problem
                                                 # options:
                                                 #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    poi mpc to forecast and optimize
+                                                #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization
                                                 # unit: s
@@ -2548,12 +2554,13 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -2574,12 +2581,13 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -2821,12 +2829,13 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -2847,12 +2856,13 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3091,12 +3101,13 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3117,12 +3128,13 @@ producer:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3281,12 +3293,13 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3307,12 +3320,13 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3466,12 +3480,13 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3492,12 +3507,13 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3651,12 +3667,13 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - poi: experimental. Does not reproduce the linopy
+                                                #          results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3677,12 +3694,13 @@ storage:
             framework: linopy                     # Framework used to create optimization problem
                                                   # options:
                                                   #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - poi:    experimental. Does not reproduce the linopy
+                                                #             results (see issue #198) and crashes on Windows
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
