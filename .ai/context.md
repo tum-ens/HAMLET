@@ -149,6 +149,13 @@ deviation from target that is re-anchored each timestep, unlike the MPC's.
   `xfail(strict=True)`. Note what that test can and cannot say: it compares whole-run outputs, so
   it will keep failing under degeneracy even once the backends are equivalent. See #198.
 
+**Decided 2026-08-09: `linopy` stays the default until `poi` runs on Windows.** Not for
+correctness reasons — those are settled above — but because flipping it would make the shipped
+example segfault on every Windows machine, and `pytest -m golden` with it, while CI stayed green
+because CI is Linux. The golden master is deliberately **not** re-baselined: re-baselining is what
+the flip would require, and it would leave the reference reproducible on Linux only. `poi` remains
+selectable per agent and is documented as experimental wherever it is offered.
+
 **§14a grid restrictions are implemented but almost entirely untested, and no example runs them.**
 Direct power control reaches the RTC only (never the FBC), through `apply_grid_commands`; indirect
 control (variable grid fees) is applied outside the solver in `agent_base.py`, so it is
