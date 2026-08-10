@@ -25,8 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   licence is present and skip visibly, with a stated reason, where it is not. The tests compare the
   *objective value* of one MPC-shaped and one RTC-shaped model at the solvers' 1e-4 MIP gap — not
   setpoints or result tables, which legitimately differ between equally-optimal vertices — and a
-  smoke arm runs `examples/create_simple_scenario` end to end under each combination. See
-  `tests/README.md`
+  smoke arm runs `examples/create_simple_scenario` end to end under each combination that nothing
+  else already covers, with `HAMLET_SMOKE_ALL=1` to run all four. See `tests/README.md`
 
   **`tests/benchmarks/test_backend_speed.py` now covers the same four cells**, reporting build and
   solve medians alongside each cell's objective, so correctness and cost are read from one table.

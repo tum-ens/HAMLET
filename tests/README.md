@@ -57,7 +57,22 @@ Two tests cover them, and `-rs` names every cell that skipped:
 | Test | Asks |
 |---|---|
 | `integration/executor/test_solver_backend_matrix.py` | do all four reach the same optimum, on one MPC-shaped and one RTC-shaped model |
-| `e2e/test_solver_backend_smoke.py` | does the shipped example run end to end under each |
+| `e2e/test_solver_backend_smoke.py` | does the shipped example run end to end under each cell nothing else already covers |
+
+The smoke arm defaults to the **uncovered** cells, which is both Gurobi ones. An example run costs
+minutes, and the two HiGHS cells are already run end to end by the golden master (the shipped
+config, in its own CI job) and by the equivalence test's linopy arm. Running them here as well
+tripled the `e2e` job — 338 s to ~1090 s — and bought nothing, which on a shared runner is not free:
+it widened the window in which the `golden` job competes for the same cores. To run all four:
+
+```bash
+HAMLET_SMOKE_ALL=1 python -m pytest tests/e2e/test_solver_backend_smoke.py -m e2e -rs
+```
+
+The deferred cells are still parametrised and skipped, with a reason naming what covers them, so
+they appear in the report rather than vanishing. And the deferral is itself tested:
+`test_the_deferred_cells_are_still_covered_elsewhere` fails if the covering runs are deleted or
+repointed at another backend — deferring coverage is only safe if the deferral is checked.
 
 **Objective values are compared, and nothing else.** Equally-optimal vertices differ between
 solvers and between backends — !201 measured 3 row counts and 76 column statistics moving on a
