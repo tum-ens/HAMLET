@@ -22,19 +22,23 @@ arms of a backend comparison would have run `poi`, agreed, and passed while asse
 Every test below therefore checks what actually solved before it looks at any number, and a passing
 matrix without that check would prove nothing. See `backend_models.identify`.
 
+**Speed is not measured here.** It is measured for the same four cells, on the same model, by
+`tests/benchmarks/test_backend_speed.py` — which interleaves them, warms each one first and reports
+medians, none of which a correctness test should be doing. A single build-and-solve inside these
+tests charges solver-library loading to whichever cell happens to run first and is not rankable;
+this file used to print exactly that, and the numbers were wrong by an order of magnitude.
+
 **Skips are loud and countable.** All four combinations are always parametrised and an unavailable
 one skips from inside the test, so it appears in the report rather than vanishing from it -- most
 environments skip both Gurobi cells, and a silent skip is how eight Windows tests hid a real
 interpreter crash for a release (#202). `test_at_least_one_combination_is_available` fails rather
 than skips if the whole matrix is empty, so this file cannot go green by testing nothing.
 """
-import time
-
 import pytest
 
 from tests.backend_matrix import (COMBINATION_IDS, COMBINATIONS, FRAMEWORKS, REFERENCE, SOLVERS,
                                   describe, is_available, require)
-from tests.backend_models import MPC_HORIZON, RTC_OPTIMUM, solve_mpc, solve_rtc
+from tests.backend_models import RTC_OPTIMUM, solve_mpc, solve_rtc
 
 # The optimum of the MPC-shaped model at `rep=0`, measured once and committed. Every cell is
 # compared against this fixed number rather than against another cell, so no arm is trivially
@@ -145,18 +149,7 @@ def test_the_mpc_model_reaches_the_same_optimum(framework, solver):
     """A 24-step battery/load/market MILP -- the shape HAMLET solves ~911k times per year."""
     require(framework, solver)
 
-    started = time.perf_counter()
-    solved = solve_mpc(framework, solver)
-    elapsed = (time.perf_counter() - started) * 1e3
-
-    check(solved, framework, solver, MPC_OPTIMUM)
-
-    # Informational only, and it gates nothing. One build plus one solve is not a benchmark: it
-    # includes import and licence-check costs and has a sample size of one. Speed lives in
-    # `tests/benchmarks/test_backend_speed.py`, which perturbs the model between repetitions and
-    # reports medians. Visible with `-s`.
-    print(f'\n  mpc  {framework}+{solver:<7} horizon={MPC_HORIZON}  '
-          f'objective={solved.objective:.6f}  {elapsed:7.1f} ms (informational)')
+    check(solve_mpc(framework, solver), framework, solver, MPC_OPTIMUM)
 
 
 @pytest.mark.solver
@@ -171,14 +164,7 @@ def test_the_rtc_model_reaches_the_same_optimum(framework, solver):
     """
     require(framework, solver)
 
-    started = time.perf_counter()
-    solved = solve_rtc(framework, solver)
-    elapsed = (time.perf_counter() - started) * 1e3
-
-    check(solved, framework, solver, RTC_OPTIMUM)
-
-    print(f'\n  rtc  {framework}+{solver:<7} '
-          f'objective={solved.objective:.6f}  {elapsed:7.1f} ms (informational)')
+    check(solve_rtc(framework, solver), framework, solver, RTC_OPTIMUM)
 
 
 @pytest.mark.solver

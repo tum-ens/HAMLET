@@ -67,12 +67,14 @@ def _silenced():
     to add a quiet mode. Without this, every `pytest` run would open with a Gurobi banner, because
     the report header probes.
 
-    A plain `os.dup2` pair with `try/finally`, not the `ctypes` file-descriptor swap that
-    `grids/electricity.py` uses -- see roadmap item #11 for why that one is a wart.
+    Restored in a `finally`, which is the part worth being deliberate about: the two linopy
+    controllers still do `sys.stdout = open(os.devnull, 'w')` around their solve
+    (`optim_linopy.py:241`, `mpc_linopy.py:234`), which leaks a file object per solve and never
+    restores it if the solve raises. That is roadmap item #11; do not copy the pattern here.
     """
     sys.stdout.flush()
-    saved = os.dup(1)
     with tempfile.TemporaryFile() as sink:
+        saved = os.dup(1)
         try:
             os.dup2(sink.fileno(), 1)
             yield

@@ -28,6 +28,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   smoke arm runs `examples/create_simple_scenario` end to end under each combination. See
   `tests/README.md`
 
+  **`tests/benchmarks/test_backend_speed.py` now covers the same four cells**, reporting build and
+  solve medians alongside each cell's objective, so correctness and cost are read from one table.
+  On the development laptop the framework axis is worth ~50× and is almost entirely model *build*;
+  the solver axis is worth a few per cent at HAMLET's model sizes and is deliberately reported
+  rather than asserted
+
   **If you use Gurobi, note that the two frameworks reach it differently.** PyOptInterface links a
   *system* Gurobi installation directly and needs no Python package. linopy goes through
   `gurobipy`, which is an optional extra: run `uv sync --extra gurobi` before selecting

@@ -94,10 +94,39 @@ empty; and every assertion checks *what actually solved* before it looks at a nu
 comparison whose two arms have silently collapsed into one is the failure mode that matters here
 (`backend_models.identify` for the models, `scenario_run.BACKEND_PROBE` for the example run).
 
-Timings printed by these tests with `-s` are informational and gate nothing. Speed lives in
-`benchmarks/test_backend_speed.py`, which holds the solver fixed, perturbs the model between
-repetitions and reports medians; the two share their model definitions through
-`tests/backend_models.py` so they cannot drift apart.
+**Speed for the same four cells** is measured by `benchmarks/test_backend_speed.py`, which shares
+its model with the matrix through `tests/backend_models.py` so the thing timed and the thing
+compared cannot drift apart. It is deselected by default:
+
+```bash
+uv run python -m pytest -m benchmark -s
+```
+
+On the development laptop (24-step horizon, 60 interleaved repetitions, medians in ms):
+
+| cell | build | solve | total |
+|---|---|---|---|
+| `poi` + `highs` | 0.95 | 3.29 | **4.24** |
+| `poi` + `gurobi` | 2.10 | 3.46 | 5.56 |
+| `linopy` + `gurobi` | 150.36 | 56.60 | 206.96 |
+| `linopy` + `highs` | 148.38 | 64.52 | 212.90 |
+
+Two readings, and only the first is asserted. **The framework axis dominates: ~50×**, and it is
+almost entirely *build* — linopy's build cost is the same whichever solver it is pointed at, which
+is what identifies the cost as Python model construction rather than solving. **The solver axis is
+reported, never asserted:** at HAMLET's model sizes (144 columns here) per-model overhead dominates,
+so Gurobi's edge on `solve` under linopy and its loss on `build` under POI are properties of this
+model size and this machine. Read that column; do not pin it.
+
+Three methodology points, each of which has produced a wrong number here: the price vector is
+perturbed between repetitions (an unchanged re-solve short-circuits and reports ~0.01 ms), cells
+are interleaved rather than run in blocks (this laptop drifts >2× thermally), and every cell is
+warmed before timing (loading a solver library is a one-off cost of tens of ms that otherwise
+inverts the ranking outright).
+
+**Per-solve speed is not run speed.** A run is not only its solves: the modelling layer is ~50×
+faster while the shipped example's Executor stage is 4.7× and the whole process 3.3×. Quote the
+run-level figures.
 
 ## The golden master
 
