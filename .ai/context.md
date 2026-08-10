@@ -87,15 +87,21 @@ them equal, or a backend comparison stops being a comparison.
 either, and `framework: poi` works on HiGHS because of it — before that it imported Gurobi
 unconditionally and silently required a system Gurobi installation.
 
-**`framework: poi` is validated against linopy but does not work on Windows.** Both controllers'
-models have been shown equivalent to their linopy counterparts (below); what is left is a platform
-problem and a consequence of degeneracy, not an unvalidated backend:
+**Windows needs a modern `MSVCP140.dll`, and `hamlet/__init__.py` makes sure it gets one.**
+`highsbox` 1.10.0's `highs.dll` corrupts memory if it binds to a C++ runtime older than **14.38**
+— measured on a version ladder, 14.36 crashes and 14.38 does not. The Windows loader resolves that
+import by *base name against whatever loaded first*, and `pyarrow` (14.28) and `scikit-learn`
+(14.32) each ship an unmangled private copy, so `import pandas` used to hand HiGHS a runtime five
+toolsets too old. That was #202. `hamlet/msvc_runtime.py` claims the name for the system runtime on
+the **first line** of `hamlet/__init__.py`; keep it there, because the imports below it reach
+`pandas`. If something else wins the race anyway, `poi_solver` raises instead of solving. The rule
+this imposes on callers — *import `hamlet` before `pandas`* — is why `tests/conftest.py` does.
 
-- *Windows*: PyOptInterface + highsbox crash the interpreter with an access violation. The shipped
-  example under `framework: poi` segfaults at the first timestep, reproducibly, outside pytest.
-  The affected tests carry `skip_on_windows` from `tests/poi_support.py`, which records the
-  evidence and the ruled-out causes. Linux is unaffected and CI is Linux.
-- *Results*: on Linux, `poi` does not reproduce the linopy numbers on the shipped example — but
+**`framework: poi` is validated against linopy and now runs on Windows.** Both controllers' models
+have been shown equivalent to their linopy counterparts (below); what is left is a consequence of
+degeneracy, not an unvalidated backend:
+
+- *Results*: `poi` does not reproduce the linopy numbers on the shipped example — but
   the reason is **degeneracy amplified by state feedback, not a modelling difference**, and that
   distinction decides what to do about it. Both the MPC and the RTC models were compared directly
   and are equivalent; the run-level difference arises downstream of them. Three real defects were fixed first (heat pump built
@@ -149,11 +155,10 @@ deviation from target that is re-anchored each timestep, unlike the MPC's.
   `xfail(strict=True)`. Note what that test can and cannot say: it compares whole-run outputs, so
   it will keep failing under degeneracy even once the backends are equivalent. See #198.
 
-**Decided 2026-08-09: `linopy` stays the default until `poi` runs on Windows.** Not for
-correctness reasons — those are settled above — but because flipping it would make the shipped
-example segfault on every Windows machine, and `pytest -m golden` with it, while CI stayed green
-because CI is Linux. The golden master is deliberately **not** re-baselined: re-baselining is what
-the flip would require, and it would leave the reference reproducible on Linux only. `poi` remains
+**`linopy` is still the default, and the reason has changed.** The Windows blocker is gone (#202,
+above): the example, the suite and `pytest -m golden` all run under `poi` on Windows. What remains
+is that flipping the default requires re-baselining the golden master, which will move for the
+degeneracy reason above — that is roadmap item #10's own step, not this one's. `poi` remains
 selectable per agent and is documented as experimental wherever it is offered.
 
 **§14a grid restrictions are implemented but almost entirely untested, and no example runs them.**

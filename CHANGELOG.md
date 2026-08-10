@@ -42,11 +42,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   in a degenerate MILP breaks differently and feeds the next timestep. One loose end: the
   EV-owning agent differs by ~1e-5 at the first timestep at identical state. `linopy` remains the
   default. See #198
-- **`framework: poi` does not run on Windows at all.** The shipped example segfaults at the first
-  timestep, reproducibly, with no pytest involved; Linux is unaffected. Recorded with the
-  ruled-out causes in `tests/poi_support.py`
+- **`framework: poi` now runs on Windows** — see the entry under Fixed. The eight tests that
+  carried `skip_on_windows` run there again, so the Windows suite goes from 221 passed / 8 skipped
+  to 233 passed / 3 skipped, matching the other platforms
 
 ### Fixed
+- **Fixed `framework: poi` crashing the interpreter on Windows with an access violation (#202).**
+  The shipped example segfaulted at the first timestep and the suite died at a location that moved
+  between runs. Neither dependency was at fault on its own, and the cause was not in HAMLET:
+  `highsbox` 1.10.0's `highs.dll` imports `MSVCP140.dll` **by base name**, and the Windows loader
+  satisfies such an import from whatever module of that name loaded *first*. `pyarrow` and
+  `scikit-learn` each ship an unmangled private `msvcp140.dll` — 14.28 and 14.32 — and
+  `import pandas` pulls `pyarrow` in, so HiGHS ran against a C++ runtime far older than the 14.43
+  toolset it was built with, and corrupted memory. Measured on a ladder of runtimes, 20 runs each:
+  14.28, 14.32 and 14.36 crash; **14.38 and newer never do**. Two controls make it causal — a copy
+  of the *system* runtime placed at a foreign path never crashes, so the path is irrelevant and the
+  version is the cause; and importing `pyarrow` *after* the first solve never crashes, so it is the
+  load order. `hamlet/msvc_runtime.py` now claims the `MSVCP140.dll` name for the system runtime on
+  the first line of `hamlet/__init__.py`, before `pandas` can, and `poi_solver` raises a
+  `RuntimeError` naming the offending DLL if something wins the race anyway — a lost race can no
+  longer corrupt the process silently. This imposes one rule on callers on Windows: **import
+  `hamlet` before `pandas`**. `highspy` and PyOptInterface's own extensions are built with 14.29
+  and were never exposed, which is why only the POI path broke
 - **Fixed the PyOptInterface backend ignoring direct power control (§14a EnWG).** The real-time
   controller never overrode `OptimBase.apply_grid_commands`, which is a bare `pass`, and never
   stored `grid_commands` at all — so an agent on `framework: poi` accepted the grid operator's

@@ -13,8 +13,6 @@ backends are reconciled, which is the signal to delete the marker. See #198 for 
 
 Each test runs the example twice, so budget a few minutes.
 """
-import sys
-
 import pytest
 
 from tests.scenario_run import REPO_ROOT, compare, run_example
@@ -27,10 +25,6 @@ SCENARIO_NAME = 'simple_scenario'
 # modelling change. Deliberately *not* widened to accommodate the current divergence -- a band that
 # admitted a 100 % difference would assert nothing.
 RELATIVE_TOLERANCE = 1e-6
-
-not_on_windows = pytest.mark.skipif(
-    sys.platform == 'win32',
-    reason='framework: poi segfaults on Windows; see tests/poi_support.py')
 
 # The models are equivalent -- proven by exporting both to LP and diffing by constraint shape --
 # so this failure is degeneracy amplified by state feedback, not a modelling defect: a tie in a
@@ -77,7 +71,6 @@ def test_the_linopy_arm_reproduces_the_golden_master(linopy_results):
         'in this file cannot be trusted:\n  ' + '\n  '.join(differences[:20]))
 
 
-@not_on_windows
 @known_divergence
 @pytest.mark.e2e
 @pytest.mark.solver
@@ -89,7 +82,6 @@ def test_the_two_backends_produce_the_same_tables(linopy_results, poi_results):
     assert not differences, 'structure differs between backends:\n  ' + '\n  '.join(differences)
 
 
-@not_on_windows
 @known_divergence
 @pytest.mark.e2e
 @pytest.mark.solver

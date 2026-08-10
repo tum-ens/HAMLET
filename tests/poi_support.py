@@ -1,37 +1,17 @@
-"""Shared PyOptInterface support for the test suite: which backend to use, and when to skip.
+"""Shared PyOptInterface support for the test suite: which backend to use.
 
-Both the slack integration tests and the backend speed tests need the same two answers, and they
-must not drift apart -- a benchmark that silently measured a different solver from the one the
+Both the slack integration tests and the backend speed tests need the same answer, and they must
+not drift apart -- a benchmark that silently measured a different solver from the one the
 correctness tests exercise would be worse than no benchmark.
+
+**`skip_on_windows` is gone, deliberately.** Eight tests carried it because PyOptInterface plus
+the `highsbox` HiGHS crashed the interpreter on Windows with an access violation. That was issue
+#202, its cause is a C++ runtime the Windows loader picked by base name, and `hamlet/__init__.py`
+now claims that name before `pandas` can. These tests run on Windows again; if the fix ever stops
+working the suite fails with the `RuntimeError` from `poi_solver`, naming the offending DLL,
+rather than taking the process down. Do not reintroduce a platform skip here without a
+measurement -- reinstating one would hide exactly the regression the fix exists to prevent.
 """
-import sys
-
-import pytest
-
-# PyOptInterface + the `highsbox` HiGHS crash the *interpreter* on Windows -- an access violation
-# (0xC0000005) at a moving, unrelated location (ast, pathlib, pytest internals), which is the
-# signature of memory corruption rather than a fault where it is reported.
-#
-# **This is not only a test problem.** Running the shipped example under `framework: poi` on
-# Windows segfaults at the first timestep, reproducibly, outside pytest entirely. So `poi` is
-# unusable on Windows, full stop, and these skips only keep the suite from taking the process down
-# with it. On Linux the same example runs to completion.
-#
-# What it takes to reproduce in-process: two or more HiGHS solves. A single solve always passes,
-# and 200 consecutive solves of a small synthetic MILP are fine -- so it depends on what is being
-# solved, not merely on how many times.
-#
-# Ruled out: pytest's output capture (`-s` still crashes, and silencing the solver does not help),
-# `np.inf` bounds, HAMLET's own code (it reproduces on an unmodified tree with only `highsbox`
-# installed), and either dependency's version alone. It does not reproduce on Linux at any version
-# tested, and CI is Linux, so these tests keep their coverage where it counts.
-#
-# There is an escape -- pyoptinterface >= 0.5.1 with highsbox >= 1.12.0 does not crash the suite --
-# but that HiGHS is 3-5x slower on HAMLET-shaped models, which is most of the speedup this backend
-# exists to deliver, and it was not checked against the example run. Revisit with the root cause.
-skip_on_windows = pytest.mark.skipif(
-    sys.platform == 'win32',
-    reason='PyOptInterface + highsbox crash the interpreter on Windows; CI covers this on Linux')
 
 
 def can_solve(module):
