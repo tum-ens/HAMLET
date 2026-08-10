@@ -153,11 +153,18 @@ lint:
 # Test
 # ----------------------------------------------------------------------------------------------
 # pytest.ini deselects e2e and golden by default, so this needs no marker.
+#
+# `-rs` on every invocation: a skip count on its own says how many tests did not run, never which.
+# Skips here are load-bearing rather than incidental -- the Gurobi half of the solver x framework
+# matrix skips on any runner without a licence, and !212 used the per-platform skip split as
+# evidence that a fix had landed -- and `-q` suppresses the report header that names them locally.
+# Without this, telling "the Gurobi cells skipped, as expected" from "a test silently stopped
+# running" means downloading the JUnit artifact.
 fast:
   stage: test
   extends: .python
   script:
-    - python -m pytest -q --junitxml=report-fast.xml
+    - python -m pytest -q -rs --junitxml=report-fast.xml
   timeout: 40 minutes
   artifacts:
     when: always
@@ -169,7 +176,7 @@ e2e:
   stage: test
   extends: .python
   script:
-    - python -m pytest -q -m e2e --junitxml=report-e2e.xml
+    - python -m pytest -q -rs -m e2e --junitxml=report-e2e.xml
   timeout: 40 minutes
   artifacts:
     when: always
@@ -181,7 +188,7 @@ golden:
   stage: test
   extends: .python
   script:
-    - python -m pytest -q -m golden --junitxml=report-golden.xml
+    - python -m pytest -q -rs -m golden --junitxml=report-golden.xml
   timeout: 40 minutes
   artifacts:
     when: always
@@ -246,7 +253,7 @@ macos:
     #
     # What this does cover is every unit and integration test on a third OS and a second CPU
     # architecture, including the PyOptInterface tests that Windows has to skip entirely.
-    - python -m pytest -q --junitxml=report-macos.xml
+    - python -m pytest -q -rs --junitxml=report-macos.xml
   timeout: 40 minutes
   artifacts:
     when: always
