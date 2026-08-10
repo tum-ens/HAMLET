@@ -211,18 +211,24 @@ macos:
   when: manual
   allow_failure: true
   variables:
-    # The globals point at /cache, a Docker volume the Linux runner mounts into each container.
-    # The shell executor has no such volume and cannot write to `/`, so both move under the
-    # runner's own home -- where they persist between jobs for exactly the same reason.
-    UV_CACHE_DIR: "$HOME/.cache/uv"
-    PIP_CACHE_DIR: "$HOME/.cache/pip"
     # Alongside the checkout rather than on a separate filesystem, so uv still hardlinks out of
     # its cache instead of copying. Same reasoning as `.python` above, different paths.
+    #
+    # `$CI_PROJECT_DIR` is safe to use here; `$HOME` is not. GitLab expands its own variables in
+    # this block, but a shell variable it does not know expands to the empty string -- which is
+    # how the first version of this job asked for `/.cache/uv` and failed on a read-only `/`.
+    # Anything built from `$HOME` therefore has to be exported in `before_script`, where the
+    # shell does the expanding.
     UV_PROJECT_ENVIRONMENT: "$CI_PROJECT_DIR/.venv"
   before_script:
     # There is no image to bake tooling into, so `uv` is installed on the machine itself. It lives
     # in ~/.local/bin, which a job shell does not have on PATH.
     - export PATH="$HOME/.local/bin:$PATH"
+    # The globals point at /cache, a Docker volume the Linux runner mounts into each container.
+    # The shell executor has no such volume and cannot write to `/`, so both move under the
+    # runner's own home -- where they persist between jobs for exactly the same reason.
+    - export UV_CACHE_DIR="$HOME/.cache/uv"
+    - export PIP_CACHE_DIR="$HOME/.cache/pip"
     - uv --version
     - uv sync --locked
     - export PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH"
