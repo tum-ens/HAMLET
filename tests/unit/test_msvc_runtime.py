@@ -9,6 +9,7 @@ The interesting failure mode can only be provoked in a fresh interpreter, becaus
 decision is made once per process and cannot be undone. `test_a_stale_runtime_is_refused` therefore
 runs a subprocess; everything else can be checked in-process.
 """
+import os
 import subprocess
 import sys
 import textwrap
@@ -59,6 +60,12 @@ def test_hamlet_wins_the_race_against_pandas():
     Ordering inside `hamlet/__init__.py` is the entire mechanism, and it is one edit away from
     being lost -- moving the call below the `Creator` import silently reintroduces #202. Checked in
     a subprocess because this one has already been decided in the parent.
+
+    The startup hook is turned off here for the same reason as in the test below: with it on, the
+    name is claimed before this script runs a single line, so the assertion would hold no matter
+    what `hamlet/__init__.py` did. The two mechanisms are independent and both are still needed --
+    the hook covers callers who never import HAMLET at all, `__init__` covers anyone whose
+    environment has no `.pth` (`python -S`, a vendored tree, an unusual installer).
     """
     script = textwrap.dedent("""
         import hamlet
@@ -68,7 +75,8 @@ def test_hamlet_wins_the_race_against_pandas():
         print(version[0], version[1], path)
     """)
     done = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True,
-                          timeout=300)
+                          timeout=300,
+                          env={**os.environ, 'HAMLET_NO_MSVCP140_HOOK': '1'})
     assert done.returncode == 0, done.stderr[-2000:]
     major, minor, path = done.stdout.split(maxsplit=2)
     assert (int(major), int(minor)) >= msvc_runtime.MINIMUM_MSVCP140, (
@@ -84,6 +92,12 @@ def test_a_stale_runtime_is_refused_rather_than_solved_against():
     report. It deliberately provokes the bad ordering -- `pandas` first -- and requires a clean
     `RuntimeError` naming the offending DLL. A subprocess, because a process that has bound the
     wrong CRT is not safe to keep using.
+
+    **The opt-out below is load-bearing.** Once the `.pth` startup hook shipped, `pandas` first no
+    longer loses the race, so this test provoked nothing and skipped itself as
+    `NO_STALE_RUNTIME_AVAILABLE` -- passing while asserting nothing. Turning the hook off is what
+    keeps it able to reach the condition it was written for. See
+    `packaging/hamlet_msvcp140_hook.py` and `tests/unit/test_msvcp140_hook.py`.
     """
     script = textwrap.dedent("""
         import pandas  # noqa: F401  -- claims MSVCP140 for pyarrow's old private copy
@@ -101,7 +115,8 @@ def test_a_stale_runtime_is_refused_rather_than_solved_against():
                 print('NOT_REFUSED')
     """)
     done = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True,
-                          timeout=300)
+                          timeout=300,
+                          env={**os.environ, 'HAMLET_NO_MSVCP140_HOOK': '1'})
     assert done.returncode == 0, (
         f'the subprocess did not exit cleanly -- exit {done.returncode}, which for this test most '
         f'likely means the access violation of #202:\n{done.stderr[-2000:]}')

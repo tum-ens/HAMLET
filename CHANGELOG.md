@@ -27,6 +27,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Changed
+- **PyOptInterface is now the default modelling backend, and this changes your results.**
+  `framework: poi` replaces `framework: linopy` throughout `config_templates/` and all four
+  shipped examples. On the shipped example the Executor stage goes **73.9 s → 15.7 s (4.7×)** and
+  the whole run, scenario creation included, **86.2 s → 26.5 s (3.3×)**; the modelling layer
+  itself is ~43× faster per solve, and the gap between those figures is the share of a run that
+  was never the modelling layer.
+
+  **Migration.** Existing scenario folders are unaffected — `framework` is baked into a scenario
+  when it is created, so anything already under `scenarios/` keeps running on linopy and keeps
+  producing the numbers it produced before. The change reaches you when you *create a new
+  scenario* from the templates or examples. To stay on linopy, set `framework: linopy` under
+  `ems.controller.rtc.optimization` and `ems.controller.fbc.optimization` in your `agents.yaml`;
+  it remains fully supported and is the reference implementation PyOptInterface was validated
+  against.
+
+  **Expect different numbers, and not because either backend is wrong.** The two produce
+  *mathematically identical models* — verified by exporting both controllers to LP and diffing by
+  constraint shape — but the agent MILPs are degenerate: a battery or EV can shift charging
+  between timesteps at identical cost, the backends break that tie differently, and
+  `rtc_base.update_socs` quantises the chosen vertex into a state of charge the next timestep
+  reads. On the shipped example that shows up as 3 row counts and 85 column statistics moving,
+  with structure unchanged (same 18 tables, no column added or dropped). No agent differs at the
+  first timestep, where both backends are handed identical inputs; the agent owning neither a
+  battery nor an EV first differs at step 10, by 1 Wh. The committed golden master
+  (`tests/e2e/golden/simple_scenario.json`) was re-baselined on that evidence. Closes #198
 - **`framework: poi` is documented as experimental.** With a HiGHS library finally available, the
   shipped example was run under both frameworks and compared for the first time — the comparison
   #198 asks for. They do not agree: same 18 tables and no column added or dropped, but 3 row

@@ -9,6 +9,7 @@ Reproducibility rests on seeding `random` and `numpy.random` and pinning `PYTHON
 Creator draws agent ids, plant ownership and sizings from all three.
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -68,8 +69,11 @@ def fingerprint(results_root):
 def run_example(base, example_dir, scenario_name, framework=None, edits=(), config_edits=None):
     """Run one example end to end under `base`, and return the fingerprint of its results.
 
-    `framework` switches `framework: linopy` to another backend everywhere it appears; None leaves
-    the config as shipped. `edits` is a sequence of (old, new) string replacements applied to
+    `framework` switches every `framework:` key to the named backend, whatever the config ships;
+    None leaves it alone. It matches the *key* rather than the shipped value on purpose -- it used
+    to look for the literal `framework: linopy`, which silently became a no-op the moment the
+    default flipped to `poi`, and a no-op here means both arms of a backend comparison run the
+    same backend and agree. `edits` is a sequence of (old, new) string replacements applied to
     `agents.yaml`, and `config_edits` is a {filename: [(old, new), ...]} mapping for any other
     config file -- `grids.yaml`, say, to switch a grid restriction on.
 
@@ -95,8 +99,9 @@ def run_example(base, example_dir, scenario_name, framework=None, edits=(), conf
     agents = config / 'agents.yaml'
     agents_text = agents.read_text(encoding='utf-8')
     if framework is not None:
-        assert 'framework: linopy' in agents_text, 'no framework key to switch'
-        agents_text = agents_text.replace('framework: linopy', f'framework: {framework}')
+        agents_text, switched = re.subn(r'^(\s*)framework: *\w+', rf'\g<1>framework: {framework}',
+                                        agents_text, flags=re.MULTILINE)
+        assert switched, 'no framework key to switch'
     for old, new in edits:
         assert old in agents_text, f'{old!r} not found in agents.yaml'
         agents_text = agents_text.replace(old, new)

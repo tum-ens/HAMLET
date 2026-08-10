@@ -18,6 +18,14 @@ The only lever is to be first, which is why this runs at `import hamlet` and not
 time -- by then `pandas` is long since imported and the race is over. `hamlet/__init__.py` calls
 `ensure_supported_msvcp140()` on its first line for that reason; keep it there.
 
+**Being first at `import hamlet` is not first enough for a caller who never imports HAMLET before
+`pandas`.** That residual was tolerable while `framework: poi` was opt-in and is not now that it
+is the default, so `packaging/hamlet_msvcp140_hook.py` calls the same function from a `.pth` at
+interpreter startup instead. The two are independent on purpose: the hook covers callers who
+import `pandas` first, and this call covers environments where the `.pth` never runs (`python -S`,
+a vendored tree, an unusual installer). Neither is the safety net -- `describe_unsupported_msvcp140`
+is, and `poi_solver` raises on it.
+
 Loading the system C++ runtime ahead of an older bundled one is the supported direction: the
 `140` runtime is binary-backward-compatible by design, which is the whole point of a shared
 redistributable. It is also measured rather than assumed -- the full suite and the shipped example
@@ -44,8 +52,30 @@ wrong: `highsbox` 1.12.0 is linked with a *newer* toolset (14.44 against 1.10.0'
 happily against 14.28. Holding PyOptInterface at 0.2.8 and moving only `highsbox` 1.10.0 -> 1.12.0
 takes the same experiment from 15/15 crashes to 0/15, and moving only PyOptInterface 0.2.8 -> 0.6.1
 leaves it at 15/15 -- so whatever changed is inside the `highsbox` build, and it is not the
-compiler version. The pinned 1.10.0 stays because it is the HiGHS `highspy` ships and 3-5x faster
-on these models than 1.12+; see issue #202.
+compiler version. See issue #202.
+
+### Why this module exists at all rather than a `highsbox` bump
+
+Because bumping is the obvious escape and it costs the speedup this backend was adopted for.
+Measured on the `tests/benchmarks/test_backend_speed.py` MILP, medians of 100 reps, all four cells
+reaching an identical objective, each solve time normalised by a fixed pure-Python loop run in the
+same process (this laptop drifts >2x thermally, so raw ms across runs are not comparable):
+
+    pyoptinterface   highsbox   solve (ms)   normalised
+    0.2.8            1.10.0        3.09         0.146
+    0.2.8            1.12.0       14.56         0.697      4.8x slower
+    0.6.1            1.10.0        5.49         0.121
+    0.6.1            1.12.0       32.42         0.749      6.2x slower
+
+Read down each pair: moving *only* `highsbox` costs 4.8-6.2x. Read across at fixed `highsbox`: the
+PyOptInterface version is worth ~20%, which is noise-adjacent. So the slowdown is `highsbox`', and
+1.11.0 -- the very next release after the pin -- is already slow (solve 39.89 against 4.53), so
+there is no fast *and* crash-free version to move to. It is not a changed default either:
+`presolve=off`, `parallel=off`, `mip_detect_symmetry=False`, `solver=simplex` and
+`mip_heuristic_effort=0` each move the total by under 6%.
+
+Taking the bump would drop the per-solve speedup over linopy from ~43x to roughly 6-9x. Hence the
+pin stays at the version `highspy` ships, and this module handles the consequence.
 """
 import ctypes
 import ctypes.wintypes as wt

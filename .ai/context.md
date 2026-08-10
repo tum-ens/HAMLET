@@ -94,12 +94,40 @@ import by *base name against whatever loaded first*, and `pyarrow` (14.28) and `
 (14.32) each ship an unmangled private copy, so `import pandas` used to hand HiGHS a runtime five
 toolsets too old. That was #202. `hamlet/msvc_runtime.py` claims the name for the system runtime on
 the **first line** of `hamlet/__init__.py`; keep it there, because the imports below it reach
-`pandas`. If something else wins the race anyway, `poi_solver` raises instead of solving. The rule
-this imposes on callers — *import `hamlet` before `pandas`* — is why `tests/conftest.py` does.
+`pandas`. If something else wins the race anyway, `poi_solver` raises instead of solving.
 
-**`framework: poi` is validated against linopy and now runs on Windows.** Both controllers' models
-have been shown equivalent to their linopy counterparts (below); what is left is a consequence of
-degeneracy, not an unvalidated backend:
+**A caller who imports `pandas` and never imports HAMLET is not covered by that**, which was
+acceptable while `poi` was opt-in and not once it became the default. So a second, independent
+claim runs at interpreter startup: `packaging/hamlet_msvcp140_hook.py`, invoked by
+`hamlet-msvcp140.pth`, both force-included into the wheel *and* the editable target by
+`pyproject.toml`. Three things about it are deliberate and easy to undo by accident — it must
+short-circuit on `sys.platform` before touching the disk, it must swallow every exception (`site`
+degrades a raising `.pth` to a traceback printed on **every** interpreter start in the
+environment), and it must not import `hamlet`, whose `__init__` would drag `pandas` into every
+Python process in the environment. It costs ~40 ms of Windows startup, ~26 ms of which is
+`ctypes` and irreducible; `HAMLET_NO_MSVCP140_HOOK=1` turns it off.
+`tests/unit/test_msvcp140_hook.py` covers all of it.
+
+Note what the hook did to the tests that predate it: with the name already claimed, the two
+subprocess tests in `tests/unit/test_msvc_runtime.py` could no longer provoke a stale runtime and
+**silently skipped**. They set the opt-out now. Any future test of this mechanism has to do the
+same, or it will pass without asserting anything.
+
+Why not simply bump `highsbox` past the crash, which #202 measured as sufficient? Because that
+HiGHS is 4.8–6.2× slower on HAMLET's models, and 1.11.0 — the very next release after the pin — is
+already slow, so there is no fast *and* crash-free version to move to. The 2×2 establishing that
+the `pyoptinterface` version is not the variable is in `hamlet/msvc_runtime.py`.
+
+**`framework: poi` is the default.** Both controllers' models have been shown equivalent to their
+linopy counterparts (below); what is left is a consequence of degeneracy, not an unvalidated
+backend. `linopy` remains fully supported and selectable per agent, and is the reference
+implementation POI was validated against — keep it working.
+
+Measured on the shipped example, medians of three interleaved runs on the development laptop:
+the Executor stage goes **73.9 s → 15.7 s (4.7×)** and the whole process, scenario creation
+included, **86.2 s → 26.5 s (3.3×)**. Quote those and not the per-solve figure — the modelling
+layer is 43× faster per solve (`pytest -m benchmark`), but a run is not only its solves, and the
+gap between the two numbers is the point of measuring both.
 
 - *Results*: `poi` does not reproduce the linopy numbers on the shipped example — but
   the reason is **degeneracy amplified by state feedback, not a modelling difference**, and that
@@ -151,15 +179,24 @@ the difference is degeneracy rather than an RTC defect. Over the run the RTC mis
 solves, appearing and disappearing rather than growing monotonically — its objective is a
 deviation from target that is re-anchored each timestep, unlike the MPC's.
 
-  `tests/e2e/test_backend_equivalence.py` holds the end-to-end comparison as an
-  `xfail(strict=True)`. Note what that test can and cannot say: it compares whole-run outputs, so
-  it will keep failing under degeneracy even once the backends are equivalent. See #198.
+  `tests/e2e/test_backend_equivalence.py` holds the end-to-end comparison as a **permanent**
+  `xfail(strict=True)` — not one pending a fix. It compares whole-run outputs, so it keeps failing
+  under degeneracy however correct both backends are. It still earns its place by failing loudly if
+  the divergence ever *disappears*, which would mean the two arms had stopped being two arms (a
+  renamed key, a switch silently no-oping). Do not delete the marker on the grounds that the models
+  are equivalent; that was established and is not what the test measures. See #198.
 
-**`linopy` is still the default, and the reason has changed.** The Windows blocker is gone (#202,
-above): the example, the suite and `pytest -m golden` all run under `poi` on Windows. What remains
-is that flipping the default requires re-baselining the golden master, which will move for the
-degeneracy reason above — that is roadmap item #10's own step, not this one's. `poi` remains
-selectable per agent and is documented as experimental wherever it is offered.
+**The golden master was re-baselined when the default flipped, and the evidence is the point.**
+Movement was expected here — it is the one time in this project that is true — so it was checked
+against the mechanism rather than accepted because it appeared. Structure held (18 tables, no
+column added or dropped); 3 row counts and 85 statistics moved, the same character as the
+Gurobi→HiGHS switch (!201: 3 and 76). The decisive check is *when* each agent first diverges, per
+the criterion in `tests/e2e/test_golden_master.py`: **no agent differs at timestep 0**, where both
+backends are handed provably identical inputs. The agent owning neither battery nor EV diverges
+latest (step 10), on 1 of 48 columns, by 1 Wh on `hp_heat` — it still owns heat storage, so it is
+the *least*-stateful agent rather than a stateless one; there is no stateless agent in this
+scenario. Agents owning a battery or EV diverge from step 1–12 by hundreds of Wh. That is a
+degenerate tie propagating through `update_socs`, not a component-set difference.
 
 **§14a grid restrictions are implemented but almost entirely untested, and no example runs them.**
 Direct power control reaches the RTC only (never the FBC), through `apply_grid_commands`; indirect

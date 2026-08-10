@@ -1,13 +1,25 @@
-"""End to end — `framework: linopy` and `framework: poi` must produce the same results.
+"""End to end — what `framework: linopy` and `framework: poi` do and do not share.
 
-`framework` is a per-agent configuration option, so a user can select `poi` today and get whatever
-that backend computes. Both backends are handed the same scenario and the same solver, so the only
-thing that differs is how the model is expressed; equal expressions must give equal results.
+`framework` is a per-agent configuration option; `poi` is the default and `linopy` remains fully
+supported. Both backends are handed the same scenario and the same solver, so the only thing that
+differs is how the model is expressed.
 
-**These tests currently fail, and that is the point** -- they are `xfail(strict=True)`, so they
-report the known defect without reddening the pipeline, and they will fail *loudly* the moment the
-backends are reconciled, which is the signal to delete the marker. See #198 for the measurement:
-3 row counts and 110 column statistics move, by up to 100 %.
+**The models are equivalent and the whole-run outputs still differ, permanently.** Both controllers
+were compared by exporting their models to LP and diffing by constraint shape -- sense, RHS and
+coefficient multiset, invariant to the variable naming and ordering that differ between backends --
+and they match, with first-timestep objectives agreeing to ~1e-12 (MPC) and exactly (RTC). What
+diverges downstream is a *tie*: the agent MILPs are degenerate, the two backends present an equal
+optimum at a different vertex, and `rtc_base.update_socs` quantises that vertex into a state of
+charge the next timestep reads and amplifies.
+
+**So these tests are `xfail(strict=True)` permanently, not pending a fix.** That is unusual enough
+to spell out: an xfail normally marks something to repair, and this one marks a comparison that
+cannot succeed on whole-run outputs however correct both backends are. It is kept because it is
+still load-bearing in one direction -- it fails loudly if the divergence ever *disappears*, which
+would mean the two arms had stopped being two arms (a framework key renamed, a switch silently
+no-oping). The evidence that this is degeneracy rather than a defect lives in #198 and in
+`tests/e2e/test_golden_master.py`'s "when it fails" guidance; do not delete the marker on the
+strength of the models being equivalent, because that was already established.
 
     python -m pytest tests -m e2e
 
@@ -26,11 +38,9 @@ SCENARIO_NAME = 'simple_scenario'
 # admitted a 100 % difference would assert nothing.
 RELATIVE_TOLERANCE = 1e-6
 
-# The models are equivalent -- proven by exporting both to LP and diffing by constraint shape --
-# so this failure is degeneracy amplified by state feedback, not a modelling defect: a tie in a
-# degenerate MILP breaks differently and the resulting state of charge feeds the next timestep.
-# This test therefore cannot pass on whole-run outputs even once the backends agree, which is a
-# limit of *this* comparison rather than of the backends. See #198 before removing the marker.
+# See the module docstring: this is a permanent xfail, not a pending repair. The models are
+# equivalent; whole-run outputs still differ because a degenerate MILP's tie breaks differently
+# and `update_socs` feeds that vertex into the next timestep.
 known_divergence = pytest.mark.xfail(
     strict=True,
     reason='POI and linopy diverge on whole-run output through degeneracy amplified by state '
@@ -39,24 +49,30 @@ known_divergence = pytest.mark.xfail(
 
 @pytest.fixture(scope='module')
 def linopy_results(tmp_path_factory):
-    """The example as shipped. Also the arm that must match the golden master."""
+    """The reference implementation, still fully supported and selectable."""
     return run_example(tmp_path_factory.mktemp('linopy'), EXAMPLE, SCENARIO_NAME,
                        framework='linopy')
 
 
 @pytest.fixture(scope='module')
 def poi_results(tmp_path_factory):
+    """The example as shipped. Also the arm that must match the golden master."""
     return run_example(tmp_path_factory.mktemp('poi'), EXAMPLE, SCENARIO_NAME, framework='poi')
 
 
 @pytest.mark.e2e
 @pytest.mark.solver
-def test_the_linopy_arm_reproduces_the_golden_master(linopy_results):
+def test_the_poi_arm_reproduces_the_golden_master(poi_results):
     """The control, and it must pass even while the comparison below does not.
 
-    Without this, a failing equivalence test is ambiguous: it could mean the POI backend diverges,
-    or that this harness does not run the example the way the golden master does. This pins it to
-    the second interpretation being false.
+    Without this, a failing equivalence test is ambiguous: it could mean the backends diverge, or
+    that this harness does not run the example the way the golden master does. This pins it to the
+    second interpretation being false.
+
+    **This was the linopy arm until `poi` became the default.** The control has to be whichever
+    backend the shipped config selects, because that is what the golden master runs -- pointing it
+    at the other one turns a passing control into an assertion that the two backends agree, which
+    is precisely what the tests below record that they do not.
     """
     import json
 
@@ -64,10 +80,10 @@ def test_the_linopy_arm_reproduces_the_golden_master(linopy_results):
         (REPO_ROOT / 'tests' / 'e2e' / 'golden' / f'{SCENARIO_NAME}.json').read_text(
             encoding='utf-8'))
 
-    differences = compare(linopy_results, reference, 'this harness', 'golden master',
+    differences = compare(poi_results, reference, 'this harness', 'golden master',
                           RELATIVE_TOLERANCE)
     assert not differences, (
-        'the linopy arm no longer matches the committed golden master, so the backend comparison '
+        'the poi arm no longer matches the committed golden master, so the backend comparison '
         'in this file cannot be trusted:\n  ' + '\n  '.join(differences[:20]))
 
 
