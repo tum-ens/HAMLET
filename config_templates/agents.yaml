@@ -897,11 +897,11 @@ sfh:
                                                 #   - rb: rule-based (not implemented yet)
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy optimization problem is solved
-                                                #   - poi: experimental. Does not reproduce the linopy
-                                                #          results (see issue #198) and crashes on Windows
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
@@ -924,11 +924,11 @@ sfh:
                                                 # note: cannot exceed forecast horizon
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    experimental. Does not reproduce the linopy
-                                                #             results (see issue #198) and crashes on Windows
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
@@ -1572,11 +1572,11 @@ ctsp:
                                                 #   - rb: rule-based (not implemented yet)
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy optimization problem is solved
-                                                #   - poi: experimental. Does not reproduce the linopy
-                                                #          results (see issue #198) and crashes on Windows
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
@@ -1599,11 +1599,11 @@ ctsp:
                                                 # note: cannot exceed forecast horizon
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    experimental. Does not reproduce the linopy
-                                                #             results (see issue #198) and crashes on Windows
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
@@ -2253,11 +2253,11 @@ industry:
                                                 #   - rb: rule-based (not implemented yet)
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy optimization problem is solved
-                                                #   - poi: experimental. Does not reproduce the linopy
-                                                #          results (see issue #198) and crashes on Windows
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
@@ -2280,11 +2280,11 @@ industry:
                                                 # note: cannot exceed forecast horizon
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    experimental. Does not reproduce the linopy
-                                                #             results (see issue #198) and crashes on Windows
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
@@ -2551,11 +2551,11 @@ producer:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: experimental. Does not reproduce the linopy
-                                                #          results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -2578,11 +2578,11 @@ producer:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    experimental. Does not reproduce the linopy
-                                                #             results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
@@ -2826,11 +2826,11 @@ producer:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: experimental. Does not reproduce the linopy
-                                                #          results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -2853,11 +2853,11 @@ producer:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    experimental. Does not reproduce the linopy
-                                                #             results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
@@ -3098,11 +3098,11 @@ producer:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: experimental. Does not reproduce the linopy
-                                                #          results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -3125,11 +3125,11 @@ producer:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    experimental. Does not reproduce the linopy
-                                                #             results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
@@ -3290,11 +3290,11 @@ storage:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: experimental. Does not reproduce the linopy
-                                                #          results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -3317,11 +3317,11 @@ storage:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    experimental. Does not reproduce the linopy
-                                                #             results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
@@ -3477,11 +3477,11 @@ storage:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: experimental. Does not reproduce the linopy
-                                                #          results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -3504,11 +3504,11 @@ storage:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    experimental. Does not reproduce the linopy
-                                                #             results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
@@ -3664,11 +3664,11 @@ storage:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: experimental. Does not reproduce the linopy
-                                                #          results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
@@ -3691,11 +3691,11 @@ storage:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    experimental. Does not reproduce the linopy
-                                                #             results (see issue #198) and crashes on Windows
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
