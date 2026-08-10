@@ -185,3 +185,62 @@ golden:
     reports:
       junit: report-golden.xml
     expire_in: 1 week
+
+# ----------------------------------------------------------------------------------------------
+# macOS
+# ----------------------------------------------------------------------------------------------
+# A second platform, on an Apple M4 Mac mini registered as a project runner tagged
+# `macos, arm64`. It exists because Linux CI cannot see platform-specific breakage, and this
+# repository has now been bitten by that twice: agent selection depended on filesystem ordering
+# until !202, and `framework: poi` crashes the interpreter on Windows while Linux is unaffected
+# (#202). macOS was the measurement that showed the second one is a Windows loader problem rather
+# than a conflict between the two HiGHS builds.
+#
+# **Manual, and allowed to fail.** The runner is a private machine on a home network, so it is not
+# always reachable. A required job pinned to it would leave pipelines hanging whenever it is off,
+# which is a worse failure than having no macOS coverage. Run it from the pipeline view when a
+# change plausibly touches platform behaviour -- solver wiring, file discovery, path handling,
+# native dependencies. Make it automatic only if the machine becomes reliably available.
+#
+# The runner is registered with `run_untagged = false`, so it cannot pick up the jobs above even
+# though they carry no tags. That is deliberate: they are measured on x86_64 (see `golden`).
+macos:
+  stage: test
+  tags:
+    - macos
+  when: manual
+  allow_failure: true
+  variables:
+    # The globals point at /cache, a Docker volume the Linux runner mounts into each container.
+    # The shell executor has no such volume and cannot write to `/`, so both move under the
+    # runner's own home -- where they persist between jobs for exactly the same reason.
+    UV_CACHE_DIR: "$HOME/.cache/uv"
+    PIP_CACHE_DIR: "$HOME/.cache/pip"
+    # Alongside the checkout rather than on a separate filesystem, so uv still hardlinks out of
+    # its cache instead of copying. Same reasoning as `.python` above, different paths.
+    UV_PROJECT_ENVIRONMENT: "$CI_PROJECT_DIR/.venv"
+  before_script:
+    # There is no image to bake tooling into, so `uv` is installed on the machine itself. It lives
+    # in ~/.local/bin, which a job shell does not have on PATH.
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv --version
+    - uv sync --locked
+    - export PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH"
+    - python -c "import hamlet; print('hamlet:', hamlet.__file__)"
+  script:
+    # The fast tier only. `pytest.ini` deselects e2e, golden and benchmark by default, and two of
+    # those should stay deselected here for reasons rather than convenience:
+    #
+    #   golden  — the committed reference is architecture-coupled and does not reproduce on arm64
+    #             (#203). Row counts move, so this would fail by construction, not by regression.
+    #   e2e     — runs the example twice; worth adding once this job has earned its keep.
+    #
+    # What this does cover is every unit and integration test on a third OS and a second CPU
+    # architecture, including the PyOptInterface tests that Windows has to skip entirely.
+    - python -m pytest -q --junitxml=report-macos.xml
+  timeout: 40 minutes
+  artifacts:
+    when: always
+    reports:
+      junit: report-macos.xml
+    expire_in: 1 week
