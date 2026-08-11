@@ -115,6 +115,13 @@ G_HEAT = ET_HEAT
 G_COOLING = ET_COOLING
 G_H2 = ET_H2
 
+# Key under which the grid stage records each element's horizon profile on a pandapower net, for
+# the restriction stage to run the horizon from. It lives here rather than on either class because
+# `grids/electricity.py` writes it and `grid_restrictions/enwg_14a.py` reads it, and those two
+# already import each other through `grid_restriction.py` -- naming it on either side is a circular
+# import. `pandapowerNet` is a dict, so the key rides along through `deepcopy`.
+GRID_HORIZON_PROFILES = 'hamlet_horizon_profiles'
+
 # SYMBOLS (symbols used for the units in the tables)
 S_POWER = 'P'
 S_ENERGY = 'E'

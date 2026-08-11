@@ -82,6 +82,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   written when a delivery timestep is settled, and agents run before markets, so the timestep the
   controller asks about never has any. The filter makes that independent of ordering instead of
   silently dependent on it
+- **§14a's variable grid fees are five times cheaper to compute, and produce identical numbers.**
+  The grid stage is the largest single term in a timestep once the market rescans are gone, and
+  `pp.runpp` is **3 ms** of it — it was never power flow. Two things were: the horizon's flows went
+  through `pandapower.timeseries.run_timeseries` (2.065 s per timestep, of which ~0.07 s is the 24
+  flows and the rest is per-controller stepping over ~1,460 `ConstControl`s), and the network
+  shortest paths were recomputed every timestep over a topology that does not change (0.609 s).
+  Both are fixed. A third followed from them: `_write_grid_parameters` built one
+  `ConstControl` per element per variable, ~1,460 objects per timestep, **only for the horizon
+  loop to read them straight back** — so it records the profile arrays directly instead.
+  Measured per timestep on design 6:
+
+  | part | before | after |
+  |---|---|---|
+  | §14a restrictions | 3.021 s | **0.528 s** |
+  | `_write_grid_parameters` | 0.524 s | **0.234 s** |
+  | grid stage | ~3.6 s | **~0.77 s** |
+
+  **The golden master does not cover this** — the shipped example has `electricity.active: False`,
+  so it runs no grid at all. The evidence is a direct comparison against `run_timeseries` on a
+  network with random per-step profiles, where all four logged series match exactly, plus an
+  end-to-end run of the paper's design 6 where §14a's outputs are byte-for-byte identical over 8
+  timesteps.
+
+  **`numba` was measured for this and does not help, so it is not being added.** pandapower prints
+  *"install numba to gain a massive speedup"* on every run, and with 24 power flows per timestep
+  that looks like an obvious win. With numba installed and pandapower confirming it usable,
+  `run_timeseries` moved 2.065 s → 2.075 s. At 246 buses the numerics were never the cost
 
 ### Removed
 - **`psutil` is no longer a dependency.** Its only importer was the multiprocessing path removed

@@ -191,7 +191,21 @@ class Electricity(GridBase):
 
     def __add_controller_to_grid(self, grid, agent_elements, setpoints, element_name) -> pp.pandapowerNet:
         """
-        Add controller to the grid for timeseries calculation.
+        Record each element's horizon profile on the grid for the time series calculation.
+
+        This used to create one `ConstControl` per element **per variable**, each wrapping its own
+        single-column `DFData`. On the paper's design 6 that is ~1,460 controller objects built per
+        simulated timestep, and building them cost **0.298 s of a 0.524 s** `_write_grid_parameters`
+        -- 57 % of it.
+
+        They existed so that `pandapower.timeseries.run_timeseries` could step them. §14a no longer
+        calls it: `EnWG14a.__run_horizon_power_flows` runs the horizon itself, and its first act was
+        to read the controllers back to recover the arrays they wrap. So they were being constructed
+        and immediately decompiled. The arrays are recorded directly instead.
+
+        `EnWG14a` still knows how to compile controllers, and that path is not dead code -- it is
+        what the equivalence test against `run_timeseries` uses as its oracle, since `run_timeseries`
+        can only be driven by real controllers.
 
         Args:
             grid (pp.pandapowerNet): pandapower network object.
@@ -200,21 +214,20 @@ class Electricity(GridBase):
             element_name (string): name of grid element (normally load or sgen).
 
         Returns:
-            grid (pp.pandapowerNet): pandapower network object with controller added.
+            grid (pp.pandapowerNet): pandapower network object with the profiles recorded.
         """
-        datasource = DFData(setpoints)
+        profiles = grid.get(c.GRID_HORIZON_PROFILES)
+        if profiles is None:
+            profiles = {}
+            grid[c.GRID_HORIZON_PROFILES] = profiles
+
         for idx, row in agent_elements.iterrows():
             column_name = row['column_name']
-            # Add controller for p_mw
-            ConstControl(grid, element=element_name, variable='p_mw', element_index=idx,
-                         data_source=datasource, profile_name=[column_name])
+            active_power = setpoints[column_name].to_numpy()
+            profiles.setdefault((element_name, 'p_mw'), {})[idx] = active_power
 
             if self.method == 'ac':
                 phi = math.acos(row['cos_phi'])
-                q_mvar_series = setpoints[column_name] * np.tan(phi)
-                # Assign reactive power controller
-                datasource_q = DFData(pd.DataFrame({column_name: q_mvar_series}))
-                ConstControl(grid, element=element_name, variable='q_mvar', element_index=idx,
-                             data_source=datasource_q, profile_name=[column_name])
+                profiles.setdefault((element_name, 'q_mvar'), {})[idx] = active_power * np.tan(phi)
 
         return grid
