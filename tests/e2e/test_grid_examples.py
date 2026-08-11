@@ -39,14 +39,16 @@ def grid_run(request, tmp_path_factory):
 
     Nothing is overridden — no framework, no solver, no config edit. That is the point: the
     acceptance criterion for #205 is that the examples run as a user finds them, and an override
-    here would test a configuration nobody ships.
+    here would test a configuration nobody ships. `record_backends` is not an override; it is the
+    receipt, and `test_the_grid_example_needs_no_commercial_licence` says why one is needed.
     """
     example, scenario_name, creator_method = request.param
     base = tmp_path_factory.mktemp('e2e_grid')
+    record = base / 'backends.json'
     try:
         fingerprint = run_example(base, REPO_ROOT / 'examples' / example, scenario_name,
-                                  creator_method=creator_method)
-        yield scenario_name, fingerprint, base / 'results' / scenario_name
+                                  creator_method=creator_method, record_backends=record)
+        yield scenario_name, fingerprint, base / 'results' / scenario_name, record
     finally:
         shutil.rmtree(base, ignore_errors=True)
 
@@ -54,9 +56,31 @@ def grid_run(request, tmp_path_factory):
 @pytest.mark.e2e
 def test_the_grid_example_runs_to_completion(grid_run):
     """Creator and Executor both complete. `run_example` asserts on RUN_OK and raises otherwise."""
-    scenario_name, fingerprint, _ = grid_run
+    scenario_name, fingerprint, _, _ = grid_run
 
     assert fingerprint, f'{scenario_name} produced no result tables at all'
+
+
+@pytest.mark.e2e
+def test_the_grid_example_needs_no_commercial_licence(grid_run):
+    """The examples run on HiGHS, checked rather than inherited from whatever the machine has.
+
+    Both were switched from Gurobi to HiGHS so that anyone can run them, and nothing pinned it: a
+    reviewer reverted both `agents.yaml` files to `solver: gurobi` and this file still passed, in
+    85 s, on a machine with a licence. The property held only on machines incapable of breaking
+    it, which is the wrong way round.
+    """
+    import json
+
+    scenario_name, _, _, record = grid_run
+
+    assert record.exists(), (
+        f'{scenario_name} completed but wrote no backend record, so what solved it is unknown')
+    used = {tuple(pair) for pair in json.loads(record.read_text(encoding='utf-8'))}
+
+    assert used == {('poi', 'highs')}, (
+        f'{scenario_name} was solved by {sorted(used)} rather than poi + highs as its config '
+        f'specifies, so the example would need a commercial licence')
 
 
 @pytest.mark.e2e
@@ -69,7 +93,7 @@ def test_the_grid_stage_produced_power_flow_results(grid_run):
     """
     import pandas as pd
 
-    scenario_name, _, results = grid_run
+    scenario_name, _, results, _ = grid_run
     grid_results = results / 'grids' / 'electricity'
     written = sorted(path.name for path in grid_results.glob('res_*.csv'))
 
@@ -94,14 +118,9 @@ def test_every_grid_element_belongs_to_an_agent(grid_run):
     """
     import pandapower as pp
 
-    scenario_name, _, results = grid_run
+    scenario_name, _, results, _ = grid_run
     grid_file = next((results / 'grids' / 'electricity').glob('*.xlsx'))
     net = pp.from_excel(str(grid_file))
-
-    # Stated as a count and not as `if table.empty: continue`. A registration that produced no
-    # loads at all, or that lost the id column in the round-trip, would otherwise satisfy an
-    # "every element has an agent" check by having no elements.
-    assert len(net.load) >= 4, f'{scenario_name}: only {len(net.load)} loads in the saved network'
 
     for table_name in ('load', 'sgen'):
         table = getattr(net, table_name)
@@ -114,3 +133,39 @@ def test_every_grid_element_belongs_to_an_agent(grid_run):
         assert unassigned.empty, (
             f'{scenario_name}: {len(unassigned)} of {len(table)} {table_name} elements have no '
             f'agent after registration (rows {list(unassigned.index)})')
+
+
+@pytest.mark.e2e
+def test_every_agent_in_the_scenario_reached_the_network(grid_run):
+    """Every agent the scenario created is present in the saved network.
+
+    The element-side check above cannot see this, and a reviewer proved it: the `topology` branch
+    ends with `self.grid.load.dropna(subset=['id_agent'])`, so an element that lost its agent is
+    *deleted* rather than left unassigned. Removing one agent's plants entirely took that example
+    from 10 loads and 4 agents to 7 loads and 3 agents, and every assertion above still passed —
+    a whole participant missing from the feeder, silently, which is the exact harm they claim to
+    guard. Counting elements cannot fix it either; the count that would have caught it is the one
+    nobody knows until after the run.
+
+    So this asks the question from the other end: the agents are enumerated from the results tree,
+    which is what the Executor actually simulated, and every one of them must own something in the
+    network. Both shipped grid examples give every agent an inflexible load, so "every agent"
+    is the right bar -- an agent owning nothing electrical would legitimately be absent, and no
+    shipped example has one.
+    """
+    import pandapower as pp
+
+    scenario_name, _, results, _ = grid_run
+    grid_file = next((results / 'grids' / 'electricity').glob('*.xlsx'))
+    net = pp.from_excel(str(grid_file))
+
+    simulated = {path.name
+                 for type_dir in (results / 'agents').iterdir() if type_dir.is_dir()
+                 for path in type_dir.iterdir() if path.is_dir()}
+    in_network = set(net.load.get('id_agent', [])) | set(net.sgen.get('id_agent', []))
+
+    assert simulated, f'{scenario_name}: no agents found under {results / "agents"}'
+    missing = sorted(simulated - in_network)
+    assert not missing, (
+        f'{scenario_name}: {len(missing)} of {len(simulated)} simulated agents own nothing in the '
+        f'saved network, so the power flow ran on a feeder missing them: {missing}')

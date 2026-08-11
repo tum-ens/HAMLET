@@ -109,6 +109,26 @@ def test_no_columns_are_invented_from_the_description(grid_db):
         assert invented not in result.columns
 
 
+def test_a_parseable_description_is_not_read_when_the_real_column_is_there(grid_db):
+    """The precedence rule itself: real columns win, and `description` is not looked at at all.
+
+    Every other case in this file mixes in a description that *cannot* parse, so the fallback's
+    own internal guards (`notna().all()`, and the `except` around the parse) absorb the mutation
+    and deleting the precedence check `if type_field not in df.columns` leaves the whole suite
+    green. A reviewer demonstrated exactly that. Here every description parses cleanly, so that
+    one line is the only thing between the network and a set of invented columns.
+
+    `Baujahr` is a real field in the paper's design 6 workbook, so this is the shape an operator
+    export actually has rather than a contrived one.
+    """
+    result = elements(grid_db, network(['Baujahr:2022', 'Baujahr:2011']))
+
+    assert len(result) == 2
+    assert 'Baujahr' not in result.columns, (
+        'the description was parsed even though load_type is present as a real column, so an '
+        'operator export would have had its prose joined into the network')
+
+
 def test_the_real_columns_still_arrive(grid_db):
     """What the method is actually for, pinned so the fix cannot be bought at its expense."""
     result = elements(grid_db, network([None, PROSE]))
