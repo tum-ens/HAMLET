@@ -78,6 +78,14 @@ HiGHS is installed with HAMLET and is what `examples/create_simple_scenario` use
 CI. Gurobi is optional and fully supported — set `solver: gurobi` under `optimization`; the other
 three examples and `config_templates/` still specify it.
 
+**`framework` and `solver` are independent, so there are four supported combinations, and all four
+are tested.** The matrix and its rules are documented once, in `tests/README.md`. The one thing
+worth knowing before you read it: **the two frameworks do not reach Gurobi the same way.**
+PyOptInterface links a *system* Gurobi installation through its C API with no Python package
+involved, while linopy goes through `gurobipy`, which is an optional extra — so
+`uv sync --extra gurobi` is what a licensed machine needs before the linopy half of the matrix runs
+at all, and the two halves can be exercising different Gurobi versions.
+
 **Two solver libraries ship, deliberately.** `highspy` is the one linopy talks to. It bundles
 HiGHS inside its `_core` extension and exposes no shared library, which PyOptInterface needs — so
 `highsbox`, the same HiGHS build packaged as a plain `highs.dll` / `libhighs.so`, is also a

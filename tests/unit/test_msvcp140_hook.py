@@ -24,6 +24,10 @@ hook = pytest.importorskip(
 windows_only = pytest.mark.skipif(sys.platform != 'win32',
                                   reason='the MSVCP140 loader race is a Windows-only problem')
 
+#: The only file `_load_msvc_runtime` looks for on `sys.path`. Read from the hook rather than
+#: repeated, so a rename there cannot leave a test pruning the wrong thing and passing anyway.
+_SOURCE = hook._SOURCE
+
 
 def run(script, env=None):
     """A fresh interpreter, because the loader decision is made once per process."""
@@ -145,14 +149,29 @@ def test_it_survives_hamlet_being_unimportable():
     `site.addpackage` catches whatever a `.pth` raises and keeps going -- but it prints the
     traceback first, to stderr, for every Python process in the environment. That is the failure
     mode worth guarding: noisy and global, in processes with no connection to HAMLET.
+
+    **"HAMLET is not locatable" is arranged by removing the entries that actually hold it**, i.e.
+    the ones carrying `hamlet/msvc_runtime.py`, which is the one and only thing `_load_msvc_runtime`
+    looks for. This used to prune `sys.path` by the substring `'HAMLET'`, which silently made the
+    test a property of the *checkout directory's name*: it passed in `HAMLET-gitlab` and failed in
+    any worktree or clone named anything else, because the repository stayed on `sys.path` and the
+    hook duly found the module it was supposed to be unable to find. CI never noticed, as GitLab
+    clones into a matching name. Match on the file, not on the folder.
     """
+    hook_directory = os.path.dirname(hook.__file__)
+    if os.path.isfile(os.path.join(hook_directory, _SOURCE)):
+        pytest.skip('installed as a wheel, so the hook and the package share a directory and '
+                    '"HAMLET not locatable" cannot be arranged by pruning sys.path')
+
     output = run("""
-        import sys
-        sys.path[:] = [p for p in sys.path if 'HAMLET' not in p and 'site-packages' not in p]
+        import os, sys
+        source = os.path.join('hamlet', 'msvc_runtime.py')
+        sys.path[:] = [p for p in sys.path
+                       if p and not os.path.isfile(os.path.join(p, source))]
         sys.path.insert(0, %r)
         import hamlet_msvcp140_hook
         print(hamlet_msvcp140_hook._load_msvc_runtime(), hamlet_msvcp140_hook.claim())
-    """ % os.path.dirname(hook.__file__))
+    """ % hook_directory)
     assert output == 'None None', output
 
 

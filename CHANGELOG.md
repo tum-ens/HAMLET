@@ -19,6 +19,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   needs a shared library, which `highspy` does not expose — it bundles HiGHS inside its `_core`
   extension — so `highsbox` is a new dependency, pinned to `highspy`'s exact version so that both
   backends solve with an identical solver. Unblocks #198
+- **A solver x framework equivalence matrix, so all four supported combinations are tested.**
+  `framework` (`linopy` | `poi`) and `solver` (`highs` | `gurobi`) are independent options, and
+  until now only the two HiGHS combinations were exercised. Both Gurobi cells now run wherever a
+  licence is present and skip visibly, with a stated reason, where it is not. The tests compare the
+  *objective value* of one MPC-shaped and one RTC-shaped model at the solvers' 1e-4 MIP gap — not
+  setpoints or result tables, which legitimately differ between equally-optimal vertices — and a
+  smoke arm runs `examples/create_simple_scenario` end to end under each combination that nothing
+  else already covers, with `HAMLET_SMOKE_ALL=1` to run all four. See `tests/README.md`
+
+  **`tests/benchmarks/test_backend_speed.py` now covers the same four cells**, reporting build and
+  solve medians alongside each cell's objective, so correctness and cost are read from one table.
+  On the development laptop the framework axis is worth ~50× and is almost entirely model *build*;
+  the solver axis is worth a few per cent at HAMLET's model sizes and is deliberately reported
+  rather than asserted
+
+  **If you use Gurobi, note that the two frameworks reach it differently.** PyOptInterface links a
+  *system* Gurobi installation directly and needs no Python package. linopy goes through
+  `gurobipy`, which is an optional extra: run `uv sync --extra gurobi` before selecting
+  `framework: linopy` with `solver: gurobi`, or linopy reports `Solver gurobi not installed` on a
+  machine with a perfectly valid licence
 - **A backend speed benchmark, `tests/benchmarks/test_backend_speed.py`.** It builds the same
   agent-MPC-shaped MILP through linopy and through PyOptInterface, hands both to the same HiGHS,
   and asserts they reach the same optimum before reporting the build/solve split. Deselected by

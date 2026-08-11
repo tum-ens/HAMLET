@@ -42,6 +42,107 @@ Markers: `solver` (builds and solves a real optimisation model), `e2e` (runs the
 `golden` (compares against committed reference numbers). The last two take a couple of minutes
 each and are deselected by default.
 
+## The solver x framework matrix
+
+`framework` (`linopy` | `poi`) and `solver` (`highs` | `gurobi`) are independent per-agent options,
+so there are four supported combinations. Every run of the suite opens with a header line saying
+which of them this machine can exercise:
+
+```
+solver x framework matrix: linopy+highs=ok  linopy+gurobi=SKIP  poi+highs=ok  poi+gurobi=SKIP
+```
+
+Two tests cover them, and `-rs` names every cell that skipped:
+
+| Test | Asks |
+|---|---|
+| `integration/executor/test_solver_backend_matrix.py` | do all four reach the same optimum, on one MPC-shaped and one RTC-shaped model |
+| `e2e/test_solver_backend_smoke.py` | does the shipped example run end to end under each cell nothing else already covers |
+
+The smoke arm defaults to the **uncovered** cells, which is both Gurobi ones. An example run costs
+minutes, and the two HiGHS cells are already run end to end by the golden master (the shipped
+config, in its own CI job) and by the equivalence test's linopy arm. Running them here as well
+tripled the `e2e` job — 338 s to ~1090 s — and bought nothing, which on a shared runner is not free:
+it widened the window in which the `golden` job competes for the same cores. To run all four:
+
+```bash
+HAMLET_SMOKE_ALL=1 python -m pytest tests/e2e/test_solver_backend_smoke.py -m e2e -rs
+```
+
+The deferred cells are still parametrised and skipped, with a reason naming what covers them, so
+they appear in the report rather than vanishing. And the deferral is itself tested:
+`test_the_deferred_cells_are_still_covered_elsewhere` fails if the covering runs are deleted or
+repointed at another backend — deferring coverage is only safe if the deferral is checked.
+
+**Objective values are compared, and nothing else.** Equally-optimal vertices differ between
+solvers and between backends — !201 measured 3 row counts and 76 column statistics moving on a
+Gurobi → HiGHS switch. An equality assertion on setpoints or result tables would be wrong and would
+flake. Whole-run divergence between the two frameworks is degeneracy, is expected, and is closed as
+#198; `e2e/test_backend_equivalence.py` holds that comparison as a permanent strict xfail.
+
+**The tolerance is the MIP gap, not machine epsilon.** Both models carry a binary and both solvers
+default to a 1e-4 *relative* MIP gap, so each is only obliged to return an incumbent within that of
+the true optimum, and two incumbents can differ by twice it. The band is therefore `2e-4`, about
+eight orders looser than the ~1e-12 the cells actually agree to. That is deliberate: it states what
+the solver guarantees rather than what it happened to deliver, so a solver version changing its
+branching does not send someone looking for a number to loosen.
+
+**Both Gurobi cells skip on most machines, and that is the normal case.** The two frameworks do not
+reach Gurobi the same way, so they fail independently:
+
+- **`poi` + `gurobi`** links a *system* Gurobi installation through PyOptInterface's C API. No
+  Python package is involved — `gurobipy` need not be installed at all.
+- **`linopy` + `gurobi`** goes through `gurobipy`, which is an optional extra. Without
+  `uv sync --extra gurobi` this cell skips even on a machine with a valid licence — and when both
+  are available they may be running different Gurobi *versions*, since `gurobipy` carries its own.
+
+Availability is decided by **solving a small model, never by importing one**. Gurobi's shared
+library loads perfectly well without a licence and only fails at `optimize()`, so an import check —
+`linopy.available_solvers` included — turns "no licence" into test *failures* rather than skips.
+That is what `poi_support.can_solve` exists for, and `backend_matrix` reuses it rather than
+restating it.
+
+**Neither test can pass by doing nothing.** All four combinations are always parametrised and an
+unavailable one skips from inside the test, so it appears in the report rather than vanishing from
+it; `test_at_least_one_combination_is_available` fails rather than skips if the whole matrix is
+empty; and every assertion checks *what actually solved* before it looks at a number, because a
+comparison whose two arms have silently collapsed into one is the failure mode that matters here
+(`backend_models.identify` for the models, `scenario_run.BACKEND_PROBE` for the example run).
+
+**Speed for the same four cells** is measured by `benchmarks/test_backend_speed.py`, which shares
+its model with the matrix through `tests/backend_models.py` so the thing timed and the thing
+compared cannot drift apart. It is deselected by default:
+
+```bash
+uv run python -m pytest -m benchmark -s
+```
+
+On the development laptop (24-step horizon, 60 interleaved repetitions, medians in ms):
+
+| cell | build | solve | total |
+|---|---|---|---|
+| `poi` + `highs` | 0.95 | 3.29 | **4.24** |
+| `poi` + `gurobi` | 2.10 | 3.46 | 5.56 |
+| `linopy` + `gurobi` | 150.36 | 56.60 | 206.96 |
+| `linopy` + `highs` | 148.38 | 64.52 | 212.90 |
+
+Two readings, and only the first is asserted. **The framework axis dominates: ~50×**, and it is
+almost entirely *build* — linopy's build cost is the same whichever solver it is pointed at, which
+is what identifies the cost as Python model construction rather than solving. **The solver axis is
+reported, never asserted:** at HAMLET's model sizes (144 columns here) per-model overhead dominates,
+so Gurobi's edge on `solve` under linopy and its loss on `build` under POI are properties of this
+model size and this machine. Read that column; do not pin it.
+
+Three methodology points, each of which has produced a wrong number here: the price vector is
+perturbed between repetitions (an unchanged re-solve short-circuits and reports ~0.01 ms), cells
+are interleaved rather than run in blocks (this laptop drifts >2× thermally), and every cell is
+warmed before timing (loading a solver library is a one-off cost of tens of ms that otherwise
+inverts the ranking outright).
+
+**Per-solve speed is not run speed.** A run is not only its solves: the modelling layer is ~50×
+faster while the shipped example's Executor stage is 4.7× and the whole process 3.3×. Quote the
+run-level figures.
+
 ## The golden master
 
 Every other test pins a property someone thought to check. `tests/e2e/test_golden_master.py`
