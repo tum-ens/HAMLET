@@ -1,10 +1,19 @@
 """Unit -- a grid imported from a network operator can be read.
 
 `ElectricityGridDB.__get_grid_element_dataframe` used to unpack pandapower's `description` column
-as `key:value,key:value` before filtering. That column is not HAMLET's to read: nothing in HAMLET
-writes it -- `_create_grid_from_topology` passes `plant_id`, `agent_id`, `agent_type`, `zone` and
-`load_type`/`plant_type` as real pandapower columns -- and in an imported network it holds
-free-form text.
+as `key:value,key:value` *unconditionally*, before filtering. In a network imported from an
+operator that column holds free-form text, so the unpack either raised or invented columns.
+
+**It is read as a fallback again, and that is not a regression -- read this before changing it.**
+Some grid files really do pack HAMLET's metadata into `description`, and
+`examples/create_scenario_with_grid`'s `electricity.xlsx` is one of them; removing the reader
+outright made that example unreadable (#205). What was wrong was reading `description`
+*unconditionally*, not reading it at all. `__get_grid_element_dataframe` now reads it only when
+`type_field` is absent as a real column, so every case below -- all of which declare `load_type`
+as a real column, exactly as an imported network does once HAMLET's metadata is added -- never
+reaches the parser. The packed convention is covered in
+`tests/integration/executor/test_grid_registration.py`. Making either branch unconditional again
+breaks the other one's files; the repository has now done it in both directions.
 
 Measured on the paper's design 6 grid, which is the first real network anything here has been run
 against:
@@ -19,8 +28,9 @@ Both fixtures below are taken from that data. The second matters more than the f
 description that happens to parse would have had its invented columns joined on and written back
 into `self.grid.load`, so *succeeding* would have been worse than crashing.
 
-Nothing in the suite caught this because both shipped grid examples fail earlier for unrelated
-reasons, so no test has ever reached this code with a network in it.
+Nothing in the suite caught this because both shipped grid examples failed earlier for unrelated
+reasons, so no test had ever reached this code with a network in it. Both run again as of #205,
+and `tests/e2e/test_grid_examples.py` runs them.
 """
 import pandapower as pp
 import pytest

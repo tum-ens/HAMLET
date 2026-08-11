@@ -203,9 +203,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   **A grid file may carry HAMLET's per-element metadata in either of two places, and only one was
   being read.** Some files declare `load_type`, `plant_type`, `owner`, `agent_type` and `file` as
   real columns; others pack them into `description` as `key:value,key:value`. The packed reader was
-  removed outright in the previous release because a network imported from an operator puts prose
-  in `description` — `'2022: 17209 kWh'`, or nothing at all — and parsing it either raised or, worse,
-  invented columns that were then written back into the network. That fixed real networks and broke
+  removed outright earlier in this same release (see the entry below) because a network imported
+  from an operator puts prose in `description` — `'2022: 17209 kWh'`, or nothing at all — and parsing
+  it either raised or, worse, invented columns that were then written back into the network. That
+  fixed real networks and broke
   `create_scenario_with_grid`, whose `electricity.xlsx` is written in the packed convention, with
   `KeyError: 'load_type'`. Both conventions are now supported: real columns win, `description` is
   the fallback, and a file in neither convention is rejected with a message naming both.
@@ -270,10 +271,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   **A parse that had succeeded would have been worse than the crash**, because the invented columns
   are joined on and written straight back into `self.grid.load`. So the call is removed rather than
   guarded — which is what `paper/elsevier-2026-complexity` does at this exact line, commented out,
-  so the published runs never parsed descriptions either. Nothing downstream consumes a
-  description-derived column. Covered by
+  so the published runs never parsed descriptions either. Covered by
   `tests/unit/executor/utilities/database/test_grid_element_dataframe.py`, which builds a real
   pandapower network carrying each of the description shapes above
+
+  > **Corrected while fixing #205, in this same release.** Two statements above are too strong.
+  > *Nothing in HAMLET writes `description`* is true of HAMLET's code but not of its data:
+  > `examples/create_scenario_with_grid`'s `electricity.xlsx` is authored entirely in the packed
+  > convention. And *nothing downstream consumes a description-derived column* — which this entry
+  > originally asserted, and which is what made removing the call look free — is false for that
+  > file, where `load_type`, `owner`, `agent_type` and `file` are all description-derived and all
+  > consumed by `_create_grid_from_file`. Removing the call therefore made that example
+  > unreadable. The reader is now a typed fallback rather than absent or unconditional; see the
+  > #205 entry above
 - **Fixed `framework: poi` crashing the interpreter on Windows with an access violation (#202).**
   The shipped example segfaulted at the first timestep and the suite died at a location that moved
   between runs. Neither dependency was at fault on its own, and the cause was not in HAMLET:
