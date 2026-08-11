@@ -196,6 +196,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   to 233 passed / 3 skipped, matching the other platforms
 
 ### Fixed
+- **Both grid-enabled examples run again (#205, #201).** `examples/create_scenario_with_grid` and
+  `examples/create_scenario_with_topology` are the only shipped scenarios that calculate a grid at
+  all — `create_simple_scenario` sets `electricity.active: False` — and neither could be executed.
+
+  **A grid file may carry HAMLET's per-element metadata in either of two places, and only one was
+  being read.** Some files declare `load_type`, `plant_type`, `owner`, `agent_type` and `file` as
+  real columns; others pack them into `description` as `key:value,key:value`. The packed reader was
+  removed outright in the previous release because a network imported from an operator puts prose
+  in `description` — `'2022: 17209 kWh'`, or nothing at all — and parsing it either raised or, worse,
+  invented columns that were then written back into the network. That fixed real networks and broke
+  `create_scenario_with_grid`, whose `electricity.xlsx` is written in the packed convention, with
+  `KeyError: 'load_type'`. Both conventions are now supported: real columns win, `description` is
+  the fallback, and a file in neither convention is rejected with a message naming both.
+
+  **Two mismatches now say what is wrong instead of crashing on a lookup.** An agent with no bus in
+  the topology file raised `KeyError: '<random agent id>'`, and an agent whose plants match no
+  inflexible load in the grid file returned `None` into a tuple unpacking
+  (`TypeError: cannot unpack non-iterable NoneType object`). Both now raise a `ValueError` naming
+  the agent, the file to fix and, for the topology case, the fact that creating a scenario with
+  `new_scenario_from_configs` redraws the agent ids that the topology file refers to by name.
+  Skipping the unmatched element was rejected as the alternative: it would leave the agent out of
+  the network and solve the power flow for a feeder missing one of its participants.
+
+  **Both examples now specify `framework: poi` and `solver: highs`**, like `create_simple_scenario`
+  since !201, so neither needs a Gurobi licence. `tests/e2e/test_grid_examples.py` runs both end to
+  end and asserts that the power flow actually ran and that every load and sgen belongs to an
+  agent; `tests/integration/executor/test_grid_registration.py` covers both grid-file conventions
+  and both mismatches in about a second. Before this, `GridDB.register_grid` had no test at all
 - **Fixed results depending on how busy the machine was (#204).** Three defects compounded into
   one: nothing pinned the solver's thread count, the configured `time_limit` was divided by 60 on
   its way to the solver, and `TerminationStatusCode.TIME_LIMIT` was accepted as success alongside
