@@ -72,14 +72,6 @@ dependencies = [
     "pandapower==2.14.8",
     "pandas==2.2.3",
     "polars==0.20.31",
-    # 5.9.4 rather than env.yml's 5.9.0, which is the one pin this change had to move. 5.9.0
-    # predates Python 3.11 and ships no cp311 wheel for any platform, so installing it from PyPI
-    # means compiling it: it is why CI runs the 900 MB `python:3.11` image instead of `-slim`, and
-    # it fails outright on a Windows machine without MSVC. `hamlet311` only has it because conda
-    # built it. 5.9.4 is the first release with cp311 wheels on both Linux and Windows.
-    #
-    # Numerically inert: the only use is `TaskExecutioner.enough_memory`, which has no callers.
-    "psutil==5.9.4",
     "pvlib==0.10.5",
     "pyarrow==17.0.0",       # required by every `polars.DataFrame.to_pandas()` call, of which there are many
     "pyoptinterface==0.2.8",

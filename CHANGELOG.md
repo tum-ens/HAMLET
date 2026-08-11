@@ -47,6 +47,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Removed
+- **`psutil` is no longer a dependency.** Its only importer was the multiprocessing path removed
+  above, and its own pin comment already recorded that the sole use — `TaskExecutioner.
+  enough_memory`, guarding on `MIN_GB_AVAILABLE = 35` — had no callers. So it was installed for a
+  function nothing invoked, inside a module nothing could run. The default environment is one
+  package smaller; it still arrives under the `notebooks` extra, through jupyter, so notebook users
+  see no change. The lock diff is two lines and no other version moved
 - **The multiprocessing path, `hamlet/executor/utilities/tasks_execution/` — it did not work.**
   Six files and 435 lines that handed each agent to a worker process by writing the database to
   disk every timestep and reading it back. It was believed to be merely unused and unvalidated;
