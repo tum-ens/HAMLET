@@ -90,6 +90,50 @@ class TestOnlyAProvenOptimumIsAccepted:
             raise_unless_optimal(self.status('INFEASIBLE'), 'agent-1', CONFIGURED_TIME_LIMIT)
 
 
+class TestBothLinopyControllersSendTheOptions:
+    """The linopy half of the fix, which nothing else would notice if it were dropped.
+
+    `poi`'s call sites are covered by the golden master -- it is the shipped backend, so removing
+    `apply_reproducibility_options` there moves numbers under load. linopy's are not: its only
+    end-to-end comparison is `test_backend_equivalence`, a permanent strict xfail on whole-run
+    output, which stays xfail whether or not the options are sent. So the call is asserted here.
+
+    `run` is exercised on a bare instance with a fake model rather than a built controller,
+    because everything before the `solve` call is irrelevant to the claim.
+    """
+
+    @pytest.fixture(params=['rtc', 'fbc'])
+    def controller(self, request):
+        if request.param == 'rtc':
+            from hamlet.executor.utilities.controller.rtc.optim.linopy.optim_linopy import Linopy
+        else:
+            from hamlet.executor.utilities.controller.fbc.mpc.linopy.mpc_linopy import Linopy
+
+        class FakeModel:
+            def __init__(self):
+                self.options = None
+
+            def solve(self, **kwargs):
+                self.options = kwargs
+                return 'ok', 'optimal'
+
+        instance = object.__new__(Linopy)
+        instance.ems = {'solver': 'highs', 'time_limit': CONFIGURED_TIME_LIMIT}
+        instance.model = FakeModel()
+        instance.agent = 'unused'
+        instance._warn_on_slack = lambda: None
+        instance.process_solution = lambda: 'unused'
+        return instance
+
+    def test_the_thread_count_is_sent(self, controller):
+        controller.run()
+        assert controller.model.options['threads'] == 1
+
+    def test_the_time_limit_is_sent_in_seconds(self, controller):
+        controller.run()
+        assert controller.model.options['time_limit'] == pytest.approx(CONFIGURED_TIME_LIMIT)
+
+
 @pytest.mark.solver
 class TestTheOptionsReachTheSolver:
     """Applied to a real model, because a name the solver does not know is discarded silently.

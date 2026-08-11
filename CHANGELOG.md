@@ -102,12 +102,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
   **This was measured, not reasoned about.** Instrumenting all 192 solves of the shipped example:
   on an idle machine every one is `OPTIMAL` and the slowest takes 62 ms, and under artificial CPU
-  load one returns `TIME_LIMIT` and is accepted. `hamlet/executor/utilities/controller/`
-  `solver_options.py` now names the two reproducibility-critical options once for both frameworks
-  and both solvers — `threads = 1` and the limit **in seconds** — and
-  `poi_solver.raise_unless_optimal` refuses anything short of a proven optimum, which is what the
-  linopy controllers have always done. The commented-out `raise` next to it is gone with it: no
-  solver failure was ever surfaced.
+  load — 48 spinning processes on 16 threads — the median solve goes 11 ms → 414 ms, the slowest
+  takes 3.33 s, and one returns `TIME_LIMIT` and is accepted. End to end, on the same commit and
+  the same machine:
+
+  | tree | machine | `pytest -m golden` |
+  |---|---|---|
+  | before | idle | 4 passed, 37 s |
+  | before | loaded | **2 failed** (row counts *and* column statistics), 18m26s |
+  | after | idle | 4 passed, 37 s |
+  | after | loaded | 4 passed, 15m46s |
+
+  So the golden-master failure recorded as flakiness on 2026-08-10 was not flakiness.
+  `hamlet/executor/utilities/controller/solver_options.py` now names the two
+  reproducibility-critical options once for both frameworks and both solvers — `threads = 1` and
+  the limit **in seconds** — and `poi_solver.raise_unless_optimal` refuses anything short of a
+  proven optimum, which is what the linopy controllers have always done. The commented-out `raise`
+  next to it is gone with it: no solver failure was ever surfaced.
 
   **No results move.** The golden reference was recorded with `threads = 0` and a 2 s limit and
   still matches exactly, so on an idle machine HiGHS was already solving these models serially and
