@@ -46,6 +46,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   PyOptInterface against **191.76 ms** for linopy, and the split shows why — linopy spends 138.89
   ms building a model that HiGHS then solves in 52.86 ms
 
+### Removed
+- **The multiprocessing path, `hamlet/executor/utilities/tasks_execution/` — it did not work.**
+  Six files and 435 lines that handed each agent to a worker process by writing the database to
+  disk every timestep and reading it back. It was believed to be merely unused and unvalidated;
+  measured against `develop` before deleting it, `num_workers=2` fails at the **first timestep of
+  every shipped example**:
+
+  | example | grid | `num_workers=1` | `num_workers=2` |
+  |---|---|---|---|
+  | `create_simple_scenario` | inactive | runs (this is the golden master) | **crashes at timestep 1** |
+  | `create_scenario_with_market` | inactive | runs, 18 tables | **crashes at timestep 1** |
+  | `create_scenario_with_topology` | active | crashes before the executor | crashes before the executor |
+  | `create_scenario_with_grid` | active | crashes before the executor | crashes before the executor |
+
+  `agent_pool.get_grid_restriction_commands` lists a `grids/` directory that a grid-less scenario
+  never has, so every worker raised; `agent_pool.task`'s bare `except` turned that into a `None`,
+  and the parent unpacked it — `TypeError: cannot unpack non-iterable NoneType object`. The two
+  examples that would have had a `grids/` directory never reach the executor at all, so that
+  branch has never run either. Nothing noticed, because every run in this project's history
+  passed `num_workers=1`.
+
+  **Migration.** `num_workers` is still accepted, and still means what it did for every existing
+  caller: `1` or `None` run the simulation. Anything else now raises `ValueError` naming the
+  number asked for, rather than silently running serial — a caller who asked for eight workers
+  should find out. When parallelism returns it will be **threads over agents**, not processes; all
+  three solver bindings release the GIL during solve, measured at ~6× on 8 cores. See ROADMAP
+  §6.3 and §7.3.
+
+  Deleted with it: the per-timestep `save_database(save_restriction_commands_only=True)`, the
+  `save_all` branch of `AgentDB.save_agent`, and the `forecaster_train.pickle` that every agent
+  save wrote for a worker to read back — nothing else has ever read it, so results folders no
+  longer contain it. **No results move**: the golden master is unchanged, and the fingerprint it
+  compares reads `.ft` tables only.
+
 ### Changed
 - **PyOptInterface is now the default modelling backend, and this changes your results.**
   `framework: poi` replaces `framework: linopy` throughout `config_templates/` and all four

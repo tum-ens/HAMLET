@@ -18,8 +18,8 @@ from datetime import datetime
 from hamlet.executor.utilities.database.database import Database
 import hamlet.constants as c
 # pl.enable_string_cache(True)
-from hamlet.executor.utilities.tasks_execution.agent_task_executioner import AgentTaskExecutioner
-from hamlet.executor.utilities.tasks_execution.market_task_executioner import MarketTaskExecutioner
+from hamlet.executor.agents.agent import Agent
+from hamlet.executor.markets.market import Market
 from hamlet.executor.grids.grid import Grid
 import warnings
 
@@ -28,8 +28,23 @@ warnings.filterwarnings("ignore")
 
 class Executor:
 
+    #: Rejected `num_workers` values get this. Stated once so the test and the message agree.
+    NO_PARALLELISM = (
+        "num_workers={requested}: HAMLET simulates in one process. The multiprocessing path was "
+        "removed because it did not work -- on every shipped example, each worker raised inside "
+        "`agent_pool.task`, whose bare `except` turned that into a None the parent then "
+        "unpacked. Nothing that ran it noticed, because no run ever used it. Pass 1 or None. "
+        "When parallelism returns it will be threads over agents rather than processes, which "
+        "needs no state transfer at all: see ROADMAP section 7.3.")
+
     def __init__(self, path, name: str = None, num_workers: int = None, overwrite_sim: bool = True,
                  allow_incompatible_scenario: bool = False):
+        # Kept as a parameter, and refused rather than ignored. Every caller in the tree passes 1
+        # already; silently running serial for someone who asked for eight would be the same class
+        # of quiet wrong answer this executor has been accumulating.
+        if num_workers not in (None, 1):
+            raise ValueError(self.NO_PARALLELISM.format(requested=num_workers))
+
         # Progress bar
         self.pbar = tqdm()
 
@@ -54,10 +69,6 @@ class Executor:
 
         # Scenario structure
         self.structure = {}
-
-        # Initialize task executioners
-        self.agent_task_executioner = AgentTaskExecutioner(self.database, num_workers)
-        self.market_task_executioner = MarketTaskExecutioner(self.database, 1)  # use 1 worker only
 
         # Overwrites the results folder if it already exists
         self.overwrite = overwrite_sim
@@ -95,10 +106,6 @@ class Executor:
         self.pbar.reset(total=len(self.timetable.partition_by('timestamp')))
         self.pbar.set_description(desc='Start execution')
 
-        # Update results path in task executioners
-        self.agent_task_executioner.set_results_path(self.path_results)
-        self.market_task_executioner.set_results_path(self.path_results)
-
         for timestamp in self.timetable.partition_by('timestamp'):
             # Wait for the timestamp to be reached if the simulation is to be carried out in real-time
             if self.type == 'rts':
@@ -127,8 +134,8 @@ class Executor:
                         'Executing timestamp ' + timestamp_str + ' for region_tasks ' + region_name)
 
                     # Execute agent and market tasks
-                    self.agent_task_executioner.execute(region_tasks)
-                    self.market_task_executioner.execute(region_tasks)
+                    self.__execute_agents(region_tasks)
+                    self.__execute_markets(region_tasks)
 
                 # Calculate the grids for the current timestamp (calculated together as they are connected)
                 self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid')
@@ -136,13 +143,9 @@ class Executor:
 
             self.pbar.update(1)
 
-        # Cleanup the parallel pool
-        self.agent_task_executioner.close_pool()
-        self.market_task_executioner.close_pool()
-
     def cleanup(self):
         """Cleans up the scenario after execution"""
-        self.database.save_database(os.path.dirname(self.path_results), save_restriction_commands_only=False)
+        self.database.save_database(os.path.dirname(self.path_results))
 
         self.database.concat_market_files()
 
@@ -155,6 +158,62 @@ class Executor:
     def resume(self):
         """Resumes the simulation"""
         raise NotImplementedError("Resume functionality not implemented yet")
+
+    def __execute_agents(self, tasks: pl.DataFrame):
+        """Run every agent of this region for this timestamp, and post what they produced.
+
+        Moved here from `AgentTaskExecutioner.execute_serial` and `.postprocess_results` when the
+        multiprocessing path was deleted. The two were split across a base class only so that the
+        parallel branch could reuse the second half; with one branch left, the split cost a file
+        and bought nothing.
+        """
+        region_name = str(tasks.select(c.TC_REGION).sample(n=1).item())
+
+        # Get the data of the agents that are part of the tasklist
+        agents = self.database.get_agent_data(region=region_name)
+
+        # Get the data of the markets that are part of the tasklist
+        markets = self.database.get_market_data(region=region_name)
+
+        # Get grid restriction commands
+        grid_commands = {}
+        for grid_type, grid in self.database.get_grid_data().items():
+            grid_commands[grid_type] = grid.restriction_commands
+
+        # Iterate over the agents and execute them sequentially
+        results = []
+        for agent_type, agent in agents.items():
+            for agent_id, agent_db in agent.items():
+                # Update save path for agent
+                agent_db.agent_save = os.path.join(self.path_results, 'agents', agent_type, agent_id)
+                # Create an instance of the Agent class and execute its tasks
+                results.append(Agent(agent_type=agent_type, data=agent_db, timetable=tasks, market=markets,
+                                     grid_commands=grid_commands).execute())
+
+        # Update agents data in database
+        self.database.post_agents_to_region(region=region_name, agents=results)
+
+    def __execute_markets(self, tasks: pl.DataFrame):
+        """Clear every market of this region for this timestamp, and post the results.
+
+        Moved here from `MarketTaskExecutioner`, which never had a parallel branch at all: the
+        Executor constructed it with one worker and no `MarketPool` was ever built.
+        """
+        markets = []
+        for task in tasks.iter_rows(named=True):
+            market = self.database.get_market_data(region=task[c.TC_REGION],
+                                                   market_type=task[c.TC_MARKET],
+                                                   market_name=task[c.TC_NAME])
+            markets.append(Market(data=market, tasks=task, database=self.database))
+
+        results = []
+        for market in markets:
+            results.append(market.execute())
+
+        region_name = tasks.select(pl.first(c.TC_REGION)).item()
+        timestamp = tasks.select(c.TC_TIMESTAMP).sample(n=1).item()
+        self.database.post_markets_to_region(region=region_name, markets=results, timestamp=timestamp,
+                                             path_results=self.path_results)
 
     def __execute_grids(self, tasklist: pl.DataFrame, initial_db: Database, num_iteration: int) -> (bool, dict):
         """Execute grids for the given tasklist."""

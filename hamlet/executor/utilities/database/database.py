@@ -5,7 +5,6 @@ __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
 import os
-import pickle
 from datetime import datetime
 import polars as pl
 import hamlet.constants as c
@@ -425,13 +424,16 @@ class Database:
 
     """save database"""
 
-    def save_database(self, path: str, save_restriction_commands_only):
+    def save_database(self, path: str):
         """
         Save the database to the specified path.
 
+        Called once, at the end of a run. It used to take `save_restriction_commands_only`, which
+        the multiprocessing path set per timestep so that workers could pickle the grid's
+        restriction commands out of the results folder and read them back. That path is gone.
+
         Args:
             path: The path to save the database to.
-            save_restriction_commands_only: only save grid restriction commands (for parallel execution).
 
         """
 
@@ -447,13 +449,7 @@ class Database:
         grid_path = os.path.join(path, list(self.__regions.keys())[0], 'grids')
 
         for grid_type, grid in self.__grids.items():
-            if save_restriction_commands_only:      # only save restriction commands
-                file_name = grid_type + '_restriction.pickle'
-                with open(os.path.join(grid_path, file_name), 'wb') as handle:
-                    pickle.dump(grid.restriction_commands, handle)
-
-            else:   # save whole grid database
-                grid.save_grid(grid_path)
+            grid.save_grid(grid_path)
 
     ########################################## PRIVATE METHODS ##########################################
 
