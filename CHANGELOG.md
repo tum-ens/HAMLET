@@ -92,6 +92,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   to 233 passed / 3 skipped, matching the other platforms
 
 ### Fixed
+- **Fixed results depending on how busy the machine was (#204).** Three defects compounded into
+  one: nothing pinned the solver's thread count, the configured `time_limit` was divided by 60 on
+  its way to the solver, and `TerminationStatusCode.TIME_LIMIT` was accepted as success alongside
+  `OPTIMAL` — so the shipped example asked for 120 s, got 2 s, and a solve that ran out of time had
+  its suboptimal incumbent used with no signal at all. Under `framework: linopy` the limit had
+  always been inert, because it was sent under Gurobi's `TimeLimit` key and HiGHS discards names it
+  does not know; making `poi` the default therefore activated a limit that had never applied.
+
+  **This was measured, not reasoned about.** Instrumenting all 192 solves of the shipped example:
+  on an idle machine every one is `OPTIMAL` and the slowest takes 62 ms, and under artificial CPU
+  load one returns `TIME_LIMIT` and is accepted. `hamlet/executor/utilities/controller/`
+  `solver_options.py` now names the two reproducibility-critical options once for both frameworks
+  and both solvers — `threads = 1` and the limit **in seconds** — and
+  `poi_solver.raise_unless_optimal` refuses anything short of a proven optimum, which is what the
+  linopy controllers have always done. The commented-out `raise` next to it is gone with it: no
+  solver failure was ever surfaced.
+
+  **No results move.** The golden reference was recorded with `threads = 0` and a 2 s limit and
+  still matches exactly, so on an idle machine HiGHS was already solving these models serially and
+  the limit never bound. The thread count is pinned because it *can* vary with machine load, not
+  because it was shown to have. Output suppression is still spelled per framework and still sends
+  Gurobi's `OutputFlag`/`LogToConsole` to HiGHS, which ignores them; that is roadmap item #11
 - **Fixed `framework: poi` crashing the interpreter on Windows with an access violation (#202).**
   The shipped example segfaulted at the first timestep and the suite died at a location that moved
   between runs. Neither dependency was at fault on its own, and the cause was not in HAMLET:
