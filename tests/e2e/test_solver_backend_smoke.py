@@ -99,6 +99,9 @@ def test_the_deferred_cells_are_still_covered_elsewhere():
 
     Checked against the covering modules' source rather than by importing their fixtures, because
     what matters is *that the example is run under that backend*, not what the fixture is called.
+    The exception is which scenarios the golden master pins, which is read as data: now that it is
+    multi-scenario, "it calls run_example somewhere" no longer implies "it still runs *this*
+    example", and no substring can tell those two apart.
     """
     from tests.e2e import test_backend_equivalence as equivalence
     from tests.e2e import test_golden_master as golden
@@ -112,6 +115,13 @@ def test_the_deferred_cells_are_still_covered_elsewhere():
     assert 'run_example(' in golden_source, (
         'test_golden_master no longer runs the example, so poi + highs is not covered there and '
         'must stop being skipped here')
+    # The deferral names *this* scenario, not merely "the golden master". Dropping it from
+    # `SCENARIOS` while pinning some other one would leave poi + highs uncovered with every other
+    # check here still passing.
+    pinned = {scenario.name for scenario in golden.SCENARIOS}
+    assert SCENARIO_NAME in pinned, (
+        f'test_golden_master no longer pins {SCENARIO_NAME} (it pins {sorted(pinned)}), so '
+        f'poi + highs is not covered there and must stop being skipped here')
     # The golden master must still run the *shipped* configuration -- it is only a stand-in for
     # the poi + highs cell for as long as it does not override the backend itself.
     assert 'framework=' not in golden_source, (

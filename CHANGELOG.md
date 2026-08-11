@@ -47,6 +47,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Changed
+- **The golden master can pin more than one scenario.** `tests/e2e/test_golden_master.py` held its
+  example and scenario name as module-scope constants, so exactly one scenario could ever be
+  pinned — and the one it pins sets `electricity.active: False`, which is why no reference numbers
+  have ever covered the grid stage. Scenarios are now a list, parametrised so each is run once for
+  the whole module, with its reference at `tests/e2e/golden/<scenario>.json`. Adding one is appending a
+  `GoldenScenario` and running `HAMLET_UPDATE_GOLDEN=1`; see `tests/README.md`. No scenario was
+  added in the same change, so that the reference could be shown byte-identical before and after
 - **Agents no longer scan the whole market-transaction table to find what they already traded.**
   `strategies.py` filtered and grouped `market_transactions` on every agent on every timestep;
   `MarketDB.get_net_energy` answers the same question from a running per (timestep, agent) sum.

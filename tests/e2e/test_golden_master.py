@@ -42,75 +42,113 @@ The reference records per-table row counts and, for every numeric column, the su
 maximum. Agent ids are random-but-seeded, so tables are grouped by kind rather than by agent --
 that keeps the reference readable and stable against an id-scheme change, while still moving the
 moment the physics does.
+
+**Adding a scenario.** Append a `GoldenScenario` to `SCENARIOS` and create its reference with
+`HAMLET_UPDATE_GOLDEN=1`. Each scenario carries its own reference file, named after it, and is run
+once for the whole module, however many assertions read it. A scenario earns its place by reaching code the
+others do not -- `simple_scenario` sets `electricity.active: False`, so nothing pinned here
+executes the grid stage.
 """
 import json
 import os
 import shutil
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
 from tests.scenario_run import REPO_ROOT, run_example
 
-EXAMPLE = REPO_ROOT / 'examples' / 'create_simple_scenario'
-SCENARIO_NAME = 'simple_scenario'
-REFERENCE = Path(__file__).parent / 'golden' / f'{SCENARIO_NAME}.json'
+
+class GoldenScenario(NamedTuple):
+    """One example, pinned against one committed reference.
+
+    `name` is both the example's scenario folder and the reference's filename, so the mapping
+    between a scenario and its numbers stays greppable in both directions. It is also what
+    `test_solver_backend_smoke.py` reads when checking that the backend cell it defers to this
+    module is still covered here.
+    """
+
+    example: str
+    name: str
+
+    @property
+    def config_dir(self):
+        return REPO_ROOT / 'examples' / self.example
+
+    @property
+    def reference(self):
+        return Path(__file__).parent / 'golden' / f'{self.name}.json'
+
+
+#: Every scenario the golden master pins. See "Adding a scenario" in the module docstring.
+SCENARIOS = [
+    GoldenScenario(example='create_simple_scenario', name='simple_scenario'),
+]
 
 # Solver output is bit-stable on a fixed platform, but HiGHS and polars versions move; this is
 # loose enough to survive that and far tighter than any real modelling change.
 RELATIVE_TOLERANCE = 1e-6
 
 
+@pytest.fixture(scope='module', params=SCENARIOS, ids=lambda pinned: pinned.name)
+def scenario(request):
+    """The scenario under test. Parametrised here so each one is run once for the whole module."""
+    return request.param
+
+
 @pytest.fixture(scope='module')
-def actual(tmp_path_factory):
+def actual(scenario, tmp_path_factory):
     """Run the example once, seeded, against a temp copy of the config.
 
     The run and the fingerprint live in `tests/scenario_run.py`, shared with the backend
     equivalence tests -- those compare their linopy arm against this reference, which only means
     anything if both reduce results the same way.
     """
-    base = tmp_path_factory.mktemp('golden')
+    base = tmp_path_factory.mktemp(f'golden_{scenario.name}')
     try:
-        yield run_example(base, EXAMPLE, SCENARIO_NAME)
+        yield run_example(base, scenario.config_dir, scenario.name)
     finally:
         shutil.rmtree(base, ignore_errors=True)
 
 
 @pytest.fixture(scope='module')
-def expected(actual):
+def expected(scenario, actual):
     """The committed reference, regenerated in place when explicitly asked for."""
+    reference = scenario.reference
     if os.environ.get('HAMLET_UPDATE_GOLDEN'):
-        REFERENCE.parent.mkdir(parents=True, exist_ok=True)
-        REFERENCE.write_text(json.dumps(actual, indent=2, sort_keys=True) + '\n',
+        reference.parent.mkdir(parents=True, exist_ok=True)
+        reference.write_text(json.dumps(actual, indent=2, sort_keys=True) + '\n',
                              encoding='utf-8')
-        pytest.skip(f'reference regenerated at {REFERENCE.relative_to(REPO_ROOT)}; '
+        pytest.skip(f'reference regenerated at {reference.relative_to(REPO_ROOT)}; '
                     f'review the diff and commit it with the change that caused it')
 
-    assert REFERENCE.exists(), (
-        f'no golden reference at {REFERENCE.relative_to(REPO_ROOT)}. Create one with '
+    assert reference.exists(), (
+        f'no golden reference at {reference.relative_to(REPO_ROOT)}. Create one with '
         f'HAMLET_UPDATE_GOLDEN=1 python -m pytest tests -m golden')
 
-    return json.loads(REFERENCE.read_text(encoding='utf-8'))
+    return json.loads(reference.read_text(encoding='utf-8'))
 
 
 @pytest.mark.golden
-def test_the_same_tables_are_produced(actual, expected):
+def test_the_same_tables_are_produced(scenario, actual, expected):
     """A table appearing or disappearing is a result change like any other."""
-    assert sorted(actual) == sorted(expected)
+    assert sorted(actual) == sorted(expected), scenario.name
 
 
 @pytest.mark.golden
-def test_row_counts_match(actual, expected):
+def test_row_counts_match(scenario, actual, expected):
     """Catches trades appearing or vanishing, which several defects here did."""
     differences = {kind: (entry['rows'], expected[kind]['rows'])
                    for kind, entry in actual.items()
                    if kind in expected and entry['rows'] != expected[kind]['rows']}
 
-    assert not differences, f'row counts moved (actual, expected): {differences}'
+    assert not differences, (
+        f'{scenario.name}: row counts moved (actual, expected): {differences}')
 
 
 @pytest.mark.golden
-def test_column_statistics_match(actual, expected):
+def test_column_statistics_match(scenario, actual, expected):
     """The substance: every numeric column's total, minimum and maximum.
 
     Reported all at once rather than failing on the first, because when the model changes it is
@@ -137,7 +175,7 @@ def test_column_statistics_match(actual, expected):
                         f'(delta {value - other:+,.3f})')
 
     assert not differences, (
-        'the shipped example now produces different numbers:\n  '
+        f'{scenario.name} now produces different numbers:\n  '
         + '\n  '.join(differences[:40])
         + (f'\n  ... and {len(differences) - 40} more' if len(differences) > 40 else '')
         + '\n\nIf this change was intended, regenerate the reference with '
@@ -145,11 +183,11 @@ def test_column_statistics_match(actual, expected):
 
 
 @pytest.mark.golden
-def test_no_column_was_dropped(actual, expected):
+def test_no_column_was_dropped(scenario, actual, expected):
     """A column disappearing is easy to miss when only the ones present are compared."""
     missing = [f'{kind}:{column}'
                for kind, entry in expected.items() if kind in actual
                for column in entry['columns']
                if column not in actual[kind]['columns']]
 
-    assert not missing, f'columns no longer produced: {missing}'
+    assert not missing, f'{scenario.name}: columns no longer produced: {missing}'

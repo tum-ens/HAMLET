@@ -152,8 +152,13 @@ run-level figures.
 
 Every other test pins a property someone thought to check. `tests/e2e/test_golden_master.py`
 pins the numbers themselves, so a change that moves results has to be acknowledged rather than
-noticed later. It runs the shipped example under a fixed seed and compares per-table row counts
-and per-column sum/min/max against `tests/e2e/golden/simple_scenario.json`.
+noticed later. It runs each scenario in its `SCENARIOS` list under a fixed seed and compares
+per-table row counts and per-column sum/min/max against `tests/e2e/golden/<scenario>.json`.
+
+**To pin another scenario**, append a `GoldenScenario(example, name)` and create its reference
+with `HAMLET_UPDATE_GOLDEN=1`. One earns its place by reaching code the others do not, and costs
+a full example run in the `golden` CI job every time it runs. Note that `simple_scenario` sets
+`electricity.active: False`, so pinning it does not pin the grid stage.
 
 **When it fails**, the message names the tables and columns that moved and by how much. Decide
 whether that is the change you meant. If it is, regenerate the reference and commit it *with*
