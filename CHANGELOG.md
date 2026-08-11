@@ -159,6 +159,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   the limit never bound. The thread count is pinned because it *can* vary with machine load, not
   because it was shown to have. Output suppression is still spelled per framework and still sends
   Gurobi's `OutputFlag`/`LogToConsole` to HiGHS, which ignores them; that is roadmap item #11
+- **Fixed the Executor being unable to read any scenario carrying a real electricity network.**
+  `GridDB.__get_grid_element_dataframe` unpacked pandapower's `description` column as
+  `key:value,key:value` HAMLET metadata. That column is not HAMLET's to read: nothing in HAMLET
+  writes it — `_create_grid_from_topology` passes `plant_id`, `agent_id`, `agent_type`, `zone` and
+  `load_type`/`plant_type` as real pandapower columns — and in a network imported from an operator
+  it holds free-form text. On the paper's design 6 grid, 96 of 469 loads and 134 of 263 sgens have
+  no description at all (`AttributeError: 'NoneType' object has no attribute 'split'`), and most of
+  the rest are prose containing colons — `'Anlagenart: Photovoltaik \n Energieart: Sonne \n Baujahr:
+  2022'`, `'2022: 17209 kWh'` — giving `ValueError: too many values to unpack (expected 2)`.
+
+  **A parse that had succeeded would have been worse than the crash**, because the invented columns
+  are joined on and written straight back into `self.grid.load`. So the call is removed rather than
+  guarded — which is what `paper/elsevier-2026-complexity` does at this exact line, commented out,
+  so the published runs never parsed descriptions either. Nothing downstream consumes a
+  description-derived column. Covered by
+  `tests/unit/executor/utilities/database/test_grid_element_dataframe.py`, which builds a real
+  pandapower network carrying each of the description shapes above
 - **Fixed `framework: poi` crashing the interpreter on Windows with an access violation (#202).**
   The shipped example segfaulted at the first timestep and the suite died at a location that moved
   between runs. Neither dependency was at fault on its own, and the cause was not in HAMLET:
