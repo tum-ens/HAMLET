@@ -14,6 +14,7 @@ from linopy.io import read_netcdf
 
 from hamlet.executor.utilities.controller.fbc.mpc.linopy.components import *
 from hamlet.executor.utilities.controller.fbc.mpc.mpc_base import MpcBase
+from hamlet.executor.utilities.controller.solver_options import reproducibility_options
 
 LOGGER = logging.getLogger(__name__)
 
@@ -232,9 +233,12 @@ class Linopy(MpcBase):
         match solver:
             case 'gurobi' | 'highs':
                 sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
+                # `OutputFlag` and `LogToConsole` are Gurobi's names, and HiGHS discards them
+                # unrecognised -- the redirect above is what actually silences it. Tidying that is
+                # roadmap item #11; the options added below are the ones that decide whether the
+                # run is reproducible, so they are named per solver (#204).
                 solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
-                if self.ems.get('time_limit') is not None:
-                    solver_options.update({'TimeLimit': self.ems['time_limit'] / 60})
+                solver_options.update(reproducibility_options(solver, self.ems.get('time_limit')))
                 status = self.model.solve(solver_name=solver, **solver_options)
                 sys.stdout = sys.__stdout__  # re-activate printing
             case _:

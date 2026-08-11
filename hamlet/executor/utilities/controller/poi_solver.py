@@ -25,6 +25,7 @@ import os
 import sys
 
 from hamlet import msvc_runtime
+from hamlet.executor.utilities.controller.solver_options import reproducibility_options
 
 LOGGER = logging.getLogger(__name__)
 
@@ -158,17 +159,38 @@ def create_model(solver):
     return model
 
 
-def set_time_limit(model, solver, seconds):
-    """Apply a wall-clock limit, named per solver.
+def apply_reproducibility_options(model, solver, time_limit):
+    """Pin the thread count, and the wall-clock limit in seconds, on `model`.
 
-    Gurobi's `TimeLimit` and HiGHS' `time_limit` are both in seconds. HAMLET has always passed
-    `time_limit / 60` to Gurobi, which is a unit bug rather than a deliberate choice; it is kept
-    here so this change moves no results, since at HAMLET's model sizes (single-digit ms) neither
-    value ever binds. Correcting it belongs with the solver-options cleanup, roadmap item #11.
+    `solver_options.reproducibility_options` decides what is applied and under which names; this
+    only puts it on a PyOptInterface model.
     """
-    if seconds is None:
+    for name, value in reproducibility_options(solver, time_limit).items():
+        model.set_raw_parameter(name, value)
+
+
+def raise_unless_optimal(status, agent_id, time_limit):
+    """Refuse any solve that did not reach a proven optimum.
+
+    `TerminationStatusCode.TIME_LIMIT` used to be whitelisted alongside `OPTIMAL`, so a solve that
+    ran out of time returned its incumbent and the simulation carried on with a suboptimal
+    schedule and no signal at all -- which made results a function of machine load (#204). Every
+    other bad status was equally ignored: the `raise` was present but commented out, so a failed
+    solve only printed.
+
+    Raising is not new behaviour for HAMLET as a whole. The linopy controllers have always raised
+    on a non-`ok` status; this is the POI half catching up.
+    """
+    import pyoptinterface as poi
+
+    if status == poi.TerminationStatusCode.OPTIMAL:
         return
-    if solver == 'gurobi':
-        model.set_raw_parameter('TimeLimit', seconds / 60)
-    else:
-        model.set_raw_parameter('time_limit', float(seconds) / 60)
+
+    detail = ''
+    if status == poi.TerminationStatusCode.TIME_LIMIT:
+        detail = (f' The solve hit its {time_limit} s limit, so the schedule it returned is an '
+                  f'incumbent rather than an optimum. Raise `time_limit` under `optimization`, or '
+                  f'run on a less loaded machine.')
+
+    raise ValueError(f'Optimization failed for agent {agent_id}: solver returned "{status}".'
+                     f'{detail}')

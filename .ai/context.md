@@ -246,6 +246,21 @@ is **not established** — nobody has checked:
 - `hamlet/executor/utilities/database/market_db.py:158`
 - `hamlet/executor/utilities/tasks_execution/agent_pool.py:108`
 
+**A solve must be reproducible, so two solver options are set for you and one status is fatal.**
+`hamlet/executor/utilities/controller/solver_options.py` names them once for both frameworks:
+`threads = 1`, because a parallel MIP's incumbent depends on how its threads interleave; and the
+configured `time_limit` **in seconds**, which HAMLET divided by 60 for years, so the example's
+`time_limit: 120` reached the solver as 2 s. Under linopy that was inert — the value went under
+Gurobi's `TimeLimit`, which HiGHS discards unrecognised — so making `poi` the default activated a
+limit that had never applied. Measured on the shipped example, 1 of 192 solves hit it under
+artificial load and its incumbent was accepted silently, because `TIME_LIMIT` was whitelisted
+alongside `OPTIMAL`. `poi_solver.raise_unless_optimal` now refuses anything but a proven optimum,
+which is what linopy's controllers always did. See #204.
+
+Pinning the threads moved no numbers: the golden reference was recorded at `threads = 0` and still
+matches, so HiGHS was already solving these models serially on an idle machine. The thread count is
+pinned because it *can* vary, not because it was shown to have.
+
 ## Branches and propagation
 
 - `master` and `develop` are protected on GitLab with push access **No one**. Changes land by

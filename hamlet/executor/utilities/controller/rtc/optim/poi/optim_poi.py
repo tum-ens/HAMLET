@@ -11,7 +11,8 @@ import logging
 # balance with slack reported nothing while the linopy run warned.
 import numpy as np
 
-from hamlet.executor.utilities.controller.poi_solver import create_model, set_time_limit
+from hamlet.executor.utilities.controller.poi_solver import (apply_reproducibility_options,
+                                                             create_model, raise_unless_optimal)
 from hamlet.executor.utilities.controller.rtc.optim.poi.components import *
 from hamlet.executor.utilities.controller.rtc.optim.optim_base import OptimBase
 
@@ -302,16 +303,15 @@ class POI(OptimBase):
     def run(self):
 
         # Solve the optimization problem. The model was already created and silenced for this
-        # solver in `get_model`, so only the time limit is left to apply.
+        # solver in `get_model`, so only the reproducibility options are left to apply.
         solver = self.ems[c.C_OPTIM].get('solver')
-        set_time_limit(self.model, solver, self.ems[c.C_OPTIM].get('time_limit'))
+        time_limit = self.ems[c.C_OPTIM].get('time_limit')
+        apply_reproducibility_options(self.model, solver, time_limit)
         self.model.optimize()
         status = self.model.get_model_attribute(poi.ModelAttribute.TerminationStatus)
 
-        # Check if the solution is optimal
-        if status not in [poi.TerminationStatusCode.OPTIMAL, poi.TerminationStatusCode.TIME_LIMIT]:
-            print(f'Exited with status "{status}". \n')
-            # raise ValueError(f"Optimization failed: {status}")
+        # Anything short of a proven optimum is an error, the time limit included
+        raise_unless_optimal(status, self.agent.agent_id, time_limit)
 
         # Surface any energy that was shed or dumped to close the balance
         self._warn_on_slack()
