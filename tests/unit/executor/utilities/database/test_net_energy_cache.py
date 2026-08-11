@@ -54,18 +54,33 @@ def transactions(rows):
 
 @pytest.fixture
 def market(monkeypatch):
-    """A MarketDB with no folder behind it -- only the netting logic is under test."""
+    """A MarketDB with no folder behind it -- only the netting logic is under test.
+
+    **Both caches have to be initialised here**, and forgetting one is not a small mistake: an
+    uninitialised cache reads as None, every getter silently falls back to recomputing from the
+    full table, and the tests pass while exercising none of the code they are about. That is
+    exactly what happened -- the RTC tests below were green for a while against the fallback path,
+    and only a surviving mutation showed it.
+    """
     monkeypatch.setattr(MarketDB, '__init__', lambda self, **kwargs: None)
     db = MarketDB()
     db.market_type = MARKET_TYPE
     db.market_name = MARKET_NAME
     db.market_transactions = pl.DataFrame()
     db._net_cache = pl.DataFrame(schema=MarketDB.NET_SCHEMA)
+    db._rtc_cache = pl.DataFrame(schema=MarketDB.NET_SCHEMA)
     return db
+
+
+def assert_cache_is_live(db):
+    """Guard against the fixture regressing to the fallback path."""
+    assert db.net_cache is not None and db.rtc_cache is not None, \
+        'a cache is missing, so this test would pass against the uncached fallback'
 
 
 def feed(db, batches):
     """Append each batch the way `post_markets_to_region` does, folding as it goes."""
+    assert_cache_is_live(db)
     for batch in batches:
         combined = batch if db.market_transactions.is_empty() else pl.concat(
             [db.market_transactions, batch], how='vertical')
@@ -188,3 +203,85 @@ class TestWithoutACache:
         assert market._net_cache is None
         assert market.get_net_energy('a', *window).rows() == \
                [(START + datetime.timedelta(hours=1), 100, 0)]
+
+    def test_a_dropped_cache_still_answers_the_rtc_correctly(self, market):
+        feed(market, [transactions([(1, 'a', c.TT_MARKET, 100, 0)])])
+        market.set_market_transactions(market.market_transactions)
+
+        assert market._rtc_cache is None
+        assert market.get_rtc_market_result('a', START + datetime.timedelta(hours=1)) == 100
+
+
+def rtc_uncached(db, agent, timestep):
+    """The RTC's original expression, verbatim, as the oracle for the cached version.
+
+    Deliberately a copy of what `rtc_base._get_market_results` used to run rather than a call into
+    `MarketDB`, so that this compares the cache against the *replaced code* and not against
+    itself.
+    """
+    frame = db.market_transactions
+    frame = frame.filter(pl.col(c.TC_ID_AGENT) == agent)
+    frame = frame.filter(pl.col(c.TC_TIMESTEP) == timestep)
+    frame = frame.fill_null(0)
+    return frame.select(pl.sum(c.TC_ENERGY_IN).cast(pl.Int64)
+                        - pl.sum(c.TC_ENERGY_OUT).cast(pl.Int64)).to_series().to_list()[0]
+
+
+class TestTheRtcResultMatchesTheCodeItReplaced:
+    """The RTC's own definition, which is not the trading strategy's. See #206."""
+
+    def test_a_simple_case(self, market):
+        feed(market, [transactions([(1, 'a', c.TT_MARKET, 300, 100)])])
+        at = START + datetime.timedelta(hours=1)
+
+        assert market.get_rtc_market_result('a', at) == rtc_uncached(market, 'a', at)
+
+    def test_across_many_batches(self, market):
+        feed(market, [transactions([(step, 'a', c.TT_MARKET, 10 * step, 3 * step),
+                                    (step, 'b', c.TT_RETAIL, 0, 7 * step)])
+                      for step in range(1, 25)])
+
+        for step in range(1, 25):
+            at = START + datetime.timedelta(hours=step)
+            for agent in ('a', 'b'):
+                assert market.get_rtc_market_result(agent, at) == \
+                       rtc_uncached(market, agent, at), (agent, step)
+
+    def test_rows_for_one_timestep_arriving_in_different_batches_are_summed(self, market):
+        """A timestep is cleared more than once, so the fold must accumulate rather than replace.
+
+        Added because a mutation survived without it: folding with `last()` instead of `sum()`
+        passed every other test here, since each of them delivers a timestep's rows in a single
+        batch and a one-row group is its own sum.
+        """
+        feed(market, [transactions([(3, 'a', c.TT_MARKET, 100, 0)]),
+                      transactions([(3, 'a', c.TT_RETAIL, 40, 0)]),
+                      transactions([(3, 'a', c.TT_BALANCING, 0, 25)])])
+        at = START + datetime.timedelta(hours=3)
+
+        assert market.get_rtc_market_result('a', at) == 115
+        assert market.get_rtc_market_result('a', at) == rtc_uncached(market, 'a', at)
+
+    def test_an_agent_with_nothing_at_that_timestep_gets_zero(self, market):
+        feed(market, [transactions([(1, 'a', c.TT_MARKET, 100, 0)])])
+        at = START + datetime.timedelta(hours=9)
+
+        assert market.get_rtc_market_result('a', at) == 0
+        assert market.get_rtc_market_result('a', at) == rtc_uncached(market, 'a', at)
+
+    def test_fee_rows_are_counted_here_and_not_by_the_trading_strategy(self, market):
+        """The discrepancy itself, pinned. Both halves are current behaviour.
+
+        If #206 concludes the RTC should filter, this test is the one that has to change, and it
+        will change together with the golden reference. Until then it stops the two definitions
+        being quietly unified in either direction.
+        """
+        feed(market, [transactions([(1, 'a', c.TT_MARKET, 1000, 0),
+                                    (1, 'a', c.TT_GRID, 1000, 0),
+                                    (1, 'a', c.TT_LEVIES, 1000, 0)])])
+        at = START + datetime.timedelta(hours=1)
+
+        assert market.get_rtc_market_result('a', at) == 3000, 'the RTC counts the fee clones'
+        assert market.get_rtc_market_result('a', at) == rtc_uncached(market, 'a', at)
+        assert market.get_net_energy('a', at, at).rows() == [(at, 1000, 0)], \
+            'the trading strategy does not'

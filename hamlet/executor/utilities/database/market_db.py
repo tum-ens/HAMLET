@@ -47,8 +47,10 @@ class MarketDB:
         self.positions_matched = pl.DataFrame()
         self.retailer = pl.DataFrame()
 
-        # Running per (timestep, agent) sum of netted energy. See `get_net_energy`.
+        # Running per (timestep, agent) sums. Two of them, because the trading strategy and the
+        # RTC define traded energy differently -- see `_rtc_energy_from`.
         self._net_cache = pl.DataFrame(schema=self.NET_SCHEMA)
+        self._rtc_cache = pl.DataFrame(schema=self.NET_SCHEMA)
 
         # Tuples of (file name, file schema)
         self.files = [(f'{c.TN_MARKET_TRANSACTIONS}.ft', c.TS_MARKET_TRANSACTIONS),
@@ -135,10 +137,10 @@ class MarketDB:
         # trading horizon, which is ahead of `start_horizon_ts` -- so this is about keeping the
         # cache bounded rather than correct. Without it the cache would carry one row per
         # (timestep, agent) for the whole run.
-        cache = self.net_cache
-        if cache is not None and not cache.is_empty():
-            self._net_cache = cache.filter(
-                (pl.col(c.TC_TIMESTEP) >= start_horizon_ts).fill_null(True))
+        for attribute, cache in (('_net_cache', self.net_cache), ('_rtc_cache', self.rtc_cache)):
+            if cache is not None and not cache.is_empty():
+                setattr(self, attribute, cache.filter(
+                    (pl.col(c.TC_TIMESTEP) >= start_horizon_ts).fill_null(True)))
 
         for file_name, schema in self.files:
             attr_name, extension = file_name.rsplit('.', 1)
@@ -196,18 +198,20 @@ class MarketDB:
                 shutil.rmtree(path)
 
     def set_market_transactions(self, data, new_rows=None):
-        """Replace the transactions table, folding `new_rows` into the net-energy cache.
+        """Replace the transactions table, folding `new_rows` into both energy caches.
 
-        `new_rows` is the *addition* rather than the whole table. Passing it keeps the cache
-        incremental; omitting it drops the cache, so a caller that replaces the table wholesale
-        cannot leave a stale one behind. Correctness never depends on which happens --
-        `get_net_energy` recomputes when there is no cache.
+        `new_rows` is the *addition* rather than the whole table. Passing it keeps the caches
+        incremental; omitting it drops them, so a caller that replaces the table wholesale cannot
+        leave a stale one behind. Correctness never depends on which happens -- both getters
+        recompute when there is no cache.
         """
         self.market_transactions = data
         if new_rows is None:
             self._net_cache = None
+            self._rtc_cache = None
         else:
             self._fold_into_net_cache(new_rows)
+            self._fold_into_rtc_cache(new_rows)
 
     @property
     def net_cache(self):
@@ -251,6 +255,69 @@ class MarketDB:
                 .agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum())
                 .with_columns([pl.col(c.TC_ENERGY_IN).cast(pl.Int64),
                                pl.col(c.TC_ENERGY_OUT).cast(pl.Int64)]))
+
+    """rtc market results -- a second, deliberately different definition"""
+
+    @property
+    def rtc_cache(self):
+        """The RTC's energy cache, or None. Same contract as `net_cache`."""
+        return getattr(self, '_rtc_cache', None)
+
+    def _fold_into_rtc_cache(self, new_rows):
+        """Add `new_rows` to the running per (timestep, agent) sums the RTC reads."""
+        cache = self.rtc_cache
+        if cache is None:
+            return
+        folded = self._rtc_energy_from(new_rows)
+        if folded.is_empty():
+            return
+        self._rtc_cache = (pl.concat([cache, folded], how='vertical')
+                           .groupby([c.TC_TIMESTEP, c.TC_ID_AGENT])
+                           .agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum()))
+
+    def _rtc_energy_from(self, transactions):
+        """Per (timestep, agent) sums **the way the RTC computes them**, which is not the above.
+
+        `RtcBase._get_market_results` applies **no transaction-type filter and no market/name
+        filter** -- it takes this market's whole table, keeps the agent's rows for one timestep,
+        and sums `energy_in - energy_out` across everything it finds. `get_net_energy` filters to
+        `NET_TRANSACTION_TYPES`. The two therefore answer different questions from the same table
+        under the same name, and this method exists to reproduce the RTC's answer *exactly*.
+
+        That difference is very likely a defect. `market_transactions` carries `grid` and `levies`
+        rows which clone the netted transactions and hold identical energy, so the RTC counts fee
+        rows as traded energy. But it is what `develop` does today, correcting it moves results,
+        and this change is a performance change whose contract is that nothing moves. Investigating
+        the filter is #206, and it needs a golden-master re-baseline rather than a patch here.
+        """
+        if transactions is None or transactions.is_empty():
+            return pl.DataFrame(schema=self.NET_SCHEMA)
+
+        return (transactions
+                .groupby([c.TC_TIMESTEP, c.TC_ID_AGENT])
+                .agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum())
+                .with_columns([pl.col(c.TC_ENERGY_IN).cast(pl.Int64),
+                               pl.col(c.TC_ENERGY_OUT).cast(pl.Int64)]))
+
+    def get_rtc_market_result(self, agent_id, timestep):
+        """One agent's `energy_in - energy_out` at one timestep, as the RTC defines it.
+
+        Replaces the second whole-table scan: every agent did this on every timestep too, and it
+        is the larger of the two. Measured on design 6 (104 agents, three months), the RTC and FBC
+        phase grew 2.6 s to 7.9 s per timestep over 140 steps purely because of it, while the
+        trading phase -- already served from `get_net_energy` -- stayed at 0.25 s.
+
+        Returns a plain int, matching what the scan returned, including 0 for an agent with no
+        transactions at that timestep.
+        """
+        cache = self.rtc_cache
+        source = cache if cache is not None else self._rtc_energy_from(self.market_transactions)
+
+        rows = source.filter((pl.col(c.TC_ID_AGENT) == agent_id)
+                             & (pl.col(c.TC_TIMESTEP) == timestep))
+        if rows.is_empty():
+            return 0
+        return int(rows.select(pl.sum(c.TC_ENERGY_IN) - pl.sum(c.TC_ENERGY_OUT)).item())
 
     def get_net_energy(self, agent_id, first_timestep, last_timestep):
         """One agent's netted energy per timestep, over the closed window given.
