@@ -72,10 +72,6 @@ dependencies = [
     "pandapower==2.14.8",
     "pandas==2.2.3",
     "polars==0.20.31",
-    # `psutil` was here, and is gone with the multiprocessing path that was its only importer. Its
-    # own pin comment already recorded that the sole use was `TaskExecutioner.enough_memory`, which
-    # had no callers -- so the package was carried for a function nothing invoked, inside a module
-    # nothing could run. It still arrives under the `notebooks` extra, through jupyter.
     "pvlib==0.10.5",
     "pyarrow==17.0.0",       # required by every `polars.DataFrame.to_pandas()` call, of which there are many
     "pyoptinterface==0.2.8",
