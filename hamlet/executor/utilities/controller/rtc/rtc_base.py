@@ -215,21 +215,24 @@ class RtcBase(ControllerBase):
         return self.meters
 
     def _get_market_results(self):
+        """This agent's already-settled energy per market, at the current timestep.
+
+        This used to scan the whole `market_transactions` table right here -- filter to the agent,
+        filter to the timestep, sum -- which every agent did on every timestep. Measured on design
+        6 (104 agents, three months), it is why this phase grew from 2.6 s to 7.9 s per timestep
+        over 140 steps while every other phase stayed flat. `MarketDB.get_rtc_market_result`
+        answers the same question from a running sum instead.
+
+        **It keeps this method's definition, which is not the trading strategy's.** There is no
+        transaction-type filter, so `grid` and `levies` rows are summed here as though they were
+        traded energy, where `strategies.py` excludes them. That is preserved deliberately: this
+        change must not move results. Whether the omission is correct is #206.
+        """
         self.market_results = {}
         for market_type, market in self.market.items():
             for market_name, data in market.items():
-                # Get transactions table
-                transactions = data.market_transactions
-                # Filter for agent ID
-                transactions = transactions.filter(pl.col(c.TC_ID_AGENT) == self.agent.agent_id)
-                # Filter for current timestamp
-                transactions = transactions.filter(pl.col(c.TC_TIMESTEP) == self.timestamp)
-                # Fill NaN values with 0
-                transactions = transactions.fill_null(0)
-                # Get net energy amount for market
-                self.market_results[market_name] = (transactions.select(pl.sum(c.TC_ENERGY_IN).cast(pl.Int64)
-                                                                        - pl.sum(c.TC_ENERGY_OUT).cast(pl.Int64))
-                                                    .to_series().to_list()[0])
+                self.market_results[market_name] = data.get_rtc_market_result(
+                    agent_id=self.agent.agent_id, timestep=self.timestamp)
 
         return self.market_results
 

@@ -46,6 +46,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   PyOptInterface against **191.76 ms** for linopy, and the split shows why — linopy spends 138.89
   ms building a model that HiGHS then solves in 52.86 ms
 
+### Changed
+- **Agents no longer scan the whole market-transaction table to find what they already traded.**
+  `strategies.py` filtered and grouped `market_transactions` on every agent on every timestep;
+  `MarketDB.get_net_energy` answers the same question from a running per (timestep, agent) sum.
+  Measured on a 104-agent, three-month scenario with a live grid, the agent stage grew from 3.7 s
+  to 12.1 s per timestep over 120 steps while every other stage stayed flat — the deepcopy that
+  ROADMAP §6.1a names as the main mechanism was 0.6 % of a timestep throughout.
+
+  **The type filter is the reason this is not a two-line change.** `market_transactions` also
+  carries `grid` and `levies` rows that clone the netted energy, so summing without filtering to
+  `retail | market | balancing` roughly triple-counts traded energy for any agent paying fees. A
+  version of this cache without that filter was refused during the paper-fix port for exactly this
+  reason; `MarketDB.NET_TRANSACTION_TYPES` is now the single place the filter lives, used both to
+  build the cache and to answer without one. `tests/unit/executor/utilities/database/`
+  `test_net_energy_cache.py` compares the two paths on every case. No results move
+
+  **The real-time controller did the same scan, and it was the larger of the two.**
+  `RtcBase._get_market_results` is now served from the same machinery. Measured end to end on that
+  scenario, 150 timesteps per arm:
+
+  | steps 141–160 | timestep | agent stage | RTC+FBC | trading |
+  |---|---|---|---|---|
+  | before | ~19 s and rising | — | — | — |
+  | after the trading cache only | 14.63 s | 9.62 s | 8.99 s | 0.25 s |
+  | after both | **7.84 s** | 2.99 s | 2.39 s | 0.24 s |
+
+  The baseline reached 21.8 s per timestep by step 218 and was still climbing; with both caches the
+  timestep is roughly flat
+- **The real-time controller no longer counts grid fees and levies as traded energy.** It summed
+  `market_transactions` with no transaction-type filter where the trading strategy has always
+  excluded them. **This changes no results, and that was measured rather than assumed**: filtered
+  and unfiltered sums agree on 96 of 96 calls in the shipped example and 1040 of 1040 in a
+  three-month, 104-agent scenario whose table does hold 890 `grid` and 890 `levies` rows. Fees are
+  written when a delivery timestep is settled, and agents run before markets, so the timestep the
+  controller asks about never has any. The filter makes that independent of ordering instead of
+  silently dependent on it
+
 ### Removed
 - **`psutil` is no longer a dependency.** Its only importer was the multiprocessing path removed
   above, and its own pin comment already recorded that the sole use — `TaskExecutioner.

@@ -61,18 +61,20 @@ class TradingBase:
         # Create the bids and offers table
         self.bids_offers = pl.DataFrame(schema=c.TS_BIDS_OFFERS)
 
-        # Get the market transactions for the given market and agent for the given time horizon
-        self.market_transactions = self.market_transactions.filter((pl.col(c.TC_MARKET) == self.market_type)
-                                                                   & (pl.col(c.TC_NAME) == self.market_name)
-                                                                   & ((pl.col(c.TC_TYPE_TRANSACTION) == c.TT_RETAIL)
-                                                                      | (pl.col(c.TC_TYPE_TRANSACTION) == c.TT_MARKET)
-                                                                      | (pl.col(c.TC_TYPE_TRANSACTION) == c.TT_BALANCING))
-                                                                   & (pl.col(c.TC_ID_AGENT) == self.agent_id)
-                                                                   & (pl.col(c.TC_TIMESTEP) >= self.timetable.select(pl.first(c.TC_TIMESTEP)))
-                                                                   & (pl.col(c.TC_TIMESTEP) <= self.timetable.select(pl.last(c.TC_TIMESTEP)))
-                                                                   )
-        # Group the market data by the timestep      
-        self.market_transactions = self.market_transactions.groupby(c.TC_TIMESTEP).agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum())
+        # Get the market transactions for the given market and agent for the given time horizon,
+        # already netted per timestep.
+        #
+        # This used to filter and group `market_data.market_transactions` right here, so every
+        # agent scanned the whole accumulated table on every timestep. `MarketDB.get_net_energy`
+        # answers the same question -- same market, same three transaction types, same closed
+        # window -- from a running sum instead. The type filter lives in
+        # `MarketDB.NET_TRANSACTION_TYPES` now and must stay there: `market_transactions` also
+        # holds `grid` and `levies` rows that clone the netted energy, so dropping it roughly
+        # triple-counts for any agent subject to fees.
+        self.market_transactions = self.market_data.get_net_energy(
+            agent_id=self.agent_id,
+            first_timestep=self.timetable.select(pl.first(c.TC_TIMESTEP)).item(),
+            last_timestep=self.timetable.select(pl.last(c.TC_TIMESTEP)).item())
         # Fill all empty columns with zero
         self.market_transactions = self.market_transactions.fill_null(0)
         # Compute the net energy

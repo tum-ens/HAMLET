@@ -309,8 +309,12 @@ class Database:
 
             # Save results to region
             # Tables that are to be expanded
-            market_db.set_market_transactions(pl.concat([market_db.market_transactions]
-                                                        + results[c.TN_MARKET_TRANSACTIONS], how='vertical'))
+            # `new_rows` is what keeps `MarketDB`'s net-energy cache incremental; without it the
+            # cache is dropped and every agent goes back to scanning the whole table.
+            new_transactions = pl.concat(results[c.TN_MARKET_TRANSACTIONS], how='vertical')
+            market_db.set_market_transactions(
+                pl.concat([market_db.market_transactions, new_transactions], how='vertical'),
+                new_rows=new_transactions)
             market_db.set_bids_cleared(pl.concat([market_db.bids_cleared]
                                                  + results[c.TN_BIDS_CLEARED], how='vertical'))
             market_db.set_offers_cleared(pl.concat([market_db.offers_cleared]
