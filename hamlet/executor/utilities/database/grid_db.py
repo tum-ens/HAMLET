@@ -275,8 +275,25 @@ class ElectricityGridDB(GridDB):
             df (pd.DataFrame): grid element dataframe.
             df_plant_types (list): list of plant type names in the dataframe.
         """
-        # get dataframe and unpack description column
-        df = f.add_info_from_col(df=getattr(self.grid, element_name).copy(), col='description', drop=False)
+        # `description` is NOT read here, and must not be. It used to be unpacked as
+        # `key:value,key:value` via `functions.add_info_from_col`, on the assumption that HAMLET's
+        # per-element metadata lives in it. It does not: nothing in HAMLET ever writes that column
+        # -- `_create_grid_from_topology` passes `plant_id`, `agent_id`, `agent_type`, `zone` and
+        # `load_type`/`plant_type` as real pandapower columns -- and in a network imported from a
+        # network operator, `description` is free-form human text.
+        #
+        # So the unpacking could only ever fail or invent columns. On the paper's design 6 grid it
+        # does both: 96 of 469 loads and 134 of 263 sgens have no description at all
+        # (`AttributeError: 'NoneType' object has no attribute 'split'`), and of those that do,
+        # most are prose that happens to contain colons -- `'Anlagenart: Photovoltaik \n
+        # Energieart: Sonne \n ...'`, `'2022: 17209 kWh'` -- giving
+        # `ValueError: too many values to unpack (expected 2)`. Anything that had parsed would have
+        # been joined on and written back into `self.grid.load`, so success would have been worse
+        # than the crash.
+        #
+        # This is why `paper/elsevier-2026-complexity` has the line commented out at this exact
+        # spot; the published runs never parsed descriptions. See #216.
+        df = getattr(self.grid, element_name).copy()
         df = df.loc[df[type_field].isin(self.relevant_plant_type[element_name])]  # remove unnecessary plants from grid
         df[add_columns] = 0  # add additional columns
 
