@@ -5,7 +5,6 @@ __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
 import os.path
-import pickle
 import polars as pl
 from polars.type_aliases import SizeUnit
 from hamlet import constants as c
@@ -107,12 +106,19 @@ class AgentDB:
         self.sub_agents[id] = AgentDB(path, self.agent_type, id)
         self.sub_agents[id].register_agent()
 
-    def save_agent(self, path: str, save_all: bool = False, dtype: str = 'ft') -> None:
+    def save_agent(self, path: str, dtype: str = 'ft') -> None:
         """
         Saves the agent's data to the agent's folder.
 
         The method saves the agent's data to the agent's folder as files.
         The data is stored as files with the same name as the class attributes.
+
+        Two things went with the multiprocessing path. `save_all` wrote `account`, `plants`,
+        `specs` and `bids_offers` as well; only a worker handing an agent back to the parent ever
+        passed it, and the serial save never did, because the Executor copies the scenario folder
+        into the results folder and those four are unchanged there. And a pickle of the
+        forecaster's training data was written next to them on *every* save, for a worker to read
+        back when it rebuilt the agent -- nothing else has ever read it.
         """
 
         # Update agent path
@@ -124,17 +130,6 @@ class AgentDB:
         f.save_file(path=os.path.join(self.agent_save, f'socs.{dtype}'), data=self.socs, df='polars')
         f.save_file(path=os.path.join(self.agent_save, f'setpoints.{dtype}'), data=self.setpoints, df='polars')
         f.save_file(path=os.path.join(self.agent_save, f'forecasts.{dtype}'), data=self.forecasts, df='polars')
-
-        # Save forecaster train data (for multiprocessing)
-        with open(os.path.join(self.agent_save, 'forecaster_train.pickle'), 'wb') as handle:
-            pickle.dump(self.forecaster.train_data, handle)
-
-        # Data optional to save as there aren't any changes to them (as of now)
-        if save_all:
-            f.save_file(path=os.path.join(self.agent_save, 'account.json'), data=self.account)
-            f.save_file(path=os.path.join(self.agent_save, 'plants.json'), data=self.plants)
-            f.save_file(path=os.path.join(self.agent_save, 'specs.json'), data=self.specs)
-            f.save_file(path=os.path.join(self.agent_save, f'bids_offers.{dtype}'), data=self.bids_offers, df='polars')
 
     def estimated_size(self, unit:SizeUnit = "kb") -> float:
         ret = 0
