@@ -27,6 +27,16 @@ Live simulation state and the append-only results log both live in one in-memory
 Most of the executor's performance workarounds follow from those two responsibilities sharing an
 object. Splitting them is planned, not done.
 
+**The Executor runs in one process, and `num_workers` above 1 is refused rather than ignored.**
+There was a multiprocessing path — `tasks_execution/`, six files — that handed each agent to a
+worker by writing the database to disk and reading it back. It did not work: on every shipped
+example each worker raised inside `agent_pool.task`, whose bare `except` returned `None`, which
+the parent then unpacked (`TypeError: cannot unpack non-iterable NoneType`). Nobody noticed
+because no run ever used it; every paper run passed `num_workers=1`. It is deleted rather than
+repaired, because it is also what forced the whole disk-serialisation design that the state/results
+split has to undo. When parallelism returns it will be **threads over agents** — all three solver
+bindings release the GIL, measured — which needs no state transfer at all. ROADMAP §6.3, §7.3.
+
 ## Repository data
 
 Of those three directories **only `input_data/` is tracked** — 152 files, ~159 MB. `scenarios/`
@@ -239,12 +249,13 @@ The method lesson is worth more than the bug: mounting a Windows-materialised ch
 Linux container tests the kernel and the libraries, not the checkout. To test a platform, let that
 platform's git write the tree.
 
-Four unsorted `os.listdir()` calls of the same shape remain. Whether any of them can affect output
+Three unsorted `os.listdir()` calls of the same shape remain. Whether any of them can affect output
 is **not established** — nobody has checked:
 
 - `hamlet/creator/setup.py:609`, `:692`
 - `hamlet/executor/utilities/database/market_db.py:158`
-- `hamlet/executor/utilities/tasks_execution/agent_pool.py:108`
+
+A fourth, in `tasks_execution/agent_pool.py`, went with that directory.
 
 **A solve must be reproducible, so two solver options are set for you and one status is fatal.**
 `hamlet/executor/utilities/controller/solver_options.py` names them once for both frameworks:
