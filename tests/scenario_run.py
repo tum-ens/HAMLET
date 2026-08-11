@@ -29,7 +29,7 @@ random.seed({seed})
 np.random.seed({seed})
 from hamlet import Creator, Executor
 {probe}
-Creator(path=r"{config_dir}").new_scenario_from_configs()
+Creator(path=r"{config_dir}").{creator_method}()
 Executor(r"{scenarios}/{name}", num_workers=1).run()
 print("RUN_OK")
 """
@@ -109,8 +109,15 @@ def fingerprint(results_root):
 
 
 def run_example(base, example_dir, scenario_name, framework=None, solver=None, edits=(),
-                config_edits=None, record_backends=None):
+                config_edits=None, record_backends=None,
+                creator_method='new_scenario_from_configs'):
     """Run one example end to end under `base`, and return the fingerprint of its results.
+
+    `creator_method` is the Creator entry point the example's own notebook calls — the three
+    shipped ones differ (`new_scenario_from_configs` reads the YAML, `new_scenario_from_files`
+    reads `agents.xlsx`, `new_scenario_from_grids` derives the agents from the grid file), and
+    which one is used decides whether the agent ids are drawn fresh or come from a file. That
+    matters for the `topology` grid method, whose topology file names agents by id.
 
     `framework` switches every `framework:` key to the named backend and `solver` every `solver:`
     key to the named solver, whatever the config ships; None leaves either alone. Both match the
@@ -169,8 +176,8 @@ def run_example(base, example_dir, scenario_name, framework=None, solver=None, e
         target.write_text(content, encoding='utf-8')
 
     probe = '' if record_backends is None else BACKEND_PROBE.format(record=record_backends)
-    script = RUNNER.format(config_dir=config.as_posix(), seed=SEED,
-                           scenarios=scenarios, name=scenario_name, probe=probe)
+    script = RUNNER.format(config_dir=config.as_posix(), seed=SEED, scenarios=scenarios,
+                           name=scenario_name, probe=probe, creator_method=creator_method)
     completed = subprocess.run(
         [sys.executable, '-c', script], capture_output=True, text=True,
         encoding='utf-8', errors='replace', timeout=3600,

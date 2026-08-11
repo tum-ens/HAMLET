@@ -196,6 +196,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   to 233 passed / 3 skipped, matching the other platforms
 
 ### Fixed
+- **Both grid-enabled examples run again (#205, #201).** `examples/create_scenario_with_grid` and
+  `examples/create_scenario_with_topology` are the only shipped scenarios that calculate a grid at
+  all — `create_simple_scenario` sets `electricity.active: False` — and neither could be executed.
+
+  **A grid file may carry HAMLET's per-element metadata in either of two places, and only one was
+  being read.** Some files declare `load_type`, `plant_type`, `owner`, `agent_type` and `file` as
+  real columns; others pack them into `description` as `key:value,key:value`. The packed reader was
+  removed outright earlier in this same release (see the entry below) because a network imported
+  from an operator puts prose in `description` — `'2022: 17209 kWh'`, or nothing at all — and parsing
+  it either raised or, worse, invented columns that were then written back into the network. That
+  fixed real networks and broke
+  `create_scenario_with_grid`, whose `electricity.xlsx` is written in the packed convention, with
+  `KeyError: 'load_type'`. Both conventions are now supported: real columns win, `description` is
+  the fallback, and a file in neither convention is rejected with a message naming both.
+
+  **Two mismatches now say what is wrong instead of crashing on a lookup.** An agent with no bus in
+  the topology file raised `KeyError: '<random agent id>'`, and an agent whose plants match no
+  inflexible load in the grid file returned `None` into a tuple unpacking
+  (`TypeError: cannot unpack non-iterable NoneType object`). Both now raise a `ValueError` naming
+  the agent, the file to fix and, for the topology case, the fact that creating a scenario with
+  `new_scenario_from_configs` redraws the agent ids that the topology file refers to by name.
+  Skipping the unmatched element was rejected as the alternative: it would leave the agent out of
+  the network and solve the power flow for a feeder missing one of its participants.
+
+  **Both examples now specify `framework: poi` and `solver: highs`**, like `create_simple_scenario`
+  since !201, so neither needs a Gurobi licence. `tests/e2e/test_grid_examples.py` runs both end to
+  end and asserts that the power flow actually ran and that every load and sgen belongs to an
+  agent; `tests/integration/executor/test_grid_registration.py` covers both grid-file conventions
+  and both mismatches in about a second. Before this, `GridDB.register_grid` had no test at all
 - **Fixed results depending on how busy the machine was (#204).** Three defects compounded into
   one: nothing pinned the solver's thread count, the configured `time_limit` was divided by 60 on
   its way to the solver, and `TerminationStatusCode.TIME_LIMIT` was accepted as success alongside
@@ -242,10 +271,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   **A parse that had succeeded would have been worse than the crash**, because the invented columns
   are joined on and written straight back into `self.grid.load`. So the call is removed rather than
   guarded — which is what `paper/elsevier-2026-complexity` does at this exact line, commented out,
-  so the published runs never parsed descriptions either. Nothing downstream consumes a
-  description-derived column. Covered by
+  so the published runs never parsed descriptions either. Covered by
   `tests/unit/executor/utilities/database/test_grid_element_dataframe.py`, which builds a real
   pandapower network carrying each of the description shapes above
+
+  > **Corrected while fixing #205, in this same release.** Two statements above are too strong.
+  > *Nothing in HAMLET writes `description`* is true of HAMLET's code but not of its data:
+  > `examples/create_scenario_with_grid`'s `electricity.xlsx` is authored entirely in the packed
+  > convention. And *nothing downstream consumes a description-derived column* — which this entry
+  > originally asserted, and which is what made removing the call look free — is false for that
+  > file, where `load_type`, `owner`, `agent_type` and `file` are all description-derived and all
+  > consumed by `_create_grid_from_file`. Removing the call therefore made that example
+  > unreadable. The reader is now a typed fallback rather than absent or unconditional; see the
+  > #205 entry above
 - **Fixed `framework: poi` crashing the interpreter on Windows with an access violation (#202).**
   The shipped example segfaulted at the first timestep and the suite died at a location that moved
   between runs. Neither dependency was at fault on its own, and the cause was not in HAMLET:

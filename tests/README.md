@@ -12,9 +12,14 @@ tests/
   integration/   several components wired together, or code that touches the filesystem
     analyzer/                  creator/            executor/
     creator/format/            committed scenario-format references, one per version
-  e2e/           the shipped example, Creator -> Executor -> Analyzer
+  e2e/           a shipped example, Creator -> Executor -> Analyzer
     golden/                    committed reference numbers
 ```
+
+Three of the four shipped examples are exercised. `create_simple_scenario` carries the golden
+master and the backend comparisons; the two grid-enabled ones are run by `e2e/test_grid_examples.py`,
+which is the only place a power flow is solved end to end — `create_simple_scenario` sets
+`electricity.active: False` and calculates no grid at all (#205).
 
 `unit/` and `integration/` mirror `hamlet/`, so the test for
 `hamlet/executor/markets/electricity.py` lives at `tests/unit/executor/markets/`. Reading or

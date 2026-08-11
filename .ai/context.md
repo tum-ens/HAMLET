@@ -222,10 +222,29 @@ control (variable grid fees) is applied outside the solver in `agent_base.py`, s
 backend-agnostic and both MPC backends pick it up. Nothing in `tests/` executes `EnWG14a`, and no
 shipped example enables the mechanism: the two scenarios that set `restrictions.apply:
 ['enwg_14a']` have `electricity.active: False`, and the two with a live grid have an empty
-restriction list. An end-to-end test needs a new fixture — and note that
-`examples/create_scenario_with_grid` currently **cannot run at all**, on `develop` as well: it
-raises `TypeError: cannot unpack non-iterable NoneType` in `grid_db._create_grid_from_file`,
-because `__assign_inflexible_load_for_agent` returns `None` when no load matches.
+restriction list. An end-to-end test needs a new fixture.
+
+**The grid stage itself is covered since #205, and it was not before.** Both grid-enabled examples
+run again and `tests/e2e/test_grid_examples.py` runs them, asserting that a power flow was solved
+and that every load and sgen belongs to an agent. Nothing else here would notice the stage
+breaking: the example the golden master uses calculates no grid at all.
+
+**A grid file states its per-element metadata in one of two conventions, and `register_grid` reads
+both.** Either as real `load_type` / `plant_type` / `owner` / `agent_type` / `file` columns, or
+packed into `description` as `key:value,key:value`. Which one applies is a property of the file:
+`examples/create_scenario_with_grid` ships the packed form, while a network imported from an
+operator has real columns and free-form prose in `description` (#216 records what parsing that
+does). Real columns win, `description` is read only as a fallback, and a file in neither convention
+is rejected by name. Do not make either branch unconditional again — each one breaks the other's
+files, and the repository has now done it in both directions.
+
+**`agents.xlsx` in an example's config folder is an output as well as an input.** Both
+`new_scenario_from_configs` and `new_scenario_from_grids` write it back, with freshly drawn agent
+ids. Running an example from a checkout therefore dirties the working tree, and for
+`create_scenario_with_topology` it *breaks* the example: that scenario's `topology.xlsx` assigns
+agents to buses by id, so only `new_scenario_from_files` preserves the ids those assignments refer
+to. Run examples against a copy of the config tree — `tests/scenario_run.py` does, and takes the
+Creator entry point as an argument for this reason.
 
 **The golden reference is solver-coupled.** Running under a different solver moves the numbers.
 Measured when the example switched Gurobi → HiGHS (commit `f65edf0`): structure unchanged — same
