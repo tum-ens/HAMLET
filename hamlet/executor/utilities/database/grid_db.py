@@ -239,6 +239,33 @@ class ElectricityGridDB(GridDB):
                         agent_id = self.grid.bus.loc[index, column]
                         agents_bus[agent_id] = index
 
+        # Every agent must have been assigned to a bus, and an agent that was not is not something
+        # this method can paper over: it would simply be absent from the network, so the power flow
+        # would be solved for a feeder that is missing one of its participants and would report a
+        # loading that is too low. Reported as a bare `KeyError` on an opaque id in #205.
+        #
+        # The usual cause is that the scenario was created with `new_scenario_from_configs`, which
+        # draws fresh random agent ids, rather than with `new_scenario_from_files`, which takes them
+        # from `agents.xlsx`. The `topology` method is inherently two-pass -- create the scenario,
+        # then write the ids it produced into the topology file -- so the ids in that file are only
+        # meaningful for the scenario they were read off.
+        scenario_agents = {agent_id: agent_type
+                           for region in regions.values()
+                           for agent_type, agents in region.agents.items()
+                           for agent_id in agents}
+        unassigned = [agent_id for agent_id in scenario_agents if agent_id not in agents_bus]
+        if unassigned:
+            topology_file = self.grid_config['generation']['topology']['file']
+            raise ValueError(
+                f"{len(unassigned)} of {len(scenario_agents)} agents are not assigned to a bus in "
+                f"'{topology_file}': {', '.join(sorted(unassigned))}. Every agent of the scenario "
+                f"must appear in one of that file's 'agent' columns on the bus sheet. Note that the "
+                f"ids are those of the scenario that was actually created -- if it was created with "
+                f"`new_scenario_from_configs`, they are freshly drawn and cannot match a topology "
+                f"file written for an earlier scenario; use `new_scenario_from_files` so that the "
+                f"ids come from 'agents.xlsx'."
+            )
+
         # add grid elements according to agent plants
         for region_name, region in regions.items():
             for agent_type, agents in region.agents.items():
@@ -275,25 +302,13 @@ class ElectricityGridDB(GridDB):
             df (pd.DataFrame): grid element dataframe.
             df_plant_types (list): list of plant type names in the dataframe.
         """
-        # `description` is NOT read here, and must not be. It used to be unpacked as
-        # `key:value,key:value` via `functions.add_info_from_col`, on the assumption that HAMLET's
-        # per-element metadata lives in it. It does not: nothing in HAMLET ever writes that column
-        # -- `_create_grid_from_topology` passes `plant_id`, `agent_id`, `agent_type`, `zone` and
-        # `load_type`/`plant_type` as real pandapower columns -- and in a network imported from a
-        # network operator, `description` is free-form human text.
-        #
-        # So the unpacking could only ever fail or invent columns. On the paper's design 6 grid it
-        # does both: 96 of 469 loads and 134 of 263 sgens have no description at all
-        # (`AttributeError: 'NoneType' object has no attribute 'split'`), and of those that do,
-        # most are prose that happens to contain colons -- `'Anlagenart: Photovoltaik \n
-        # Energieart: Sonne \n ...'`, `'2022: 17209 kWh'` -- giving
-        # `ValueError: too many values to unpack (expected 2)`. Anything that had parsed would have
-        # been joined on and written back into `self.grid.load`, so success would have been worse
-        # than the crash.
-        #
-        # This is why `paper/elsevier-2026-complexity` has the line commented out at this exact
-        # spot; the published runs never parsed descriptions. See #216.
+        # Two grid-file conventions exist and both are supported, distinguished by whether
+        # `type_field` is a real column. See `_read_packed_metadata` for why `description` is only
+        # ever read as a fallback, and #205 / #216 for what happened when each was assumed to be
+        # the only one.
         df = getattr(self.grid, element_name).copy()
+        if type_field not in df.columns:
+            df = self._read_packed_metadata(df=df, element_name=element_name, type_field=type_field)
         df = df.loc[df[type_field].isin(self.relevant_plant_type[element_name])]  # remove unnecessary plants from grid
         df[add_columns] = 0  # add additional columns
 
@@ -303,6 +318,58 @@ class ElectricityGridDB(GridDB):
         bus_df.reset_index(inplace=True)
         bus_df = bus_df[['bus', 'zone']]
         df = df.reset_index().merge(bus_df, how="left").set_index('index')
+
+        return df
+
+    def _read_packed_metadata(self, df: pd.DataFrame, element_name: str, type_field: str) -> pd.DataFrame:
+        """
+        Unpack HAMLET's per-element metadata out of the `description` column.
+
+        Only called when `type_field` is absent as a real column, i.e. for grid files written in
+        the packed convention. See the note below for why the distinction is made by the caller
+        rather than here.
+
+        Args:
+            df (pd.DataFrame): the raw pandapower element table.
+            element_name (string): name of grid element (normally load or sgen).
+            type_field (string): the column the caller needs (`load_type` or `plant_type`).
+
+        Returns:
+            df (pd.DataFrame): the element table with the packed keys added as columns.
+        """
+        # A HAMLET grid file may carry its per-element metadata (`load_type`/`plant_type`, `owner`,
+        # `agent_type`, `file`, sizings) in either of two places, and which one is used is a
+        # property of the file, not of HAMLET:
+        #
+        #   real columns  -- what `_create_grid_from_topology` writes, and what the paper's design 6
+        #                    network carries. There `description` is the network operator's prose:
+        #                    96 of 469 loads and 134 of 263 sgens have none at all, and those that
+        #                    do are text that merely contains colons ('2022: 17209 kWh'). Parsing it
+        #                    raised, and anything that had parsed would have been joined back into
+        #                    `self.grid.load` -- so succeeding would have been worse than crashing.
+        #                    That is #216, and it is why the parse is not unconditional.
+        #   packed        -- `key:value,key:value` inside `description`, with no metadata columns at
+        #                    all. `examples/create_scenario_with_grid/.../electricity.xlsx` is
+        #                    written this way, so removing the parse outright made the file method
+        #                    unusable on the one example that exercises it. That is #205.
+        #
+        # Hence: real columns win, `description` is the fallback, and a file that is in neither
+        # convention is rejected here rather than several frames deeper on a missing column.
+        if 'description' in df.columns and df['description'].notna().all():
+            try:
+                df = f.add_info_from_col(df=df, col='description', drop=False)
+            except (AttributeError, ValueError):
+                pass
+
+        if type_field not in df.columns:
+            raise ValueError(
+                f"The {element_name} table of grid file "
+                f"'{self.grid_config['generation'][self.grid_config['generation']['method']]['file']}' "
+                f"carries no '{type_field}' information. A grid file used with `generation.method: "
+                f"file` must provide HAMLET's per-element metadata either as real columns "
+                f"('{type_field}', 'owner', 'agent_type', 'file', ...) or packed into a "
+                f"'description' column as 'key:value,key:value'. Neither was found."
+            )
 
         return df
 
@@ -402,6 +469,21 @@ class ElectricityGridDB(GridDB):
 
                     # finished assigning inflexible load, further inflexible load won't be considered
                     return load_df, inflexible_load_index
+
+        # Falling out of the loop means the grid file and the scenario disagree about this agent.
+        # The caller unpacks the return value, so returning `None` here surfaced as
+        # `TypeError: cannot unpack non-iterable NoneType object` with nothing identifying the
+        # agent -- #201, and the second half of #205. Silently skipping the agent is not the
+        # alternative: its plants would stay unassigned and the power flow would run on a feeder
+        # that is missing them.
+        raise ValueError(
+            f"No inflexible load in the grid file matches agent '{agent.agent_id}' "
+            f"(type '{agent.agent_type}', bus {agent.account[c.K_GENERAL]['bus']}). "
+            f"{len(inflexible_load_for_agent_index)} inflexible load(s) of that type sit at that "
+            f"bus, and none of them owns the plant set the agent declares "
+            f"({dict(plants_df['type'].value_counts())}) with a matching profile file. The grid "
+            f"file and the scenario's agent configuration describe different agents."
+        )
 
     def __assign_plants_for_agent(self, element_df: pd.DataFrame, plants_df: pd.DataFrame, inflexible_load_index: int,
                                   agent, type_field: str):
