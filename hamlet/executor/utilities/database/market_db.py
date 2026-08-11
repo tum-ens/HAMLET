@@ -276,24 +276,33 @@ class MarketDB:
                            .agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum()))
 
     def _rtc_energy_from(self, transactions):
-        """Per (timestep, agent) sums **the way the RTC computes them**, which is not the above.
+        """Per (timestep, agent) sums for the RTC. Same type filter as above; no market filter.
 
-        `RtcBase._get_market_results` applies **no transaction-type filter and no market/name
-        filter** -- it takes this market's whole table, keeps the agent's rows for one timestep,
-        and sums `energy_in - energy_out` across everything it finds. `get_net_energy` filters to
-        `NET_TRANSACTION_TYPES`. The two therefore answer different questions from the same table
-        under the same name, and this method exists to reproduce the RTC's answer *exactly*.
+        `RtcBase._get_market_results` applied **no transaction-type filter** -- it took this
+        market's whole table, kept the agent's rows for one timestep and summed everything it
+        found, so `grid` and `levies` rows, which clone the netted transactions and hold identical
+        energy, were counted as traded energy. `strategies.py` has always excluded them.
 
-        That difference is very likely a defect. `market_transactions` carries `grid` and `levies`
-        rows which clone the netted transactions and hold identical energy, so the RTC counts fee
-        rows as traded energy. But it is what `develop` does today, correcting it moves results,
-        and this change is a performance change whose contract is that nothing moves. Investigating
-        the filter is #206, and it needs a golden-master re-baseline rather than a patch here.
+        **The filter is applied here now, and it is inert.** It was measured before being added,
+        because a change that is meant to move nothing has to be shown to move nothing rather than
+        argued to: instrumenting every call, the filtered and unfiltered sums agreed on **96 of 96
+        calls on the shipped example and 1040 of 1040 on the paper's design 6** -- a scenario whose
+        table does contain 890 `grid` and 890 `levies` rows. The RTC never sees one.
+
+        The mechanism is the ordering. Fees are written when a delivery timestep is *settled*, and
+        within a timestep the executor runs agents before markets, so when the RTC asks about
+        timestep T there is nothing for T but ex-ante trades. The filter is therefore not a fix but
+        a guard: without it, that invariant is unstated, unenforced, and silently load-bearing --
+        move settlement earlier and the RTC starts counting fees with nothing to notice.
+
+        The market/name filter that `_net_energy_from` applies is deliberately *not* copied here.
+        It was not in the code this replaces, and unlike the type filter it has not been measured.
         """
         if transactions is None or transactions.is_empty():
             return pl.DataFrame(schema=self.NET_SCHEMA)
 
         return (transactions
+                .filter(pl.col(c.TC_TYPE_TRANSACTION).is_in(list(self.NET_TRANSACTION_TYPES)))
                 .groupby([c.TC_TIMESTEP, c.TC_ID_AGENT])
                 .agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum())
                 .with_columns([pl.col(c.TC_ENERGY_IN).cast(pl.Int64),

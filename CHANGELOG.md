@@ -62,6 +62,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   build the cache and to answer without one. `tests/unit/executor/utilities/database/`
   `test_net_energy_cache.py` compares the two paths on every case. No results move
 
+  **The real-time controller did the same scan, and it was the larger of the two.**
+  `RtcBase._get_market_results` is now served from the same machinery. Measured end to end on that
+  scenario, 150 timesteps per arm:
+
+  | steps 141–160 | timestep | agent stage | RTC+FBC | trading |
+  |---|---|---|---|---|
+  | before | ~19 s and rising | — | — | — |
+  | after the trading cache only | 14.63 s | 9.62 s | 8.99 s | 0.25 s |
+  | after both | **7.84 s** | 2.99 s | 2.39 s | 0.24 s |
+
+  The baseline reached 21.8 s per timestep by step 218 and was still climbing; with both caches the
+  timestep is roughly flat
+- **The real-time controller no longer counts grid fees and levies as traded energy.** It summed
+  `market_transactions` with no transaction-type filter where the trading strategy has always
+  excluded them. **This changes no results, and that was measured rather than assumed**: filtered
+  and unfiltered sums agree on 96 of 96 calls in the shipped example and 1040 of 1040 in a
+  three-month, 104-agent scenario whose table does hold 890 `grid` and 890 `levies` rows. Fees are
+  written when a delivery timestep is settled, and agents run before markets, so the timestep the
+  controller asks about never has any. The filter makes that independent of ordering instead of
+  silently dependent on it
+
 ### Removed
 - **The multiprocessing path, `hamlet/executor/utilities/tasks_execution/` — it did not work.**
   Six files and 435 lines that handed each agent to a worker process by writing the database to

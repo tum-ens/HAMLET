@@ -213,11 +213,27 @@ class TestWithoutACache:
 
 
 def rtc_uncached(db, agent, timestep):
-    """The RTC's original expression, verbatim, as the oracle for the cached version.
+    """The oracle for the cache: the RTC's query written out, with no cache involved.
 
-    Deliberately a copy of what `rtc_base._get_market_results` used to run rather than a call into
-    `MarketDB`, so that this compares the cache against the *replaced code* and not against
-    itself.
+    Spelled here rather than called through `MarketDB` so that the cache is compared against an
+    independent expression instead of against itself.
+    """
+    frame = db.market_transactions
+    frame = frame.filter(pl.col(c.TC_ID_AGENT) == agent)
+    frame = frame.filter(pl.col(c.TC_TIMESTEP) == timestep)
+    frame = frame.filter(pl.col(c.TC_TYPE_TRANSACTION).is_in(list(MarketDB.NET_TRANSACTION_TYPES)))
+    frame = frame.fill_null(0)
+    if frame.is_empty():
+        return 0
+    return frame.select(pl.sum(c.TC_ENERGY_IN).cast(pl.Int64)
+                        - pl.sum(c.TC_ENERGY_OUT).cast(pl.Int64)).to_series().to_list()[0]
+
+
+def rtc_unfiltered(db, agent, timestep):
+    """What the RTC computed *before* the type filter was added.
+
+    Kept so the one behavioural change in this area is visible as a test rather than only as a
+    commit message: this is the expression that summed `grid` and `levies` rows as traded energy.
     """
     frame = db.market_transactions
     frame = frame.filter(pl.col(c.TC_ID_AGENT) == agent)
@@ -228,7 +244,7 @@ def rtc_uncached(db, agent, timestep):
 
 
 class TestTheRtcResultMatchesTheCodeItReplaced:
-    """The RTC's own definition, which is not the trading strategy's. See #206."""
+    """The RTC's definition, which now shares the trading strategy's type filter."""
 
     def test_a_simple_case(self, market):
         feed(market, [transactions([(1, 'a', c.TT_MARKET, 300, 100)])])
@@ -269,19 +285,31 @@ class TestTheRtcResultMatchesTheCodeItReplaced:
         assert market.get_rtc_market_result('a', at) == 0
         assert market.get_rtc_market_result('a', at) == rtc_uncached(market, 'a', at)
 
-    def test_fee_rows_are_counted_here_and_not_by_the_trading_strategy(self, market):
-        """The discrepancy itself, pinned. Both halves are current behaviour.
+    def test_fee_rows_are_excluded_here_as_they_are_everywhere_else(self, market):
+        """The one behavioural change: the RTC no longer counts the fee clones.
 
-        If #206 concludes the RTC should filter, this test is the one that has to change, and it
-        will change together with the golden reference. Until then it stops the two definitions
-        being quietly unified in either direction.
+        `grid` and `levies` rows carry the same energy as the transaction they are levied on, so
+        summing all three trebles it. This is the case that *would* have been wrong; it does not
+        arise in any run measured, because the RTC only ever asks about a timestep that has not
+        been settled yet -- 96/96 calls on the shipped example and 1040/1040 on design 6 saw
+        `retail` rows only. The filter makes that independent of ordering rather than reliant on it.
         """
         feed(market, [transactions([(1, 'a', c.TT_MARKET, 1000, 0),
                                     (1, 'a', c.TT_GRID, 1000, 0),
                                     (1, 'a', c.TT_LEVIES, 1000, 0)])])
         at = START + datetime.timedelta(hours=1)
 
-        assert market.get_rtc_market_result('a', at) == 3000, 'the RTC counts the fee clones'
-        assert market.get_rtc_market_result('a', at) == rtc_uncached(market, 'a', at)
+        assert market.get_rtc_market_result('a', at) == 1000
+        assert rtc_unfiltered(market, 'a', at) == 3000, \
+            'the old expression trebled it, which is what the filter removes'
         assert market.get_net_energy('a', at, at).rows() == [(at, 1000, 0)], \
-            'the trading strategy does not'
+            'and it now agrees with the trading strategy'
+
+    def test_it_is_unchanged_when_there_are_no_fee_rows(self, market):
+        """Which is every case that occurs. Same answer as the code it replaces, exactly."""
+        feed(market, [transactions([(step, 'a', c.TT_RETAIL, 10 * step, 4 * step)])
+                      for step in range(1, 13)])
+
+        for step in range(1, 13):
+            at = START + datetime.timedelta(hours=step)
+            assert market.get_rtc_market_result('a', at) == rtc_unfiltered(market, 'a', at), step
