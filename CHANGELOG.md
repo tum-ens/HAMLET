@@ -46,6 +46,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   PyOptInterface against **191.76 ms** for linopy, and the split shows why — linopy spends 138.89
   ms building a model that HiGHS then solves in 52.86 ms
 
+### Changed
+- **Agents no longer scan the whole market-transaction table to find what they already traded.**
+  `strategies.py` filtered and grouped `market_transactions` on every agent on every timestep;
+  `MarketDB.get_net_energy` answers the same question from a running per (timestep, agent) sum.
+  Measured on a 104-agent, three-month scenario with a live grid, the agent stage grew from 3.7 s
+  to 12.1 s per timestep over 120 steps while every other stage stayed flat — the deepcopy that
+  ROADMAP §6.1a names as the main mechanism was 0.6 % of a timestep throughout.
+
+  **The type filter is the reason this is not a two-line change.** `market_transactions` also
+  carries `grid` and `levies` rows that clone the netted energy, so summing without filtering to
+  `retail | market | balancing` roughly triple-counts traded energy for any agent paying fees. A
+  version of this cache without that filter was refused during the paper-fix port for exactly this
+  reason; `MarketDB.NET_TRANSACTION_TYPES` is now the single place the filter lives, used both to
+  build the cache and to answer without one. `tests/unit/executor/utilities/database/`
+  `test_net_energy_cache.py` compares the two paths on every case. No results move
+
 ### Removed
 - **The multiprocessing path, `hamlet/executor/utilities/tasks_execution/` — it did not work.**
   Six files and 435 lines that handed each agent to a worker process by writing the database to

@@ -18,6 +18,20 @@ class MarketDB:
     """Database contains all the information for markets.
     Should only be connected with Database class, no connection with main Executor."""
 
+    #: Transaction types that count towards an agent's net traded energy. `market_transactions`
+    #: also carries `grid` and `levies` rows, and those are *clones* of the netted transactions
+    #: carrying identical energy -- measured on the shipped example: retail 926 rows / 320,525 Wh
+    #: in, grid 87 / 24,298, levies 87 / 24,298. Summing without this filter roughly triple-counts
+    #: traded energy for any agent subject to fees, which is why the paper branch's `_net_cache`
+    #: was not ported as it stood. See ROADMAP item #2.
+    NET_TRANSACTION_TYPES = (c.TT_RETAIL, c.TT_MARKET, c.TT_BALANCING)
+
+    #: Columns of the net-energy cache, and of what `get_net_energy` returns.
+    NET_SCHEMA = {c.TC_TIMESTEP: c.TS_MARKET_TRANSACTIONS[c.TC_TIMESTEP],
+                  c.TC_ID_AGENT: c.TS_MARKET_TRANSACTIONS[c.TC_ID_AGENT],
+                  c.TC_ENERGY_IN: pl.Int64,
+                  c.TC_ENERGY_OUT: pl.Int64}
+
     def __init__(self, market_type, name, market_path, retailer_path):
         self.market_type = market_type
         self.market_name = name
@@ -32,6 +46,9 @@ class MarketDB:
         self.offers_uncleared = pl.DataFrame()
         self.positions_matched = pl.DataFrame()
         self.retailer = pl.DataFrame()
+
+        # Running per (timestep, agent) sum of netted energy. See `get_net_energy`.
+        self._net_cache = pl.DataFrame(schema=self.NET_SCHEMA)
 
         # Tuples of (file name, file schema)
         self.files = [(f'{c.TN_MARKET_TRANSACTIONS}.ft', c.TS_MARKET_TRANSACTIONS),
@@ -113,6 +130,16 @@ class MarketDB:
         horizon_range = self.market_config['clearing']['timing']['horizon'][1]
         start_horizon_ts = timestamp - datetime.timedelta(seconds=horizon_range)
 
+        # The net-energy cache follows the tables out of the horizon. Entries for dropped
+        # timesteps are already unreachable -- `get_net_energy` is only ever asked about the
+        # trading horizon, which is ahead of `start_horizon_ts` -- so this is about keeping the
+        # cache bounded rather than correct. Without it the cache would carry one row per
+        # (timestep, agent) for the whole run.
+        cache = self.net_cache
+        if cache is not None and not cache.is_empty():
+            self._net_cache = cache.filter(
+                (pl.col(c.TC_TIMESTEP) >= start_horizon_ts).fill_null(True))
+
         for file_name, schema in self.files:
             attr_name, extension = file_name.rsplit('.', 1)
             df = getattr(self, attr_name)
@@ -168,8 +195,82 @@ class MarketDB:
             if delete_dir and os.path.isdir(path):
                 shutil.rmtree(path)
 
-    def set_market_transactions(self, data):
+    def set_market_transactions(self, data, new_rows=None):
+        """Replace the transactions table, folding `new_rows` into the net-energy cache.
+
+        `new_rows` is the *addition* rather than the whole table. Passing it keeps the cache
+        incremental; omitting it drops the cache, so a caller that replaces the table wholesale
+        cannot leave a stale one behind. Correctness never depends on which happens --
+        `get_net_energy` recomputes when there is no cache.
+        """
         self.market_transactions = data
+        if new_rows is None:
+            self._net_cache = None
+        else:
+            self._fold_into_net_cache(new_rows)
+
+    @property
+    def net_cache(self):
+        """The net-energy cache, or None when there is not one.
+
+        Read through this rather than the attribute. A `MarketDB` can legitimately exist without
+        having run `__init__` -- `tests/integration/executor/test_market_db.py` builds them that
+        way, deliberately, to test the file handling without a folder behind it -- and a cache
+        that is merely absent must behave exactly like a cache that was dropped. The whole design
+        rests on the cache never being a second source of truth.
+        """
+        return getattr(self, '_net_cache', None)
+
+    def _fold_into_net_cache(self, new_rows):
+        """Add `new_rows`' netted energy to the running per (timestep, agent) sums."""
+        cache = self.net_cache
+        if cache is None:
+            return
+        folded = self._net_energy_from(new_rows)
+        if folded.is_empty():
+            return
+        self._net_cache = (pl.concat([cache, folded], how='vertical')
+                           .groupby([c.TC_TIMESTEP, c.TC_ID_AGENT])
+                           .agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum()))
+
+    def _net_energy_from(self, transactions):
+        """Net energy per (timestep, agent) for this market, out of `transactions`.
+
+        This is the single definition of "netted energy", used both to build the cache and to
+        answer a query when there is none. `NET_TRANSACTION_TYPES` is applied here and nowhere
+        else, so the cached and uncached answers cannot diverge by drifting filters.
+        """
+        if transactions is None or transactions.is_empty():
+            return pl.DataFrame(schema=self.NET_SCHEMA)
+
+        return (transactions
+                .filter((pl.col(c.TC_MARKET) == self.market_type)
+                        & (pl.col(c.TC_NAME) == self.market_name)
+                        & pl.col(c.TC_TYPE_TRANSACTION).is_in(list(self.NET_TRANSACTION_TYPES)))
+                .groupby([c.TC_TIMESTEP, c.TC_ID_AGENT])
+                .agg(pl.col(c.TC_ENERGY_IN, c.TC_ENERGY_OUT).sum())
+                .with_columns([pl.col(c.TC_ENERGY_IN).cast(pl.Int64),
+                               pl.col(c.TC_ENERGY_OUT).cast(pl.Int64)]))
+
+    def get_net_energy(self, agent_id, first_timestep, last_timestep):
+        """One agent's netted energy per timestep, over the closed window given.
+
+        Replaces a scan of the whole `market_transactions` table, which every agent did on every
+        timestep. That table is horizon-bounded but still large -- measured on a 104-agent design
+        it reaches ~10 MB within 70 timesteps -- so the scan is O(table) per agent per timestep,
+        and the agent stage grew 3.7 s to 10.4 s over 80 steps because of it.
+
+        Falls back to computing from the full table when there is no cache, which is what makes
+        the cache an optimisation rather than a second source of truth.
+        """
+        cache = self.net_cache
+        source = cache if cache is not None else self._net_energy_from(self.market_transactions)
+
+        return (source
+                .filter((pl.col(c.TC_ID_AGENT) == agent_id)
+                        & (pl.col(c.TC_TIMESTEP) >= first_timestep)
+                        & (pl.col(c.TC_TIMESTEP) <= last_timestep))
+                .select([c.TC_TIMESTEP, c.TC_ENERGY_IN, c.TC_ENERGY_OUT]))
 
     def set_bids_cleared(self, data):
         self.bids_cleared = data
