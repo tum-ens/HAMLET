@@ -1,7 +1,9 @@
 """End-to-end — the shipped example, Creator to Executor to Analyzer.
 
-This is the test the README names as the installation check, and the only one that exercises
-the real file layout, the forecaster, the market clearing and the grid stage together. It takes
+This is the test the README names as the installation check, and the one that exercises the
+real file layout, the forecaster and the market clearing together. It does *not* cover the grid
+stage: this example sets `electricity.active: False` and calculates no grid at all, which is what
+`tests/e2e/test_grid_examples.py` is for. It takes
 a few minutes, so it is marked `e2e` and deselected by default:
 
     python -m pytest tests -m e2e
