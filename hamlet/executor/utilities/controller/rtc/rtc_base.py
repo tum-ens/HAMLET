@@ -223,10 +223,17 @@ class RtcBase(ControllerBase):
         over 140 steps while every other phase stayed flat. `MarketDB.get_rtc_market_result`
         answers the same question from a running sum instead.
 
-        **It keeps this method's definition, which is not the trading strategy's.** There is no
-        transaction-type filter, so `grid` and `levies` rows are summed here as though they were
-        traded energy, where `strategies.py` excludes them. That is preserved deliberately: this
-        change must not move results. Whether the omission is correct is #206.
+        **It counts the same transaction types as the trading strategy** -- `retail`, `market` and
+        `balancing`, named once in `MarketDB.NET_TRANSACTION_TYPES`. It used not to: `grid` and
+        `levies` rows, which clone the netted transactions and carry identical energy, were summed
+        here as though they were traded energy.
+
+        Adding the filter moved nothing, and that was measured rather than assumed: filtered and
+        unfiltered sums agree on 96 of 96 calls on the shipped example and 1040 of 1040 on the
+        paper's design 6, a scenario whose table does hold 890 `grid` and 890 `levies` rows. Fees
+        are written when a delivery timestep is *settled*, and the executor runs agents before
+        markets, so the timestep this asks about holds only ex-ante trades. The filter makes that
+        independent of ordering rather than silently dependent on it.
         """
         self.market_results = {}
         for market_type, market in self.market.items():
