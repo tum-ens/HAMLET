@@ -45,7 +45,7 @@ moment the physics does.
 
 **Adding a scenario.** Append a `GoldenScenario` to `SCENARIOS` and create its reference with
 `HAMLET_UPDATE_GOLDEN=1`. Each scenario carries its own reference file, named after it, and is run
-once per session however many assertions read it. A scenario earns its place by reaching code the
+once for the whole module, however many assertions read it. A scenario earns its place by reaching code the
 others do not -- `simple_scenario` sets `electricity.active: False`, so nothing pinned here
 executes the grid stage.
 """
