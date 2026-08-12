@@ -211,12 +211,8 @@ class Linopy(MpcBase):
         balance. That has to be visible: an agent that shed 3 kW must not look identical to one
         that served it.
 
-        Reported through `logging`. That was originally forced -- the executor installed a
-        blanket `warnings.filterwarnings("ignore")` at import, so anything raised through the
-        `warnings` machinery here reached nobody (#199). The blanket filter is gone, and
-        `logging` is kept on its own merits: the `warnings` machinery deduplicates by source
-        line, so it would report the first agent that shed and stay silent for every one after
-        it, which is precisely the wrong shape for a per-agent, per-timestep report.
+        Reported through `logging`, not `warnings`, which deduplicates by source line and would
+        report only the first agent that shed. Pinned by `tests/.../test_slack_wiring.py`.
         """
 
         for name, variable in self.model.variables.items():
@@ -237,15 +233,17 @@ class Linopy(MpcBase):
         solver = self.ems.get('solver')
         match solver:
             case 'gurobi' | 'highs':
-                # linopy prints around the solve regardless of what the solver is told, so the
-                # redirect stays -- but as a context manager. The previous form assigned
-                # `sys.stdout` and restored it afterwards, which leaked a file object per solve,
-                # never restored it if the solve raised, and restored it to `sys.__stdout__`
-                # rather than to whatever the caller had installed (pytest's capture, for one).
-                #
-                # The solver's own flags are now looked up per solver. Sending Gurobi's
-                # `OutputFlag`/`LogToConsole` to HiGHS was a no-op -- the same defect as #204's
-                # `TimeLimit` -- so before #199 the redirect was the only thing working here.
+                # The flags are what silence the solver; the redirect is a cheap guard, not the
+                # mechanism. Measured per solve on a real MPC model, stdout lines under
+                # highs: 52 with the old Gurobi-named options (two of them
+                # `ERROR: getOptionIndex: Option "OutputFlag" is unknown`), 1 with these -- the
+                # HiGHS banner, emitted from C before options apply. **The old
+                # `sys.stdout = open(os.devnull, 'w')` never suppressed any of it**, because
+                # HiGHS writes to file descriptor 1 and that only rebinds a Python attribute;
+                # only an fd-level redirect can, as `tests/backend_matrix._silenced` does.
+                # `redirect_stdout` is kept because it is exception-safe where the assignment was
+                # not: that leaked a handle per solve, never restored on a raise, and restored to
+                # `sys.__stdout__` rather than the caller's stdout. It captures 0 bytes today.
                 solver_options = quiet_options(solver)
                 solver_options.update(reproducibility_options(solver, self.ems.get('time_limit')))
                 with redirect_stdout(io.StringIO()):

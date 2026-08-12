@@ -6,6 +6,9 @@ __email__ = "markus.doepfert@tum.de"
 
 import os
 import time
+# Still used by `__wait_for_ts`. The blanket filter this module used to install made that
+# `warnings.warn` a guaranteed no-op; removing the filter is what makes it a real warning.
+import warnings
 
 import polars as pl
 from tqdm import tqdm

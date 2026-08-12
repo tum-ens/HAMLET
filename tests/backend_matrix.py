@@ -67,10 +67,10 @@ def _silenced():
     to add a quiet mode. Without this, every `pytest` run would open with a Gurobi banner, because
     the report header probes.
 
-    Restored in a `finally`, which is the part worth being deliberate about: the two linopy
-    controllers still do `sys.stdout = open(os.devnull, 'w')` around their solve
-    (`optim_linopy.py:241`, `mpc_linopy.py:234`), which leaks a file object per solve and never
-    restores it if the solve raises. That is roadmap item #11; do not copy the pattern here.
+    Restored in a `finally`. The controllers reached the same conclusion in #199 and now use
+    `contextlib.redirect_stdout`; note that theirs is a Python-level redirect and this is an
+    fd-level one, which is why both exist -- a Python redirect cannot stop either solver's C
+    output, and the flags in `solver_options.quiet_options` are what actually do that.
     """
     sys.stdout.flush()
     with tempfile.TemporaryFile() as sink:

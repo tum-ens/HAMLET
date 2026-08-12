@@ -283,12 +283,8 @@ class POI(OptimBase):
         The shed energy is never written to the setpoints, so without this an agent that shed
         3 kW is indistinguishable in the results from one that served it.
 
-        Reported through `logging`. That was originally forced -- the executor installed a
-        blanket `warnings.filterwarnings("ignore")` at import, so anything raised through the
-        `warnings` machinery here reached nobody (#199). The blanket filter is gone, and
-        `logging` is kept on its own merits: the `warnings` machinery deduplicates by source
-        line, so it would report the first agent that shed and stay silent for every one after
-        it, which is precisely the wrong shape for a per-agent, per-timestep report.
+        Reported through `logging`, not `warnings`, which deduplicates by source line and would
+        report only the first agent that shed. Pinned by `tests/.../test_slack_wiring.py`.
         """
 
         for name, variables in self.variables.items():

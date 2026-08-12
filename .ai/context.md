@@ -313,11 +313,16 @@ pinned because it *can* vary, not because it was shown to have.
 **Every solver option is looked up per solver, and writing one out inline is the bug.** The same
 module answers `quiet_options(solver)` — `output_flag`/`log_to_console` for HiGHS,
 `OutputFlag`/`LogToConsole` for Gurobi, each in the type that solver's API demands. The linopy
-controllers used to send the Gurobi pair to both, so under the default backend the flags did
-nothing and only the stdout redirect was keeping the console clean; `poi_solver.create_model`
-reads the same table, so the two backends cannot drift apart again. A solver silently ignores an
-option it does not recognise and returns nothing to say so, which is why the spelling is pinned by
-a test rather than discovered by running (#199).
+controllers used to send the Gurobi pair to both, so under HiGHS the flags did nothing;
+`poi_solver.create_model` reads the same table, so the two backends cannot drift apart again.
+
+**And the stdout hijack was not covering for them.** HiGHS logs from C to file descriptor 1;
+`sys.stdout = open(os.devnull, 'w')` rebinds a Python attribute and never touched it. Measured
+per solve under `framework: linopy` + `solver: highs`: **52 stdout lines before, 1 after** — two
+of the 52 being `ERROR: getOptionIndex: Option "OutputFlag" is unknown`, which linopy discards
+the status of. So the solver was complaining, on every solve, into a stream nobody was reading.
+Only an fd-level redirect catches C output; `tests/backend_matrix._silenced` is the one place
+that does it. The spelling is pinned by a test rather than discovered by running (#199).
 
 ## Warnings
 
@@ -332,15 +337,12 @@ by raising warnings in a subprocess after importing the package, not by grepping
 Suppression that is still wanted is **enumerated** in `hamlet/warning_policy.py`: each entry names
 a category, a message pattern and the reason, and `quiet_known_noise()` installs exactly that list
 around a Creator or Executor run. `tests/conftest.py` registers the same list with pytest, so the
-suite and the runtime agree by construction rather than by two people remembering.
+suite and the runtime agree by construction rather than by two people remembering. That module
+records what the blanket filter was hiding, measured, and why enumerating beat deleting.
 
-Everything on that list today is HAMLET calling deprecated polars 0.20 APIs — backlog item #12.
-Measured: with the filters lifted, the shipped example raises 4,688 warnings and `grid_golden`
-7,805, **all of them from HAMLET's own code**; a bare removal prints 491 lines per 30-timestep
-run, or ~140,000 over a year. With the enumerated policy it prints 95, and 94 of those are two
-real §14a defects the blanket filter had been hiding (#210, #211). **Do not add a category to
-`SUPPRESSED` to quieten a run** — if a warning is worth hiding it is worth an issue, and the two
-above are what the enumeration exists to expose.
+**Do not add a category to `SUPPRESSED` to quieten a run.** If a warning is worth hiding it is
+worth an issue: lifting the filter is what surfaced #210 and #211, two live §14a defects that had
+been invisible for as long as the filter existed.
 
 ## Branches and propagation
 

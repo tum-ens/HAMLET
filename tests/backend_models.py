@@ -28,16 +28,18 @@ about the configured MIP gap rather than about floating point.
 """
 from collections import namedtuple
 
+from hamlet.executor.utilities.controller.solver_options import (KNOWN_SOLVERS,
+                                                                 quiet_options)
+
 # A solved model, with the framework and solver read back off the model rather than echoed from
 # the request. See `identify`.
 Solved = namedtuple('Solved', 'objective framework solver')
 
-# Per-solver log silencing for the linopy path. Named per solver on purpose: HAMLET's own linopy
-# controllers pass Gurobi's `OutputFlag`/`LogToConsole` whatever the solver, and HiGHS answers
-# `getOptionIndex: Option "OutputFlag" is unknown` and solves anyway. Harmless there, noisy here.
-# Correcting it in the production path is roadmap item #11.
-LINOPY_SILENCE = {'highs': {'output_flag': False, 'log_to_console': False},
-                  'gurobi': {'OutputFlag': 0, 'LogToConsole': 0}}
+# Per-solver log silencing for the linopy path, taken from the production table rather than
+# spelled out again. This file used to carry its own copy, with a note that the controllers sent
+# Gurobi's names to both solvers and that fixing that was roadmap item #11. It is fixed (#199),
+# and a second copy is exactly the drift that caused it.
+LINOPY_SILENCE = {solver: quiet_options(solver) for solver in KNOWN_SOLVERS}
 
 # ---------------------------------------------------------------------------------------------
 # MPC-shaped model

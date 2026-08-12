@@ -80,28 +80,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   (`FutureWarning`, all modules) sat in `hamlet/creator/agents/agents.py`, and `pytest.ini`
   carried a third (`ignore::DeprecationWarning`) for the suite. All three are gone.
 
-  What they were hiding was **measured, not guessed**: both shipped scenarios were run end to end
-  with the filters lifted after import and every warning recorded. `create_simple_scenario`
-  (24 steps) raised 4,688 warnings from 30 locations; `grid_golden` (30 steps) raised 7,805 from
-  36. **Every one originated in HAMLET's own code** — none was a dependency warning about itself
-  — and the volume is HAMLET calling polars 0.20 APIs that polars 0.20 already deprecates
-  (`groupby`, `cumsum`, `apply`, `how='outer'`, the `axis` parameter, the left-join coalesce
-  default, and `map_elements` without `return_dtype`).
-
-  The blanket filter could not simply be deleted, and that was measured too. Python ignores
-  `DeprecationWarning` outside `__main__` by default, so the raised count overstates what a user
-  sees — but a bare removal still prints **491 lines for a 30-timestep run**, 360 of them polars'
-  `MapWithoutReturnDtypeWarning`, whose origin Python records as `sys:1` so it never
-  deduplicates. That is roughly 16 lines per timestep, or ~140,000 over a simulated year.
-
-  So the suppression is now *enumerated* instead of blanket. `hamlet/warning_policy.py` lists
-  each hidden message with its category, its reason and the backlog item tracking its removal
-  (#12, the Polars 1.x migration), and `quiet_known_noise()` installs exactly that list around a
-  Creator or Executor run and removes it again afterwards — including when the run raises.
-  Nothing runs at import. `tests/conftest.py` registers the same list with pytest, so the suite
-  and the runtime cannot disagree about what counts as noise. Anything not on the list now
-  reaches the user: a new deprecation, a `UserWarning` from pandas, a `warnings.warn` added to
-  HAMLET tomorrow. Closes #199 and the warnings half of roadmap item #11
+  Suppression that is still wanted is now *enumerated* rather than blanket:
+  `hamlet/warning_policy.py` lists each hidden message with its category and reason, and
+  `quiet_known_noise()` installs exactly that list around a Creator or Executor run and removes
+  it again afterwards, including when the run raises. Nothing runs at import.
+  `tests/conftest.py` registers the same list with pytest so the suite and the runtime cannot
+  disagree. Everything on the list is HAMLET calling deprecated polars 0.20 APIs
+  (ROADMAP item #12); what it hid, what a bare removal would have cost, and why it is enumerated
+  rather than deleted are recorded in that module. Anything *not* on the list now reaches the
+  user — including two live §14a defects that had been invisible for years, now #210 and #211.
+  Closes #199 and the warnings half of ROADMAP item #11
 
 - **Solver output options are looked up per solver instead of written out inline.**
   `mpc_linopy.py` and `optim_linopy.py` sent the literal `{'OutputFlag': 0, 'LogToConsole': 0}`

@@ -21,6 +21,8 @@ import re
 import subprocess
 import sys
 import warnings
+from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 from polars.exceptions import MapWithoutReturnDtypeWarning
@@ -56,8 +58,8 @@ RECORDED = (
 #: interpreter and pytest has already installed filters of its own in this one.
 #:
 #: Stated behaviourally rather than as "the filter list is unchanged". Importing HAMLET pulls in
-#: numpy, scipy, urllib3, ruamel, deepdiff and requests, and between them those add 13 filters at
-#: import -- every one of them naming a specific category or message. There is nothing in a
+#: numpy, scipy, urllib3, ruamel, deepdiff and requests, and between them those add a dozen or so
+#: filters at import -- every one naming a specific category or message. There is nothing in a
 #: filter tuple that says who installed it, so "nothing was added" is not a property HAMLET can
 #: have. "Nothing HAMLET added swallows an ordinary warning" is, and it is the property #199 is
 #: actually about.
@@ -256,26 +258,95 @@ class TestTheListIsNotStale:
 
 
 class TestTheEntryPointsUseIt:
-    """The policy is only worth anything where it is applied."""
+    """The policy is only worth anything where it is applied.
 
-    def test_the_creator_entry_points_are_wrapped(self):
-        """All three, not just the sink they share: which one a user calls is their choice."""
+    Everything here is behavioural. An earlier version asserted `'quiet_known_noise()' in
+    inspect.getsource(Executor.run)`, and a review panel defeated it by deleting the `with` block
+    and leaving a comment mentioning the name -- the source-text check passed with the policy
+    entirely absent. Source-text assertions are satisfiable by comments; this repo has been bitten
+    by that before.
+    """
+
+    def test_quiet_actually_suppresses(self):
+        """What `@quiet` is *for*, as opposed to the fact that it is a decorator.
+
+        A panel gutted `quiet` to a bare `functools.wraps` pass-through and every test in this
+        class stayed green, because they all checked decorator metadata. This one goes red.
+        """
+        category, message = RECORDED[0]
+
+        @quiet
+        def noisy():
+            warnings.warn(message, category)
+            warnings.warn('not on the list', UserWarning)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            noisy()
+
+        assert [record.category for record in caught] == [UserWarning], (
+            '`@quiet` did not apply the policy: expected the listed message hidden and the '
+            f'unlisted one through, got {[record.category.__name__ for record in caught]}')
+
+    def test_the_creator_entry_points_use_this_decorator(self):
+        """All three, not just the sink they share: which one a user calls is their choice.
+
+        Identified by where the wrapper's code was compiled, not by `__wrapped__` being set --
+        `functools.wraps` copies `__module__` and `__qualname__` off the wrapped function, so a
+        locally defined, unrelated `@wraps` decorator is indistinguishable from this one by every
+        attribute except this. A panel substituted exactly that and the old check passed.
+        """
         from hamlet.creator.setup import Creator
 
         for name in ('new_scenario_from_configs', 'new_scenario_from_grids',
                      'new_scenario_from_files'):
             method = getattr(Creator, name)
             assert getattr(method, '__wrapped__', None) is not None, (
-                f'Creator.{name} is not wrapped in the warning policy, so a scenario created '
-                f'through it prints the polars deprecation noise')
+                f'Creator.{name} is not wrapped at all, so a scenario created through it prints '
+                f'the polars deprecation noise')
+            assert Path(method.__code__.co_filename).name == 'warning_policy.py', (
+                f'Creator.{name} is wrapped by a decorator defined in '
+                f'{method.__code__.co_filename}, not by `warning_policy.quiet`')
 
-    def test_the_executor_run_is_wrapped(self):
-        """Read from the source: `Executor.run` is not decorated, it uses the block form."""
-        import inspect
+    def test_the_executor_enters_the_policy_around_every_stage(self, monkeypatch):
+        """`Executor.run` uses the block form, so there is no decorator to inspect.
 
-        from hamlet.executor.setup import Executor
+        Driven rather than read: a recording context manager replaces `quiet_known_noise` and the
+        three stages are stubbed, so the assertion is about the order things actually happened in
+        -- the policy is entered before `setup` and left after `cleanup`, not wrapped around one
+        stage or dropped entirely.
+        """
+        from hamlet.executor import setup as executor_setup
 
-        assert 'quiet_known_noise()' in inspect.getsource(Executor.run)
+        events = []
+
+        @contextmanager
+        def recording():
+            events.append('enter')
+            try:
+                yield
+            finally:
+                events.append('exit')
+
+        monkeypatch.setattr(executor_setup, 'quiet_known_noise', recording)
+
+        class Probe(executor_setup.Executor):
+            def __init__(self):  # noqa: D107 -- deliberately skips the real constructor
+                pass
+
+            def setup(self):
+                events.append('setup')
+
+            def execute(self):
+                events.append('execute')
+
+            def cleanup(self):
+                events.append('cleanup')
+
+        Probe().run()
+
+        assert events == ['enter', 'setup', 'execute', 'cleanup', 'exit'], (
+            f'the executor did not run its stages inside the warning policy: {events}')
 
     def test_the_suite_registers_the_same_list(self, pytestconfig):
         """`pytest.ini` used to say `ignore::DeprecationWarning`, which is the same blanket
@@ -296,6 +367,15 @@ class TestTheEntryPointsUseIt:
             assert expected in registered, (
                 f'SUPPRESSED entry ({reason}) is not registered with pytest, so the suite and '
                 f'the runtime disagree about what is noise')
+
+        # Registered is not the same claim as applied: the ini value is text that pytest has to
+        # compile and install per test item. Checked here from inside one, so a pytest change
+        # that stopped honouring `addinivalue_line` would fail rather than pass on the string.
+        live = {(entry[0], entry[2]) for entry in warnings.filters}
+        for category, _, reason in SUPPRESSED:
+            assert ('ignore', category) in live, (
+                f'SUPPRESSED entry ({reason}) is in the ini value but not in the filters actually '
+                f'in force inside a test')
 
     def test_quiet_preserves_the_wrapped_signature(self):
         """`functools.wraps`, so `delete=` and friends stay introspectable and documented."""

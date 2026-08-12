@@ -31,30 +31,36 @@ end to end with the filters lifted after import and every warning recorded:
 | `tests/e2e/scenarios/grid_golden` (30 steps) | 7,805 | 36 | 100 % |
 
 Not one came from a dependency warning about itself. The volume is HAMLET calling polars 0.20
-APIs that polars 0.20 already deprecates -- the inventory backlog item #12 (Polars 1.x
-migration) exists to clear -- and that is what `SUPPRESSED` covers.
+APIs that polars 0.20 already deprecates -- the inventory ROADMAP item #12 (Polars 1.x migration)
+exists to clear -- and that is what `SUPPRESSED` covers.
 
 **Why the blanket filter could not simply be deleted.** Python already ignores
-`DeprecationWarning` outside `__main__`, so the 7,311 deprecations above are invisible by
-default and the count overstates what a user would see. What a bare removal actually prints was
-measured too: **491 lines for a 30-timestep run**, of which 360 are polars'
-`MapWithoutReturnDtypeWarning`, whose origin Python records as `sys:1` so it never deduplicates.
-That is ~16 lines per timestep, or roughly 140,000 lines over a simulated year. The concern that
-a bare removal would be reinstated by the next person is correct, and this module is the reason
-it does not have to be.
+`DeprecationWarning` outside `__main__`, so most of that count is invisible by default and
+overstates what a user would see. What a bare removal actually prints was measured separately:
+**491 lines for a 30-timestep run**, of which 360 are polars' `MapWithoutReturnDtypeWarning`,
+whose origin Python records as `sys:1` so it never deduplicates. That is ~16 lines per timestep,
+or roughly 140,000 over a simulated year. The concern that a bare removal would simply be
+reinstated by the next person is correct, and this module is why it does not have to be.
 
-**What is deliberately left visible**, because it is signal rather than noise:
+**What is deliberately left visible**, because it is signal rather than noise. Two live HAMLET
+defects, both in Section 14a, both hidden for as long as the blanket filter existed:
 
 - `enwg_14a.py:517` and `:522` -- 64 per run of pandas' `UserWarning: Boolean Series key will be
   reindexed to match DataFrame index`, from chained boolean masks. Issue #210.
 - `enwg_14a.py:87` -- 30 per run of `FutureWarning: Non-integer 'periods' in pd.date_range ...`,
   which pandas will turn into an error. Issue #211.
 
-Both only appear when a scenario runs Section 14a, which today is `grid_golden` and nothing else.
-Neither is suppressed here: hiding them again is how they stayed hidden in the first place.
+These fire only where Section 14a actually runs, which today is `grid_golden` -- the shipped
+examples configure the restriction but leave the grid inactive. That is a property of the shipped
+configs, not a guarantee. Neither is suppressed here: hiding them again is how they stayed hidden.
 
-The `'S'` frequency aliases that produced the remaining `FutureWarning`s were fixed at source
-rather than listed here -- `'S'` and `'s'` are the same offset, so the rename costs nothing.
+The list is **not** an exhaustive inventory of what a run prints. A few dependency warnings
+survive too (pandapower's `output_writer` and `run_control` each raise a `FutureWarning` on the
+grid path, roughly once per run rather than per timestep), and that is the intended state -- they
+are somebody else's code telling us something true.
+
+The `'S'` frequency aliases that produced the Creator's own `FutureWarning`s were fixed at source
+rather than listed here: `'S'` and `'s'` are the same offset, so the rename costs nothing.
 """
 import warnings
 from contextlib import contextmanager
@@ -74,20 +80,20 @@ from polars.exceptions import MapWithoutReturnDtypeWarning
 #: pattern against the message it was added for so the drift is caught before a user sees it.
 SUPPRESSED = (
     (DeprecationWarning, r'`cumsum` is deprecated',
-     'polars 0.20 renamed it to `cum_sum`; backlog #12'),
+     'polars 0.20 renamed it to `cum_sum`; ROADMAP item #12'),
     (DeprecationWarning, r'`groupby` is deprecated',
-     'polars 0.20 renamed it to `group_by`; backlog #12'),
+     'polars 0.20 renamed it to `group_by`; ROADMAP item #12'),
     (DeprecationWarning, r'`apply` is deprecated',
-     'polars 0.20 renamed it to `map_elements`; backlog #12'),
+     'polars 0.20 renamed it to `map_elements`; ROADMAP item #12'),
     (DeprecationWarning, r'The `axis` parameter for `DataFrame\.\w+` is deprecated',
-     'polars 0.20 wants the explicit `*_horizontal` methods; backlog #12'),
+     'polars 0.20 wants the explicit `*_horizontal` methods; ROADMAP item #12'),
     (DeprecationWarning, r"Use of `how='outer'` should be replaced with `how='full'`",
-     'polars 0.20 renamed the join strategy; backlog #12'),
+     'polars 0.20 renamed the join strategy; ROADMAP item #12'),
     (DeprecationWarning, r'The default coalesce behavior of left join will change',
-     'polars 0.20 announcing a 1.x default change; backlog #12'),
+     'polars 0.20 announcing a 1.x default change; ROADMAP item #12'),
     (MapWithoutReturnDtypeWarning, r'Calling `map_elements` without specifying `return_dtype`',
      'the 360-per-run one. Adding `return_dtype` can change a column dtype, so it belongs '
-     'with backlog #12 and its golden-master re-check, not here'),
+     'with ROADMAP item #12 and its golden-master re-check, not here'),
 )
 
 
