@@ -32,6 +32,11 @@ comparison as a permanent strict xfail; do not reopen it here.
 **Each run reports which backend actually solved it.** The config edit is a request, and this
 asserts it was honoured -- see `scenario_run.BACKEND_PROBE` for why the request alone is not
 enough. Budget a few minutes per combination that runs.
+
+**One test here is not about the matrix at all.**
+`test_a_workbook_built_scenario_runs_the_backend_it_was_asked_for` asks a scenario built from
+`agents.xlsx` for a backend it does not ship, and reads back what solved (#206). It lives in this
+file because this is where "the requested backend is what ran" is the subject.
 """
 import inspect
 import json
@@ -44,6 +49,11 @@ from tests.scenario_run import REPO_ROOT, run_example
 
 EXAMPLE = REPO_ROOT / 'examples' / 'create_simple_scenario'
 SCENARIO_NAME = 'simple_scenario'
+
+#: A scenario built with `new_scenario_from_files`, and so one whose backend comes from
+#: `agents.xlsx` rather than from `agents.yaml`. See the #206 test at the bottom of this file.
+WORKBOOK_CONFIG_ROOT = REPO_ROOT / 'tests' / 'e2e' / 'scenarios'
+WORKBOOK_SCENARIO = 'grid_golden'
 
 #: Set to run every combination here, including the ones covered elsewhere.
 RUN_ALL = 'HAMLET_SMOKE_ALL'
@@ -87,6 +97,51 @@ def test_the_example_runs_under_this_combination(framework, solver, tmp_path):
     assert fingerprint, 'the run produced no result tables'
     assert sum(entry['rows'] for entry in fingerprint.values()) > 0, (
         'the run wrote result tables but every one of them is empty')
+
+
+@pytest.mark.e2e
+@pytest.mark.solver
+def test_a_workbook_built_scenario_runs_the_backend_it_was_asked_for(tmp_path):
+    """#206 — the request reaches a scenario the Creator builds from `agents.xlsx`.
+
+    `grid_golden` is created with `new_scenario_from_files`, which builds its agents from the
+    workbook and never regenerates it. The switch used to edit only `agents.yaml`, so this call
+    would have been accepted, `assert switched` satisfied by a file the agents do not come from,
+    and `poi` -- what the workbook pins -- run instead. Nothing failed; the request evaporated.
+
+    **The assertion is on what solved, not on what was asked for.** `used` comes from
+    `scenario_run.BACKEND_PROBE`, which wraps `linopy.Model.solve` and the two POI `create_model`
+    functions inside the run's own interpreter, so it reports the backend that actually built and
+    solved the agents' models. Asserting that `agents.xlsx` now says `linopy` would only re-check
+    the edit; this checks the consequence.
+
+    **It is deliberately redundant with `run_example`'s own `assert_backend_honoured`**, which fires
+    first and would already have failed. Keeping it is what makes this test independent of that
+    guard: with the workbook step reverted *and* the compulsory receipt disabled, the assertion
+    below is the one that fails. Verified by running exactly that mutation.
+
+    `linopy` + `highs` deliberately: it needs no licence, so this runs everywhere, and it is not
+    what the scenario ships, so a switch that silently did nothing would leave `poi` in the record.
+
+    Costs one full `grid_golden` run -- 184 s here against 70 s for the same scenario under `poi`,
+    both from `python -m pytest tests/e2e -m e2e --durations=8` on the development laptop. linopy
+    spends far longer building models; `tests/README.md` has the measured build/solve split. One
+    call rather than a parametrisation over the matrix, because the point is the *file* the request
+    has to reach, and one backend the scenario does not ship establishes that as well as four would.
+    """
+    require('linopy', 'highs')
+
+    record = tmp_path / 'backends.json'
+    run_example(tmp_path, WORKBOOK_CONFIG_ROOT, WORKBOOK_SCENARIO, framework='linopy',
+                solver='highs', record_backends=record,
+                creator_method='new_scenario_from_files')
+
+    used = {tuple(pair) for pair in json.loads(record.read_text(encoding='utf-8'))}
+
+    assert used == {('linopy', 'highs')}, (
+        f'asked {WORKBOOK_SCENARIO} for linopy + highs, but the run actually used '
+        f'{sorted(used) or "no modelling backend at all"}. This scenario is built from '
+        f'agents.xlsx, so a switch that only edits agents.yaml is lost -- see #206')
 
 
 def test_the_deferred_cells_are_still_covered_elsewhere():
