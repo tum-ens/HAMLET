@@ -220,6 +220,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   on any file that never declares ownership. And the unassigned-agent check added for #205 was
   stricter than the code it guards — it demanded a bus for agents that place no electrical element
   at all, such as a heat-only agent or the parent of a set of sub-agents
+- **§14a direct power control crashed the first time a heat pump took part in a reduction.**
+  `EnWG14a` reads each heat pump's minimum controllable power from a `hp_min_control` column on
+  the grid's load table, and nothing in HAMLET ever wrote it, so the run died with
+  `KeyError: 'hp_min_control'`. Nothing caught it because nothing had ever reached that code: no
+  shipped example enables `direct_power_control`, and the study the implementation was written
+  for ran with it switched off. Both control methods need the column, so direct power control had
+  never executed successfully at all.
+
+  The minimum is now computed at grid registration from the heat pump's rated power, per BNetzA
+  BK6-22-300: `0.4 × P_rated` where the grid connection power exceeds 11 kW, and the configured
+  `direct_power_control.threshold` below it — the flat guarantee that EVs and batteries get. The
+  same floor enters the EMS variant with the simultaneity factor fixed at 1. It is computed at
+  registration rather than in the control because the rated power lives in the agent's plant
+  configuration and not in the grid file, so both grid-creation methods need the same answer.
+
+  **Known deviation, unchanged and worth an issue of its own:** `enwg_14a` decides whether the
+  11 kW rule applies by comparing the heat pump's *instantaneous* power against 11 kW, where the
+  regulation means grid connection power. It cannot over-curtail — the minimum computed here caps
+  the reduction — but it is not what the regulation says
 - **Both grid-enabled examples run again (#205, #201).** `examples/create_scenario_with_grid` and
   `examples/create_scenario_with_topology` are the only shipped scenarios that calculate a grid at
   all — `create_simple_scenario` sets `electricity.active: False` — and neither could be executed.
