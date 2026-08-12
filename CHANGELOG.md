@@ -203,6 +203,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   to 233 passed / 3 skipped, matching the other platforms
 
 ### Fixed
+- **Grid registration could drop an agent from the network and report success (follow-up to
+  #205).** Two agents the matcher cannot tell apart — same bus, same agent type, same profile file
+  — both matched the *same* inflexible load, and the second overwrote the first's `id_agent`.
+  Elements with no agent are then dropped downstream, so the power flow was solved for a feeder
+  missing one of its participants and reported a loading that was too low, with nothing raised.
+  The defect predates the description reader restored for #205; that reader made the path
+  reachable again. Candidates already claimed by an earlier agent are now excluded, so each agent
+  keeps its own element, and an agent with genuinely nothing left to match is named in an error
+  rather than lost.
+
+  Three narrower robustness gaps went with it, each reachable from an ordinary network: a grid
+  file with **no sgen rows at all** (a feeder with no PV or battery) was rejected as carrying no
+  `plant_type` information; `_create_grid_from_topology` raised `KeyError: 'id_agent'` when no
+  element of a kind was created; and `__assign_plants_for_agent` raised a bare `KeyError: 'owner'`
+  on any file that never declares ownership. And the unassigned-agent check added for #205 was
+  stricter than the code it guards — it demanded a bus for agents that place no electrical element
+  at all, such as a heat-only agent or the parent of a set of sub-agents
 - **Both grid-enabled examples run again (#205, #201).** `examples/create_scenario_with_grid` and
   `examples/create_scenario_with_topology` are the only shipped scenarios that calculate a grid at
   all — `create_simple_scenario` sets `electricity.active: False` — and neither could be executed.
