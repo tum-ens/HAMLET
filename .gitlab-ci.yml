@@ -10,8 +10,10 @@
 # Measured on this runner, pipeline 3233720, against a 40-minute per-job timeout. These numbers are
 # not stable and are not meant to be — the point of stating them is that `e2e` is the job with the
 # least headroom, so anything that adds a scenario run to it is a decision. It grew from 12 to 20
-# minutes when !230 added one `grid_golden` run under `linopy`, which is ~3 min of work on a laptop
-# and more here because three jobs share the machine. Re-measure rather than adjust these by feel.
+# minutes when !230 added one `grid_golden` run under `linopy`; !233 replaced that run with a much
+# smaller one and took some of it back (1572 s -> 1171 s, one paired observation on this runner,
+# whose spread on identical work is 723-1317 s — treat it as a direction, not a number).
+# Re-measure rather than adjust these by feel.
 #
 # `golden` is the one that catches a change in *results* rather than in behaviour someone thought
 # to assert. Of the defects found while assembling !195, most were caught by review or ad-hoc

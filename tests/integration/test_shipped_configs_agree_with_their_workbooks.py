@@ -31,7 +31,15 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: The keys that appear in both files and that a mismatch on changes what runs.
-KEYS = ('framework', 'solver')
+#:
+#: Guarded by `test_the_compared_keys_are_the_ones_that_decide_the_backend`. An allowlist nothing
+#: compares against the tree exempts whatever is left out: dropping `'solver'` here re-opens #214
+#: on the very file this module was written to repair, and every test still passes. Demonstrated.
+#:
+#: `time_limit` is in the list because that guard put it there -- it is written to the workbook
+#: alongside the other two and was not being compared. It is not decoration: a `time_limit` the
+#: Executor reads in seconds, where the config author meant minutes, is #204.
+KEYS = ('framework', 'solver', 'time_limit')
 
 #: Every scenario config folder in the repository, named rather than globbed.
 #:
@@ -53,10 +61,24 @@ SCENARIOS = (
 NO_WORKBOOK = ('examples/create_simple_scenario/simple_scenario',)
 
 
+def canonical(value):
+    """One spelling for a value that YAML gives as text and the workbook as a number.
+
+    `time_limit: 120` is the string `'120'` out of the YAML and the int `120` out of pandas, and
+    comparing those raw reports a disagreement that is not one. Numbers compare as numbers,
+    everything else as text -- so `poi` still only equals `poi`, and `120` equals `120.0` because
+    the Creator writes whichever the sheet's dtype gives it.
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return str(value).strip()
+
+
 def yaml_values(path, key):
     """Every value the YAML gives `key`, as a set. The Creator reads all of them, not the first."""
-    pattern = re.compile(r'^\s*' + re.escape(key) + r': *(\w+)', re.MULTILINE)
-    return set(pattern.findall(path.read_text(encoding='utf-8')))
+    pattern = re.compile(r'^\s*' + re.escape(key) + r': *([\w.]+)', re.MULTILINE)
+    return {canonical(value) for value in pattern.findall(path.read_text(encoding='utf-8'))}
 
 
 def workbook_values(path, key):
@@ -77,7 +99,7 @@ def workbook_values(path, key):
             values = set()
             for column in frame.columns:
                 if str(column).rsplit('/', 1)[-1] == key:
-                    values.update(frame[column].dropna().tolist())
+                    values.update(canonical(value) for value in frame[column].dropna())
             per_sheet[sheet] = values
     return per_sheet
 
@@ -114,10 +136,14 @@ def test_every_shipped_scenario_is_listed_here():
     not tested, and the suite reports nothing. Walking for `agents.yaml` is the definition of "a
     scenario config folder" the Creator itself uses.
     """
+    # `rglob`, not a two-level glob. The Creator treats every subfolder of a config directory as a
+    # region with its own `agents.yaml`/`agents.xlsx` (`scenario_run.prepare_config` rglobs for
+    # exactly that), so a nested region is a scenario this test has to see. A fixed depth silently
+    # skipped one: a planted `scenario_with_grid/region_north/` with a contradictory workbook left
+    # the whole suite green, and the same folder one level up failed correctly. Demonstrated.
     found = {path.parent.relative_to(REPO_ROOT).as_posix()
-             for path in REPO_ROOT.glob('examples/*/*/agents.yaml')}
-    found |= {path.parent.relative_to(REPO_ROOT).as_posix()
-              for path in REPO_ROOT.glob('tests/e2e/scenarios/*/agents.yaml')}
+             for root in ('examples', 'tests/e2e/scenarios')
+             for path in (REPO_ROOT / root).rglob('agents.yaml')}
 
     assert found == set(SCENARIOS), (
         f'scenario folders in the tree but not listed: {sorted(found - set(SCENARIOS))}; '
@@ -162,6 +188,13 @@ def test_the_workbook_says_what_the_yaml_says(scenario):
         pytest.skip(f'{name} ships no agents.xlsx; the Creator writes it from the YAML')
 
     found = mismatches(path / 'agents.yaml', path / 'agents.xlsx', name)
+    # Nested regions carry their own pair, and `new_scenario_from_files` reads each one.
+    for nested in sorted(path.rglob('agents.xlsx')):
+        if nested.parent == path:
+            continue
+        region = nested.parent
+        found += mismatches(region / 'agents.yaml', nested,
+                            f'{name}/{region.relative_to(path).as_posix()}')
 
     assert not found, (
         'a scenario states its backend twice and the two disagree. Whichever file the Creator '
@@ -242,3 +275,34 @@ def test_a_yaml_stating_one_key_two_ways_is_caught(tmp_path):
         encoding='utf-8')
 
     assert yaml_values(tmp_path / 'agents.yaml', 'framework') == {'poi', 'linopy'}
+
+
+def test_the_compared_keys_are_the_ones_that_decide_the_backend():
+    """`KEYS` is checked against the workbooks, not merely declared.
+
+    Without this it is an allowlist that exempts whatever is left out of it: with `KEYS` reduced to
+    `('framework',)` the `scenario_with_market` workbook can be put back into disagreement on
+    `solver` — #214, on the file this module exists to repair — and all 15 tests still pass.
+    Demonstrated by mutation, not argued.
+
+    The check is that every backend-selecting column present in a shipped workbook is compared.
+    `ems/controller/{rtc,fbc}/optimization/` is where the Creator writes them, and its leaf names
+    are what `KEYS` holds.
+    """
+    leaves = set()
+    for name in SCENARIOS:
+        book = REPO_ROOT / name / 'agents.xlsx'
+        if not book.exists():
+            continue
+        with pd.ExcelFile(book) as workbook:
+            for sheet in workbook.sheet_names:
+                for column in workbook.parse(sheet, index_col=0).columns:
+                    text = str(column)
+                    if text.startswith('ems/controller/') and '/optimization/' in text:
+                        leaves.add(text.rsplit('/', 1)[-1])
+
+    assert leaves, 'no optimization columns found in any shipped workbook; the layout changed'
+    assert leaves == set(KEYS), (
+        f'the shipped workbooks carry optimization keys {sorted(leaves)} but this module compares '
+        f'{sorted(KEYS)}. A key that is written but not compared is free to disagree with the '
+        f'YAML, which is #214')
