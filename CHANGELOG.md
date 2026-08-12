@@ -73,6 +73,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Changed
+- **`CONTRIBUTING.md`'s branch naming convention now matches what the repository actually does.**
+  It documented `type-issue-nr-short-description` with types `feature`/`hotfix`/`release`, and
+  gave `feature-42-add-new-ontology-class` as the example. Not one of the last 40 merged branches
+  followed it: the convention in use is `type/short-description` with the issue number leading the
+  description, over nine types (`fix`, `feat`, `chore`, `test`, `perf`, `refactor`, `docs`, `ci`,
+  `release`). The document is corrected to the observed practice rather than the practice to the
+  document, and the stale `main` branch reference is now `master`
+- **The `open-a-merge-request` skill card now requires `Closes #<n>` in the MR description.**
+  `CONTRIBUTING.md` §5 has always said so, but the card did not repeat it and the rule was skipped
+  every time — #195 and #200 each sat open for a week after the work that fixed them had merged.
+  The mechanism was never broken: `develop` is the default branch and autoclose is on. The card
+  also gains the one check that settles it, `glab api .../merge_requests/<iid>/closes_issues`
 - **The golden master can pin more than one scenario.** `tests/e2e/test_golden_master.py` held its
   example and scenario name as module-scope constants, so exactly one scenario could ever be
   pinned — and the one it pins sets `electricity.active: False`, which is why no reference numbers
