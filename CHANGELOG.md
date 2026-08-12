@@ -14,9 +14,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   master pinned sets `electricity.active: False` and calculates no grid, so no committed reference
   number had ever come from the power flow, the variable grid fees or direct power control — while
   the grid stage was being measured and optimised. `tests/e2e/scenarios/grid_golden/` is a 21-bus
-  feeder with four single-family homes over one day, deliberately weak: the transformer is sized
-  above the four-agent §14a guarantee floor and below the coincident peak, so it overloads at 132 %
-  and the restriction fires.
+  feeder with four single-family homes over one day, deliberately weak: at 15 kVA the transformer
+  is below the uncontrolled peak of 19.8 kW, so it overloads at 132 % and the restriction fires,
+  and above the 8.4 kW §14a floor of the two agents that are actually curtailable at those hours
+  (the other two draw 892 W between them, well under the 4200 W threshold). It is *below* the
+  16.8 kW floor all four agents together would be guaranteed, so a fixture change that brought a
+  third agent's EV onto the same hour would leave an overload §14a cannot resolve.
 
   The topology is a radial slice of the real low-voltage feeder the §14a study used — real cable
   lengths, real impedances and ampacities — **rebuilt from explicitly chosen electrical parameters

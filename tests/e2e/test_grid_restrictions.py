@@ -33,6 +33,11 @@ import pytest
 from tests.scenario_run import REPO_ROOT, run_example
 
 SCENARIO = 'grid_golden'
+
+#: Where the §14a fee lands once `agent_base` has applied it: the agent's own forecast, which is
+#: what it then optimises against. `res_variable_grid_fee.csv` does *not* hold fees -- see
+#: `test_the_variable_grid_fee_reached_the_agents`.
+FEE_COLUMN = 'grid_market_out'
 CONFIG_ROOT = REPO_ROOT / 'tests' / 'e2e' / 'scenarios'
 
 
@@ -73,19 +78,43 @@ def test_the_feeder_actually_overloads(grid_results):
 
 
 @pytest.mark.e2e
-def test_variable_grid_fees_vary(grid_results):
-    """The indirect mechanism: fees must actually differ across time.
+def test_the_variable_grid_fee_reached_the_agents(grid_results):
+    """The indirect mechanism, read where it lands rather than where it is computed.
 
-    A constant fee column would mean the calculation ran and produced the base rate everywhere,
-    which is what a broken loading signal looks like.
+    **Not** from `res_variable_grid_fee.csv`, despite the name. `enwg_14a` writes
+    `combined_loading_for_bus` under that key -- per-unit loading, roughly 0.1 to 2.3 -- while the
+    fees themselves go only into `restriction_commands` and are never saved. Asserting that that
+    table varies is asserting that the *loading* varies, which is what the overload test above
+    already says, and it holds whether or not a single agent ever sees a fee.
+
+    That is not hypothetical. Severing the mechanism entirely -- an early `return` in
+    `agent_base.apply_grid_commands`, the only place a variable fee reaches an agent -- leaves the
+    grid-side table completely unchanged, and a review panel demonstrated all four tests in this
+    file passing against it.
+
+    The fee lands in each agent's forecast, which is the whole point of an *indirect* control: it
+    changes what the agent optimises against. With the mechanism live it varies over the horizon
+    and rises above the flat base rate; with it severed the column is the shipped constant.
     """
-    fees = read_csv(grid_results, 'res_variable_grid_fee.csv')
-    numeric = fees.select_dtypes('number').drop(columns=[fees.columns[0]], errors='ignore')
+    import polars as pl
 
-    assert not numeric.empty, 'the variable grid fee table carries no numeric columns'
-    spread = (numeric.max() - numeric.min()).max()
-    assert spread > 0, (
-        'every variable grid fee is identical, so the fee is not varying with grid loading')
+    spreads = {}
+    for type_dir in sorted((grid_results / 'agents').iterdir()):
+        if not type_dir.is_dir():
+            continue
+        for agent_dir in sorted(type_dir.iterdir()):
+            forecasts = pl.read_ipc(agent_dir / 'forecasts.ft', memory_map=False)
+            if FEE_COLUMN not in forecasts.columns:
+                continue
+            column = forecasts[FEE_COLUMN]
+            spreads[agent_dir.name] = float(column.max()) - float(column.min())
+
+    assert spreads, (
+        f'no agent forecast carries a {FEE_COLUMN!r} column, so the grid fee an agent optimises '
+        f'against cannot be read and this test asserts nothing')
+    assert max(spreads.values()) > 0, (
+        f'every agent sees a constant grid fee across the whole horizon ({spreads}), so the '
+        f'variable grid fee never reached them -- the indirect mechanism is not connected')
 
 
 @pytest.mark.e2e
@@ -114,8 +143,17 @@ def test_the_curtailment_command_was_respected(grid_results):
     the base class's was a no-op. The grid stage cannot notice that by itself: it re-simulates,
     gets the same answer, and converges on an uncapped grid.
 
-    Read from `res_bus` at the agent's own bus, taking the last row for the timestep -- that is
-    the converged iteration, the one the run kept.
+    Read from `res_bus` at the agent's own bus, taking the **last** row for the timestep. Not the
+    converged one: `grids.yaml` sets `max_iteration: 3`, and at both restricted timesteps
+    `executor/setup.py` forces `grid_ok = True` on the iteration cap rather than reaching a fixed
+    point (`res_trafo.csv` carries 4 rows at each of them). The last row is the state the run
+    actually kept, which is what the assertion is about.
+
+    The cap is recomputed from each pass's power flow, so at the end of a converging sequence it
+    sits exactly on the power drawn -- the margins here are 0 W, and the `+ 1` below is what
+    absorbs the rounding. Under a backend that ignores the cap the sequence does not converge at
+    all: the draw stays at its uncontrolled value while the cap keeps asking for less, and the
+    gap is hundreds of watts.
     """
     commands = read_csv(grid_results, 'res_direct_power_control.csv')
     bus = read_csv(grid_results, 'res_bus.csv')

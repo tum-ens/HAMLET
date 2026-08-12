@@ -216,7 +216,7 @@ the *least*-stateful agent rather than a stateless one; there is no stateless ag
 scenario. Agents owning a battery or EV diverge from step 1–12 by hundreds of Wh. That is a
 degenerate tie propagating through `update_socs`, not a component-set difference.
 
-**§14a grid restrictions are covered end to end since #205, and were not before.** Direct power
+**§14a grid restrictions are covered end to end since the #205 work, and were not before.** Direct power
 control reaches the RTC only (never the FBC), through `apply_grid_commands`; indirect control
 (variable grid fees) is applied outside the solver in `agent_base.py`, so it is backend-agnostic
 and both MPC backends pick it up. No *shipped example* enables the mechanism — the two that set
@@ -224,11 +224,15 @@ and both MPC backends pick it up. No *shipped example* enables the mechanism —
 test fixture instead: `tests/e2e/scenarios/grid_golden/`, a deliberately weak 21-bus feeder that
 overloads at 132 % and is pinned by the golden master.
 
-Three things about that fixture are load-bearing and easy to undo by accident. **The transformer is
-sized between the §14a guarantee floor and the coincident peak** — raise it and nothing overloads,
-which `test_the_feeder_actually_overloads` exists to catch. **Every agent has an EV starting at
-SoC 0.2**: the shipped examples start at 0.8 against a target of 0.8, so nothing charges, no agent
-exceeds the 4200 W threshold, and direct control computes a reduction of exactly zero. And **each
+Three things about that fixture are load-bearing and easy to undo by accident. **The transformer
+is sized between the peak and the floor of the agents that are actually curtailable** — 15 kVA
+against a 19.8 kW uncontrolled peak and an 8.4 kW floor for the two agents above the 4200 W
+threshold at those hours. Raise it and nothing overloads, which `test_the_feeder_actually_overloads`
+exists to catch. Note it is *below* the 16.8 kW all four agents would be guaranteed together: bring
+a third EV onto the same hour and §14a can no longer resolve the overload. **Every agent has an EV starting at
+SoC 0.2**: `create_scenario_with_topology`, which this fixture derives from, starts at 0.8 against a
+target of 0.8, so nothing charges, no agent exceeds the 4200 W threshold, and direct control
+computes a reduction of exactly zero. And **each
 agent needs a bus in `agents.xlsx`** — `agent_base.__update_variable_grid_fees` looks the fee up by
 it, so a blank one is `KeyError: nan` the moment variable grid fees are switched on. The shipped
 topology example leaves it blank and gets away with it only because it runs no restriction.
