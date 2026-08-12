@@ -79,21 +79,21 @@ class GoldenScenario(NamedTuple):
     `test_solver_backend_smoke.py` reads when checking that the backend cell it defers to this
     module is still covered here.
 
-    `root` is where the config folder lives, relative to the repository. Shipped examples sit
-    under `examples/` and are a user's entry point; a scenario built purely to pin behaviour --
-    deliberately undersized, tuned to reach a particular code path -- sits under
+    `container` is the repository-relative directory that *holds* the scenario folder -- not the
+    folder itself, because that is what `run_example` takes. Shipped examples sit under
+    `examples/<example>/` and are a user's entry point; a scenario built purely to pin behaviour
+    -- deliberately undersized, tuned to reach a particular code path -- sits under
     `tests/e2e/scenarios/` instead, because putting it in `examples/` would advertise it as
     something to copy. `creator_method` follows from where the agent ids have to come from.
     """
 
-    example: str
+    container: str
     name: str
-    root: str = 'examples'
     creator_method: str = 'new_scenario_from_configs'
 
     @property
     def config_dir(self):
-        return REPO_ROOT.joinpath(*self.root.split('/'), self.example)
+        return REPO_ROOT.joinpath(*self.container.split('/'))
 
     @property
     def reference(self):
@@ -102,13 +102,13 @@ class GoldenScenario(NamedTuple):
 
 #: Every scenario the golden master pins. See "Adding a scenario" in the module docstring.
 SCENARIOS = [
-    GoldenScenario(example='create_simple_scenario', name='simple_scenario'),
+    GoldenScenario(container='examples/create_simple_scenario', name='simple_scenario'),
     # The grid scenario. `simple_scenario` sets `electricity.active: False`, so until this one
     # nothing here pinned a single number produced by the grid stage, the §14a restrictions or the
     # power flow. `new_scenario_from_files` because its topology assigns agents to buses by id,
     # and only that entry point keeps the ids `agents.xlsx` declares -- creating from configs
     # redraws them and the assignment stops meaning anything.
-    GoldenScenario(example='grid_golden', name='grid_golden', root='tests/e2e/scenarios',
+    GoldenScenario(container='tests/e2e/scenarios', name='grid_golden',
                    creator_method='new_scenario_from_files'),
 ]
 
@@ -175,7 +175,7 @@ def actual(scenario, tmp_path_factory):
     """
     base = tmp_path_factory.mktemp(f'golden_{scenario.name}')
     try:
-        yield run_example(base, scenario.config_dir.parent, scenario.name,
+        yield run_example(base, scenario.config_dir, scenario.name,
                           creator_method=scenario.creator_method)
     finally:
         shutil.rmtree(base, ignore_errors=True)
