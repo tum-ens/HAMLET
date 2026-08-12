@@ -128,11 +128,11 @@ def test_the_deferred_cells_are_still_covered_elsewhere():
     # of this cell. It is not the only thing running poi + highs end to end -- `COVERED_ELSEWHERE`
     # names the equivalence test's poi arm as well, and that has its own constants and would keep
     # running if this module were repointed.
-    pinned = {(scenario.example, scenario.name) for scenario in golden.SCENARIOS}
-    assert (EXAMPLE.name, SCENARIO_NAME) in pinned, (
+    pinned = {(scenario.config_dir, scenario.name) for scenario in golden.SCENARIOS}
+    assert (EXAMPLE, SCENARIO_NAME) in pinned, (
         f'test_golden_master no longer pins {EXAMPLE.name}/{SCENARIO_NAME} (it pins '
-        f'{sorted(pinned)}), so the poi + highs cell has no golden reference behind it and must '
-        f'stop being skipped here')
+        f'{sorted((str(d), n) for d, n in pinned)}), so the poi + highs cell has no golden '
+        f'reference behind it and must stop being skipped here')
     # The golden master must still run the *shipped* configuration -- it is only a stand-in for
     # the poi + highs cell for as long as it does not override the backend itself.
     assert 'framework=' not in golden_source, (

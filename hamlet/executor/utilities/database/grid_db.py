@@ -129,6 +129,58 @@ class ElectricityGridDB(GridDB):
             case _:
                 raise ValueError(f"Unknown grid creation method: {self.grid_config['method']}")
 
+        self._set_heat_pump_minimum_power(regions)
+
+    def _set_heat_pump_minimum_power(self, regions: dict):
+        """Write each heat pump's Section 14a minimum controllable power onto its grid element.
+
+        `EnWG14a` reduces a device only as far as the power the regulation guarantees it, and for
+        a heat pump that floor is not the flat threshold that applies to EVs and batteries.
+        BNetzA BK6-22-300 sets it by the device's *grid connection* power:
+
+            P_min = 0.4 * P_rated    if P_rated > 11 kW
+            P_min = threshold        otherwise
+
+        The same floor enters the EMS variant of the control, where the per-device minima are
+        summed with the simultaneity factor fixed at 1. Source: Chu (2024), "Comparative
+        Techno-Economic Analysis of Grid-Serving Control Methods Using Agent-Based Modeling",
+        equations 2.1 to 2.3 -- the thesis the Section 14a implementation here comes from.
+
+        `enwg_14a` reads this as a `hp_min_control` column on the load table and **nothing had
+        ever written it**, so direct power control raised `KeyError: 'hp_min_control'` the first
+        time a heat pump took part in a reduction. Nothing caught it because nothing ever reached
+        it: no shipped example enables direct power control, and the study the implementation was
+        written for ran with `direct_power_control.active: False`.
+
+        Computed here, after both creation methods, because the rated power lives in the agent's
+        plant configuration rather than in the grid file, so neither method has it to hand while
+        it builds its elements, and both need the same answer.
+        """
+        loads = self.grid.load
+        if loads.empty or 'load_type' not in loads.columns:
+            return
+
+        restrictions = self.grid_config.get('restrictions', {}) or {}
+        threshold_w = ((restrictions.get('enwg_14a', {}) or {})
+                       .get('direct_power_control', {}).get('threshold', 4200))
+
+        minimum_w = {}
+        for region in regions.values():
+            for agents in region.agents.values():
+                for agent in agents.values():
+                    for plant_id, plant in agent.plants.items():
+                        if plant['type'] != c.P_HP:
+                            continue
+                        rated = (plant.get('sizing') or {}).get('power')
+                        minimum_w[plant_id] = (
+                            c.ENWG14A_HP_SCALING_FACTOR * rated
+                            if rated is not None and rated > c.ENWG14A_HP_SCALING_LIMIT
+                            else threshold_w)
+
+        loads['hp_min_control'] = [
+            minimum_w.get(plant_id, threshold_w) * c.WH_TO_MWH if load_type == c.P_HP else 0.0
+            for plant_id, load_type in zip(loads[c.TC_ID_PLANT], loads['load_type'])]
+
     def save_grid(self, path):
         """
         Save the grid results to the given path.
