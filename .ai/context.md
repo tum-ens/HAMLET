@@ -216,13 +216,28 @@ the *least*-stateful agent rather than a stateless one; there is no stateless ag
 scenario. Agents owning a battery or EV diverge from step 1–12 by hundreds of Wh. That is a
 degenerate tie propagating through `update_socs`, not a component-set difference.
 
-**§14a grid restrictions are implemented but almost entirely untested, and no example runs them.**
-Direct power control reaches the RTC only (never the FBC), through `apply_grid_commands`; indirect
-control (variable grid fees) is applied outside the solver in `agent_base.py`, so it is
-backend-agnostic and both MPC backends pick it up. Nothing in `tests/` executes `EnWG14a`, and no
-shipped example enables the mechanism: the two scenarios that set `restrictions.apply:
-['enwg_14a']` have `electricity.active: False`, and the two with a live grid have an empty
-restriction list. An end-to-end test needs a new fixture.
+**§14a grid restrictions are covered end to end since #205, and were not before.** Direct power
+control reaches the RTC only (never the FBC), through `apply_grid_commands`; indirect control
+(variable grid fees) is applied outside the solver in `agent_base.py`, so it is backend-agnostic
+and both MPC backends pick it up. No *shipped example* enables the mechanism — the two that set
+`restrictions.apply: ['enwg_14a']` have `electricity.active: False` — so the coverage comes from a
+test fixture instead: `tests/e2e/scenarios/grid_golden/`, a deliberately weak 21-bus feeder that
+overloads at 132 % and is pinned by the golden master.
+
+Three things about that fixture are load-bearing and easy to undo by accident. **The transformer is
+sized between the §14a guarantee floor and the coincident peak** — raise it and nothing overloads,
+which `test_the_feeder_actually_overloads` exists to catch. **Every agent has an EV starting at
+SoC 0.2**: the shipped examples start at 0.8 against a target of 0.8, so nothing charges, no agent
+exceeds the 4200 W threshold, and direct control computes a reduction of exactly zero. And **each
+agent needs a bus in `agents.xlsx`** — `agent_base.__update_variable_grid_fees` looks the fee up by
+it, so a blank one is `KeyError: nan` the moment variable grid fees are switched on. The shipped
+topology example leaves it blank and gets away with it only because it runs no restriction.
+
+**The assertion that matters is that a curtailment command is *respected*.** The grid stage cannot
+check that itself: it re-simulates, gets the same answer, and converges on an uncapped grid. So a
+backend whose `apply_grid_commands` silently does nothing — which is what `poi` inherited from the
+base class before !209 — looks identical to one that obeys. Restoring that no-op fails exactly one
+test and leaves the other three green.
 
 **The grid stage itself is covered since #205, and it was not before.** Both grid-enabled examples
 run again and `tests/e2e/test_grid_examples.py` runs them, asserting that a power flow was solved
