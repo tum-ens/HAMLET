@@ -25,7 +25,8 @@ import os
 import sys
 
 from hamlet import msvc_runtime
-from hamlet.executor.utilities.controller.solver_options import reproducibility_options
+from hamlet.executor.utilities.controller.solver_options import (quiet_options,
+                                                                 reproducibility_options)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -139,6 +140,13 @@ def create_model(solver):
     environment *before* the model exists, because it prints its licence banner at model
     creation, whereas HiGHS is configured on the model itself. `set_raw_parameter` is also
     type-strict for HiGHS -- it dispatches to `set_raw_option_bool`, which rejects `0`/`1`.
+
+    The model-level names come from `solver_options.quiet_options`, which is also what the linopy
+    controllers now send. This backend already had them right; the point of sharing the table is
+    that neither backend can drift from the other, which is how `{'OutputFlag': 0}` came to be
+    sent to HiGHS on the linopy side for years (#199). The env line stays written out: it is not
+    "the quiet options", it is the one parameter that has to be set before `Env.start()` for the
+    banner not to appear.
     """
     module = get_solver_module(solver)
 
@@ -147,12 +155,11 @@ def create_model(solver):
         env.set_raw_parameter("OutputFlag", 0)
         env.start()
         model = module.Model(env)
-        model.set_raw_parameter("OutputFlag", 0)
-        model.set_raw_parameter("LogToConsole", 0)
     else:
         model = module.Model()
-        model.set_raw_parameter("output_flag", False)
-        model.set_raw_parameter("log_to_console", False)
+
+    for name, value in quiet_options(solver).items():
+        model.set_raw_parameter(name, value)
 
     import pyoptinterface as poi
     model.set_model_attribute(poi.ModelAttribute.Silent, True)

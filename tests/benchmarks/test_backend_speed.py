@@ -105,9 +105,11 @@ def test_every_available_combination_agrees_and_poi_is_faster_than_linopy():
     assert cells, ('not one framework x solver combination can solve here, so this benchmark '
                    'would measure nothing. HiGHS ships with HAMLET -- run `uv sync`.')
 
-    warnings.filterwarnings('ignore')  # linopy is loud about coordinate alignment
-
-    timings, objectives = measure(cells, REPS)
+    # Scoped, not global. A bare `filterwarnings('ignore')` here mutates the process filter
+    # list for every test that runs after this one -- the same defect as #199, in a test.
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')  # linopy is loud about coordinate alignment
+        timings, objectives = measure(cells, REPS)
 
     print(f'\n  horizon={HORIZON}  reps={REPS}  interleaved   (medians, ms)')
     print(f"  {'cell':<16}{'build':>9}{'solve':>9}{'total':>9}   objective")

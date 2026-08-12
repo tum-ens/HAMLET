@@ -19,6 +19,7 @@ from hamlet.creator.agents.agents import Agents
 from hamlet.creator.markets.markets import Markets
 from hamlet.creator.grids.grids import Grids
 import hamlet.constants as c
+from hamlet.warning_policy import quiet
 
 
 class Creator:
@@ -92,6 +93,7 @@ class Creator:
 
         return config
 
+    @quiet
     def new_scenario_from_configs(self, delete: bool = True) -> None:
         """Create a new scenario using configuration files.
 
@@ -117,6 +119,7 @@ class Creator:
         # Continue with creating a new scenario from files
         self.new_scenario_from_files(delete=delete)
 
+    @quiet
     def new_scenario_from_grids(self, fill_from_config: bool = False, delete: bool = True) -> None:
         """Create a new scenario using grid files.
 
@@ -138,6 +141,7 @@ class Creator:
         # Create the scenario from the generated files
         self.new_scenario_from_files(delete=delete)
 
+    @quiet
     def new_scenario_from_files(self, delete: bool = True) -> None:
         """Creates a new scenario from the files.
 
