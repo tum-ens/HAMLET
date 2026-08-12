@@ -302,8 +302,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   #213 rather than in a crash fix. Values that were always exact are unchanged in all three classes,
   which is asserted rather than assumed.
 
-  Latent until now: no shipped scenario declares a `ctsp` agent, so no generated scenario and
-  neither golden reference moves
+  **It is one line per device group, not one line.** The same bare cast sizes the plant power in
+  `_pv_grid`, `_wind_grid`, `_fixed_gen_grid` and `_battery_grid` — four more sites in each of
+  `ctsp.py` and `industry.py`, all eight of which `sfh` already rounds. Fixing only the demand
+  column would have left four identical crashes per class behind, which is this repository's
+  recurring shape: the fix for a failure contains the same failure one level down. All nine sites
+  are fixed and each is covered; reverting the eight fails 16 of the tests.
+
+  A detail worth keeping, because the first attempt got it wrong and the new test caught it in one
+  run: these methods write `self.df.index.map(...)`, and `round()` on a pandas `Index` raises
+  `TypeError: type Index doesn't define __round__`. The Series has to be rounded *before* mapping,
+  which is what `sfh` does.
+
+  Latent until now: these methods are reached only from `new_scenario_from_grids`, and no config in
+  the repository is built that way, so no generated scenario and neither golden reference moves
 - **A test asking a scenario for a different solver backend could have it silently ignored
   (#206).** `tests/scenario_run.run_example`'s `framework=` / `solver=` switch edited
   `agents.yaml`. A scenario built with `new_scenario_from_files` gets its agents from

@@ -516,7 +516,12 @@ class Ctsp(AgentBase):
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one pv per agent is supported
             # Match the power with the power specified in sgen sheet
-            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(df['power']) * 1e6).astype('Int64')
+            # MW -> W, rounded before the cast for the same reason as the demand column:
+            # power * 1e6 is not exact in float64 for ~3.5 % of ordinary decimal values, and a
+            # bare astype('Int64') raises on those. #212; sfh.py rounds these the same way,
+            # rounding the Series *before* mapping because an Index has no __round__.
+            self.df[f"{key}/sizing/power_{num}"] = self.df.index.map(
+                round(df['power'] * 1e6)).astype('Int64')
 
             # Check if file column exists
             if 'file' in df and not df['file'].isnull().all():
@@ -623,7 +628,12 @@ class Ctsp(AgentBase):
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
             # Match the power with the power specified in sgen sheet
-            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(df['power']) * 1e6).astype('Int64')
+            # MW -> W, rounded before the cast for the same reason as the demand column:
+            # power * 1e6 is not exact in float64 for ~3.5 % of ordinary decimal values, and a
+            # bare astype('Int64') raises on those. #212; sfh.py rounds these the same way,
+            # rounding the Series *before* mapping because an Index has no __round__.
+            self.df[f"{key}/sizing/power_{num}"] = self.df.index.map(
+                round(df['power'] * 1e6)).astype('Int64')
 
             # Check if file column exists
             if 'file' in df and not df['file'].isnull().all():
@@ -725,7 +735,12 @@ class Ctsp(AgentBase):
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
             # Match the power with the power specified in sgen sheet
-            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(df['power']) * 1e6).astype('Int64')
+            # MW -> W, rounded before the cast for the same reason as the demand column:
+            # power * 1e6 is not exact in float64 for ~3.5 % of ordinary decimal values, and a
+            # bare astype('Int64') raises on those. #212; sfh.py rounds these the same way,
+            # rounding the Series *before* mapping because an Index has no __round__.
+            self.df[f"{key}/sizing/power_{num}"] = self.df.index.map(
+                round(df['power'] * 1e6)).astype('Int64')
 
             # Check if file column exists
             if 'file' in df and not df['file'].isnull().all():
@@ -895,7 +910,12 @@ class Ctsp(AgentBase):
         # sizing (all parameters that can be indexed)
         for num in range(max(self.df[f"{key}/num"])):  # Currently only one plant per agent is supported
             # Match the power with the power specified in sgen sheet
-            self.df[f"{key}/sizing/power_{num}"] = (self.df.index.map(df['power']) * 1e6).astype('Int64')
+            # MW -> W, rounded before the cast for the same reason as the demand column:
+            # power * 1e6 is not exact in float64 for ~3.5 % of ordinary decimal values, and a
+            # bare astype('Int64') raises on those. #212; sfh.py rounds these the same way,
+            # rounding the Series *before* mapping because an Index has no __round__.
+            self.df[f"{key}/sizing/power_{num}"] = self.df.index.map(
+                round(df['power'] * 1e6)).astype('Int64')
             self.df[f"{key}/sizing/capacity_{num}"] = (self.df.index.map(df['capacity']) * 1e6).astype('Int64')
             self.df[f"{key}/sizing/efficiency_{num}"] = self.df.index.map(df['efficiency'])
             self.df[f"{key}/sizing/soc_{num}"] = self.df.index.map(df['soc'])

@@ -13,9 +13,10 @@ every case runs against each. Where they legitimately differ -- `industry` floor
 averaged away. See #213, which is the issue for collapsing them.
 
 The classes are driven through a stub `load` frame rather than a generated scenario. That is not
-only for speed: `_inflexible_load_grid` is reached from `new_scenario_from_grids`, and no shipped
-config declares a `ctsp` or `industry` agent at all, so a scenario-level test would have to author
-a grid file to reach one line. What the method needs is `self.load`, `self.df` and a `fcast`
+only for speed: `_inflexible_load_grid` is reached from `new_scenario_from_grids` alone, and no
+config in the repository is built that way -- `tests/e2e/scenarios/ctsp_industry/` declares both
+types but is built from configs and from files, so it never reaches this method. A scenario-level
+test would have to author a grid file to reach one line. What the method needs is `self.load`, `self.df` and a `fcast`
 config, and those are what it is given.
 """
 import numpy as np
@@ -36,8 +37,8 @@ ROUNDING = {'ctsp': (Ctsp, round), 'industry': (Industry, np.floor), 'sfh': (Sfh
 PARAMETRISED = pytest.mark.parametrize('name', sorted(ROUNDING), ids=sorted(ROUNDING))
 
 #: A value from the failing set. `1.001` MW is a 1 MW load stated to three decimals, which is the
-#: precision the shipped grid file writes (`demand:2.455`, `demand:0.0385`). `1.001 * 1e6` is
-#: 1000999.9999999999 in float64, and that is what the old expression could not cast.
+#: precision the shipped grid file writes for an inflexible load (`demand:2.455`). `1.001 * 1e6`
+#: is 1000999.9999999999 in float64, and that is what the old expression could not cast.
 INEXACT = 1.001
 
 
@@ -146,3 +147,117 @@ def test_the_three_classes_agree_on_a_value_that_is_exact():
              for name, (agent_class, _) in ROUNDING.items()}
 
     assert len(set(map(tuple, sized.values()))) == 1, sized
+
+
+# ---------------------------------------------------------------------------------------------
+# The same defect, at every other site that has it.
+#
+# #212 was filed against one line. It is one line *per device group*: `_pv_grid`, `_wind_grid`,
+# `_fixed_gen_grid` and `_battery_grid` each size a plant as `(index.map(df['power']) * 1e6)
+# .astype('Int64')` in `ctsp` and `industry`, and `sfh` rounds all four. Fixing only the demand
+# column would have left four identical crashes per class behind -- which is this repository's
+# recurring shape: the fix for a silent failure contains the same failure one level down.
+# ---------------------------------------------------------------------------------------------
+
+#: The grid-path sizing methods that turn a MW column into integer watts, and the column each
+#: writes. `_inflexible_load_grid` reads `demand`; the rest read `power`.
+POWER_METHODS = ('_pv_grid', '_wind_grid', '_fixed_gen_grid', '_battery_grid')
+
+
+#: Every column these four methods read off the sgen/battery frame, gathered from the source rather
+#: than discovered one `KeyError` at a time. A stub that is missing one fails for a reason that has
+#: nothing to do with what is under test, which is how a test ends up asserting its own scaffolding.
+GRID_PLANT_COLUMNS = {
+    'file': 'plant.csv', 'file_add': 'plant_add.csv', 'orientation': 0, 'angle': 30, 'height': 100,
+    'capacity': 1.0, 'efficiency': 0.9, 'soc': 0.5, 'charging_home': 0.0, 'charging_ac': 0.011,
+    'charging_dc': 0.05, 'v2g': False, 'v2h': False, 'g2b': True, 'b2g': False,
+}
+
+
+def size_power(agent_class, method_name, powers, key='pv'):
+    """Run one of the `power`-sizing grid methods and return the sizing column it wrote.
+
+    These methods read `self.sgen` (or `self.battery`), filter it by `plant_type`, index it by
+    `owner`, and then read a further dozen columns off the same frame -- so the stub supplies the
+    whole set (`GRID_PLANT_COLUMNS`) rather than the two the sizing line itself needs. Only the
+    frame is stubbed; the method under test runs unmodified.
+    """
+    agent = agent_class.__new__(agent_class)
+    agent.n_digits = 3
+    index = list(range(len(powers)))
+    data = {'owner': index, 'plant_type': [key] * len(powers), 'sgen_type': [key] * len(powers),
+            'load_type': [key] * len(powers), 'power': list(powers)}
+    data.update({name: [value] * len(powers) for name, value in GRID_PLANT_COLUMNS.items()})
+    frame = pd.DataFrame(data)
+    agent.sgen = frame
+    agent.battery = frame
+    agent.load = frame
+    agent.df = pd.DataFrame(index=index)
+
+    config = {'fcast': {}, 'quality': 1,
+              'sizing': {'controllable': [False], 'efficiency': [0.9], 'g2b': [True],
+                         'b2g': [False], 'soc': [0.5], 'capacity': [1.0]}}
+    getattr(agent, method_name)(key=key, config=config)
+
+    return agent.df[f'{key}/sizing/power_0']
+
+
+@pytest.mark.parametrize('name', sorted(ROUNDING), ids=sorted(ROUNDING))
+def test_every_grid_sizing_method_of_this_class_is_covered_here(name):
+    """`POWER_METHODS` is the set of methods with this shape, not a subset someone remembered.
+
+    An allowlist that is not compared against the class silently exempts the next method to grow
+    the same line -- and the whole point of #212 is that a line was copied into places nobody was
+    checking. So the class is asked which of these it defines.
+    """
+    agent_class, _ = ROUNDING[name]
+
+    defined = [method for method in POWER_METHODS if hasattr(agent_class, method)]
+
+    assert defined == list(POWER_METHODS), (
+        f'{name} defines {defined} of the grid sizing methods, not all of {list(POWER_METHODS)}; '
+        f'if one was renamed or removed, update POWER_METHODS deliberately')
+
+
+def test_no_creator_class_sizes_a_megawatt_column_with_a_bare_cast():
+    """The completeness guard: every class that does this must be in `ROUNDING`.
+
+    `ROUNDING` names three classes. Nothing tied it to the tree, so dropping an entry -- or adding
+    a fourth agent class with the same line -- left every assertion in this file silently
+    inapplicable to it. Demonstrated: removing `sfh` from `ROUNDING` and reverting `sfh.py`'s fix
+    left the whole suite green.
+
+    `AgentBase` itself raises `NotImplementedError` for these, so the set compared against is the
+    subclasses that actually override `_inflexible_load_grid`.
+    """
+    from hamlet.creator.agents.agent_base import AgentBase
+
+    overriders = {cls.__name__.lower() for cls in AgentBase.__subclasses__()
+                  if cls.__dict__.get('_inflexible_load_grid') is not None}
+
+    assert overriders == set(ROUNDING), (
+        f'these classes override _inflexible_load_grid: {sorted(overriders)}, but ROUNDING names '
+        f'{sorted(ROUNDING)}. A class not listed here is not covered by any assertion in this '
+        f'file, which is how #212 survived in ctsp')
+
+
+@pytest.mark.parametrize('name', sorted(ROUNDING), ids=sorted(ROUNDING))
+@pytest.mark.parametrize('method', POWER_METHODS)
+def test_an_inexact_megawatt_power_does_not_raise(name, method):
+    """The four sites #212 did not name. Against the unfixed code these raise `TypeError`."""
+    agent_class, _ = ROUNDING[name]
+
+    sized = size_power(agent_class, method, [INEXACT])
+
+    assert len(sized) == 1
+
+
+@pytest.mark.parametrize('name', sorted(ROUNDING), ids=sorted(ROUNDING))
+@pytest.mark.parametrize('method', POWER_METHODS)
+def test_an_inexact_megawatt_power_is_sized_to_the_watt(name, method):
+    """And to the watt. All three classes round `power`, unlike `demand`, where `industry` floors."""
+    agent_class, _ = ROUNDING[name]
+
+    sized = size_power(agent_class, method, [INEXACT])
+
+    assert sized.tolist() == [round(INEXACT * 1e6)]
