@@ -347,6 +347,12 @@ P_PV = 'pv'
 P_WIND = 'wind'
 P_FIXED_GEN = 'fixed-gen'
 P_HP = 'hp'
+
+# Section 14a EnWG (BNetzA BK6-22-300, eq. 2.1 in Chu 2024): a heat pump or room cooling system
+# whose *grid connection* power exceeds 11 kW may be dimmed to 40 % of that power. Below the
+# limit, the flat guaranteed minimum applies instead -- the same one EVs and batteries get.
+ENWG14A_HP_SCALING_LIMIT = 11_000  # W
+ENWG14A_HP_SCALING_FACTOR = 0.4
 P_EV = 'ev'
 P_BATTERY = 'battery'
 P_PSH = 'psh'
