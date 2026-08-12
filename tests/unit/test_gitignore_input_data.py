@@ -78,6 +78,25 @@ def test_generated_output_directories_are_still_ignored():
         assert ignoring_rule(path) is not None, f'`{path}` is run output and must stay ignored.'
 
 
+def test_the_golden_scenario_configs_are_not_ignored():
+    """`tests/e2e/scenarios/` is tracked source that merely looks like run output.
+
+    The rule at the top of `.gitignore` is `scenarios/*`, which is root-anchored and so does not
+    reach here -- but only by that detail. Broadening it to `**/scenarios/`, which reads like a
+    tidy-up, would take the golden master's grid fixture with it: the config would vanish from
+    `git status`, the reference would stay committed, and the scenario would fail to generate on
+    the next clone with nothing explaining why. That is precisely how the benchmark input above
+    was lost.
+    """
+    for path in ('tests/e2e/scenarios/grid_golden/setup.yaml',
+                 'tests/e2e/scenarios/grid_golden/topology.xlsx',
+                 'tests/e2e/scenarios/some_future_fixture/agents.xlsx'):
+        rule = ignoring_rule(path)
+        assert rule is None, (
+            f'`{path}` is ignored by `{rule}`. These are tracked scenario *configs*, not run '
+            f'output; ignore the generated tree under the repository root instead.')
+
+
 def test_archives_are_ignored_anywhere_in_the_tree():
     """Bulk data is what the blanket `input_data/*` rule was really guarding against."""
     for path in ('V2.zip', 'input_data/agents/sfh/raw.rar', 'docs/big.tar.gz'):
