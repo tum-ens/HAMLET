@@ -386,8 +386,10 @@ class Ctsp(AgentBase):
 
         # sizing
         for num in range(max(self.df[f"{key}/num"])):  # currently only one device per agent is supported
-            # Get demand from load sheet
-            self.df[f"{key}/sizing/demand_{num}"] = (df['demand'] * 1e6).astype('Int64')
+            # Get demand from load sheet, MW -> W. Rounded rather than cast: x * 1e6 is not exact
+            # in float64 for ~2-3 % of ordinary decimal MW values, and a bare astype('Int64')
+            # raises on those. See #212 and sfh.py, which rounds the same way.
+            self.df[f"{key}/sizing/demand_{num}"] = round(df['demand'] * 1e6).astype('Int64')
             # Check if file column is empty and fill it with the closest file if so
             if df['file'].isnull().all():
                 # file

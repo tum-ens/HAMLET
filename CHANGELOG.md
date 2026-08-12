@@ -285,6 +285,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Creating a CTSP agent from a grid file crashed on ordinary demand values (#212).**
+  `Ctsp._inflexible_load_grid` sized the load as `(df['demand'] * 1e6).astype('Int64')`, and
+  `demand * 1e6` is not exactly representable in float64 for **349 of the 10 000** three-decimal MW
+  values between 0 and 10 — `1.001` among them, which is a 1 MW load stated to the precision the
+  shipped grid file uses. pandas refuses to cast a non-integral float to a nullable integer, so
+  scenario creation aborted with `TypeError` rather than returning a wrong number.
+
+  The same line exists three times. `industry` floors it, `sfh` rounds it, and `industry.py:392`
+  keeps the old expression commented out beneath its replacement — so the change was deliberate and
+  `ctsp` is the copy it was not applied to. **`ctsp` now rounds, matching `sfh` rather than
+  `industry`, and that choice moves a watt**: `1.001 MW` is 1 001 000 W under `round` and
+  1 000 999 W under `floor`. Rounding recovers the decimal the file states, where flooring is biased
+  low on every value that is inexact and never high. `industry` is left as it is — changing it would
+  move generated sizings for a second agent type, which belongs with the deduplication decision in
+  #213 rather than in a crash fix. Values that were always exact are unchanged in all three classes,
+  which is asserted rather than assumed.
+
+  Latent until now: no shipped scenario declares a `ctsp` agent, so no generated scenario and
+  neither golden reference moves
 - **A test asking a scenario for a different solver backend could have it silently ignored
   (#206).** `tests/scenario_run.run_example`'s `framework=` / `solver=` switch edited
   `agents.yaml`. A scenario built with `new_scenario_from_files` gets its agents from
