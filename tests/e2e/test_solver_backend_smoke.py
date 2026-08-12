@@ -102,6 +102,10 @@ def test_the_deferred_cells_are_still_covered_elsewhere():
     The exception is which scenarios the golden master pins, which is read as data: now that it is
     multi-scenario, "it calls run_example somewhere" no longer implies "it still runs *this*
     example", and no substring can tell those two apart.
+
+    Note that `SCENARIOS` being non-empty is not checked here but in `test_golden_master.py`
+    itself, against the committed references -- that guard generalises to every pinned scenario,
+    where this one only defends the cell this file defers.
     """
     from tests.e2e import test_backend_equivalence as equivalence
     from tests.e2e import test_golden_master as golden
@@ -115,13 +119,20 @@ def test_the_deferred_cells_are_still_covered_elsewhere():
     assert 'run_example(' in golden_source, (
         'test_golden_master no longer runs the example, so poi + highs is not covered there and '
         'must stop being skipped here')
-    # The deferral names *this* scenario, not merely "the golden master". Dropping it from
-    # `SCENARIOS` while pinning some other one would leave poi + highs uncovered with every other
-    # check here still passing.
-    pinned = {scenario.name for scenario in golden.SCENARIOS}
-    assert SCENARIO_NAME in pinned, (
-        f'test_golden_master no longer pins {SCENARIO_NAME} (it pins {sorted(pinned)}), so '
-        f'poi + highs is not covered there and must stop being skipped here')
+    # The deferral names *this* example and *this* scenario, not merely "the golden master".
+    # Matching on the scenario name alone would accept a different example that happened to carry
+    # a folder of the same name -- which is only unreachable today because no two shipped examples
+    # share a scenario folder name, and that is a coincidence rather than a rule.
+    #
+    # Note what this does and does not buy: it protects the golden-master *reference* comparison
+    # of this cell. It is not the only thing running poi + highs end to end -- `COVERED_ELSEWHERE`
+    # names the equivalence test's poi arm as well, and that has its own constants and would keep
+    # running if this module were repointed.
+    pinned = {(scenario.example, scenario.name) for scenario in golden.SCENARIOS}
+    assert (EXAMPLE.name, SCENARIO_NAME) in pinned, (
+        f'test_golden_master no longer pins {EXAMPLE.name}/{SCENARIO_NAME} (it pins '
+        f'{sorted(pinned)}), so the poi + highs cell has no golden reference behind it and must '
+        f'stop being skipped here')
     # The golden master must still run the *shipped* configuration -- it is only a stand-in for
     # the poi + highs cell for as long as it does not override the backend itself.
     assert 'framework=' not in golden_source, (

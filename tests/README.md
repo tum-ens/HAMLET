@@ -165,8 +165,12 @@ whether that is the change you meant. If it is, regenerate the reference and com
 the change, so the review sees the numbers move:
 
 ```bash
-HAMLET_UPDATE_GOLDEN=1 python -m pytest tests -m golden
+HAMLET_UPDATE_GOLDEN=1 python -m pytest tests -m golden               # every scenario
+HAMLET_UPDATE_GOLDEN=simple_scenario python -m pytest tests -m golden  # just this one
 ```
+
+Name the scenario when more than one is pinned: `1` regenerates every reference, so a re-baseline
+aimed at one change silently commits any unrelated movement in the others.
 
 Reproducibility rests on seeding `random` and `numpy.random` and pinning `PYTHONHASHSEED`; the
 Creator draws agent ids, plant ownership and sizings from all three. Two seeded runs were
