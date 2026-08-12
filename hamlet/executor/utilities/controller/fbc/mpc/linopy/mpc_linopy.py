@@ -4,9 +4,10 @@ __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
-import os
-import sys
+import io
 import logging
+import os
+from contextlib import redirect_stdout
 
 import numpy as np
 
@@ -14,7 +15,8 @@ from linopy.io import read_netcdf
 
 from hamlet.executor.utilities.controller.fbc.mpc.linopy.components import *
 from hamlet.executor.utilities.controller.fbc.mpc.mpc_base import MpcBase
-from hamlet.executor.utilities.controller.solver_options import reproducibility_options
+from hamlet.executor.utilities.controller.solver_options import (quiet_options,
+                                                                 reproducibility_options)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -209,9 +211,12 @@ class Linopy(MpcBase):
         balance. That has to be visible: an agent that shed 3 kW must not look identical to one
         that served it.
 
-        Note: this reports through `logging` rather than `warnings`. The executor installs a
-        blanket `warnings.filterwarnings("ignore")` at import time, so a warning here would
-        never reach the user and the shed energy would be silent.
+        Reported through `logging`. That was originally forced -- the executor installed a
+        blanket `warnings.filterwarnings("ignore")` at import, so anything raised through the
+        `warnings` machinery here reached nobody (#199). The blanket filter is gone, and
+        `logging` is kept on its own merits: the `warnings` machinery deduplicates by source
+        line, so it would report the first agent that shed and stay silent for every one after
+        it, which is precisely the wrong shape for a per-agent, per-timestep report.
         """
 
         for name, variable in self.model.variables.items():
@@ -232,15 +237,19 @@ class Linopy(MpcBase):
         solver = self.ems.get('solver')
         match solver:
             case 'gurobi' | 'highs':
-                sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
-                # `OutputFlag` and `LogToConsole` are Gurobi's names, and HiGHS discards them
-                # unrecognised -- the redirect above is what actually silences it. Tidying that is
-                # roadmap item #11; the options added below are the ones that decide whether the
-                # run is reproducible, so they are named per solver (#204).
-                solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
+                # linopy prints around the solve regardless of what the solver is told, so the
+                # redirect stays -- but as a context manager. The previous form assigned
+                # `sys.stdout` and restored it afterwards, which leaked a file object per solve,
+                # never restored it if the solve raised, and restored it to `sys.__stdout__`
+                # rather than to whatever the caller had installed (pytest's capture, for one).
+                #
+                # The solver's own flags are now looked up per solver. Sending Gurobi's
+                # `OutputFlag`/`LogToConsole` to HiGHS was a no-op -- the same defect as #204's
+                # `TimeLimit` -- so before #199 the redirect was the only thing working here.
+                solver_options = quiet_options(solver)
                 solver_options.update(reproducibility_options(solver, self.ems.get('time_limit')))
-                status = self.model.solve(solver_name=solver, **solver_options)
-                sys.stdout = sys.__stdout__  # re-activate printing
+                with redirect_stdout(io.StringIO()):
+                    status = self.model.solve(solver_name=solver, **solver_options)
             case _:
                 raise ValueError(f"Unsupported solver: {solver}")
 

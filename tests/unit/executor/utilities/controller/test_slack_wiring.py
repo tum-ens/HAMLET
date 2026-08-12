@@ -56,12 +56,15 @@ class TestSlackIsReported:
 
     @pytest.mark.parametrize('module', [mpc_linopy, optim_linopy], ids=['mpc', 'rtc'])
     def test_it_reports_through_logging_not_warnings(self, module):
-        """Regression: `warnings.warn` is dead in this package.
+        """Regression: the slack report must not go through `warnings.warn`.
 
-        `hamlet/executor/setup.py` installs a blanket `warnings.filterwarnings("ignore")` at
-        import time, so a warning raised here never reaches the user. The shed energy would be
-        completely silent, which is exactly the failure the slack is meant to make survivable
-        rather than invisible.
+        It originally could not: `hamlet/executor/setup.py` installed a blanket
+        `warnings.filterwarnings("ignore")` at import, so a warning raised here reached nobody
+        and the shed energy was completely silent. That filter is gone (#199), so this is no
+        longer the *only* thing standing between the report and the user -- but `warnings`
+        deduplicates by source line, so a single `warn` here would report the first agent that
+        shed and stay quiet for every one after it. `logging` is the right channel for a
+        per-agent, per-timestep report, and this pins it.
         """
         source = inspect.getsource(module.Linopy._warn_on_slack)
 
@@ -70,7 +73,7 @@ class TestSlackIsReported:
 
     def test_a_warning_actually_escapes_the_package_filters(self, caplog):
         """The end-to-end property: importing hamlet must not silence this message."""
-        import hamlet  # noqa: F401  -- installs the blanket warnings filter
+        import hamlet  # noqa: F401  -- the import that used to install the blanket filter
 
         logger = logging.getLogger(mpc_linopy.__name__)
         with caplog.at_level(logging.WARNING, logger=mpc_linopy.__name__):

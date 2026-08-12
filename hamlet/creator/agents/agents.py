@@ -28,12 +28,10 @@ from pvlib.pvsystem import PVSystem
 from pvlib.location import Location
 from windpowerlib import ModelChain, WindTurbine
 from hplib import hplib
-import warnings
 import re
 from hamlet import functions as f
 from hamlet import constants as c
 
-warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.options.mode.chained_assignment = None  # default='warn'
 
 # Column in the EV input files that holds the availability flag rather than a quantity
@@ -430,13 +428,13 @@ class Agents:
         # End of the first forecasting period in UTC
         end_fcast_period = start + datetime.timedelta(seconds=fcast_period)
         # Time range for the simulation
-        timerange = pd.date_range(start=start, end=end, freq=f"{int(self.setup['time']['timestep'])}S")[:-1]
+        timerange = pd.date_range(start=start, end=end, freq=f"{int(self.setup['time']['timestep'])}s")[:-1]
         # Time range for the forecasting training period
         timerange_fcast_train = pd.date_range(start=start_fcast_train, end=end,
-                                              freq=f"{int(self.setup['time']['timestep'])}S")[:-1]
+                                              freq=f"{int(self.setup['time']['timestep'])}s")[:-1]
         # Time range for the first forecasting period (first simulation period)
         timerange_fcast_period = pd.date_range(start=start, end=end_fcast_period,
-                                              freq=f"{int(self.setup['time']['timestep'])}S")[:-1]
+                                              freq=f"{int(self.setup['time']['timestep'])}s")[:-1]
 
         # Initialize data structures
         # Time series of each plant

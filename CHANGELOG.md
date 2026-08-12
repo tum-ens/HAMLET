@@ -73,6 +73,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Changed
+- **`import hamlet` no longer silences every warning in the process.** `hamlet/executor/setup.py`
+  called `warnings.filterwarnings("ignore")` at module scope, and `hamlet/__init__.py` imports
+  that module, so importing HAMLET installed a process-wide blanket filter — hiding HAMLET's own
+  warnings, every dependency's, and any raised by the importing program. A second blanket filter
+  (`FutureWarning`, all modules) sat in `hamlet/creator/agents/agents.py`, and `pytest.ini`
+  carried a third (`ignore::DeprecationWarning`) for the suite. All three are gone.
+
+  What they were hiding was **measured, not guessed**: both shipped scenarios were run end to end
+  with the filters lifted after import and every warning recorded. `create_simple_scenario`
+  (24 steps) raised 4,688 warnings from 30 locations; `grid_golden` (30 steps) raised 7,805 from
+  36. **Every one originated in HAMLET's own code** — none was a dependency warning about itself
+  — and the volume is HAMLET calling polars 0.20 APIs that polars 0.20 already deprecates
+  (`groupby`, `cumsum`, `apply`, `how='outer'`, the `axis` parameter, the left-join coalesce
+  default, and `map_elements` without `return_dtype`).
+
+  The blanket filter could not simply be deleted, and that was measured too. Python ignores
+  `DeprecationWarning` outside `__main__` by default, so the raised count overstates what a user
+  sees — but a bare removal still prints **491 lines for a 30-timestep run**, 360 of them polars'
+  `MapWithoutReturnDtypeWarning`, whose origin Python records as `sys:1` so it never
+  deduplicates. That is roughly 16 lines per timestep, or ~140,000 over a simulated year.
+
+  So the suppression is now *enumerated* instead of blanket. `hamlet/warning_policy.py` lists
+  each hidden message with its category, its reason and the backlog item tracking its removal
+  (#12, the Polars 1.x migration), and `quiet_known_noise()` installs exactly that list around a
+  Creator or Executor run and removes it again afterwards — including when the run raises.
+  Nothing runs at import. `tests/conftest.py` registers the same list with pytest, so the suite
+  and the runtime cannot disagree about what counts as noise. Anything not on the list now
+  reaches the user: a new deprecation, a `UserWarning` from pandas, a `warnings.warn` added to
+  HAMLET tomorrow. Closes #199 and the warnings half of roadmap item #11
+
+- **Solver output options are looked up per solver instead of written out inline.**
+  `mpc_linopy.py` and `optim_linopy.py` sent the literal `{'OutputFlag': 0, 'LogToConsole': 0}`
+  to whichever solver was configured. Those are Gurobi's names; HiGHS discards them unrecognised,
+  so under the default backend nothing was switched off and the `sys.stdout` redirect around the
+  call was doing all the work. This is the same defect as #204's `TimeLimit`, differing only in
+  consequence — a discarded log flag prints, a discarded time limit changes results.
+  `solver_options.quiet_options` now answers with `output_flag`/`log_to_console` for HiGHS and
+  `OutputFlag`/`LogToConsole` for Gurobi, in each solver's required type, and `poi_solver`
+  reads the same table so the two backends cannot drift. No numbers move: these options affect
+  logging only, and the golden references are unchanged
+
+- **The solve no longer leaks a file object or loses stdout on failure.**
+  `sys.stdout = open(os.devnull, 'w')` before each linopy solve and `sys.stdout = sys.__stdout__`
+  after it leaked the handle on every solve, never restored on an exception — a raising solve
+  left the process writing to devnull permanently — and restored to `sys.__stdout__` rather than
+  to whatever the caller had installed, which broke pytest's capture. Replaced with
+  `contextlib.redirect_stdout`. The remaining half of roadmap item #11
+
+- **`freq='S'` is now `freq='s'`** in `creator/agents/agents.py` and `creator/markets/electricity.py`.
+  pandas deprecated the capitalised alias and will remove it; the two spellings denote the same
+  offset, so this fixes 37 warnings per run at no behavioural cost rather than suppressing them
+
 - **The golden master can pin more than one scenario.** `tests/e2e/test_golden_master.py` held its
   example and scenario name as module-scope constants, so exactly one scenario could ever be
   pinned — and the one it pins sets `electricity.active: False`, which is why no reference numbers

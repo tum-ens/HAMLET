@@ -21,9 +21,7 @@ import hamlet.constants as c
 from hamlet.executor.agents.agent import Agent
 from hamlet.executor.markets.market import Market
 from hamlet.executor.grids.grid import Grid
-import warnings
-
-warnings.filterwarnings("ignore")
+from hamlet.warning_policy import quiet_known_noise
 
 
 class Executor:
@@ -82,12 +80,20 @@ class Executor:
         self.max_iteration = 1
 
     def run(self):
-        """Runs the simulation"""
-        self.setup()
+        """Runs the simulation.
 
-        self.execute()
+        The whole run sits inside `quiet_known_noise`, which hides the enumerated polars 0.20
+        deprecations HAMLET is knowingly carrying and nothing else. It replaces the blanket
+        `warnings.filterwarnings("ignore")` this module used to install at import -- see
+        `hamlet/warning_policy.py` and issue #199. Entered here rather than around each stage so
+        the filters are swapped once per run instead of once per timestep.
+        """
+        with quiet_known_noise():
+            self.setup()
 
-        self.cleanup()
+            self.execute()
+
+            self.cleanup()
 
     def setup(self):
         """Sets up the scenario before execution"""
