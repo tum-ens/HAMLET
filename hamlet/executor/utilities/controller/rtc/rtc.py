@@ -13,7 +13,6 @@ from hamlet.executor.utilities.controller.rtc.optim.poi.optim_poi import POI
 from hamlet.executor.utilities.controller.rtc.rb.rule_based import RuleBased
 from hamlet.executor.utilities.database.agent_db import AgentDB
 
-# warnings.filterwarnings("ignore")
 logging.getLogger('linopy').setLevel(logging.CRITICAL)
 
 

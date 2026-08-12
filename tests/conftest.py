@@ -25,6 +25,32 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def pytest_configure(config):
+    """Give the suite the same enumerated warning policy the runtime uses.
+
+    `pytest.ini` used to carry `filterwarnings = ignore::DeprecationWarning`, which is the same
+    blanket suppression #199 is about, one layer out: it hid every deprecation raised anywhere in
+    the suite, HAMLET's own and its dependencies', and it would have hidden a new one just as
+    effectively as the old one.
+
+    The entries come from `hamlet.warning_policy.SUPPRESSED` rather than being written out in
+    `pytest.ini`, so there is exactly one list. Two copies is how `{'OutputFlag': 0}` ended up
+    being sent to HiGHS, and a second copy here would drift the same way -- silently, because a
+    filter that matches nothing looks identical to one that matches.
+
+    Registered here rather than as ini text because pytest applies `filterwarnings` per test item
+    from `config.getini`, so appending at configure time reaches every test.
+    """
+    from hamlet.warning_policy import SUPPRESSED
+
+    for category, message, _ in SUPPRESSED:
+        # pytest's spelling is `action:message:category:module:lineno`; the message is matched as
+        # a prefix regex, exactly as `warnings.filterwarnings` does.
+        config.addinivalue_line(
+            'filterwarnings',
+            f'ignore:{message}:{category.__module__}.{category.__qualname__}')
+
+
 def pytest_report_header(config):
     """State which solver x framework combinations will run, at the top of every run.
 

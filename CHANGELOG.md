@@ -73,6 +73,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Changed
+- **`import hamlet` no longer silences every warning in the process.** `hamlet/executor/setup.py`
+  called `warnings.filterwarnings("ignore")` at module scope, and `hamlet/__init__.py` imports
+  that module, so importing HAMLET installed a process-wide blanket filter — hiding HAMLET's own
+  warnings, every dependency's, and any raised by the importing program. A second blanket filter
+  (`FutureWarning`, all modules) sat in `hamlet/creator/agents/agents.py`, and `pytest.ini`
+  carried a third (`ignore::DeprecationWarning`) for the suite. All three are gone.
+
+  Suppression that is still wanted is now *enumerated* rather than blanket:
+  `hamlet/warning_policy.py` lists each hidden message with its category and reason, and
+  `quiet_known_noise()` installs exactly that list around a Creator or Executor run and removes
+  it again afterwards, including when the run raises. Nothing runs at import.
+  `tests/conftest.py` registers the same list with pytest so the suite and the runtime cannot
+  disagree. Everything on the list is HAMLET calling deprecated polars 0.20 APIs
+  (ROADMAP item #12); what it hid, what a bare removal would have cost, and why it is enumerated
+  rather than deleted are recorded in that module. Anything *not* on the list now reaches the
+  user — including two live §14a defects that had been invisible for years, now #210 and #211.
+  Closes #199 and the warnings half of ROADMAP item #11
+
+- **Solver output options are looked up per solver instead of written out inline.**
+  `mpc_linopy.py` and `optim_linopy.py` sent the literal `{'OutputFlag': 0, 'LogToConsole': 0}`
+  to whichever solver was configured. Those are Gurobi's names; HiGHS discards them unrecognised,
+  so under the default backend nothing was switched off and the `sys.stdout` redirect around the
+  call was doing all the work. This is the same defect as #204's `TimeLimit`, differing only in
+  consequence — a discarded log flag prints, a discarded time limit changes results.
+  `solver_options.quiet_options` now answers with `output_flag`/`log_to_console` for HiGHS and
+  `OutputFlag`/`LogToConsole` for Gurobi, in each solver's required type, and `poi_solver`
+  reads the same table so the two backends cannot drift. No numbers move: these options affect
+  logging only, and the golden references are unchanged
+
+- **The solve no longer leaks a file object or loses stdout on failure.**
+  `sys.stdout = open(os.devnull, 'w')` before each linopy solve and `sys.stdout = sys.__stdout__`
+  after it leaked the handle on every solve, never restored on an exception — a raising solve
+  left the process writing to devnull permanently — and restored to `sys.__stdout__` rather than
+  to whatever the caller had installed, which broke pytest's capture. Replaced with
+  `contextlib.redirect_stdout`. The remaining half of roadmap item #11
+
+- **`freq='S'` is now `freq='s'`** in `creator/agents/agents.py` and `creator/markets/electricity.py`.
+  pandas deprecated the capitalised alias and will remove it; the two spellings denote the same
+  offset, so this fixes 37 warnings per run at no behavioural cost rather than suppressing them
+
 - **The golden master can pin more than one scenario.** `tests/e2e/test_golden_master.py` held its
   example and scenario name as module-scope constants, so exactly one scenario could ever be
   pinned — and the one it pins sets `electricity.active: False`, which is why no reference numbers

@@ -310,6 +310,40 @@ Pinning the threads moved no numbers: the golden reference was recorded at `thre
 matches, so HiGHS was already solving these models serially on an idle machine. The thread count is
 pinned because it *can* vary, not because it was shown to have.
 
+**Every solver option is looked up per solver, and writing one out inline is the bug.** The same
+module answers `quiet_options(solver)` — `output_flag`/`log_to_console` for HiGHS,
+`OutputFlag`/`LogToConsole` for Gurobi, each in the type that solver's API demands. The linopy
+controllers used to send the Gurobi pair to both, so under HiGHS the flags did nothing;
+`poi_solver.create_model` reads the same table, so the two backends cannot drift apart again.
+
+**And the stdout hijack was not covering for them.** HiGHS logs from C to file descriptor 1;
+`sys.stdout = open(os.devnull, 'w')` rebinds a Python attribute and never touched it. Measured
+per solve under `framework: linopy` + `solver: highs`: **52 stdout lines before, 1 after** — two
+of the 52 being `ERROR: getOptionIndex: Option "OutputFlag" is unknown`, which linopy discards
+the status of. So the solver was complaining, on every solve, into a stream nobody was reading.
+Only an fd-level redirect catches C output; `tests/backend_matrix._silenced` is the one place
+that does it. The spelling is pinned by a test rather than discovered by running (#199).
+
+## Warnings
+
+**Nothing in `hamlet` may install a warning filter at import.** `hamlet/executor/setup.py` used to
+call `warnings.filterwarnings("ignore")` at module scope, so `import hamlet` silenced every
+warning in the process — HAMLET's own included. That is how a slack-variable warning added in
+!195 was dead on arrival, and why the scenario-format check was made a hard error rather than a
+warning. Two more blanket filters existed, in `creator/agents/agents.py` and `pytest.ini`. All
+three are gone (#199), and `tests/unit/test_warning_policy.py` fails if any comes back — checked
+by raising warnings in a subprocess after importing the package, not by grepping for the call.
+
+Suppression that is still wanted is **enumerated** in `hamlet/warning_policy.py`: each entry names
+a category, a message pattern and the reason, and `quiet_known_noise()` installs exactly that list
+around a Creator or Executor run. `tests/conftest.py` registers the same list with pytest, so the
+suite and the runtime agree by construction rather than by two people remembering. That module
+records what the blanket filter was hiding, measured, and why enumerating beat deleting.
+
+**Do not add a category to `SUPPRESSED` to quieten a run.** If a warning is worth hiding it is
+worth an issue: lifting the filter is what surfaced #210 and #211, two live §14a defects that had
+been invisible for as long as the filter existed.
+
 ## Branches and propagation
 
 - `master` and `develop` are protected on GitLab with push access **No one**. Changes land by
