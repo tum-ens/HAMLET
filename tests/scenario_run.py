@@ -86,12 +86,21 @@ def table_kind(path, root):
 
 
 def fingerprint(results_root):
-    """Row counts and per-column statistics, grouped by table kind."""
+    """Row counts and per-column statistics, grouped by table kind.
+
+    Both result formats are read. Agent and market tables are Feather; the grid stage writes its
+    power flow results as CSV (`res_bus`, `res_trafo`, `res_line`, ...), so globbing `*.ft` alone
+    silently pinned nothing the grid produces -- which for a scenario added specifically to cover
+    the grid stage would have been a golden master that passed while every number in it moved.
+    Scenarios with `electricity.active: False` write no CSV at all and are unaffected.
+    """
     import polars as pl
 
     grouped = defaultdict(lambda: {'files': 0, 'rows': 0, 'columns': {}})
-    for path in sorted(Path(results_root).rglob('*.ft')):
-        frame = pl.read_ipc(path, memory_map=False)
+    paths = sorted(list(Path(results_root).rglob('*.ft')) + list(Path(results_root).rglob('*.csv')))
+    for path in paths:
+        frame = (pl.read_csv(path) if path.suffix == '.csv'
+                 else pl.read_ipc(path, memory_map=False))
         entry = grouped[table_kind(path, results_root)]
         entry['files'] += 1
         entry['rows'] += len(frame)
