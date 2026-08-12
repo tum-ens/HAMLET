@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Added
+- **A golden master for the grid stage and §14a, which had none.** The only scenario the golden
+  master pinned sets `electricity.active: False` and calculates no grid, so no committed reference
+  number had ever come from the power flow, the variable grid fees or direct power control — while
+  the grid stage was being measured and optimised. `tests/e2e/scenarios/grid_golden/` is a 21-bus
+  feeder with four single-family homes over one day, deliberately weak: the transformer is sized
+  above the four-agent §14a guarantee floor and below the coincident peak, so it overloads at 132 %
+  and the restriction fires.
+
+  The topology is a radial slice of the real low-voltage feeder the §14a study used — real cable
+  lengths, real impedances and ampacities — **rebuilt from explicitly chosen electrical parameters
+  rather than by deleting columns**, so no street address, asset identifier or utility tag can leak
+  by being overlooked. It lives under `tests/` rather than `examples/` because it is tuned to
+  overload rather than to be copied.
+
+  `tests/e2e/test_grid_restrictions.py` asserts the mechanism rather than the numbers, in four
+  claims that fail separately: the feeder overloads, the fees vary, a command is issued, and **the
+  command is respected in the resulting power flow**. That last one is what the grid stage cannot
+  check for itself — it re-simulates, gets the same answer and converges on an uncapped grid — and
+  restoring the pre-!209 no-op `apply_grid_commands` fails it alone, with the other three still
+  green.
+
+  `fingerprint` now covers the grid stage's CSV results as well as the Feather tables; a scenario
+  with no grid writes no CSV, so the existing reference does not move
 - **The PyOptInterface backend now runs on HiGHS, so it no longer needs a Gurobi licence.**
   `framework: poi` imported `pyoptinterface.gurobi` unconditionally and accepted only
   `solver: gurobi`. Because PyOptInterface links a *system* Gurobi installation directly, without
