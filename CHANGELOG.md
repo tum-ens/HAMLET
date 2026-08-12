@@ -285,6 +285,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A test asking a scenario for a different solver backend could have it silently ignored
+  (#206).** `tests/scenario_run.run_example`'s `framework=` / `solver=` switch edited
+  `agents.yaml`. A scenario built with `new_scenario_from_files` gets its agents from
+  **`agents.xlsx`**, which nothing regenerates and which the YAML has no part in. So the request
+  was accepted, the switch's own `assert switched` was satisfied by the file it edited, and the
+  workbook's own backend ran anyway. Three shipped scenarios were exposed — `grid_golden` and
+  `scenario_with_topology` pin `poi`/`highs`, `scenario_with_market` pins `linopy`/`gurobi`, so
+  asking that one for HiGHS would have run Gurobi. Nothing called it that way yet, so no test was
+  vacuous; the trap was armed rather than sprung.
+
+  Two changes, because they close different things. The switch now reaches **every config file
+  that can carry the key**, workbook included, so no file can look authoritative while another one
+  quietly disagrees with it. And the backend receipt — the probe that records what actually built
+  and solved each model — is no longer opt-in: whenever a backend is asked for, `run_example`
+  writes it and checks it. The first fixes the entry point that was missed; the second catches the
+  next one, whatever file it reads. `tests/e2e/test_solver_backend_smoke.py` gains one test that
+  asks `grid_golden` for a backend it does not ship and asserts on what solved, not on what was
+  requested. `tests/integration/test_scenario_run_backend_switch.py` covers the same ground in the
+  fast tier: it reads the workbook back the way the Creator reads it, and it covers the receipt
+  check directly — that guard was reachable only through `run_example`, so a typo in the part
+  meant to be durable would have failed open until someone ran a job costing minutes. No golden
+  reference moves — a run that names no backend takes neither of the new paths, and the golden
+  master names none
 - **Grid registration could drop an agent from the network and report success (follow-up to
   #205).** Two agents the matcher cannot tell apart — same bus, same agent type, same profile file
   — both matched the *same* inflexible load, and the second overwrote the first's `id_agent`.

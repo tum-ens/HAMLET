@@ -8,6 +8,7 @@ the golden reference exactly.
 Reproducibility rests on seeding `random` and `numpy.random` and pinning `PYTHONHASHSEED`: the
 Creator draws agent ids, plant ownership and sizings from all three.
 """
+import json
 import os
 import re
 import shutil
@@ -76,6 +77,96 @@ atexit.register(lambda: open(r"{record}", "w", encoding="utf-8").write(json.dump
 '''
 
 
+def switch_in_yaml(text, key, value):
+    """Point every `key:` in a YAML config at `value`, or fail saying there was none to point."""
+    text, switched = re.subn(rf'^(\s*){key}: *\w+', rf'\g<1>{key}: {value}', text,
+                             flags=re.MULTILINE)
+    assert switched, f'no {key} key to switch in agents.yaml'
+    return text
+
+
+def switch_in_workbook(path, key, value):
+    """Point every `.../<key>` column of every sheet in an agents workbook at `value`.
+
+    The workbook stores what the YAML nests: `ems/controller/rtc/optimization/framework` is one
+    column header, so the key is its last path segment.
+
+    Edited in place with openpyxl rather than round-tripped through pandas, so a switch touches the
+    targeted cells and nothing else. Only cells that already hold a value are rewritten: a blank
+    means the agent has no such controller, and filling one in would be adding configuration rather
+    than switching it.
+
+    **Returns cells rewritten per sheet, not one total.** A single number lets one matching sheet
+    vouch for the rest -- `create_agents_file_from_config` writes one sheet per agent type
+    (`agents.py:228`), and `config_templates/agents.yaml` declares five -- so a workbook whose
+    `sfh` sheet switches and whose `industry` sheet has a renamed column would report success while
+    half its agents kept the shipped backend. That is #206's own shape one level down, and a total
+    cannot see it.
+    """
+    from openpyxl import load_workbook
+
+    book = load_workbook(path)
+
+    # openpyxl writes no cached formula results and pandas reads only cached results, so re-saving
+    # this workbook blanks every formula in it -- and the Creator reads a blank as "not configured".
+    # A backend switch silently rewriting an unrelated sizing column is worse than not switching, so
+    # this refuses rather than proceeds. None of the four shipped workbooks contains a formula.
+    formulas = [f'{sheet.title}!{cell.coordinate}'
+                for sheet in book.worksheets for row in sheet.iter_rows() for cell in row
+                if isinstance(cell.value, str) and cell.value.startswith('=')]
+    assert not formulas, (
+        f'{path.name} contains formulas ({formulas[:5]}), and saving it through openpyxl would '
+        f'blank their cached values -- which the Creator would then read as unset. Switch the '
+        f'backend in this scenario some other way, or replace the formulas with their values')
+
+    switched = {}
+    for sheet in book.worksheets:
+        headers = [cell for (cell,) in sheet.iter_cols(min_row=1, max_row=1)
+                   if cell.value is not None and str(cell.value).rsplit('/', 1)[-1] == key]
+        count = 0
+        for header in headers:
+            for row in range(2, sheet.max_row + 1):
+                cell = sheet.cell(row=row, column=header.column)
+                if cell.value in (None, ''):
+                    continue
+                cell.value = value
+                count += 1
+        switched[sheet.title] = count
+
+    if any(switched.values()):
+        book.save(path)
+    return switched
+
+
+def assert_backend_honoured(record, framework, solver):
+    """The request was a request; this reads the receipt the run wrote and checks it was honoured.
+
+    **This is the general guard, and it is the half of #206 that generalises.** The switch reaching
+    `agents.xlsx` fixes the one file that was missed; this fixes the class, because it does not care
+    which file a `creator_method` reads -- only that the run reports having used what was asked for.
+
+    Deliberately checks each axis only when it was asked for. `framework='linopy'` with no `solver`
+    is a legitimate call -- `test_backend_equivalence` makes it -- and must not start requiring the
+    caller to name a solver as well.
+    """
+    assert record.exists(), (
+        'the run completed but wrote no backend record, so what solved it is unknown')
+    used = {tuple(pair) for pair in json.loads(record.read_text(encoding='utf-8'))}
+
+    assert used, (
+        f'the run completed without building or solving a single model, so the requested backend '
+        f'({framework or "any"} + {solver or "any"}) cannot have been used; the request was lost')
+
+    for axis, requested, actual in (('framework', framework, sorted({pair[0] for pair in used})),
+                                    ('solver', solver, sorted({pair[1] for pair in used}))):
+        if requested is None:
+            continue
+        assert actual == [requested], (
+            f'asked for {axis} {requested!r}, but the run actually used {actual} '
+            f'(pairs: {sorted(used)}). The config edit did not reach the file this scenario is '
+            f'built from -- see #206')
+
+
 def table_kind(path, root):
     """The table's identity, with the random agent id replaced by its type."""
     parts = Path(path).relative_to(root).parts
@@ -117,6 +208,77 @@ def fingerprint(results_root):
     return {kind: entry for kind, entry in sorted(grouped.items())}
 
 
+def prepare_config(base, example_dir, scenario_name, framework=None, solver=None, edits=(),
+                   config_edits=None):
+    """Copy an example's config under `base` and apply every requested edit to it.
+
+    Split out of `run_example` so the edits can be checked without paying for a run: the backend
+    switch has to reach the file the Creator reads, and #206 went *unnoticed* for as long as
+    observing that meant running a whole scenario and reading the results afterwards.
+
+    Returns the config directory. See `run_example` for what each argument means.
+    """
+    scenarios, results = base / 'scenarios', base / 'results'
+    config = base / scenario_name
+    shutil.copytree(example_dir / scenario_name, config)
+    scenarios.mkdir(exist_ok=True)
+    results.mkdir(exist_ok=True)
+
+    setup = config / 'setup.yaml'
+    text = setup.read_text(encoding='utf-8')
+    for old, new in (('input: ../../input_data', f'input: {(REPO_ROOT / "input_data").as_posix()}'),
+                     ('scenarios: ../../scenarios', f'scenarios: {scenarios.as_posix()}'),
+                     ('results: ../../results', f'results: {results.as_posix()}')):
+        assert old in text, f'{old!r} not found in setup.yaml'
+        text = text.replace(old, new)
+    setup.write_text(text, encoding='utf-8')
+
+    agents = config / 'agents.yaml'
+    agents_text = agents.read_text(encoding='utf-8')
+    if framework is not None:
+        agents_text = switch_in_yaml(agents_text, 'framework', framework)
+    if solver is not None:
+        agents_text = switch_in_yaml(agents_text, 'solver', solver)
+    for old, new in edits:
+        assert old in agents_text, f'{old!r} not found in agents.yaml'
+        agents_text = agents_text.replace(old, new)
+    agents.write_text(agents_text, encoding='utf-8')
+
+    # The workbooks, where the scenario ships any. `new_scenario_from_files` builds the agents from
+    # them and nothing regenerates them, so this is the *only* place their backend can be switched;
+    # the other two entry points rewrite them (`__create_agent_files` passes `overwrite=True`) from
+    # the `ems` block `fill_ems` reads out of the YAML above, which makes this edit redundant there
+    # rather than wrong. Either way both files end up saying the same thing. #206.
+    #
+    # `rglob` rather than `config / 'agents.xlsx'`: the Creator treats every subfolder of the config
+    # directory as a region and creates agents for each (`setup.py.__loop_through_dict`), so a
+    # nested scenario has one workbook per region. No shipped scenario is nested, so today this
+    # finds exactly one file -- but editing only the root would be this same defect again, and the
+    # YAML edit above still has that gap (the run-time receipt is what covers it).
+    for workbook in sorted(config.rglob('agents.xlsx')):
+        for key, value in (('framework', framework), ('solver', solver)):
+            if value is None:
+                continue
+            switched = switch_in_workbook(workbook, key, value)
+            missed = sorted(sheet for sheet, count in switched.items() if not count)
+            assert switched and not missed, (
+                f'no {key} value to switch in {workbook.relative_to(config.parent)}'
+                + (f', sheets {missed}' if missed else '')
+                + f', so the request for {value!r} would be silently lost for those agents if this '
+                  f'scenario is built with new_scenario_from_files')
+
+    for filename, replacements in (config_edits or {}).items():
+        target = config / filename
+        assert target.exists(), f'{filename} not found in {scenario_name}'
+        content = target.read_text(encoding='utf-8')
+        for old, new in replacements:
+            assert old in content, f'{old!r} not found in {filename}'
+            content = content.replace(old, new)
+        target.write_text(content, encoding='utf-8')
+
+    return config
+
+
 def run_example(base, example_dir, scenario_name, framework=None, solver=None, edits=(),
                 config_edits=None, record_backends=None,
                 creator_method='new_scenario_from_configs'):
@@ -137,54 +299,32 @@ def run_example(base, example_dir, scenario_name, framework=None, solver=None, e
     `config_edits` is a {filename: [(old, new), ...]} mapping for any other config file --
     `grids.yaml`, say, to switch a grid restriction on.
 
-    Every replacement must match at least once. That is deliberate: a renamed config key then
-    fails the test loudly, instead of the test quietly running an unmodified scenario and passing
-    for the wrong reason.
+    **The backend switch reaches the workbook as well as the YAML** -- see `prepare_config` for
+    which file each entry point actually consults, and for what it still does not reach. Both are
+    switched where both exist, so neither can be the authoritative one while the other quietly
+    disagrees with it (#206).
+
+    Every replacement must match at least once, in every file it is applied to. That is deliberate:
+    a renamed config key then fails the test loudly, instead of the test quietly running an
+    unmodified scenario and passing for the wrong reason.
 
     `record_backends` is a path to write the JSON list of (framework, solver) pairs the run
-    actually used. Matching the key is what stops the *request* being lost; this is what proves it
-    was honoured. See `BACKEND_PROBE`.
+    actually used. **Whenever `framework` or `solver` is passed the record is written and checked
+    here regardless**; passing `record_backends` additionally hands it to the caller. See
+    `assert_backend_honoured`.
     """
     scenarios, results = base / 'scenarios', base / 'results'
-    config = base / scenario_name
-    shutil.copytree(example_dir / scenario_name, config)
-    scenarios.mkdir(exist_ok=True)
-    results.mkdir(exist_ok=True)
+    config = prepare_config(base, example_dir, scenario_name, framework=framework, solver=solver,
+                            edits=edits, config_edits=config_edits)
 
-    setup = config / 'setup.yaml'
-    text = setup.read_text(encoding='utf-8')
-    for old, new in (('input: ../../input_data', f'input: {(REPO_ROOT / "input_data").as_posix()}'),
-                     ('scenarios: ../../scenarios', f'scenarios: {scenarios.as_posix()}'),
-                     ('results: ../../results', f'results: {results.as_posix()}')):
-        assert old in text, f'{old!r} not found in setup.yaml'
-        text = text.replace(old, new)
-    setup.write_text(text, encoding='utf-8')
+    # A backend was asked for, so the run has to say what it used -- whether or not the caller
+    # wants the record for itself. The alternative is the state #206 was filed about: the receipt
+    # existed, was opt-in, and neither the golden master nor the grid tests took it.
+    requested = framework is not None or solver is not None
+    record = Path(record_backends) if record_backends is not None else base / 'backends_used.json'
+    wanted = requested or record_backends is not None
+    probe = BACKEND_PROBE.format(record=record.as_posix()) if wanted else ''
 
-    agents = config / 'agents.yaml'
-    agents_text = agents.read_text(encoding='utf-8')
-    if framework is not None:
-        agents_text, switched = re.subn(r'^(\s*)framework: *\w+', rf'\g<1>framework: {framework}',
-                                        agents_text, flags=re.MULTILINE)
-        assert switched, 'no framework key to switch'
-    if solver is not None:
-        agents_text, switched = re.subn(r'^(\s*)solver: *\w+', rf'\g<1>solver: {solver}',
-                                        agents_text, flags=re.MULTILINE)
-        assert switched, 'no solver key to switch'
-    for old, new in edits:
-        assert old in agents_text, f'{old!r} not found in agents.yaml'
-        agents_text = agents_text.replace(old, new)
-    agents.write_text(agents_text, encoding='utf-8')
-
-    for filename, replacements in (config_edits or {}).items():
-        target = config / filename
-        assert target.exists(), f'{filename} not found in {scenario_name}'
-        content = target.read_text(encoding='utf-8')
-        for old, new in replacements:
-            assert old in content, f'{old!r} not found in {filename}'
-            content = content.replace(old, new)
-        target.write_text(content, encoding='utf-8')
-
-    probe = '' if record_backends is None else BACKEND_PROBE.format(record=record_backends)
     script = RUNNER.format(config_dir=config.as_posix(), seed=SEED, scenarios=scenarios,
                            name=scenario_name, probe=probe, creator_method=creator_method)
     completed = subprocess.run(
@@ -193,6 +333,9 @@ def run_example(base, example_dir, scenario_name, framework=None, solver=None, e
         env={**os.environ, 'MPLBACKEND': 'Agg', 'PYTHONIOENCODING': 'utf-8',
              'PYTHONHASHSEED': '0'})
     assert 'RUN_OK' in completed.stdout, completed.stderr[-4000:]
+
+    if requested:
+        assert_backend_honoured(record, framework, solver)
 
     return fingerprint(results / scenario_name)
 
