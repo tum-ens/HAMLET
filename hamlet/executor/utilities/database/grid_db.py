@@ -301,10 +301,19 @@ class ElectricityGridDB(GridDB):
         # from `agents.xlsx`. The `topology` method is inherently two-pass -- create the scenario,
         # then write the ids it produced into the topology file -- so the ids in that file are only
         # meaningful for the scenario they were read off.
-        scenario_agents = {agent_id: agent_type
+        # Only agents that actually place an element need a bus. The loop below indexes
+        # `agents_bus` from inside `for plant_id, plant in agent.plants.items()`, and only for
+        # plant types in the electricity load/sgen lists -- so an agent owning nothing electrical
+        # never needed one. Two such agents exist in practice: a heat-only agent, and the parent
+        # of a set of sub-agents, which `RegionDB.__register_all_agents` registers via
+        # `register_sub_agent` and therefore leaves with `plants = {}`. Requiring a bus for those
+        # would reject scenarios that ran before this check existed.
+        electrical = set(self.relevant_plant_type['load']) | set(self.relevant_plant_type['sgen'])
+        scenario_agents = {agent_id: agent
                            for region in regions.values()
-                           for agent_type, agents in region.agents.items()
-                           for agent_id in agents}
+                           for agents in region.agents.values()
+                           for agent_id, agent in agents.items()
+                           if any(plant['type'] in electrical for plant in agent.plants.values())}
         unassigned = [agent_id for agent_id in scenario_agents if agent_id not in agents_bus]
         if unassigned:
             topology_file = self.grid_config['generation']['topology']['file']
@@ -335,9 +344,14 @@ class ElectricityGridDB(GridDB):
                             pp.create_sgen(self.grid, bus=agents_bus[agent_id], p_mw=0, plant_type=plant['type'],
                                            **kw_args)
 
-        # write data back to the grid
-        self.grid.load.dropna(subset=[c.TC_ID_AGENT], inplace=True)
-        self.grid.sgen.dropna(subset=[c.TC_ID_AGENT], inplace=True)
+        # Write data back to the grid, dropping the topology file's own placeholder rows -- the
+        # ones this method did not create and so did not give an `id_agent`. The column only
+        # exists once something has been created, so a scenario whose agents own no generation at
+        # all (no PV, no battery) has an untouched `sgen` table and nothing to drop.
+        for table_name in ('load', 'sgen'):
+            table = getattr(self.grid, table_name)
+            if c.TC_ID_AGENT in table.columns:
+                table.dropna(subset=[c.TC_ID_AGENT], inplace=True)
 
     def __get_grid_element_dataframe(self, element_name: str, type_field: str, add_columns: list) -> (
     pd.DataFrame, list):
@@ -407,6 +421,13 @@ class ElectricityGridDB(GridDB):
         #
         # Hence: real columns win, `description` is the fallback, and a file that is in neither
         # convention is rejected here rather than several frames deeper on a missing column.
+        # An empty table carries no metadata because it carries nothing at all, and a feeder with
+        # no generation on it is an ordinary network rather than a malformed one. Give the caller
+        # the column it filters on and let it filter nothing.
+        if df.empty:
+            df[type_field] = pd.Series(dtype='object')
+            return df
+
         if 'description' in df.columns and df['description'].notna().all():
             try:
                 df = f.add_info_from_col(df=df, col='description', drop=False)
@@ -491,9 +512,25 @@ class ElectricityGridDB(GridDB):
             inflexible_load_index (int): Index of the matching inflexible load.
 
         """
-        inflexible_load_for_agent_index = load_df[(load_df['bus'] == agent.account[c.K_GENERAL]['bus']) &
-                                                  (load_df['load_type'] == c.P_INFLEXIBLE_LOAD) &
-                                                  (load_df['agent_type'] == agent.agent_type)].index
+        candidates = load_df[(load_df['bus'] == agent.account[c.K_GENERAL]['bus']) &
+                             (load_df['load_type'] == c.P_INFLEXIBLE_LOAD) &
+                             (load_df['agent_type'] == agent.agent_type)]
+
+        # An inflexible load already claimed by an earlier agent is not a candidate. Without this,
+        # two agents that look alike to the matcher -- same bus, same type, same profile file --
+        # both match the *same* row, the second overwrites the first's `id_agent`, and the first
+        # agent then appears nowhere in the network at all. `_create_grid_from_file` iterates
+        # agents greedily and mutates `load_df` as it goes, so "already assigned" is exactly the
+        # state this filter has to see.
+        #
+        # The failure was silent, which is the reason it is worth a filter rather than a comment:
+        # `__process_elements` drops rows with no `id_agent`, so the power flow solved happily for
+        # a feeder missing one of its participants and simply reported a loading that was too low.
+        # With the filter the second agent finds no candidate and raises below, naming itself.
+        if c.TC_ID_AGENT in candidates.columns:
+            candidates = candidates[candidates[c.TC_ID_AGENT].isna()]
+
+        inflexible_load_for_agent_index = candidates.index
 
         # count numbers for each plant for this inflexible load by iterating all inflexible loads at this bus,
         # compare counts with agent to find out which inflexible load is the right one
@@ -558,6 +595,13 @@ class ElectricityGridDB(GridDB):
             plants_df (pd.DataFrame): Updated `plants_df` with unassigned plants after allocation.
 
         """
+        # `owner` is how a grid file says which inflexible load a plant belongs to. A table with
+        # no rows, or one that never declares ownership, simply has nothing to attribute this way
+        # -- the caller's `__find_remaining_unassigned_plants` fallback still gets its turn. Before
+        # this, either case was a bare `KeyError: 'owner'` naming nothing.
+        if element_df.empty or 'owner' not in element_df.columns:
+            return element_df, plants_df
+
         owned_plants_df = element_df[element_df['owner'] == inflexible_load_index]
 
         for grid_index in owned_plants_df.index:  # assign other plants
@@ -638,7 +682,14 @@ class ElectricityGridDB(GridDB):
         """
 
         agent_plants_count = agent_plants_count[element_name]
-        owned_plants_df = element_df[element_df['owner'] == inflexible_load_index]
+        # As in `__assign_plants_for_agent`: no rows, or no `owner` column, means nothing declares
+        # itself owned by this inflexible load. That is an empty ownership set, not an error --
+        # and it still has to be *compared* against the agent's plant counts below rather than
+        # skipped, or an agent owning plants would match a load that owns none.
+        if element_df.empty or 'owner' not in element_df.columns:
+            owned_plants_df = element_df.iloc[0:0]
+        else:
+            owned_plants_df = element_df[element_df['owner'] == inflexible_load_index]
 
         # compare plant count
         for plant_type in agent_plants_count.keys():

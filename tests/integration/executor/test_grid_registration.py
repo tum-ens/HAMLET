@@ -198,6 +198,58 @@ def test_an_agent_with_no_bus_in_the_topology_is_named(tmp_path):
     assert 'agent_in_topology' not in message, 'the assigned agent is reported as unassigned'
 
 
+def test_two_indistinguishable_agents_at_one_bus_each_keep_their_own_load(tmp_path):
+    """Two agents the matcher cannot tell apart must not end up sharing one grid element.
+
+    `_create_grid_from_file` iterates agents greedily and mutates `load_df` as it goes, and until
+    the candidate filter excluded already-claimed rows, the second agent re-matched the *first*
+    agent's inflexible load and overwrote its `id_agent`. The first agent then appeared nowhere in
+    the network, `register_grid` returned normally, and `__process_elements` dropped it -- so the
+    power flow solved for a feeder missing a participant and reported a loading that was too low.
+    Silent, and older than #205: it predates the reader that made this path reachable again.
+    """
+    net = base_net()
+    for _ in range(2):
+        pp.create_load(net, bus=1, p_mw=0.001,
+                       description=f'agent_type:sfh,owner:NaN,file:{LOAD_PROFILE},'
+                                   f'file_add:NaN,load_type:inflexible-load')
+    grid_db = write(net, tmp_path, GRID_FILE)
+    agents = [make_agent(agent_id, bus=1,
+                         plants={f'{agent_id}_load': {'type': c.P_INFLEXIBLE_LOAD,
+                                                      'sizing': {'file': LOAD_PROFILE}}})
+              for agent_id in ('agent_a', 'agent_b')]
+
+    grid_db.register_grid(make_regions(agents))
+
+    assigned = sorted(grid_db.grid.load[c.TC_ID_AGENT].tolist())
+    assert assigned == ['agent_a', 'agent_b'], (
+        f'the two agents did not each get their own inflexible load: {assigned}')
+
+
+def test_an_agent_owning_nothing_electrical_needs_no_bus(tmp_path):
+    """A heat-only agent, or the parent of a set of sub-agents, is not required to be in the grid.
+
+    `_create_grid_from_topology` only looks a bus up from inside its plant loop, and only for
+    plant types on the electricity side, so such an agent never needed one. The unassigned-agent
+    check added for #205 was stricter than the code it guards and rejected scenarios that ran
+    before it existed. The empty case is real rather than hypothetical:
+    `RegionDB.__register_all_agents` registers a parent of sub-agents via `register_sub_agent`,
+    which leaves it with `plants = {}`.
+    """
+    net = base_net()
+    net.bus['agent'] = [None, 'agent_on_the_grid']
+    grid_db = write(net, tmp_path, TOPOLOGY_FILE)
+    agents = [make_agent('agent_on_the_grid', bus=1,
+                         plants={'p1': {'type': c.P_INFLEXIBLE_LOAD, 'sizing': {}}}),
+              make_agent('agent_heat_only', bus=1,
+                         plants={'p2': {'type': c.P_HEAT_STORAGE, 'sizing': {}}}),
+              make_agent('agent_parent_of_sub_agents', bus=1, plants={})]
+
+    grid_db.register_grid(make_regions(agents))
+
+    assert grid_db.grid.load[c.TC_ID_AGENT].tolist() == ['agent_on_the_grid']
+
+
 def test_an_agent_with_no_matching_inflexible_load_is_named(tmp_path):
     """#201 / #205's second half: `TypeError: cannot unpack non-iterable NoneType object`.
 

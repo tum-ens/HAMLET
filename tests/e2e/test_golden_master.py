@@ -11,7 +11,11 @@ than by a test failing; this is the test that would have caught them.
 change you meant to make. If it is, regenerate the reference and commit it *with* the change,
 so the review sees the numbers move:
 
-    HAMLET_UPDATE_GOLDEN=1 python -m pytest tests -m golden
+    HAMLET_UPDATE_GOLDEN=1 python -m pytest tests -m golden               # every scenario
+    HAMLET_UPDATE_GOLDEN=simple_scenario python -m pytest tests -m golden  # just this one
+
+Name the scenario when more than one is pinned. `1` rewrites every reference, so a re-baseline
+aimed at one change also commits any unrelated movement in the others.
 
 **One legitimate cause of movement is not a defect: a different equally-optimal solution.** The
 agent models are degenerate MILPs -- a battery or EV can very often shift charging between
@@ -97,13 +101,55 @@ def scenario(request):
     return request.param
 
 
+def check_every_committed_reference_is_still_pinned():
+    """`SCENARIOS` and `golden/*.json` must agree, and neither may be empty.
+
+    Parametrising this module created a way for the whole file to stop asserting anything without
+    a job going red: with `SCENARIOS = []`, `pytest -m golden` reports `4 skipped` and exits 0 in
+    under a second, because an empty parameter set skips rather than fails. Before, dropping the
+    pinning meant deleting the tests, which a reviewer sees.
+
+    Comparing against the committed references rather than against a hardcoded name is what makes
+    this generalise: any scenario that has been pinned stays pinned, not just the first one.
+    Removing one on purpose means deleting its reference in the same commit, which is exactly the
+    visible act that ought to be required.
+
+    Run from two tests, deliberately. Markers decide jobs, and `pytest.ini` deselects `golden` by
+    default, so a single test cannot sit in both the fast tier and the golden job — and this needs
+    to be in both. The golden job is the one someone re-runs in isolation from the pipeline view,
+    and in isolation it is the only thing standing between an empty `SCENARIOS` and a green tick.
+    """
+    pinned = {pinned_scenario.name for pinned_scenario in SCENARIOS}
+    committed = {path.stem for path in (Path(__file__).parent / 'golden').glob('*.json')}
+
+    assert pinned, (
+        'SCENARIOS is empty, so the golden master pins nothing and `pytest -m golden` passes by '
+        'skipping every test')
+    assert committed <= pinned, (
+        f'these scenarios have a committed reference but are no longer in SCENARIOS, so nothing '
+        f'compares against them: {sorted(committed - pinned)}. Delete the reference in the same '
+        f'commit if that is intended')
+
+
+def test_every_committed_reference_is_still_pinned():
+    """The fast-tier arm. See `check_every_committed_reference_is_still_pinned`."""
+    check_every_committed_reference_is_still_pinned()
+
+
+@pytest.mark.golden
+def test_every_committed_reference_is_still_pinned_in_the_golden_job():
+    """The golden-job arm, so that job is self-sufficient when run alone."""
+    check_every_committed_reference_is_still_pinned()
+
+
 @pytest.fixture(scope='module')
 def actual(scenario, tmp_path_factory):
     """Run the example once, seeded, against a temp copy of the config.
 
     The run and the fingerprint live in `tests/scenario_run.py`, shared with the backend
-    equivalence tests -- those compare their linopy arm against this reference, which only means
-    anything if both reduce results the same way.
+    equivalence tests -- the poi arm of those compares against this reference, which only means
+    anything if both reduce results the same way. (It was the linopy arm until `poi` became the
+    default; the control has to be whichever backend the shipped config selects.)
     """
     base = tmp_path_factory.mktemp(f'golden_{scenario.name}')
     try:
@@ -114,14 +160,24 @@ def actual(scenario, tmp_path_factory):
 
 @pytest.fixture(scope='module')
 def expected(scenario, actual):
-    """The committed reference, regenerated in place when explicitly asked for."""
+    """The committed reference, regenerated in place when explicitly asked for.
+
+    `HAMLET_UPDATE_GOLDEN` takes a scenario name, or `1`/`all` for every scenario. Naming one
+    matters once more than one is pinned: a re-baseline aimed at a change in one scenario would
+    otherwise also rewrite the others, so an unrelated movement in a scenario you were not
+    thinking about gets committed as though it had been reviewed.
+    """
     reference = scenario.reference
-    if os.environ.get('HAMLET_UPDATE_GOLDEN'):
+    update = os.environ.get('HAMLET_UPDATE_GOLDEN')
+    if update and update in ('1', 'all', scenario.name):
         reference.parent.mkdir(parents=True, exist_ok=True)
         reference.write_text(json.dumps(actual, indent=2, sort_keys=True) + '\n',
                              encoding='utf-8')
         pytest.skip(f'reference regenerated at {reference.relative_to(REPO_ROOT)}; '
                     f'review the diff and commit it with the change that caused it')
+    if update:
+        pytest.skip(f'HAMLET_UPDATE_GOLDEN={update} does not name this scenario '
+                    f'({scenario.name}), so its reference was left alone')
 
     assert reference.exists(), (
         f'no golden reference at {reference.relative_to(REPO_ROOT)}. Create one with '
