@@ -155,8 +155,15 @@ pins the numbers themselves, so a change that moves results has to be acknowledg
 noticed later. It runs each scenario in its `SCENARIOS` list under a fixed seed and compares
 per-table row counts and per-column sum/min/max against `tests/e2e/golden/<scenario>.json`.
 
-**To pin another scenario**, append a `GoldenScenario(example, name)` and create its reference
-with `HAMLET_UPDATE_GOLDEN=1`. One earns its place by reaching code the others do not, and costs
+Two scenarios are pinned. `simple_scenario` is the shipped example and calculates no grid;
+`grid_golden` is a deliberately weak feeder under §14a and is the only thing pinning the power
+flow, the variable grid fees and direct power control. It lives in `tests/e2e/scenarios/` rather
+than `examples/` because it is tuned to overload rather than to be copied, and
+`e2e/test_grid_restrictions.py` asserts *that* the restriction fires while the golden master pins
+what it produces.
+
+**To pin another scenario**, append a `GoldenScenario(container, name)` and create its reference
+with `HAMLET_UPDATE_GOLDEN=<name>`. One earns its place by reaching code the others do not, and costs
 a full example run in the `golden` CI job every time it runs. Note that `simple_scenario` sets
 `electricity.active: False`, so pinning it does not pin the grid stage.
 

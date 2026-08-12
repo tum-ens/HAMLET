@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Added
+- **A golden master for the grid stage and §14a, which had none.** The only scenario the golden
+  master pinned sets `electricity.active: False` and calculates no grid, so no committed reference
+  number had ever come from the power flow, the variable grid fees or direct power control — while
+  the grid stage was being measured and optimised. `tests/e2e/scenarios/grid_golden/` is a 21-bus
+  feeder with four single-family homes over one day, deliberately weak: at 15 kVA the transformer
+  is below the uncontrolled peak of 19.8 kW, so it overloads at 132 % and the restriction fires,
+  and above the 8.4 kW §14a floor of the two agents that are actually curtailable at those hours
+  (the other two draw 892 W between them, well under the 4200 W threshold). It is *below* the
+  16.8 kW floor all four agents together would be guaranteed, so a fixture change that brought a
+  third agent's EV onto the same hour would leave an overload §14a cannot resolve.
+
+  The topology is a radial slice of the real low-voltage feeder the §14a study used — real cable
+  lengths, real impedances and ampacities — **rebuilt from explicitly chosen electrical parameters
+  rather than by deleting columns**, so no street address, asset identifier or utility tag can leak
+  by being overlooked. It lives under `tests/` rather than `examples/` because it is tuned to
+  overload rather than to be copied.
+
+  `tests/e2e/test_grid_restrictions.py` asserts the mechanism rather than the numbers, in four
+  claims that fail separately: the feeder overloads, the fees vary, a command is issued, and **the
+  command is respected in the resulting power flow**. That last one is what the grid stage cannot
+  check for itself — it re-simulates, gets the same answer and converges on an uncapped grid — and
+  restoring the pre-!209 no-op `apply_grid_commands` fails it alone, with the other three still
+  green.
+
+  `fingerprint` now covers the grid stage's CSV results as well as the Feather tables; a scenario
+  with no grid writes no CSV, so the existing reference does not move
 - **The PyOptInterface backend now runs on HiGHS, so it no longer needs a Gurobi licence.**
   `framework: poi` imported `pyoptinterface.gurobi` unconditionally and accepted only
   `solver: gurobi`. Because PyOptInterface links a *system* Gurobi installation directly, without
@@ -203,6 +229,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   to 233 passed / 3 skipped, matching the other platforms
 
 ### Fixed
+
+- **Grid registration could drop an agent from the network and report success (follow-up to
+  #205).** Two agents the matcher cannot tell apart — same bus, same agent type, same profile file
+  — both matched the *same* inflexible load, and the second overwrote the first's `id_agent`.
+  Elements with no agent are then dropped downstream, so the power flow was solved for a feeder
+  missing one of its participants and reported a loading that was too low, with nothing raised.
+  The defect predates the description reader restored for #205; that reader made the path
+  reachable again. Candidates already claimed by an earlier agent are now excluded, so each agent
+  keeps its own element, and an agent with genuinely nothing left to match is named in an error
+  rather than lost.
+
+  Three narrower robustness gaps went with it, each reachable from an ordinary network: a grid
+  file with **no sgen rows at all** (a feeder with no PV or battery) was rejected as carrying no
+  `plant_type` information; `_create_grid_from_topology` raised `KeyError: 'id_agent'` when no
+  element of a kind was created; and `__assign_plants_for_agent` raised a bare `KeyError: 'owner'`
+  on any file that never declares ownership. And the unassigned-agent check added for #205 was
+  stricter than the code it guards — it demanded a bus for agents that place no electrical element
+  at all, such as a heat-only agent or the parent of a set of sub-agents
+
 - **§14a direct power control crashed the first time a heat pump took part in a reduction.**
   `EnWG14a` reads each heat pump's minimum controllable power from a `hp_min_control` column on
   the grid's load table, and nothing in HAMLET ever wrote it, so the run died with
