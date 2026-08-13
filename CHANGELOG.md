@@ -114,6 +114,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **Two test modules asking for the identical end-to-end run now share one, through
+  `tests/scenario_cache.py`.** Every e2e fixture is module-scoped, so each file paid for its own
+  run. Across the whole suite that is exactly **one** duplicated pair — `e2e/test_grid_restrictions`
+  and `e2e/test_golden_master[grid_golden]` make byte-identical requests — worth 158 s on the
+  development laptop. **It saves nothing in CI and is not meant to**: `e2e` and `golden` are
+  separate jobs and separate pytest processes, and the pair straddles that boundary, so the saving
+  is real only for a local `pytest tests -m "e2e or golden"`. What the cache is for beyond those
+  158 s is that it is the mechanism, so the next duplicate shares automatically instead of being
+  noticed by someone counting runs.
+
+  The key is derived **mechanically**, by binding each request against `run_example`'s own
+  signature, so a parameter added to `run_example` later is part of the key with nothing to
+  remember; `NOT_PART_OF_THE_REQUEST` is an exclusion list whose failure direction is the safe one
+  (naming too little costs a run, where an allowlist that named too little would merge two
+  different requests — the shape `ROUNDING`, `KEYS` and `AGENT_TABLES` each failed in). Two
+  requests that differ at all do not share: the golden master passes no `framework` so that it runs
+  whatever the config ships, and the equivalence test's `poi` arm passes `framework='poi'`, so
+  those two correctly remain separate runs.
+
+  Every consumer re-reads the run's own artefacts — the `BACKEND_PROBE` receipt and the scenario
+  directory actually written — on cache hits as much as misses, because the key that decided two
+  requests were the same cannot also be the evidence that they were.
+  `tests/unit/test_scenario_cache_key.py` breaks the key on purpose and pins that the consumer,
+  not the key, is what rejects the mis-served entry.
+
 - **`CONTRIBUTING.md`'s branch naming convention now matches what the repository actually does.**
   It documented `type-issue-nr-short-description` with types `feature`/`hotfix`/`release`, and
   gave `feature-42-add-new-ontology-class` as the example. Not one of the last 40 merged branches
@@ -324,6 +349,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   to 233 passed / 3 skipped, matching the other platforms
 
 ### Fixed
+
+- **A guard inside a fixture consumed only by `xfail(strict=True)` tests was not a guard.**
+  `pytest.mark.xfail(strict=True)` converts a fixture *setup error* into a silent `xfailed`
+  (verified on pytest 8.3.5). In `e2e/test_backend_equivalence.py` the `linopy_results` fixture is
+  consumed only by the two permanently-xfailed comparisons, so anything it raised was absorbed —
+  including `run_example`'s own `assert_backend_honoured`, the #206 read-back that exists to catch
+  the two arms silently collapsing into one. The quiet form of that failure was still caught (two
+  identical arms make a strict xfail XPASS); the loud form, a guard naming the exact cause, was
+  swallowed. Found by deliberately breaking the new run cache's key and watching the module stay
+  green while the guard fired. `test_the_linopy_arm_actually_ran_linopy` now reads the same receipt
+  from a test carrying no xfail marker. This was the only such fixture in the suite.
 
 - **Two identical runs of the same scenario produced different results, because `energy_types` was
   a `set` (#216, partial).** `RtcBase` and `FbcBase` collected each agent's energy types into a

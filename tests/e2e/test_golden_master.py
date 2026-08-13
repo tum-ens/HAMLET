@@ -62,13 +62,12 @@ reaching code the others do not, and costs a full run in the `golden` CI job eve
 """
 import json
 import os
-import shutil
 from pathlib import Path
 from typing import NamedTuple
 
 import pytest
 
-from tests.scenario_run import REPO_ROOT, run_example
+from tests.scenario_run import REPO_ROOT
 
 
 class GoldenScenario(NamedTuple):
@@ -165,20 +164,23 @@ def test_every_committed_reference_is_still_pinned_in_the_golden_job():
 
 
 @pytest.fixture(scope='module')
-def actual(scenario, tmp_path_factory):
+def actual(scenario, scenario_runs):
     """Run the example once, seeded, against a temp copy of the config.
 
     The run and the fingerprint live in `tests/scenario_run.py`, shared with the backend
     equivalence tests -- the poi arm of those compares against this reference, which only means
     anything if both reduce results the same way. (It was the linopy arm until `poi` became the
     default; the control has to be whichever backend the shipped config selects.)
+
+    Requested through `scenario_runs` so that a module making the *identical* request shares this
+    run rather than paying for its own -- `test_grid_restrictions` makes exactly this request for
+    `grid_golden`. Note that no backend is named here and that is deliberate: this fixture must
+    run whatever the shipped config selects (`test_solver_backend_smoke` asserts as much), which
+    makes it a different request from the equivalence test's `framework='poi'` arm, and the two
+    correctly do not share. See `tests/scenario_cache.py`.
     """
-    base = tmp_path_factory.mktemp(f'golden_{scenario.name}')
-    try:
-        yield run_example(base, scenario.config_dir, scenario.name,
-                          creator_method=scenario.creator_method)
-    finally:
-        shutil.rmtree(base, ignore_errors=True)
+    return scenario_runs.run(scenario.config_dir, scenario.name,
+                             creator_method=scenario.creator_method).fingerprint
 
 
 @pytest.fixture(scope='module')

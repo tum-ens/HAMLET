@@ -74,6 +74,24 @@ def repo_root():
     return REPO_ROOT
 
 
+@pytest.fixture(scope='session')
+def scenario_runs(tmp_path_factory):
+    """One scenario run per distinct request, shared across modules. See `tests/scenario_cache.py`.
+
+    Session-scoped because module scope is what makes two files asking for the same run pay twice.
+
+    Runs are left in pytest's own temp tree rather than removed per module, which they have to be:
+    a module-scoped teardown on a session-scoped entry would delete another module's data. The
+    cost is that a session selecting both markers retains every run at once instead of a rolling
+    one or two. Measured on `ctsp_industry`, the smallest, at **8.7 MB** (4.4 MB of it results);
+    the grid scenarios are larger, since they add per-timestep `res_*.csv` and a pandapower
+    workbook. pytest keeps the last three sessions, so budget accordingly on a small disk.
+    """
+    from tests.scenario_cache import ScenarioRuns
+
+    return ScenarioRuns(tmp_path_factory)
+
+
 @pytest.fixture
 def timesteps():
     """Four hourly timesteps — the standard L2 horizon.

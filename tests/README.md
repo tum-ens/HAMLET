@@ -47,6 +47,33 @@ Markers: `solver` (builds and solves a real optimisation model), `e2e` (runs the
 `golden` (compares against committed reference numbers). The last two take a couple of minutes
 each and are deselected by default.
 
+### Scenario runs are shared when, and only when, the request is identical
+
+An end-to-end run costs minutes, and every e2e fixture is module-scoped, so two files wanting the
+same run each paid for one. `tests/scenario_cache.py` provides the session-scoped `scenario_runs`
+fixture instead: ask it for a run and you get the existing one if an *identical* request has
+already been made, and a fresh one otherwise. Prefer it over calling `run_example` directly.
+
+Two things about it are worth knowing before you use it, and the module docstring has the rest.
+
+**Identical means the whole request.** The key is derived by binding your arguments against
+`run_example`'s signature, so it covers every parameter except the two naming where output goes.
+That is deliberately strict: `test_golden_master` passes no `framework` — it must run whatever the
+config ships — while `test_backend_equivalence`'s poi arm passes `framework='poi'`, and those stay
+two separate runs even though `poi` is currently what ships. A cache that merged them would turn
+an independent check into the reference agreeing with itself.
+
+**Sharing a run is a way to stop testing what you think you are testing,** so each consumer's
+request is checked against what the run *actually did* — the backend receipt and the scenario
+directory it wrote — every time, cache hit included. Do not "optimise" that to once per run: the
+key that decided two requests match cannot also be the evidence that they do.
+`tests/unit/test_scenario_cache_key.py` breaks the key deliberately and pins that the consumer is
+what rejects a mis-served entry.
+
+The measurable saving today is one run — `grid_golden`, 158 s — and **only in a session that
+selects both markers**, e.g. `pytest tests -m "e2e or golden"`. The `e2e` and `golden` CI jobs are
+separate processes, so nothing is shared between them.
+
 ## The solver x framework matrix
 
 `framework` (`linopy` | `poi`) and `solver` (`highs` | `gurobi`) are independent per-agent options,

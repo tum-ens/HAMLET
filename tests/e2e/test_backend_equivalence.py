@@ -27,7 +27,7 @@ Each test runs the example twice, so budget a few minutes.
 """
 import pytest
 
-from tests.scenario_run import REPO_ROOT, compare, run_example
+from tests.scenario_run import REPO_ROOT, compare
 
 EXAMPLE = REPO_ROOT / 'examples' / 'create_simple_scenario'
 SCENARIO_NAME = 'simple_scenario'
@@ -48,16 +48,22 @@ known_divergence = pytest.mark.xfail(
 
 
 @pytest.fixture(scope='module')
-def linopy_results(tmp_path_factory):
+def linopy_results(scenario_runs):
     """The reference implementation, still fully supported and selectable."""
-    return run_example(tmp_path_factory.mktemp('linopy'), EXAMPLE, SCENARIO_NAME,
-                       framework='linopy')
+    return scenario_runs.run(EXAMPLE, SCENARIO_NAME, framework='linopy').fingerprint
 
 
 @pytest.fixture(scope='module')
-def poi_results(tmp_path_factory):
-    """The example as shipped. Also the arm that must match the golden master."""
-    return run_example(tmp_path_factory.mktemp('poi'), EXAMPLE, SCENARIO_NAME, framework='poi')
+def poi_results(scenario_runs):
+    """The example as shipped. Also the arm that must match the golden master.
+
+    Naming `framework='poi'` makes this a different request from the golden master's, which
+    names no backend so that it runs whatever the config ships -- so the two do not share a run
+    even though `poi` is currently what the config ships. That is the run cache working, not
+    failing: were they merged, this arm would stop being an independent check that `poi`
+    reproduces the reference and would instead be comparing the reference against itself.
+    """
+    return scenario_runs.run(EXAMPLE, SCENARIO_NAME, framework='poi').fingerprint
 
 
 @pytest.mark.e2e
@@ -85,6 +91,35 @@ def test_the_poi_arm_reproduces_the_golden_master(poi_results):
     assert not differences, (
         'the poi arm no longer matches the committed golden master, so the backend comparison '
         'in this file cannot be trusted:\n  ' + '\n  '.join(differences[:20]))
+
+
+@pytest.mark.e2e
+@pytest.mark.solver
+def test_the_linopy_arm_actually_ran_linopy(scenario_runs):
+    """The linopy arm's receipt, read from a test that is *not* a strict xfail.
+
+    **`xfail(strict=True)` converts a fixture setup error into a silent `xfailed`.** Demonstrated
+    on this pytest (8.3.5): a fixture raising `AssertionError` errors an unmarked test and xfails
+    a strictly-xfailed one. Every consumer of `linopy_results` below carries that marker, so until
+    this test existed, anything the fixture raised was absorbed -- including `run_example`'s own
+    `assert_backend_honoured`, which has run inside it since #206 and would have been swallowed
+    the same way. Found by breaking the run cache's key on purpose and watching the module stay
+    green while the guard fired.
+
+    Note what is and is not covered without this. The two tests below still fail loudly if the
+    arms *silently* collapse into one -- identical results make a strict xfail XPASS -- but that
+    is the quiet path. The loud one, a guard naming the exact problem, was the one being lost.
+
+    Cheap: the run is already paid for by the fixtures, and this only re-reads its receipt.
+    """
+    import json
+
+    entry = scenario_runs.run(EXAMPLE, SCENARIO_NAME, framework='linopy')
+    used = {tuple(pair) for pair in json.loads(entry.record.read_text(encoding='utf-8'))}
+
+    assert {framework for framework, _ in used} == {'linopy'}, (
+        f'the linopy arm was solved by {sorted(used)}, so the two arms of this comparison are '
+        f'not two arms and every xfail below is meaningless')
 
 
 @known_divergence

@@ -15,12 +15,9 @@ results, not that specific numbers come back. The unit-level behaviour of regist
 in `tests/integration/executor/test_grid_registration.py`, which is fast; this is the layer that
 would notice the two being wired together wrongly.
 """
-import shutil
 from pathlib import Path
 
 import pytest
-
-from tests.scenario_run import run_example
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -34,23 +31,19 @@ GRID_EXAMPLES = [
 
 
 @pytest.fixture(scope='module', params=GRID_EXAMPLES)
-def grid_run(request, tmp_path_factory):
+def grid_run(request, scenario_runs):
     """Run one grid example exactly as shipped, in a temp copy of its config tree.
 
     Nothing is overridden — no framework, no solver, no config edit. That is the point: the
     acceptance criterion for #205 is that the examples run as a user finds them, and an override
-    here would test a configuration nobody ships. `record_backends` is not an override; it is the
-    receipt, and `test_the_grid_example_needs_no_commercial_licence` says why one is needed.
+    here would test a configuration nobody ships. The receipt is not an override either, and
+    `test_the_grid_example_needs_no_commercial_licence` says why one is needed; it is now written
+    for every run by `scenario_runs` rather than asked for here.
     """
     example, scenario_name, creator_method = request.param
-    base = tmp_path_factory.mktemp('e2e_grid')
-    record = base / 'backends.json'
-    try:
-        fingerprint = run_example(base, REPO_ROOT / 'examples' / example, scenario_name,
-                                  creator_method=creator_method, record_backends=record)
-        yield scenario_name, fingerprint, base / 'results' / scenario_name, record
-    finally:
-        shutil.rmtree(base, ignore_errors=True)
+    entry = scenario_runs.run(REPO_ROOT / 'examples' / example, scenario_name,
+                              creator_method=creator_method, needs_receipt=True)
+    return scenario_name, entry.fingerprint, entry.results, entry.record
 
 
 @pytest.mark.e2e

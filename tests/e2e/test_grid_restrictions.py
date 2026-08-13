@@ -25,12 +25,11 @@ was issued at is no longer in them. `res_bus` is kept for every timestep, and in
 agent sits alone on its bus, so bus power *is* agent power as the power flow saw it.
 """
 import json
-import shutil
 from pathlib import Path
 
 import pytest
 
-from tests.scenario_run import REPO_ROOT, run_example
+from tests.scenario_run import REPO_ROOT
 
 SCENARIO = 'grid_golden'
 
@@ -42,14 +41,16 @@ CONFIG_ROOT = REPO_ROOT / 'tests' / 'e2e' / 'scenarios'
 
 
 @pytest.fixture(scope='module')
-def grid_results(tmp_path_factory):
-    """Run the fixture once and hand back its results directory."""
-    base = tmp_path_factory.mktemp('e2e_14a')
-    try:
-        run_example(base, CONFIG_ROOT, SCENARIO, creator_method='new_scenario_from_files')
-        yield base / 'results' / SCENARIO
-    finally:
-        shutil.rmtree(base, ignore_errors=True)
+def grid_results(scenario_runs):
+    """Run the fixture once and hand back its results directory.
+
+    This request is byte-identical to `test_golden_master`'s for `grid_golden`, and going
+    through `scenario_runs` is what lets the two share one run instead of paying 158 s twice.
+    They only ever co-exist in a session that selects both markers, which no CI job does --
+    see `tests/scenario_cache.py` for why the saving is local-only.
+    """
+    return scenario_runs.run(CONFIG_ROOT, SCENARIO,
+                             creator_method='new_scenario_from_files').results
 
 
 def read_csv(results, name):
