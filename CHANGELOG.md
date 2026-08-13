@@ -325,6 +325,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Two identical runs of the same scenario produced different results, because `energy_types` was
+  a `set` (#216, partial).** `RtcBase` and `FbcBase` collected each agent's energy types into a
+  set, and all four backends iterate that set in `add_balance_constraints` to add one balance
+  constraint and one `{energy_type}_{direction}_slack` variable pair each — so the set's iteration
+  order *was* the optimisation model's row and column order. Python randomises string hashing per
+  process, so the same agent's model reached HiGHS with its rows and columns permuted from run to
+  run, and `update_socs` carried the resulting difference into the next timestep, where it
+  compounded. (The interpretation — that the permuted model is degenerate enough for the solver to
+  return a different equally-optimal vertex — is the explanation, not the observation; what was
+  measured is that sorting the set removes the divergence and that the first agent-side seam to
+  move is `setpoints`.)
+
+  Both bases now derive their energy types through one shared `derive_energy_types`, which returns
+  a **sorted list**. Everything downstream tests membership or builds a `str.startswith` tuple, so
+  no call site depends on the order — only on its stability.
+
+  **Every scenario was affected, not only multi-carrier ones.** #216 reasons that a one-element set
+  has one ordering and so electricity-only scenarios are immune; that does not apply, because
+  `mapping` is not the agent's own plants. Both call sites pass the module-level constant
+  (`rtc.py:51`, `fbc.py:49`: `controller_class(**kwargs, mapping=c.COMP_MAP)`), so
+  `energy_types` is `['electricity', 'heat']` for **every agent in every scenario** whatever plants
+  it owns — two balance rows and, with slack on by default, four slack columns, in one of two
+  orders.
+
+  **The golden master does not move** — verified on Linux/x86_64, `9 passed` against the committed
+  reference, not argued. It is immune because it runs under `PYTHONHASHSEED=0`
+  (`tests/scenario_run.py:334`, `.gitlab-ci.yml:50`), and under seed 0 `list({'electricity',
+  'heat'})` already equals `sorted(...)`. Under seeds 2, 3 or 5 it is the reverse — so **the golden
+  reference was silently coupled to the value of that CI variable**, and this change removes that
+  coupling.
+
+  **This does not make HAMLET reproducible, and #216 stays open.** Two runs of the paper's design 6
+  (104 agents, POI + HiGHS, 150 steps, Mac mini/arm64, back to back) still disagree on **375 of
+  1246** compared files, every one of them under `bids_cleared`, `offers_cleared` and
+  `market_transactions`, from the first timestep on. Those runs were made on **unmodified
+  `develop`** under a pinned `PYTHONHASHSEED=0`, which fixes the old set's order too — so they
+  characterise the remaining defect and say nothing either way about this change. What supports
+  *this* change is the regression test, which varies the hash seed across processes.
+
+  The remaining source has been located and is **not** the unseeded bid/offer shuffle at
+  `markets/electricity.py:379-380`: giving that shuffle a deterministic per-clearing seed left the
+  count at exactly 375, as did `POLARS_MAX_THREADS=1`. Hashing every seam of the clearing path puts
+  the first divergence in `f.gen_ids`, which draws trade ids from the global `random` that HAMLET
+  never seeds, and then returns `list(id_set)` from a **set of strings** — so the ids vary per
+  process in value *and*, even with the RNG pinned, in order. At that seam only `id_trade` differs
+  and all 19 economic columns are identical. Fix and closing evidence belong to a follow-up; do not
+  claim reproducibility until a run compares clean against itself end to end with the hash seed
+  left random.
+
 - **The Creator silently wrote `NaN` into every nested `charging_scheme` parameter, for `ctsp` and
   `industry` (#219).** `_add_info_indexed` iterated `config.items()` at the top level only, so a
   dict value matched no column and was skipped without a word — while `_add_info_simple`, which
@@ -383,6 +432,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   fixture's own `agents.xlsx` does move and is regenerated here: its `ctsp` sheet gains the nested
   `charging_scheme` and `rfr` column names in place of the flat and `random_forest_classifier`
   ones, which is this fix and not the EV share change
+
 - **Creating a CTSP agent from a grid file crashed on ordinary demand values (#212).**
   `Ctsp._inflexible_load_grid` sized the load as `(df['demand'] * 1e6).astype('Int64')`, and
   `demand * 1e6` is not exactly representable in float64 for **349 of the 10 000** three-decimal MW
