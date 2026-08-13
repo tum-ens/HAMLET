@@ -361,6 +361,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   green while the guard fired. `test_the_linopy_arm_actually_ran_linopy` now reads the same receipt
   from a test carrying no xfail marker. This was the only such fixture in the suite.
 
+- **The market's bid/offer shuffle was unseeded, so every process cleared tied bids differently
+  (#216, the market half).** `__split_bids_offers` shuffles bids and offers before sorting them on
+  price, so that agents tied on price do not always clear in the same order. The shuffle had no
+  seed — and an unseeded `DataFrame.sample` is not merely arbitrary: **polars draws its seed from
+  Python's global `random`**, which HAMLET never seeds, so every process shuffled differently and
+  two identical runs cleared different sets of trades.
+
+  It now takes a seed derived from the clearing itself — region, market type, market name,
+  timestep and side — via `blake2b`. That keeps both properties the shuffle needs: **stable across
+  processes**, so a run is reproducible, and **different for every clearing**, so the anti-bias
+  intent survives. `hash()` cannot be used to build it, being randomised per process — the same
+  defect as the `energy_types` set in the first half of #216 — and `pl.set_random_seed()` does not
+  control `DataFrame.sample` on polars 0.20.31, so the seed must be passed per call.
+
+  **Measured on the paper's design 6, 150 steps, POI + HiGHS, hash seed left random.** Baseline:
+  ten runs, all 45 pairs compared, **45 of 45 disagreed** — always in the same 6 result files, and
+  the ten runs formed **ten mutually-distinct groups**, so it was not a single coin flip but a
+  fresh draw each run. With the seed: six runs, **15 of 15 pairs identical**, all six in one group.
+  Against a 100 % base rate that is decisive.
+
+  What moved in those 6 files, at 2 of 135 timesteps: at one, the same total energy cleared
+  (8 013 700 Wh either way) split across a different number of trades; at the other, a genuinely
+  different amount cleared (3 634 804 vs 3 642 912 Wh, ≈0.22 %).
+
+  **The golden master does not move** — verified on Linux/x86_64, `9 passed` against the committed
+  reference. The shipped example's clearing has no marginal tie for the permutation to resolve
+  differently.
+
+  This is what #216 originally suspected and what was twice recorded as refuted. Both refutations
+  were computed with the categorical-sort comparison corrected in the entry below, which inflated
+  6 differing files to 375 and made a real effect look like no effect.
+
 - **Two identical runs of the same scenario produced different results, because `energy_types` was
   a `set` (#216, partial).** `RtcBase` and `FbcBase` collected each agent's energy types into a
   set, and all four backends iterate that set in `add_balance_constraints` to add one balance

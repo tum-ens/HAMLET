@@ -5,6 +5,7 @@ __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
 # Imports
+import hashlib
 import time
 
 import polars as pl
@@ -361,6 +362,35 @@ class ElectricityMarket(MarketBase):
 
         return bids_offers, retailer
 
+    def _clearing_seed(self, role: str) -> int:
+        """A shuffle seed that varies per clearing but not per process.
+
+        The shuffle in `__split_bids_offers` exists so that agents tied on price do not always
+        clear in the same order. That intent needs randomness which varies per *clearing*; what it
+        had was randomness which varied per *process*, and the difference is the market half of
+        #216. Measured on the paper's design 6 at 150 steps with the hash seed left random: 45 of
+        45 run pairs disagreed, always in the same 6 result files, and the ten runs fell into ten
+        mutually-distinct groups. With this seed, 15 of 15 pairs are identical.
+
+        Three traps are avoided here, each of which has already cost a session:
+
+        * `hash()` of a `str` is randomised per process, so it cannot build a stable seed -- the
+          same defect as the `energy_types` set in the first half of #216;
+        * `pl.set_random_seed()` does **not** control `DataFrame.sample` in polars 0.20.31, so the
+          seed has to be passed per call;
+        * an unseeded `sample` is not merely arbitrary -- polars draws its seed from Python's
+          global `random`, which HAMLET never seeds, so every process shuffles differently. That
+          is also why seeding `random` alone appeared to fix this: it was the same intervention.
+
+        The key includes the timestep, so the tie-break still differs from one clearing to the
+        next and the anti-bias intent survives, and the role, so bids and offers do not receive
+        the same permutation.
+        """
+        key = (f'{self.tasks[c.TC_REGION]}|{self.tasks[c.TC_MARKET]}|{self.tasks[c.TC_NAME]}|'
+               f'{self.tasks[c.TC_TIMESTEP]}|{role}')
+        # blake2b rather than hash(): stable across processes and across Python versions
+        return int.from_bytes(hashlib.blake2b(key.encode(), digest_size=4).digest(), 'big')
+
     def __split_bids_offers(self, bids_offers, add_cumsum=True):
         """Splits the bids and offers into separate tables"""
         # Split the bids and offers into separate bids and offers tables
@@ -375,9 +405,9 @@ class ElectricityMarket(MarketBase):
         bids = bids.rename({c.TC_ID_AGENT: c.TC_ID_AGENT_IN})
         offers = offers.rename({c.TC_ID_AGENT: c.TC_ID_AGENT_OUT})
 
-        # Shuffle the data to avoid bias
-        bids = bids.sample(fraction=1, shuffle=True)
-        offers = offers.sample(fraction=1, shuffle=True)
+        # Shuffle the data to avoid bias, reproducibly across processes (see `_clearing_seed`)
+        bids = bids.sample(fraction=1, shuffle=True, seed=self._clearing_seed(c.PF_IN))
+        offers = offers.sample(fraction=1, shuffle=True, seed=self._clearing_seed(c.PF_OUT))
 
         # Sort the bids and offers by price
         bids = bids.sort(c.TC_PRICE_PU_IN, descending=True)
