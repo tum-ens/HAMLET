@@ -1,0 +1,1300 @@
+{
+  "AgentDataProcessor.process_all_meters_data": {
+    "/grid_golden/electricity": {
+      "columns": {
+        "battery_electricity_charging": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": -6.504,
+          "nulls": 0,
+          "ordered": -144.472,
+          "sum": -10.882
+        },
+        "battery_electricity_discharging": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 1.994,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 103.42000000000002,
+          "sum": 6.09
+        },
+        "ev_electricity": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": -13.915,
+          "nulls": 0,
+          "ordered": -1351.5469999999998,
+          "sum": -122.07399999999998
+        },
+        "hp_electricity": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": -2.904,
+          "nulls": 0,
+          "ordered": -164.889,
+          "sum": -10.307
+        },
+        "inflexible-load_electricity": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": -5.737,
+          "nulls": 0,
+          "ordered": -757.4339999999999,
+          "sum": -53.958000000000006
+        },
+        "pv_electricity": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 16.91,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 826.5909999999999,
+          "sum": 57.387
+        },
+        "total": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 2.555,
+          "min": -15.001,
+          "nulls": 0,
+          "ordered": -1488.3310000000001,
+          "sum": -133.744
+        }
+      },
+      "index": {
+        "distinct": 25,
+        "length": 25,
+        "max": "2021-03-19 23:00:00+00:00",
+        "min": "2021-03-18 23:00:00+00:00",
+        "nlevels": 1
+      },
+      "rows": 25
+    },
+    "/grid_golden/heat": {
+      "columns": {
+        "heat-storage_heat_charging": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": -12.745,
+          "nulls": 0,
+          "ordered": -321.34400000000005,
+          "sum": -18.98
+        },
+        "heat-storage_heat_discharging": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 3.067,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 297.099,
+          "sum": 27.954
+        },
+        "heat_heat": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": -3.099,
+          "nulls": 0,
+          "ordered": -795.4679999999998,
+          "sum": -60.153999999999996
+        },
+        "hp_heat": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 14.99,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 819.618,
+          "sum": 51.169
+        },
+        "total": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": -0.002,
+          "nulls": 0,
+          "ordered": -0.095,
+          "sum": -0.011
+        }
+      },
+      "index": {
+        "distinct": 25,
+        "length": 25,
+        "max": "2021-03-19 23:00:00+00:00",
+        "min": "2021-03-18 23:00:00+00:00",
+        "nlevels": 1
+      },
+      "rows": 25
+    }
+  },
+  "GridDataProcessor.process_electricity_grid_topology": {
+    "/grid_golden/bus": {
+      "columns": {
+        "agent": {
+          "distinct": 5,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "2dc37c205de00a6a",
+          "value_types": [
+            "NoneType",
+            "str"
+          ],
+          "values": [
+            "",
+            "FTEBlY05iAXL6vU",
+            "PogTCR9OtjKeq1U",
+            "VyIc0FQBwmjj51b",
+            "sxD33636ge7OVDI"
+          ]
+        },
+        "agent_description": {
+          "distinct": 5,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "29cb9e415a6c1f9e",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "FTEBlY05iAXL6vU (sfh)",
+            "PogTCR9OtjKeq1U (sfh)",
+            "VyIc0FQBwmjj51b (sfh)",
+            "no agents at bus",
+            "sxD33636ge7OVDI (sfh)"
+          ]
+        },
+        "in_service": {
+          "dtype": "b",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 231.0,
+          "sum": 21.0
+        },
+        "name": {
+          "distinct": 21,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "d043ff89adc587b9",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "bus_0",
+            "bus_1",
+            "bus_10",
+            "bus_11",
+            "bus_12",
+            "bus_13",
+            "bus_14",
+            "bus_15",
+            "bus_16",
+            "bus_17",
+            "bus_18",
+            "bus_19",
+            "bus_2",
+            "bus_3",
+            "bus_4",
+            "bus_5",
+            "bus_6",
+            "bus_7",
+            "bus_8",
+            "bus_9",
+            "hv_slack"
+          ]
+        },
+        "plant_description": {
+          "distinct": 4,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "8895a5d9d0d50224",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "inflexible-load (1), hp (1), ev (1)",
+            "inflexible-load (1), hp (1), ev (1), pv (1)",
+            "inflexible-load (1), hp (1), ev (1), pv (1), battery (1)",
+            "no plants at bus"
+          ]
+        },
+        "power_description": {
+          "dtype": "O",
+          "kind": "numeric",
+          "max": 62.60499999999911,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 1547.5109999999763,
+          "sum": 163.28399999999772,
+          "value_types": [
+            "float64",
+            "int"
+          ]
+        },
+        "type": {
+          "distinct": 1,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "c0138b165d0ab2ed",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "b"
+          ]
+        },
+        "vn_kv": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 20.0,
+          "min": 0.400000005960464,
+          "nulls": 0,
+          "ordered": 112.00000137090667,
+          "sum": 28.000000119209282
+        },
+        "zone": {
+          "distinct": 1,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "58e4ef92e7856896",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "grid_golden"
+          ]
+        }
+      },
+      "index": {
+        "distinct": 21,
+        "length": 21,
+        "max": "9",
+        "min": "0",
+        "nlevels": 1
+      },
+      "rows": 21
+    },
+    "/grid_golden/bus_geodata": {
+      "columns": {
+        "coords": {
+          "dtype": "O",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 21,
+          "ordered": 0.0,
+          "sum": 0.0,
+          "value_types": [
+            "float"
+          ]
+        },
+        "x": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 14.0,
+          "min": -5.0,
+          "nulls": 0,
+          "ordered": 1884.0,
+          "sum": 158.0
+        },
+        "y": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.875,
+          "min": -1.625,
+          "nulls": 0,
+          "ordered": -65.25,
+          "sum": -2.25
+        }
+      },
+      "index": {
+        "distinct": 21,
+        "length": 21,
+        "max": "9",
+        "min": "0",
+        "nlevels": 1
+      },
+      "rows": 21
+    },
+    "/grid_golden/ext_grid": {
+      "columns": {
+        "bus": {
+          "dtype": "u",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "in_service": {
+          "dtype": "b",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 1.0,
+          "sum": 1.0
+        },
+        "name": {
+          "distinct": 1,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "877c3aec832cd410",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "slack"
+          ]
+        },
+        "slack_weight": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 1.0,
+          "sum": 1.0
+        },
+        "va_degree": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "vm_pu": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 1.0,
+          "sum": 1.0
+        }
+      },
+      "index": {
+        "distinct": 1,
+        "length": 1,
+        "max": "0",
+        "min": "0",
+        "nlevels": 1
+      },
+      "rows": 1
+    },
+    "/grid_golden/line": {
+      "columns": {
+        "average_loading_percent": {
+          "dtype": "i",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "c_nf_per_km": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 1129.999995231628,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 80329.99867200851,
+          "sum": 8599.999845027924
+        },
+        "df": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 190.0,
+          "sum": 19.0
+        },
+        "from_bus": {
+          "dtype": "u",
+          "kind": "numeric",
+          "max": 19.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 2014.0,
+          "sum": 218.0
+        },
+        "g_us_per_km": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "in_service": {
+          "dtype": "b",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 190.0,
+          "sum": 19.0
+        },
+        "length_km": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.025000000372529,
+          "min": 0.001000000047497,
+          "nulls": 0,
+          "ordered": 1.9430000092834243,
+          "sum": 0.19300000148359703
+        },
+        "max_i_ka": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 0.143999993801117,
+          "nulls": 0,
+          "ordered": 54.24100098013878,
+          "sum": 5.1550001204013824
+        },
+        "name": {
+          "distinct": 19,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "13bd0dc5d561ade2",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "line_0",
+            "line_1",
+            "line_10",
+            "line_11",
+            "line_12",
+            "line_13",
+            "line_14",
+            "line_15",
+            "line_16",
+            "line_17",
+            "line_18",
+            "line_2",
+            "line_3",
+            "line_4",
+            "line_5",
+            "line_6",
+            "line_7",
+            "line_8",
+            "line_9"
+          ]
+        },
+        "overload_count": {
+          "dtype": "i",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "parallel": {
+          "dtype": "u",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 190.0,
+          "sum": 19.0
+        },
+        "r_ohm_per_km": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.640999972820282,
+          "min": 0.165000006556511,
+          "nulls": 0,
+          "ordered": 70.77387340366839,
+          "sum": 6.586827382445334
+        },
+        "std_type": {
+          "dtype": "O",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 19,
+          "ordered": 0.0,
+          "sum": 0.0,
+          "value_types": [
+            "NoneType"
+          ]
+        },
+        "to_bus": {
+          "dtype": "u",
+          "kind": "numeric",
+          "max": 20.0,
+          "min": 2.0,
+          "nulls": 0,
+          "ordered": 1939.0,
+          "sum": 221.0
+        },
+        "type": {
+          "dtype": "O",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 19,
+          "ordered": 0.0,
+          "sum": 0.0,
+          "value_types": [
+            "NoneType"
+          ]
+        },
+        "x_ohm_per_km": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.085137158632278,
+          "min": 0.074769906699657,
+          "nulls": 0,
+          "ordered": 15.650786511599977,
+          "sum": 1.5645131766796072
+        }
+      },
+      "index": {
+        "distinct": 19,
+        "length": 19,
+        "max": "9",
+        "min": "0",
+        "nlevels": 1
+      },
+      "rows": 19
+    },
+    "/grid_golden/load": {
+      "columns": {
+        "agent_type": {
+          "distinct": 1,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "66b39d1bd3a2f1f3",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "sfh"
+          ]
+        },
+        "bus": {
+          "dtype": "u",
+          "kind": "numeric",
+          "max": 4.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 161.0,
+          "sum": 30.0
+        },
+        "const_i_percent": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "const_z_percent": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "cos_phi": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "hp_min_control": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0042,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0924,
+          "sum": 0.0168
+        },
+        "id_agent": {
+          "distinct": 4,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "8c2a7b62d19ccc1b",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "FTEBlY05iAXL6vU",
+            "PogTCR9OtjKeq1U",
+            "VyIc0FQBwmjj51b",
+            "sxD33636ge7OVDI"
+          ]
+        },
+        "id_plant": {
+          "distinct": 12,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "3007206c6ef59ce7",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "4ZR0rIaPPYDv4fe",
+            "4gTPikLg7Zr9EJP",
+            "Febaj5xHSuadoTR",
+            "HSFM6ikQm90tALx",
+            "JnURwgUBMSUza6Q",
+            "QLQZ0Qb0duk3WSZ",
+            "RGVJNE5efgQXXlf",
+            "Ud2FhEhLR3SdQvl",
+            "X7jYen6rrw9zSqs",
+            "Z0rzvkoYT8anbAb",
+            "pOJbg8jfOJJx5cy",
+            "w2pU3HVfVLuTJr8"
+          ]
+        },
+        "in_service": {
+          "dtype": "b",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 78.0,
+          "sum": 12.0
+        },
+        "load_type": {
+          "distinct": 3,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "6f7a16f419fd0d73",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "ev",
+            "hp",
+            "inflexible-load"
+          ]
+        },
+        "name": {
+          "dtype": "O",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 12,
+          "ordered": 0.0,
+          "sum": 0.0,
+          "value_types": [
+            "NoneType"
+          ]
+        },
+        "p_mw": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "q_mvar": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "scaling": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 78.0,
+          "sum": 12.0
+        },
+        "sn_mva": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 12,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "type": {
+          "distinct": 1,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "51f4593a24b0b9a2",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "wye"
+          ]
+        },
+        "zone": {
+          "distinct": 1,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "99642bbc832a8e8b",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "grid_golden"
+          ]
+        }
+      },
+      "index": {
+        "distinct": 12,
+        "length": 12,
+        "max": "9",
+        "min": "0",
+        "nlevels": 1
+      },
+      "rows": 12
+    },
+    "/grid_golden/sgen": {
+      "columns": {
+        "agent_type": {
+          "distinct": 1,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "b28102a0ef87f5ad",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "sfh"
+          ]
+        },
+        "bus": {
+          "dtype": "i",
+          "kind": "numeric",
+          "max": 4.0,
+          "min": 2.0,
+          "nulls": 0,
+          "ordered": 41.0,
+          "sum": 15.0
+        },
+        "cos_phi": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "current_source": {
+          "dtype": "b",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 15.0,
+          "sum": 5.0
+        },
+        "id_agent": {
+          "distinct": 3,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "60ca5ae58e165428",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "FTEBlY05iAXL6vU",
+            "PogTCR9OtjKeq1U",
+            "VyIc0FQBwmjj51b"
+          ]
+        },
+        "id_plant": {
+          "distinct": 5,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "572ab19db1fbcc62",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "A2xM4ms1L9WpSeE",
+            "D4S9uAMMIKGQT4B",
+            "Gbvbe8ZQBs5IWKH",
+            "KHw6fbuiOZjxmW7",
+            "Q9kcguAY6LQwOY1"
+          ]
+        },
+        "in_service": {
+          "dtype": "b",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 15.0,
+          "sum": 5.0
+        },
+        "name": {
+          "dtype": "O",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 5,
+          "ordered": 0.0,
+          "sum": 0.0,
+          "value_types": [
+            "NoneType"
+          ]
+        },
+        "p_mw": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "plant_type": {
+          "distinct": 2,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "8f42cefdcdf7ab4f",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "battery",
+            "pv"
+          ]
+        },
+        "q_mvar": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "scaling": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 15.0,
+          "sum": 5.0
+        },
+        "sn_mva": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 5,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "type": {
+          "distinct": 1,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "6b7de25cfd76fcc6",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "wye"
+          ]
+        },
+        "zone": {
+          "distinct": 1,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "5cc143c250a0e984",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "grid_golden"
+          ]
+        }
+      },
+      "index": {
+        "distinct": 5,
+        "length": 5,
+        "max": "4",
+        "min": "0",
+        "nlevels": 1
+      },
+      "rows": 5
+    },
+    "/grid_golden/trafo": {
+      "columns": {
+        "df": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 1.0,
+          "sum": 1.0
+        },
+        "hv_bus": {
+          "dtype": "u",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "i0_percent": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.300000011920929,
+          "min": 0.300000011920929,
+          "nulls": 0,
+          "ordered": 0.300000011920929,
+          "sum": 0.300000011920929
+        },
+        "in_service": {
+          "dtype": "b",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 1.0,
+          "sum": 1.0
+        },
+        "lv_bus": {
+          "dtype": "u",
+          "kind": "numeric",
+          "max": 5.0,
+          "min": 5.0,
+          "nulls": 0,
+          "ordered": 5.0,
+          "sum": 5.0
+        },
+        "name": {
+          "distinct": 1,
+          "dtype": "O",
+          "kind": "text",
+          "ordered_digest": "feb5891dbd04c4dd",
+          "value_types": [
+            "str"
+          ],
+          "values": [
+            "trafo"
+          ]
+        },
+        "parallel": {
+          "dtype": "u",
+          "kind": "numeric",
+          "max": 1.0,
+          "min": 1.0,
+          "nulls": 0,
+          "ordered": 1.0,
+          "sum": 1.0
+        },
+        "pfe_kw": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.600000023841858,
+          "min": 0.600000023841858,
+          "nulls": 0,
+          "ordered": 0.600000023841858,
+          "sum": 0.600000023841858
+        },
+        "shift_degree": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "sn_mva": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.015,
+          "min": 0.015,
+          "nulls": 0,
+          "ordered": 0.015,
+          "sum": 0.015
+        },
+        "std_type": {
+          "dtype": "O",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 1,
+          "ordered": 0.0,
+          "sum": 0.0,
+          "value_types": [
+            "NoneType"
+          ]
+        },
+        "tap_max": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 1,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "tap_min": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 1,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "tap_neutral": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 1,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "tap_phase_shifter": {
+          "dtype": "b",
+          "kind": "numeric",
+          "max": 0.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "tap_pos": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 1,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "tap_side": {
+          "dtype": "O",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 1,
+          "ordered": 0.0,
+          "sum": 0.0,
+          "value_types": [
+            "NoneType"
+          ]
+        },
+        "tap_step_degree": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 1,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "tap_step_percent": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": null,
+          "min": null,
+          "nulls": 1,
+          "ordered": 0.0,
+          "sum": 0.0
+        },
+        "vk_percent": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 3.740000009536743,
+          "min": 3.740000009536743,
+          "nulls": 0,
+          "ordered": 3.740000009536743,
+          "sum": 3.740000009536743
+        },
+        "vkr_percent": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 1.350000023841858,
+          "min": 1.350000023841858,
+          "nulls": 0,
+          "ordered": 1.350000023841858,
+          "sum": 1.350000023841858
+        },
+        "vn_hv_kv": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 20.0,
+          "min": 20.0,
+          "nulls": 0,
+          "ordered": 20.0,
+          "sum": 20.0
+        },
+        "vn_lv_kv": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.400000005960464,
+          "min": 0.400000005960464,
+          "nulls": 0,
+          "ordered": 0.400000005960464,
+          "sum": 0.400000005960464
+        }
+      },
+      "index": {
+        "distinct": 1,
+        "length": 1,
+        "max": "0",
+        "min": "0",
+        "nlevels": 1
+      },
+      "rows": 1
+    }
+  },
+  "GridDataProcessor.process_electricity_transformer_loading": {
+    "/grid_golden": {
+      "columns": {
+        "grid_golden": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 100.00666666686756,
+          "min": -17.03333333336762,
+          "nulls": 0,
+          "ordered": 9030.580000018143,
+          "sum": 891.6266666684578
+        }
+      },
+      "index": {
+        "distinct": 24,
+        "length": 24,
+        "max": "2021-03-19 22:00:00+00:00",
+        "min": "2021-03-18 23:00:00+00:00",
+        "nlevels": 1
+      },
+      "rows": 24
+    }
+  },
+  "MarketDataProcessor.process_agent_balancing": {
+    "/grid_golden": {
+      "columns": {
+        "price_in": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 923140500.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 33196368252.0,
+          "sum": 3101974966.0
+        },
+        "price_out": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 276449000.0,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 7963056800.0,
+          "sum": 795546100.0
+        }
+      },
+      "index": {
+        "distinct": 20,
+        "length": 20,
+        "max": "sxD33636ge7OVDI|retail",
+        "min": "FTEBlY05iAXL6vU|balancing",
+        "nlevels": 2
+      },
+      "rows": 20
+    }
+  },
+  "MarketDataProcessor.process_average_pricing": {
+    "/grid_golden/markets/electricity/continuous": {
+      "columns": {
+        "average_price": {
+          "dtype": "f",
+          "kind": "numeric",
+          "max": 0.01874,
+          "min": 0.00521,
+          "nulls": 88,
+          "ordered": 101.226,
+          "sum": 1.4318600000000004
+        }
+      },
+      "index": {
+        "distinct": 188,
+        "length": 188,
+        "max": "2021-03-20 21:00:00+00:00|retail",
+        "min": "2021-03-18 23:00:00+00:00|balancing",
+        "nlevels": 2
+      },
+      "rows": 188
+    }
+  },
+  "MarketDataProcessor.process_total_balancing": {
+    "/grid_golden/markets/electricity/continuous": {
+      "columns": {
+        "cost": {
+          "dtype": "O",
+          "kind": "numeric",
+          "max": -0.63936,
+          "min": -269.97135,
+          "nulls": 0,
+          "ordered": -1186.4324732,
+          "sum": -310.19749659999997,
+          "value_types": [
+            "float"
+          ]
+        },
+        "revenue": {
+          "dtype": "O",
+          "kind": "numeric",
+          "max": 79.01125,
+          "min": 0.0,
+          "nulls": 0,
+          "ordered": 316.58836,
+          "sum": 79.55461000000001,
+          "value_types": [
+            "float"
+          ]
+        }
+      },
+      "index": {
+        "distinct": 4,
+        "length": 4,
+        "max": "retail",
+        "min": "balancing",
+        "nlevels": 1
+      },
+      "rows": 4
+    }
+  }
+}

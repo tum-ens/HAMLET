@@ -29,6 +29,12 @@ GRID_EXAMPLES = [
                   'new_scenario_from_files'), id='from_topology'),
 ]
 
+#: Part of the run-cache key, so it decides whether another module shares these runs or pays for
+#: its own. A module constant rather than a literal in the fixture because
+#: `test_analyzer_processors` shares the first of them and derives its request from here --
+#: flipping this inline would have split the run silently. See `tests/scenario_cache.py`.
+NEEDS_RECEIPT = True
+
 
 @pytest.fixture(scope='module', params=GRID_EXAMPLES)
 def grid_run(request, scenario_runs):
@@ -42,7 +48,7 @@ def grid_run(request, scenario_runs):
     """
     example, scenario_name, creator_method = request.param
     entry = scenario_runs.run(REPO_ROOT / 'examples' / example, scenario_name,
-                              creator_method=creator_method, needs_receipt=True)
+                              creator_method=creator_method, needs_receipt=NEEDS_RECEIPT)
     return scenario_name, entry.fingerprint, entry.results, entry.record
 
 

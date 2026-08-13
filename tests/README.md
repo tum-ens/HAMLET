@@ -212,6 +212,70 @@ verified to produce byte-identical scenarios and identical results. The column n
 reference contain those seeded agent and plant ids, so changing how ids are generated will fail
 this test — correctly, since agent identities would genuinely have changed.
 
+## The Analyzer's data processors
+
+`tests/e2e/test_analyzer_processors.py` pins what the Analyzer computes, against committed
+references at `tests/e2e/analyzer/<scenario>.json`. Its module docstring says what is pinned and
+why; this section covers what a reader of the suite needs that the file cannot say about itself.
+
+Before it, nothing asserted on the Analyzer's **output**. `test_simple_scenario` ran it and checked
+the process printed `E2E_OK`; `integration/analyzer/test_results_format_check.py` constructs it six
+times and asserts only on its refusal to read an incompatible scenario format. **Four of the six
+processors had never executed at all** — `test_simple_scenario` calls two plotters, and that
+example has no grid.
+
+**It adds no scenario run**, because both its requests are byte-identical to ones the `e2e` job
+already makes. `test_the_pinned_runs_are_shared_with_an_existing_module` rebuilds them from the
+owning modules' constants and fails if either side drifts; nothing else would notice, since both
+modules would still pass while the job quietly grew two more example runs. That guard is why
+`test_grid_examples.NEEDS_RECEIPT` is a module constant rather than a literal in its fixture — it
+is part of the cache key, and a literal is not derivable from outside.
+
+Four properties of the reduction are load-bearing and are pinned by
+`tests/unit/test_analyzer_outputs.py` in the fast tier rather than only inside a minutes-long job:
+every recorded statistic is **reproducible across processes** (two processors group by Categorical
+columns, so *row order* is not — **#229**); a column of numbers held as **`object` is still
+numeric** (`process_total_balancing` builds one, and `select_dtypes('number')` would skip the
+Analyzer output that most directly becomes a figure); an **empty return fails separately and
+first**, checked against the committed reference as well as the live run; and a **value/index
+misalignment is visible**. `tests/analyzer_outputs.py` gives the reasoning for each.
+
+That last one is the subtlest and it was added after a review panel broke all six processors with
+every assertion green. Sum, min, max and a distinct count are invariant under any permutation of
+values against the index, so "right numbers, wrong row" — positional indexing written back onto a
+sorted frame, an off-by-one interval convention, a price series sorted into a duration curve — was
+unassertable. `ordered` is a position-weighted total taken in **stringified-index order**: it
+catches the permutation without reintroducing the #229 flake (the weights come from the index's
+string form, never a Categorical encoding) and is compared with the same relative tolerance as
+every other float, rather than being a digest that would flake on a last-place difference between
+platforms. Text columns take a digest, where exact comparison is safe.
+
+`tests/integration/analyzer/test_market_data_processor_multi_market.py` covers the one branch the
+two pinned scenarios cannot reach: `process_agent_balancing` accumulates across markets, and no
+scenario in the repository has more than one. It builds two `market_transactions.ft` files
+directly, so the branch costs milliseconds rather than a scenario run.
+
+### What this needed before it could run at all
+
+`process_electricity_grid_topology` could not run **anywhere**, for two independent reasons, and
+both are worth keeping because of how they stayed hidden.
+
+It loaded the saved network as the hardcoded `electricity.xlsx`, which only the `file`
+grid-generation method produces — a `topology`-built scenario writes `topology.xlsx`. It now reads
+the name from the same `grids.yaml` key the Executor saves under. Both conventions are pinned, and
+that is why the two scenarios differ in generation method rather than being the two most convenient
+runs.
+
+It also calls `create_generic_coordinates(..., library='igraph')`, and **`igraph` was declared
+nowhere in the repository** — one `grep` hit, in that call — so it raised `ImportError` in every
+environment `uv sync` produces. `igraph` is now in the `test` dependency group, which is what lets
+the suite pin it; it is still broken for anyone who *installs* HAMLET, and that half is **#227**.
+
+Neither was visible because `PlotterBase.plot_all` catches every exception and prints it, so
+`Analyzer.plot_all()` reports success whatever happens (**#228**). The lesson generalises past this
+file: **coverage.py marks a line that raises as executed**, so "runs but unasserted" and "has never
+worked" look identical when the caller swallows everything.
+
 ## The `ctsp_industry` fixture
 
 `tests/e2e/scenarios/ctsp_industry/` is the only scenario anywhere in the repository that declares

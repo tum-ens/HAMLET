@@ -10,6 +10,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Added
+- **The Analyzer's data processors are pinned against committed reference numbers (#222).** Of
+  HAMLET's three top-level components, the Creator and the Executor are heavily pinned and the
+  Analyzer had nothing asserted on what it *computes*: the test that ran it checked the process
+  printed `E2E_OK`, and the one that constructs it in the fast tier asserts only on its refusal to
+  read an incompatible scenario format. **Four of the six processors had never executed at all.** A
+  regression that plotted the wrong column, dropped an agent or rescaled a series was caught by
+  nothing, in the one component whose output goes into a paper.
+
+  `tests/e2e/test_analyzer_processors.py` pins all six `process_*` methods against
+  `tests/e2e/analyzer/<scenario>.json`. **The processors are pinned and the plotters are not**,
+  deliberately: those methods return the numbers that become the figures, so a wrong figure becomes
+  a red test, where an image comparison would be brittle enough to teach people to re-baseline
+  without looking. Nothing is enumerated — the data-processor *classes* are discovered by walking
+  `hamlet.analyzer` and their `process_*` methods off each class, so a new one is pinned by default.
+
+  **It adds no scenario run.** Both pinned scenarios make requests byte-identical to ones the
+  `e2e` job already makes, so the run cache hands over the existing run, and a test rebuilds both
+  requests from the owning modules' own constants and fails if that ever stops being true.
+
+  Two scenarios rather than one because they differ in grid *generation method*, which is what
+  caught the first defect below. `simple_scenario` is deliberately not pinned: it sets
+  `electricity.active: False`, so both grid processors return `{}`, and recording an empty return
+  as though it were coverage is the vacuity the file exists to avoid — non-emptiness is asserted
+  separately, and against the committed reference as well as the live run.
+
+  **A review panel broke all six processors with every assertion green**, and closing that is the
+  most useful thing in this entry. Sum, minimum, maximum and a distinct count are invariant under
+  any permutation of values against the index, so the whole family of "right numbers, wrong row"
+  defects — positional indexing written back onto a sorted frame, an off-by-one interval
+  convention, a price series sorted into a duration curve — was unassertable. Each column now also
+  carries a position-weighted total taken in stringified-index order, which catches the
+  permutation without reintroducing the row-order flake it sits next to (#229). Two smaller holes
+  the same panel found are closed with it: a brand-new output column was reported by nothing, and
+  the anti-vacuity guard accepted an all-NaN column because pandas totals one to `0.0`
+- **The Analyzer's per-agent balancing is verified to accumulate across markets.** No scenario in
+  the repository has more than one market, so the `+=` in `process_agent_balancing` had never
+  executed; changing it to `=` left the entire end-to-end suite green while the figure would have
+  shown one market instead of the scenario. Covered by
+  `tests/integration/analyzer/test_market_data_processor_multi_market.py`, which writes two
+  `market_transactions.ft` files directly and so runs in milliseconds rather than costing a run
 - **The first coverage of the `ctsp` and `industry` agent types, which had none of any kind.** No
   `agents.yaml` outside `config_templates/` declared either type and no test imported either class,
   so ~1900 lines of Creator and both Executor agent classes were never executed — while the two
@@ -350,6 +390,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **The Analyzer's grid topology plot could not read a `topology`-built grid.**
+  `GridDataProcessor.process_electricity_grid_topology` loaded the saved network by the hardcoded
+  name `electricity.xlsx`, which only the `file` grid-generation method produces — a scenario built
+  with `generation.method: topology` writes `topology.xlsx`, so the processor raised
+  `UserWarning: File ... does not exist!!` on every one of them, `tests/e2e/scenarios/grid_golden`
+  and `examples/create_scenario_with_topology` included. It now reads the filename from the same
+  `grids.yaml` key the Executor saves the network under, so the two cannot disagree.
+
+  Both conventions are now pinned (#222), which is why the two scenarios in the new analyzer
+  reference differ in generation method rather than being the two most convenient runs.
+
+  **Two further defects in the same method are filed rather than fixed here**, both of which are
+  why this one survived: it also calls `create_generic_coordinates(..., library='igraph')` and
+  `igraph` is declared nowhere in the repository, so it raises `ImportError` in every environment
+  `uv sync` produces (#227 — `igraph` is added to the `test` dependency group so the suite can pin
+  the processor, which does not fix it for a user); and `PlotterBase.plot_all` catches every
+  exception and prints it, so `Analyzer.plot_all()` reports success whatever happens (#228). A
+  third, found while building the reference: the market processors group by Categorical columns
+  and so return rows in a process-dependent order, which reorders a per-agent bar chart between
+  identical runs (#229)
 - **A guard inside a fixture consumed only by `xfail(strict=True)` tests was not a guard.**
   `pytest.mark.xfail(strict=True)` converts a fixture *setup error* into a silent `xfailed`
   (verified on pytest 8.3.5). In `e2e/test_backend_equivalence.py` the `linopy_results` fixture is

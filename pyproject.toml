@@ -129,7 +129,10 @@ notebooks = ["jupyter==1.1.1"]
 # the published package, which is what makes them the right home for pytest.
 # ----------------------------------------------------------------------------------------------
 [dependency-groups]
-test = ["pytest==8.3.5"]
+# `igraph` is pandapower's layout backend for `create_generic_coordinates`, which the Analyzer's
+# grid topology processor calls. Test-only, so that processor still raises for a user who installs
+# HAMLET -- that half is #227; here it is what lets the suite pin the processor at all (#222).
+test = ["igraph==1.0.0", "pytest==8.3.5"]
 lint = ["ruff==0.16.1"]
 docs = ["sphinx==8.1.3", "sphinx-rtd-theme==3.0.2"]
 dev = [{ include-group = "test" }, { include-group = "lint" }]
