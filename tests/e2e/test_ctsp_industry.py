@@ -56,7 +56,7 @@ import json
 import pytest
 
 from tests.backend_matrix import require
-from tests.scenario_run import REPO_ROOT, run_example
+from tests.scenario_run import REPO_ROOT
 
 CONFIG_ROOT = REPO_ROOT / 'tests' / 'e2e' / 'scenarios'
 SCENARIO = 'ctsp_industry'
@@ -80,20 +80,18 @@ SCHEME_EXERCISING_220 = 'full'
 
 
 @pytest.fixture(scope='module')
-def run(tmp_path_factory):
+def run(scenario_runs):
     """Run the fixture once, switched to `poi`, and hand back the receipt and the fingerprint."""
     require(REQUESTED_FRAMEWORK, REQUESTED_SOLVER)
     # The premise, before spending 30 s on a run whose result would prove nothing without it.
     check_the_premise()
-    base = tmp_path_factory.mktemp('ctsp_industry')
-    record = base / 'backends.json'
 
-    fingerprint = run_example(base, CONFIG_ROOT, SCENARIO, framework=REQUESTED_FRAMEWORK,
-                              solver=REQUESTED_SOLVER, record_backends=record,
+    entry = scenario_runs.run(CONFIG_ROOT, SCENARIO, framework=REQUESTED_FRAMEWORK,
+                              solver=REQUESTED_SOLVER,
                               creator_method='new_scenario_from_files')
 
-    used = {tuple(pair) for pair in json.loads(record.read_text(encoding='utf-8'))}
-    return used, fingerprint
+    used = {tuple(pair) for pair in json.loads(entry.record.read_text(encoding='utf-8'))}
+    return used, entry.fingerprint
 
 
 def check_the_premise():

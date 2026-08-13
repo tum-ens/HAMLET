@@ -42,6 +42,7 @@ asking for `poi`: **26-36 s**, on the default backend, and it carries the first 
 coverage with it. Same assertion, same class of coverage, still selected by `-m e2e` rather than
 hidden behind a marker of its own.
 """
+import ast
 import inspect
 import json
 import os
@@ -49,7 +50,7 @@ import os
 import pytest
 
 from tests.backend_matrix import COMBINATION_IDS, COMBINATIONS, require
-from tests.scenario_run import REPO_ROOT, run_example
+from tests.scenario_run import REPO_ROOT
 
 EXAMPLE = REPO_ROOT / 'examples' / 'create_simple_scenario'
 SCENARIO_NAME = 'simple_scenario'
@@ -72,16 +73,15 @@ COVERED_ELSEWHERE = {
 @pytest.mark.e2e
 @pytest.mark.solver
 @pytest.mark.parametrize(('framework', 'solver'), COMBINATIONS, ids=COMBINATION_IDS)
-def test_the_example_runs_under_this_combination(framework, solver, tmp_path):
+def test_the_example_runs_under_this_combination(framework, solver, scenario_runs):
     """Creator and Executor complete, the requested backend is what solved, results are written."""
     require(framework, solver)
     if (framework, solver) in COVERED_ELSEWHERE and not os.environ.get(RUN_ALL):
         pytest.skip(f'{framework} + {solver} already runs end to end in '
                     f'{COVERED_ELSEWHERE[(framework, solver)]}; set {RUN_ALL}=1 to run it here too')
 
-    record = tmp_path / 'backends.json'
-    fingerprint = run_example(tmp_path, EXAMPLE, SCENARIO_NAME, framework=framework,
-                              solver=solver, record_backends=record)
+    entry = scenario_runs.run(EXAMPLE, SCENARIO_NAME, framework=framework, solver=solver)
+    record, fingerprint = entry.record, entry.fingerprint
 
     # `run_example` already fails on a missing RUN_OK, so reaching here means the run finished.
     # What is left is whether it finished having done the work, and with the requested backend.
@@ -98,6 +98,45 @@ def test_the_example_runs_under_this_combination(framework, solver, tmp_path):
         'the run wrote result tables but every one of them is empty')
 
 
+#: The two ways a module starts an end-to-end run. `scenario_runs.run` is the shared run cache
+#: and forwards to `run_example` (`tests/scenario_cache.py`), so either spelling means "this
+#: module runs the example".
+RUN_CALLS = ('run', 'run_example')
+
+
+def run_calls(module):
+    """Every end-to-end run the module *makes*, read from its syntax tree.
+
+    Returns one dict of constant keyword arguments per call, so a caller can ask what backend a
+    run was started with rather than whether a string appears somewhere in the file.
+
+    **Parsed rather than grepped, and that is the whole point.** The substring version of this
+    guard was satisfiable by prose in both directions: a comment mentioning `framework=` could
+    fail the negative check, and a docstring quoting `framework='linopy'` could pass the positive
+    one. Both happened -- the second is `tests/unit/test_warning_policy.py`'s lesson, and the
+    first broke this test when a docstring elsewhere was reworded. An `ast.Call` node cannot be
+    written in a comment.
+
+    Non-constant arguments are reported as `None` rather than guessed at. That is deliberate and
+    it is the limit of this check: a run whose backend is computed at runtime reads here as "no
+    backend named". `test_the_example_runs_under_this_combination` above is exactly that shape,
+    which is why this only inspects the two modules it defers to, both of which pass literals.
+    """
+    tree = ast.parse(inspect.getsource(module))
+    calls = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = (node.func.attr if isinstance(node.func, ast.Attribute)
+                else getattr(node.func, 'id', None))
+        if name not in RUN_CALLS:
+            continue
+        calls.append({keyword.arg: (keyword.value.value
+                                    if isinstance(keyword.value, ast.Constant) else None)
+                      for keyword in node.keywords})
+    return calls
+
+
 def test_the_deferred_cells_are_still_covered_elsewhere():
     """The cells skipped above must still be run end to end by the tests named in the skip.
 
@@ -106,11 +145,19 @@ def test_the_deferred_cells_are_still_covered_elsewhere():
     this file would go on politely skipping a cell that nothing runs any more. Deferring coverage
     is only safe if the deferral is itself tested.
 
-    Checked against the covering modules' source rather than by importing their fixtures, because
-    what matters is *that the example is run under that backend*, not what the fixture is called.
-    The exception is which scenarios the golden master pins, which is read as data: now that it is
-    multi-scenario, "it calls run_example somewhere" no longer implies "it still runs *this*
-    example", and no substring can tell those two apart.
+    Checked against the covering modules' *calls* rather than by importing their fixtures, because
+    what matters is that the example is run under that backend, not what the fixture is called.
+    See `run_calls` for why this reads the syntax tree instead of the text. Which scenarios the
+    golden master pins is read as data below, because "it starts a run somewhere" still does not
+    imply "it still runs *this* example" -- that part no parse can tell you either.
+
+    **The run cache is a registry of what actually ran, and it still cannot replace this.**
+    `scenario_runs.log` records every (request, scenario) really executed, which is stronger
+    evidence than any static read -- but it is populated by *running the examples*, and this test
+    is deliberately in the fast tier, where none of them run. Asserting against it here would read
+    an empty log and pass for the wrong reason. An e2e-marked companion could read it, but only by
+    relying on this file being collected after `test_backend_equivalence`; that is alphabetical
+    accident, not a guarantee, so it is deliberately not done.
 
     Note that `SCENARIOS` being non-empty is not checked here but in `test_golden_master.py`
     itself, against the committed references -- that guard generalises to every pinned scenario,
@@ -119,13 +166,14 @@ def test_the_deferred_cells_are_still_covered_elsewhere():
     from tests.e2e import test_backend_equivalence as equivalence
     from tests.e2e import test_golden_master as golden
 
-    equivalence_source = inspect.getsource(equivalence)
-    golden_source = inspect.getsource(golden)
+    equivalence_calls = run_calls(equivalence)
+    golden_calls = run_calls(golden)
 
-    assert "framework='linopy'" in equivalence_source, (
+    assert any(call.get('framework') == 'linopy' for call in equivalence_calls), (
         "test_backend_equivalence no longer runs the example with framework='linopy', so "
-        "linopy + highs is not covered there and must stop being skipped here")
-    assert 'run_example(' in golden_source, (
+        f"linopy + highs is not covered there and must stop being skipped here (its runs: "
+        f"{equivalence_calls})")
+    assert golden_calls, (
         'test_golden_master no longer runs the example, so poi + highs is not covered there and '
         'must stop being skipped here')
     # The deferral names *this* example and *this* scenario, not merely "the golden master".
@@ -144,6 +192,8 @@ def test_the_deferred_cells_are_still_covered_elsewhere():
         f'reference behind it and must stop being skipped here')
     # The golden master must still run the *shipped* configuration -- it is only a stand-in for
     # the poi + highs cell for as long as it does not override the backend itself.
-    assert 'framework=' not in golden_source, (
-        'test_golden_master now overrides the backend, so it no longer covers whatever the '
-        'shipped config selects; re-check which cell it stands in for')
+    overridden = [call for call in golden_calls
+                  if call.get('framework') is not None or call.get('solver') is not None]
+    assert not overridden, (
+        f'test_golden_master now overrides the backend ({overridden}), so it no longer covers '
+        f'whatever the shipped config selects; re-check which cell it stands in for')

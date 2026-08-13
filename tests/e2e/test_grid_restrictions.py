@@ -25,12 +25,11 @@ was issued at is no longer in them. `res_bus` is kept for every timestep, and in
 agent sits alone on its bus, so bus power *is* agent power as the power flow saw it.
 """
 import json
-import shutil
 from pathlib import Path
 
 import pytest
 
-from tests.scenario_run import REPO_ROOT, run_example
+from tests.scenario_run import REPO_ROOT
 
 SCENARIO = 'grid_golden'
 
@@ -40,16 +39,24 @@ SCENARIO = 'grid_golden'
 FEE_COLUMN = 'grid_market_out'
 CONFIG_ROOT = REPO_ROOT / 'tests' / 'e2e' / 'scenarios'
 
+#: `grid_golden`'s topology assigns agents to buses by id, and only this entry point keeps the ids
+#: `agents.xlsx` declares. A module constant rather than a literal in the fixture so that
+#: `test_scenario_cache_key` can check this request against the golden master's and fail if the
+#: two stop being the one shared run.
+CREATOR_METHOD = 'new_scenario_from_files'
+
 
 @pytest.fixture(scope='module')
-def grid_results(tmp_path_factory):
-    """Run the fixture once and hand back its results directory."""
-    base = tmp_path_factory.mktemp('e2e_14a')
-    try:
-        run_example(base, CONFIG_ROOT, SCENARIO, creator_method='new_scenario_from_files')
-        yield base / 'results' / SCENARIO
-    finally:
-        shutil.rmtree(base, ignore_errors=True)
+def grid_results(scenario_runs):
+    """Run the fixture once and hand back its results directory.
+
+    This request is byte-identical to `test_golden_master`'s for `grid_golden`, and going
+    through `scenario_runs` is what lets the two share one run instead of paying for it twice
+    (70-125 s; see `tests/scenario_cache.py` for the measurement and why it is a band).
+    They only ever co-exist in a session that selects both markers, which no CI job does --
+    see `tests/scenario_cache.py` for why the saving is local-only.
+    """
+    return scenario_runs.run(CONFIG_ROOT, SCENARIO, creator_method=CREATOR_METHOD).results
 
 
 def read_csv(results, name):
