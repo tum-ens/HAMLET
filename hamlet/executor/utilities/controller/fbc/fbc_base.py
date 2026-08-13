@@ -9,7 +9,7 @@ import pandas as pd
 import polars as pl
 
 import hamlet.constants as c
-from hamlet.executor.utilities.controller.controller_base import ControllerBase
+from hamlet.executor.utilities.controller.controller_base import ControllerBase, derive_energy_types
 
 
 class FbcBase(ControllerBase):
@@ -18,10 +18,8 @@ class FbcBase(ControllerBase):
 
         # Store the mapping of the components to the energy types and operation modes
         self.mapping = kwargs['mapping']
-        # Identify all unique energy types
-        self.energy_types = set()
-        for mapping in self.mapping.values():
-            self.energy_types.update(mapping.keys())
+        # Identify all unique energy types, in an order that does not depend on the process (see #216)
+        self.energy_types = derive_energy_types(self.mapping)
 
         # Get the agent and other data
         self.agent = kwargs['agent']
