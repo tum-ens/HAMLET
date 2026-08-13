@@ -141,34 +141,25 @@ def test_the_sheet_carries_the_columns_this_agent_type_is_built_from(created, ag
 
 
 #: Columns one sheet has and the other does not, with the reason for each. **This is a record of
-#: known divergence, not an approval of it.** Every entry was found by this test failing, and each
-#: is either a config-template defect filed separately or a deliberate config difference.
+#: known divergence, not an approval of it.** Every entry was found by this test failing.
 #:
-#: Two of them are stale names in `config_templates`' **ctsp** block that `sfh` and `industry` do
-#: not share — the same "the change landed in two of three copies" pattern as #212:
-#:   - the `charging_scheme` sub-keys are the pre-nesting flat form (`min_soc_val`) where the other
-#:     two carry `min_soc: {val: ...}`, which is what the Executor reads;
-#:   - the EV `fcast` sub-block is `random_forest_classifier:` where the registered model — and the
-#:     name `sfh` and `industry` use — is `rfr` (`forecasts/models.py:226`).
-#: The third is a genuine config choice: `industry` allows two EVs per agent (`num: [1, 2]`), so it
-#: gets a second set of `ev/sizing/*_1` columns.
+#: It used to hold five more entries per sheet, all of them the "the change landed in two of three
+#: copies" pattern of #212: `config_templates`' **ctsp** block carried the pre-nesting flat
+#: `charging_scheme` sub-keys (`min_soc_val`) where `sfh` and `industry` carry
+#: `min_soc: {val: ...}` — which is the form the Executor reads — and named its EV forecast
+#: sub-block `random_forest_classifier:` where the registered model is `rfr`. Both were **#218**,
+#: and fixing them is what let this fixture turn its EV share on at all. `ctsp` is now empty, and
+#: keeping the key rather than dropping it is deliberate: it is where the next ctsp-only column
+#: shows up.
+#:
+#: What is left is a genuine config choice: `industry` allows two EVs per agent (`num: [1, 2]`), so
+#: it gets a second set of `ev/sizing/*_1` columns.
 #:
 #: A dedupe of these two classes has to decide each of these explicitly (#213). Until then, this
 #: constant is what makes the difference visible in review instead of invisible in a diff.
 EXPECTED_SHEET_DIFFERENCE = {
-    'ctsp': [
-        'ev/charging_scheme/min_soc_time_time',
-        'ev/charging_scheme/min_soc_time_val',
-        'ev/charging_scheme/min_soc_val',
-        'ev/charging_scheme/price_sensitive_threshold',
-        'ev/fcast/random_forest_classifier/features',
-    ],
+    'ctsp': [],
     'industry': [
-        'ev/charging_scheme/min_soc/val',
-        'ev/charging_scheme/min_soc_time/time',
-        'ev/charging_scheme/min_soc_time/val',
-        'ev/charging_scheme/price_sensitive/threshold',
-        'ev/fcast/rfr/features',
         'ev/sizing/capacity_1',
         'ev/sizing/charging_AC_1',
         'ev/sizing/charging_DC_1',

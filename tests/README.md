@@ -204,7 +204,7 @@ is not pedantry — it is easy to assume the expensive e2e run covers everything
 | `e2e/test_ctsp_industry.py` | `new_scenario_from_files` | the **Executor** classes and the workbook → scenario → simulation path. `create_agents_from_file` never consults `Agents.types`, so **no Creator class runs at all** — traced, not assumed |
 | `integration/creator/test_ctsp_industry_creator.py` | `new_scenario_from_configs` | the **Creator** classes, the ~1900 lines. Runs in ~4 s, so it is in the fast tier |
 
-Three values in the fixture are load-bearing, and `e2e/test_ctsp_industry.py` fails if any of them
+Four values in the fixture are load-bearing, and `e2e/test_ctsp_industry.py` fails if any of them
 moves without the test moving with it. `solver: highs` is *not* one of them — nothing asserts it,
 and `run_example` rewrites it anyway; it is there so the fixture needs no licence.
 
@@ -212,34 +212,57 @@ and `run_example` rewrites it anyway; it is there so the fixture needs no licenc
 |---|---|
 | `framework: linopy` | **Not the default, deliberately.** The scenario is built with `new_scenario_from_files`, so `agents.xlsx` is what the Creator reads and the #206 read-back has to ask it for something it does not ship. Shipping `linopy` makes that request `poi` — the fast backend — so the read-back costs **26–36 s** where the same assertion against `grid_golden` cost **232–272 s** (4 and 2 runs, same harness and machine; quote the band, this runner's spread is wide). |
 | two agent **types** | `create_agents_file_from_config` writes one sheet per type, so declaring both gives `agents.xlsx` **two sheets**. `grid_golden` has one, and the per-sheet half of the backend switch had no real fixture until this one. (`number_of: 1` is a separate choice — it is what pins the 24-row assertions.) |
-| `ev` share `0` | the EV path does not work for either type. Four separate defects, below. |
+| `ev` share `1` | this is the **only** EV coverage either agent type has. `check_the_ev_premise` fails by name if it goes back to 0, and separately if the nested `charging_scheme` columns are present but entirely NaN — which is #219 exactly. |
+| `charging_scheme.method` `["full", "min_soc"]` | `full` is the arm #220 broke, and this is the only place anything exercises it. Reverting that fix makes the whole e2e module fail with the original `TypeError` — verified by reverting, not assumed. `check_the_ev_premise` asserts some agent actually **draws** `full`, deliberately a property of the draw rather than of the distribution: if a reseed makes both agents draw `min_soc` the #220 coverage is genuinely gone and that is worth a red test. This row was unguarded until a review panel changed the fixture to `min_soc` and got a green run. |
 
-**Do not raise the EV share to "cover more".** It turns the fixture red, and each of these is
-filed rather than worked around:
+### The EV path took three fixes to turn on
 
-1. `config_templates/agents.yaml`'s **ctsp** block asks for forecast method `ev_close`. No such
+The fixture shipped `ev.share: 0` until #218, #219 and #220 were closed. Raising it turned the
+fixture red **five** times over, each defect hiding the next, so the sequence is worth keeping:
+
+1. `config_templates/agents.yaml`'s **ctsp** block asked for forecast method `ev_close`. No such
    model is registered — `sfh` and `industry` both say `arrival`. `KeyError` at forecaster init.
-2. The same block states `charging_scheme` in a **flat schema** (`min_soc_val`, …) that the
+2. The same block stated `charging_scheme` in a **flat schema** (`min_soc_val`, …) that the
    Executor does not read; `sfh` and `industry` carry the nested one. `KeyError: 'min_soc'`.
 3. `Ctsp._ev_config` and `Industry._ev_config` fill `charging_scheme` with `_add_info_indexed`,
-   which **does not descend into nested config** the way `_add_info_simple` does (which is what
-   `sfh` uses). Every nested charging-scheme parameter is written as `NaN`, silently. The *code*
-   defect is in both classes; the *consequence* is live for `industry` today and conditional for
-   `ctsp`, whose template block is flat anyway until 2 is fixed.
-4. POI's `__constraint_cs_full` passes a whole `Series` where `add_linear_constraint` needs a
-   scalar RHS (its LHS is a whole variable array too); the sibling `__constraint_cs_min_soc` loops
-   per timestep, and linopy's version takes arrays natively. So `charging_scheme.method: full`
-   cannot work for **any** agent type on the default backend. Established structurally and by one
-   run; no test exercises it yet.
+   which **did not descend into nested config** the way `_add_info_simple` does (which is what
+   `sfh` uses). Every nested charging-scheme parameter was written as `NaN`, silently, and the
+   Creator reported success.
+4. POI's `__constraint_cs_full` passed a whole `Series` where `add_linear_constraint` needs a
+   scalar RHS (its LHS was a whole variable array too); the sibling `__constraint_cs_min_soc`
+   already looped per timestep, and linopy's version takes arrays natively. So
+   `charging_scheme.method: full` could not work for **any** agent type on the default backend.
+5. Found by `test_ctsp_industry_creator.py` rather than by reading: the ctsp block's EV forecast
+   sub-block was `random_forest_classifier:` where the registered model — and what `sfh` and
+   `industry` write — is `rfr`.
 
-There is a fifth, found by `test_ctsp_industry_creator.py` rather than by reading: the ctsp block's
-EV forecast sub-block is `random_forest_classifier:` where the registered model — and what `sfh`
-and `industry` write — is `rfr`.
+**1, 2 and 5 were all the same shape as #212**: a change that landed in `sfh` and `industry` and not
+in the `ctsp` copy. Those three were **#218**, config only. 3 was **#219**, code, both classes.
+4 was **#220**, backend-wide and latent — no shipped scenario asked for `full` until this fixture
+did, which is why it read as urgent only once the share went up.
 
-**1, 2 and 5 are all the same shape as #212**: a change that landed in `sfh` and `industry` and not
-in the `ctsp` copy. Four instances now, three of them in `config_templates/agents.yaml`'s ctsp block
-and one in `ctsp.py` itself. Note #213's fourth divergence runs the *other* way — `ctsp` has the
-`share > 0` guard and `industry` does not — so "ctsp is always the stale copy" is not the rule.
+Note #213's fourth divergence runs the *other* way — `ctsp` has the `share > 0` guard and
+`industry` does not — so "ctsp is always the stale copy" is not the rule.
+
+**On #219, the obvious fix and the `sfh`-shaped fix are both wrong**, and
+`tests/unit/creator/agents/test_add_info_indexed.py` pins each. The block those two classes pass is
+the only *mixed* one in the repository: `method` is a per-agent distribution list while the nested
+leaves are scalars. So plain recursion reaches `len(0.5)` and raises, and copying `sfh`'s
+`_add_info_simple` call fills the nested columns while silently stringifying `method` into
+`"['full', 'min_soc']"` for every agent — the same class of defect one level down. The helper now
+dispatches per leaf on the value's own type.
+
+Changing that shared helper was safe because of a two-part audit, and **both parts are tests rather
+than claims** — each would otherwise pass by omission as the other changed:
+
+| part | test | what it re-derives |
+|---|---|---|
+| the 35 call sites read only `sizing`, `parameters`, `charging_scheme` | `test_the_call_sites_still_read_only_the_subkeys_this_audit_covers` | parses the call sites with `ast`, so a new site reading a fourth subkey fails |
+| those subkeys are flat lists in every config | `test_no_other_call_site_passes_a_nested_or_scalar_config` | walks every `agents.yaml`: `sizing` 501 leaves, `parameters` 52, all lists, none nested |
+
+The second takes its subkey set from the first rather than hardcoding it. That pairing is why
+neither golden reference moved — verified on Linux/x86_64, and separately by building
+`simple_scenario` under both the old and new helper and getting a byte-identical workbook.
 
 ## The scenario format version
 
