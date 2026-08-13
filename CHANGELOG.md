@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Added
+- **The first coverage of the `ctsp` and `industry` agent types, which had none of any kind.** No
+  `agents.yaml` outside `config_templates/` declared either type and no test imported either class,
+  so ~1900 lines of Creator and both Executor agent classes were never executed — while the two
+  Creator classes, 92 % identical, quietly drifted apart in four behavioural ways (#213).
+  `tests/e2e/scenarios/ctsp_industry/` is one agent of each type with PV and a battery, one day at
+  hourly resolution, no grid, and **two tests read it through different Creator entry points**
+  because neither half covers the other: `e2e/test_ctsp_industry.py` builds it with
+  `new_scenario_from_files` and simulates it, which reaches the Executor classes but — traced, not
+  assumed — no Creator class at all, since `create_agents_from_file` never consults `Agents.types`;
+  `integration/creator/test_ctsp_industry_creator.py` builds the same folder with
+  `new_scenario_from_configs` in ~4 s, which is what reaches the ~1900 Creator lines and pins the
+  shape of the workbook each class writes.
+
+  **It settles the Executor's `# TODO: Not yet tested and implemented` on those two classes: they
+  run.** `Ctsp` and `Industry` are `AgentBase` subclasses with no behavioural overrides, and a run
+  produces the same result tables `sfh` does. The TODO was about testing, not about missing code.
+
+  The Creator-side test immediately earned itself: it found a **fifth** ctsp/industry divergence
+  nobody had spotted by reading — the ctsp block's EV forecast sub-block is
+  `random_forest_classifier:` where the registered model, and what `sfh` and `industry` write, is
+  `rfr`. The known column differences are now pinned as data, so a deduplication (#213) has to
+  decide each one visibly rather than silently.
+
+  Four values in the fixture are load-bearing and `tests/README.md` says why, the least obvious
+  being that it ships **`framework: linopy`, not the default**. The scenario is built with
+  `new_scenario_from_files`, so `agents.xlsx` is what the Creator reads and the #206 read-back has
+  to ask it for a backend it does *not* ship; shipping `linopy` makes that request `poi`, the fast
+  one. It also declares **no EV**, because the EV path does not work for either type — four
+  separate defects, filed rather than worked around and listed in `tests/README.md`
 - **A golden master for the grid stage and §14a, which had none.** The only scenario the golden
   master pinned sets `electricity.active: False` and calculates no grid, so no committed reference
   number had ever come from the power flow, the variable grid fees or direct power control — while
@@ -316,6 +345,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
   Latent until now: these methods are reached only from `new_scenario_from_grids`, and no config in
   the repository is built that way, so no generated scenario and neither golden reference moves
+- **Two shipped examples stated their modelling backend twice and contradicted themselves (#214).**
+  `examples/create_scenario_with_market` shipped an `agents.xlsx` saying `linopy` against an
+  `agents.yaml` saying `poi`, and because it is built with `new_scenario_from_files` **the workbook
+  wins** — a user who opened the YAML, read `framework: poi` and ran the notebook got linopy.
+  `create_scenario_with_grid` had the same drift on both `framework` and `solver`, inert only
+  because `new_scenario_from_grids` regenerates the workbook before reading it. No test ran either
+  example's config pair.
+
+  Both workbooks now say what their own YAML says — each taking its own YAML's solver, so
+  `scenario_with_grid` lands on `poi`/`highs` and `scenario_with_market` on `poi`/`gurobi`. The
+  workbook moved rather than the YAML because `poi` is the documented default *framework* and the
+  YAML is the file a reader opens; neither example's solver choice is changed by this.
+  `tests/integration/test_shipped_configs_agree_with_their_workbooks.py` keeps them that way, in
+  the fast tier and without running anything: it compares the two files **per key and per sheet**,
+  so one agreeing sheet cannot vouch for another, and it fails if a scenario folder appears in the
+  tree without being listed — a guard that passes by finding nothing is how this class of defect
+  survives
 - **A test asking a scenario for a different solver backend could have it silently ignored
   (#206).** `tests/scenario_run.run_example`'s `framework=` / `solver=` switch edited
   `agents.yaml`. A scenario built with `new_scenario_from_files` gets its agents from

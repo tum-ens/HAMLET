@@ -185,6 +185,62 @@ verified to produce byte-identical scenarios and identical results. The column n
 reference contain those seeded agent and plant ids, so changing how ids are generated will fail
 this test — correctly, since agent identities would genuinely have changed.
 
+## The `ctsp_industry` fixture
+
+`tests/e2e/scenarios/ctsp_industry/` is the only scenario anywhere in the repository that declares
+a `ctsp` or an `industry` agent. Before it, neither type had a single line of coverage — ~1900
+lines of Creator and both Executor agent classes were never executed (#213), and the two Creator
+classes had drifted apart in four behavioural ways while nobody could tell.
+
+**It answers the Executor's `# TODO: Not yet tested and implemented`: both types run.** `Ctsp` and
+`Industry` are `AgentBase` subclasses with no behavioural overrides, and a run produces the same
+result tables `sfh` does. The TODO was about testing, not about missing code.
+
+**Two tests use this one config folder, and each reaches a half the other cannot.** The distinction
+is not pedantry — it is easy to assume the expensive e2e run covers everything, and it does not:
+
+| Test | Entry point | What it reaches |
+|---|---|---|
+| `e2e/test_ctsp_industry.py` | `new_scenario_from_files` | the **Executor** classes and the workbook → scenario → simulation path. `create_agents_from_file` never consults `Agents.types`, so **no Creator class runs at all** — traced, not assumed |
+| `integration/creator/test_ctsp_industry_creator.py` | `new_scenario_from_configs` | the **Creator** classes, the ~1900 lines. Runs in ~4 s, so it is in the fast tier |
+
+Three values in the fixture are load-bearing, and `e2e/test_ctsp_industry.py` fails if any of them
+moves without the test moving with it. `solver: highs` is *not* one of them — nothing asserts it,
+and `run_example` rewrites it anyway; it is there so the fixture needs no licence.
+
+| Value | Why |
+|---|---|
+| `framework: linopy` | **Not the default, deliberately.** The scenario is built with `new_scenario_from_files`, so `agents.xlsx` is what the Creator reads and the #206 read-back has to ask it for something it does not ship. Shipping `linopy` makes that request `poi` — the fast backend — so the read-back costs **26–36 s** where the same assertion against `grid_golden` cost **232–272 s** (4 and 2 runs, same harness and machine; quote the band, this runner's spread is wide). |
+| two agent **types** | `create_agents_file_from_config` writes one sheet per type, so declaring both gives `agents.xlsx` **two sheets**. `grid_golden` has one, and the per-sheet half of the backend switch had no real fixture until this one. (`number_of: 1` is a separate choice — it is what pins the 24-row assertions.) |
+| `ev` share `0` | the EV path does not work for either type. Four separate defects, below. |
+
+**Do not raise the EV share to "cover more".** It turns the fixture red, and each of these is
+filed rather than worked around:
+
+1. `config_templates/agents.yaml`'s **ctsp** block asks for forecast method `ev_close`. No such
+   model is registered — `sfh` and `industry` both say `arrival`. `KeyError` at forecaster init.
+2. The same block states `charging_scheme` in a **flat schema** (`min_soc_val`, …) that the
+   Executor does not read; `sfh` and `industry` carry the nested one. `KeyError: 'min_soc'`.
+3. `Ctsp._ev_config` and `Industry._ev_config` fill `charging_scheme` with `_add_info_indexed`,
+   which **does not descend into nested config** the way `_add_info_simple` does (which is what
+   `sfh` uses). Every nested charging-scheme parameter is written as `NaN`, silently. The *code*
+   defect is in both classes; the *consequence* is live for `industry` today and conditional for
+   `ctsp`, whose template block is flat anyway until 2 is fixed.
+4. POI's `__constraint_cs_full` passes a whole `Series` where `add_linear_constraint` needs a
+   scalar RHS (its LHS is a whole variable array too); the sibling `__constraint_cs_min_soc` loops
+   per timestep, and linopy's version takes arrays natively. So `charging_scheme.method: full`
+   cannot work for **any** agent type on the default backend. Established structurally and by one
+   run; no test exercises it yet.
+
+There is a fifth, found by `test_ctsp_industry_creator.py` rather than by reading: the ctsp block's
+EV forecast sub-block is `random_forest_classifier:` where the registered model — and what `sfh`
+and `industry` write — is `rfr`.
+
+**1, 2 and 5 are all the same shape as #212**: a change that landed in `sfh` and `industry` and not
+in the `ctsp` copy. Four instances now, three of them in `config_templates/agents.yaml`'s ctsp block
+and one in `ctsp.py` itself. Note #213's fourth divergence runs the *other* way — `ctsp` has the
+`share > 0` guard and `industry` does not — so "ctsp is always the stale copy" is not the rule.
+
 ## The scenario format version
 
 `hamlet.constants.SCENARIO_FORMAT_VERSION` is the version of the **on-disk scenario folder**, not

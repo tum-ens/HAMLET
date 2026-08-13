@@ -8,8 +8,11 @@ request accepted, the switch's own `assert switched` satisfied by the YAML it ed
 shipped backend run anyway.
 
 Three shipped scenarios were exposed, not one: `grid_golden` and `scenario_with_topology` pin
-`poi`/`highs` in their workbooks, and `scenario_with_market` pins `linopy`/`gurobi` — so asking
-that last one for HiGHS would have run **Gurobi**, on a machine that needs a licence for it.
+`poi`/`highs` in their workbooks, and `scenario_with_market` pinned `linopy`/`gurobi` — so asking
+that last one for HiGHS would have run **Gurobi**, on a machine that needs a licence for it. (That
+workbook now agrees with its own YAML at `poi`/`gurobi`; the disagreement was #214, and
+`test_shipped_configs_agree_with_their_workbooks.py` is what keeps it that way. The exposure this
+paragraph describes was real and is what the switch had to be fixed for.)
 
 **These tests read the config files back, never the arguments they were given.** That distinction
 is the whole point: the defect was a switch that reported success on the strength of what it had
@@ -24,9 +27,11 @@ generalises to whatever file a future `creator_method` reads, and it was reachab
 ran a job costing minutes.
 
 What this file cannot see is an actual run honouring an actual config. That is
-`tests/e2e/test_solver_backend_smoke.py::test_a_workbook_built_scenario_runs_the_backend_it_was_asked_for`,
-and it is not redundant with these: it fails on the *consequence* where these fail on the *cause*,
-so it is the one that survives someone reinstating a YAML-only switch by a different route.
+`tests/e2e/test_ctsp_industry.py::test_the_requested_backend_is_what_solved`, and it is not
+redundant with these: it fails on the *consequence* where these fail on the *cause*, so it is the
+one that survives someone reinstating a YAML-only switch by a different route. It runs the
+`ctsp_industry` fixture rather than `grid_golden` — same assertion, 26-36 s instead of 232-272 s,
+and it carries the ctsp/industry coverage with it.
 """
 import json
 import shutil

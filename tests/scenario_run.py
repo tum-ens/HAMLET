@@ -110,7 +110,7 @@ def switch_in_workbook(path, key, value):
     # openpyxl writes no cached formula results and pandas reads only cached results, so re-saving
     # this workbook blanks every formula in it -- and the Creator reads a blank as "not configured".
     # A backend switch silently rewriting an unrelated sizing column is worse than not switching, so
-    # this refuses rather than proceeds. None of the four shipped workbooks contains a formula.
+    # this refuses rather than proceeds. None of the five shipped workbooks contains a formula.
     formulas = [f'{sheet.title}!{cell.coordinate}'
                 for sheet in book.worksheets for row in sheet.iter_rows() for cell in row
                 if isinstance(cell.value, str) and cell.value.startswith('=')]
