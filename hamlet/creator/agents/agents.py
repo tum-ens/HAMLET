@@ -1995,6 +1995,11 @@ class Agents:
     def _add_info_indexed(self, keys: list, config: dict, idx_list: list, df: pd.DataFrame = None,
                           separator: str = "/", preface: str = "", appendix: str = "") -> pd.DataFrame:
         """ This function accepts a  dictionary as argument and fills the according items with the indexed value
+
+        Nested config is descended into, as `_add_info_simple` does. A nested block may mix the two
+        value kinds -- `ev/charging_scheme` holds a per-agent distribution list under `method` and
+        plain scalars under `min_soc` etc. -- so each leaf is dispatched on its own type rather than
+        the block's. See `tests/unit/creator/agents/test_add_info_indexed.py`.
         """
 
         # Create path from keys
@@ -2003,13 +2008,25 @@ class Agents:
         # Iterate over all key-value pairs of dict that match the dataframe
         item_list = list(df) if df is not None else list(self.df)
         for item, value in config.items():
+            # If value is a dict call the function again with the new dict
+            if isinstance(value, dict):
+                self._add_info_indexed(keys=keys + [item], config=value, idx_list=idx_list, df=df,
+                                       separator=separator, preface=preface, appendix=appendix)
+                continue
+
             if f"{path_info}{preface}{item}{appendix}" in item_list:
-                if df is not None:
-                    df.loc[:, f"{path_info}{preface}{item}{appendix}"] = self._gen_list_from_idx_list(
-                        idx_list=idx_list, distr=value)
+                if isinstance(value, list):
+                    values = self._gen_list_from_idx_list(idx_list=idx_list, distr=value)
                 else:
-                    self.df[f"{path_info}{preface}{item}{appendix}"] = self._gen_list_from_idx_list(
-                        idx_list=idx_list, distr=value)
+                    # A scalar is the same for every agent that owns the device, and non-owners
+                    # keep NaN as they do in every other column written here. Not routed through
+                    # `_gen_list_from_idx_list` as a one-element distribution: that skips its
+                    # clipping when `idx_list` holds a NaN, and then indexes past the end.
+                    values = [value if not np.isnan(idx) else np.nan for idx in idx_list]
+                if df is not None:
+                    df.loc[:, f"{path_info}{preface}{item}{appendix}"] = values
+                else:
+                    self.df[f"{path_info}{preface}{item}{appendix}"] = values
 
         if df is not None:
             return df
