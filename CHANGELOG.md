@@ -356,82 +356,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   reference was silently coupled to the value of that CI variable**, and this change removes that
   coupling.
 
-  **This does not make HAMLET reproducible, and #216 stays open.** Two runs of the paper's design 6
-  (104 agents, POI + HiGHS, 150 steps, Mac mini/arm64, back to back) still disagree on **375 of
-  1246** compared files, every one of them under `bids_cleared`, `offers_cleared` and
-  `market_transactions`, from the first timestep on. Those runs were made on **unmodified
-  `develop`** under a pinned `PYTHONHASHSEED=0`, which fixes the old set's order too — so they
-  characterise the remaining defect and say nothing either way about this change. What supports
-  *this* change is the regression test, which varies the hash seed across processes.
+  **This does not make HAMLET reproducible, and #216 stays open.** On the paper's design 6
+  (104 agents, POI + HiGHS, 150 steps, Mac mini, pairs run back to back), two runs of unmodified
+  `develop` still disagree on **6 of 1246** compared files — two of 135 timesteps, in
+  `bids_cleared`, `offers_cleared` and `market_transactions`, and they differ in **row count**
+  (1314 vs 1312, 852 vs 857), i.e. a genuinely different number of cleared trades. The agent side
+  is identical in every arm measured, **832/832**, on `develop` as well as on this branch and with
+  the hash seed pinned or left random.
 
-  The remaining source has been located and is **not** the unseeded bid/offer shuffle at
-  `markets/electricity.py:379-380`: giving that shuffle a deterministic per-clearing seed left the
-  count at exactly 375, as did `POLARS_MAX_THREADS=1`. Hashing every seam of the clearing path puts
-  the first divergence in `f.gen_ids`, which draws trade ids from the global `random` that HAMLET
-  never seeds, and then returns `list(id_set)` from a **set of strings** — so the ids vary per
-  process in value *and*, even with the RNG pinned, in order. At that seam only `id_trade` differs
-  and all 19 economic columns are identical. Fix and closing evidence belong to a follow-up; do not
-  claim reproducibility until a run compares clean against itself end to end with the hash seed
-  left random.
+  So this change does not alter design 6's results at this commit: it removes a real ordering
+  dependency and the golden reference's coupling to `PYTHONHASHSEED`, and what supports it is the
+  regression test, not a results delta.
 
-- **The Creator silently wrote `NaN` into every nested `charging_scheme` parameter, for `ctsp` and
-  `industry` (#219).** `_add_info_indexed` iterated `config.items()` at the top level only, so a
-  dict value matched no column and was skipped without a word — while `_add_info_simple`, which
-  `sfh` uses for exactly this key, recurses. `ev/charging_scheme/min_soc/val`,
-  `.../min_soc_time/{val,time}` and `.../price_sensitive/threshold` were never written and **the
-  Creator reported success**.
-
-  **Whether anything then failed depended on the draw, and that is the worst part.** An agent
-  drawing `min_soc` reads the nested value and the Executor dies on an `IntCastingNaNError` naming
-  neither the EV nor the Creator; an agent drawing `full` never reads it, so the run **completes**
-  with a silently invalid plant. Confirmed by rebuilding the fixture with the old helper: the
-  Creator succeeded, the workbook carried four NaN columns, and the scenario ran to completion.
-  That silence is the argument for the workbook check in `check_the_ev_premise`, which is the only
-  thing that would have caught it without a `min_soc` draw.
-
-  **Neither obvious repair works, which is why this is not a one-line diff.** The block those two
-  classes pass is the only *mixed* one in the repository — `method` is a per-agent distribution
-  list, the nested leaves are scalars — so adding recursion alone reaches `len(0.5)` and raises,
-  and copying `sfh`'s `_add_info_simple` call fills the nested columns while silently stringifying
-  `method` into `"['full', 'min_soc']"` for every agent, which is the same class of defect one
-  level down. The helper now descends into nested config and dispatches **per leaf** on the value's
-  own type: a list is drawn per agent as before, a scalar is written to every agent that owns the
-  device and left NaN for those that do not.
-
-  **No shipped scenario moves and neither golden reference does.** The 35 call sites read only
-  three config subkeys, and across every `agents.yaml` in the repository `sizing` (501 leaves) and
-  `parameters` (52 leaves) are lists throughout and never nested — so both halves of the change are
-  provable no-ops for the other 33 sites. That audit is a test rather than a claim
-  (`test_no_other_call_site_passes_a_nested_or_scalar_config`), so it fails if a future config
-  stops agreeing
-- **`charging_scheme.method: full` could not work for any agent type on the default backend
-  (#220).** PyOptInterface's `__constraint_cs_full` handed `add_linear_constraint` the whole
-  variable array and a whole `Series`, where it takes one expression and a scalar right-hand side,
-  so it raised `TypeError` on construction. It now adds one constraint per timestep, exactly as the
-  sibling `__constraint_cs_min_soc` already did; linopy's implementation takes arrays natively, so
-  this was PyOptInterface-port fallout rather than a modelling disagreement.
-
-  **This was latent rather than live**: no shipped scenario asked for `full` until
-  `ctsp_industry` turned its EV share on — every shipped workbook drew `min_soc`. And **no test had
-  ever built the charging-scheme constraints on the POI backend at all**, which is precisely why it
-  survived: `test_mpc_poi_components.py` constructs the components and stops short of
-  `define_constraints`. On linopy both `full` and `min_soc` were already exercised, by
-  `test_mpc_ev.py`. `tests/unit/.../test_mpc_charging_schemes.py` is the matrix that was missing —
-  all four methods against both backends, with the scheme list derived from the backends' own
-  dispatch so a fifth cannot be added without covering it
-- **`config_templates`' `ctsp` block was stale in three places, none of them reachable by reading
-  the code (#218).** Its EV block asked for forecast method `ev_close`, which nothing registers
-  (`sfh` and `industry` both say `arrival`); stated `charging_scheme` in a pre-nesting flat schema
-  (`min_soc_val`, …) that the Executor does not read; and named its forecast sub-block
-  `random_forest_classifier:` where the registered model is `rfr`. All three are the #212 pattern —
-  a change that landed in `sfh` and `industry` and not in the `ctsp` copy — and all three were
-  latent until a scenario declared a `ctsp` agent with an EV.
-
-  Config only. `config_templates/` is not read at runtime by any scenario, and no scenario outside
-  the new fixture declares either type — so **nothing generated outside the fixture moves**. The
-  fixture's own `agents.xlsx` does move and is regenerated here: its `ctsp` sheet gains the nested
-  `charging_scheme` and `rfr` column names in place of the flat and `random_forest_classifier`
-  ones, which is this fix and not the EV share change
+  *Measurement note, because it invalidates the numbers this entry previously carried and much of
+  the work recorded in #216.* Comparing two results trees by reading the frames back and sorting
+  them **does not work on this data**: several columns are `Categorical`, `sort` orders those by
+  the column's *local* integer encoding, and that encoding depends on the order the values were
+  first seen — so two frames holding identical rows sort into different orders and compare unequal.
+  That method reports **375** differing files where an anti-join finds **zero** rows unique to
+  either side and identical column totals; the true figure for the same pair is 6. #216's own
+  figures (285, 375, 105) were produced the same way and should be treated as unverified. Cast
+  categoricals to `Utf8` before sorting.
 
 - **Creating a CTSP agent from a grid file crashed on ordinary demand values (#212).**
   `Ctsp._inflexible_load_grid` sized the load as `(df['demand'] * 1e6).astype('Int64')`, and
