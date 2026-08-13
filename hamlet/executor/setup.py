@@ -253,7 +253,8 @@ class Executor:
 
         # write grid results to database
         for grid_type, grid_db in grid_results.items():
-            self.database.post_grids(grid_type=grid_type, grid=grid_db)
+            self.database.post_grids(grid_type=grid_type, grid=grid_db,
+                                     path_results=self.path_results)
 
         return grid_ok
 

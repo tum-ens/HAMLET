@@ -311,14 +311,25 @@ class Database:
             # Tables that are to be expanded
             # `new_rows` is what keeps `MarketDB`'s net-energy cache incremental; without it the
             # cache is dropped and every agent goes back to scanning the whole table.
+            # `rechunk=True` on the three tables that are appended to rather than replaced.
+            # polars' `concat` defaults to `rechunk=False` and `filter` preserves chunking, so
+            # without it every timestep leaves one more chunk behind and nothing ever removes
+            # them. Measured on design 6: the rows are bounded -- `save_and_drop_past_records`
+            # holds `market_transactions` to ~78k, oscillating -- while the chunks grew 50 ->
+            # 7018 over 150 timesteps, monotonically, about 48 per step. That is why this phase
+            # kept getting slower while the table it works on was getting *smaller*, which is
+            # also what rules out row count as the cause.
             new_transactions = pl.concat(results[c.TN_MARKET_TRANSACTIONS], how='vertical')
             market_db.set_market_transactions(
-                pl.concat([market_db.market_transactions, new_transactions], how='vertical'),
+                pl.concat([market_db.market_transactions, new_transactions], how='vertical',
+                          rechunk=True),
                 new_rows=new_transactions)
             market_db.set_bids_cleared(pl.concat([market_db.bids_cleared]
-                                                 + results[c.TN_BIDS_CLEARED], how='vertical'))
+                                                 + results[c.TN_BIDS_CLEARED], how='vertical',
+                                                 rechunk=True))
             market_db.set_offers_cleared(pl.concat([market_db.offers_cleared]
-                                                   + results[c.TN_OFFERS_CLEARED], how='vertical'))
+                                                   + results[c.TN_OFFERS_CLEARED], how='vertical',
+                                                   rechunk=True))
             # Note: Positions matched are not used in the current version
             # market_db.set_positions_matched(pl.concat(results[c.TN_POSITIONS_MATCHED], how='vertical'))
             # Tables that are to be overwritten
@@ -328,16 +339,31 @@ class Database:
         # Update local market price in forecasters
         self.__regions[region].update_local_market_in_forecasters()
 
-    def post_grids(self, grid_type: str, grid):
+    def post_grids(self, grid_type: str, grid, path_results: str = None):
         """
         Post the given grid results to the given region.
 
         Args:
             grid_type: type of grid.
             grid: new grid db to be written into Database.
+            path_results: results folder. When given, results that can no longer change are
+                written out and dropped from memory -- see `GridDB.save_and_drop_past_results`.
+                Optional so that a caller which does not write results still works.
 
         """
         self.__grids[grid_type] = grid
+
+        if path_results is not None:
+            grid.save_and_drop_past_results(
+                self.__grid_results_path(os.path.dirname(path_results)))
+
+    def __grid_results_path(self, base: str) -> str:
+        """Where `save_grid` writes, from the same `base` that `save_database` is given.
+
+        Duplicating the construction would let the two drift apart and split one run's results
+        across two folders, so both go through here.
+        """
+        return os.path.join(base, list(self.__regions.keys())[0], 'grids')
 
     """static methods"""
 
@@ -437,7 +463,7 @@ class Database:
             self.__regions[region].save_region(path=os.path.join(path, region))
 
         # save grid data
-        grid_path = os.path.join(path, list(self.__regions.keys())[0], 'grids')
+        grid_path = self.__grid_results_path(path)
 
         for grid_type, grid in self.__grids.items():
             grid.save_grid(grid_path)
