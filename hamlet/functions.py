@@ -37,11 +37,17 @@ def create_folder(path: str, delete: bool = True) -> None:
     # Create main folder if does not exist
     if not os.path.exists(path):
         os.makedirs(path)
-    else:
-        if delete:
-            shutil.rmtree(path)
-            os.makedirs(path)
-    time.sleep(0.01)
+    elif delete:
+        shutil.rmtree(path)
+        os.makedirs(path)
+        # Only after a delete, and this is the reason the sleep exists at all: on Windows a
+        # directory that `shutil.rmtree` has just removed can still be reported as present for a
+        # short while, so recreating it immediately can raise. Nothing analogous can happen when
+        # the folder was merely created or already existed, and paying it there is what made this
+        # the most expensive part of the executor's market stage -- 0.039 s per timestep on the
+        # paper's design 6, three calls a timestep, each sleeping 10 ms to create directories
+        # that already existed.
+        time.sleep(0.01)
 
 
 def copy_folder(src: str, dst: str, only_files: bool = False, delete: bool = True) -> None:
