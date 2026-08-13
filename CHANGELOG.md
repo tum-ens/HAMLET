@@ -117,11 +117,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Two test modules asking for the identical end-to-end run now share one, through
   `tests/scenario_cache.py`.** Every e2e fixture is module-scoped, so each file paid for its own
   run. Across the whole suite that is exactly **one** duplicated pair — `e2e/test_grid_restrictions`
-  and `e2e/test_golden_master[grid_golden]` make byte-identical requests — worth 158 s on the
+  and `e2e/test_golden_master[grid_golden]` make byte-identical requests — worth 70–125 s on the
   development laptop. **It saves nothing in CI and is not meant to**: `e2e` and `golden` are
   separate jobs and separate pytest processes, and the pair straddles that boundary, so the saving
   is real only for a local `pytest tests -m "e2e or golden"`. What the cache is for beyond those
-  158 s is that it is the mechanism, so the next duplicate shares automatically instead of being
+  that is that it is the mechanism, so the next duplicate shares automatically instead of being
   noticed by someone counting runs.
 
   The key is derived **mechanically**, by binding each request against `run_example`'s own

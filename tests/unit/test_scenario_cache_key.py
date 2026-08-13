@@ -209,6 +209,38 @@ class TestTheReceiptIsWrittenOnlyWhenItIsNeeded:
         assert len(runs.log) == 2
 
 
+def test_the_one_duplicated_pair_in_the_suite_still_shares_its_run():
+    """`test_grid_restrictions` and `test_golden_master[grid_golden]` must key identically.
+
+    This is the entire measurable saving -- one `grid_golden` run -- and without this test
+    it is asserted only by a wall-clock difference that this runner cannot resolve: the two paired
+    arms measured for it came back -334 s and -28 s, a spread larger than the effect. Timing
+    cannot tell "the run was shared" from "the runner was busy". Key equality can, it costs
+    nothing, and it fails by name the day someone changes one call site and not the other.
+
+    Deliberately built from the two modules' own constants rather than from a copy of the
+    arguments, so it cannot agree with itself: if either module changes what it asks for, the two
+    keys diverge here.
+    """
+    from tests.e2e import test_golden_master as golden
+    from tests.e2e import test_grid_restrictions as restrictions
+
+    pinned = [scenario for scenario in golden.SCENARIOS if scenario.name == restrictions.SCENARIO]
+    assert len(pinned) == 1, (
+        f'the golden master no longer pins {restrictions.SCENARIO!r} (it pins '
+        f'{[scenario.name for scenario in golden.SCENARIOS]}), so there is nothing for '
+        f'test_grid_restrictions to share a run with')
+
+    assert request_key(pinned[0].config_dir, pinned[0].name,
+                       creator_method=pinned[0].creator_method) == request_key(
+        restrictions.CONFIG_ROOT, restrictions.SCENARIO,
+        creator_method=restrictions.CREATOR_METHOD), (
+        'test_grid_restrictions and test_golden_master no longer make the same request for '
+        f'{restrictions.SCENARIO!r}, so they now pay for a run each. That is correct behaviour '
+        f'from the cache -- two different requests must not share -- but it means the saving this '
+        f'module exists to protect is gone, and whichever call site changed should say why')
+
+
 def test_the_results_directory_is_checked(tmp_path_factory):
     """A run that writes no results fails here, naming that, rather than further downstream.
 

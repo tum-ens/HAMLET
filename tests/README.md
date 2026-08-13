@@ -70,7 +70,7 @@ key that decided two requests match cannot also be the evidence that they do.
 `tests/unit/test_scenario_cache_key.py` breaks the key deliberately and pins that the consumer is
 what rejects a mis-served entry.
 
-The measurable saving today is one run — `grid_golden`, 158 s — and **only in a session that
+The measurable saving today is one run — `grid_golden`, 70–125 s — and **only in a session that
 selects both markers**, e.g. `pytest tests -m "e2e or golden"`. The `e2e` and `golden` CI jobs are
 separate processes, so nothing is shared between them.
 

@@ -3,14 +3,21 @@
 Every e2e fixture is `scope='module'`, so two files asking for the *same* run each pay for one.
 Across the whole suite that is one duplicated pair -- `test_grid_restrictions` and
 `test_golden_master[grid_golden]` make byte-identical requests -- and this is what lets them
-share it. 158 s on the development laptop.
+share it.
+
+**Worth 70-125 s, and quote that band rather than a level.** Measured over the two modules alone
+(`pytest tests/e2e/test_golden_master.py tests/e2e/test_grid_restrictions.py -m "e2e or golden"`),
+three pairs with the arm order alternated: 181 -> 110, 187 -> 115, 270 -> 146 s. The two
+opposite-order pairs agree to 1 s, so the ordering bias cancels; the third ran on a busier machine
+and its delta grew with it, which is what removing a fixed unit of work looks like. The same base
+arm spanned 181-270 s on identical work, so the *level* says nothing.
 
 **It saves nothing in CI, and that is not a defect in the cache.** `e2e` and `golden` are
 separate jobs running separate pytest processes (`.gitlab-ci.yml`), and the duplicated pair
 straddles that boundary: the two runs never co-exist in one session, so there is nothing to
 share. The saving is real only for a local `pytest tests -m "e2e or golden"`. Merging the two
 jobs would realise it in CI and was considered and rejected -- they currently run in parallel, so
-merging trades ~200 s of pipeline wall-clock for ~158 s of runner compute, and costs the
+merging trades pipeline wall-clock for a smaller amount of runner compute, and costs the
 "which kind of thing broke" separation the CI file argues for.
 
 Sharing a run is exactly how a test stops exercising what it believes it does: ask for `linopy`,
