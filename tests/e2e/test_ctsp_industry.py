@@ -38,13 +38,18 @@ non-default backend here is therefore load-bearing, not an oversight: see the he
 `scenarios/ctsp_industry/agents.yaml`, and do not "correct" it to `poi` without moving this test's
 request the other way, or the saving goes with it.
 
-**The fixture declares no EV, and that is not tidiness.** Raising `ev` share turns this file red:
-the Creator writes `NaN` into every nested `charging_scheme` parameter for both classes
-(`_add_info_indexed` does not descend into nested config the way `_add_info_simple` does), the
-`config_templates` `ctsp` block names a forecast model that does not exist, and POI's
-`__constraint_cs_full` passes a Series where a scalar is required. Each is filed separately;
-`tests/README.md` names them. Until they are fixed an EV here would cover nothing and block
-everything.
+**The fixture declares an EV on both sheets, and that took three fixes.** It shipped `ev.share: 0`
+until #218, #219 and #220 were closed, because raising it turned this file red three times over:
+the `config_templates` `ctsp` block named a forecast model that is not registered and carried the
+pre-nesting flat `charging_scheme` spelling (#218); the Creator wrote `NaN` into every nested
+`charging_scheme` parameter for *both* classes and reported success (#219, `_add_info_indexed` did
+not descend into nested config the way `_add_info_simple` does); and POI's `__constraint_cs_full`
+passed a Series where a scalar is required (#220).
+
+This is now the only EV coverage either agent type has, so `check_the_ev_premise` guards it: a
+revert of `ev.share` to 0 fails by name here rather than quietly emptying the file. The fixture
+ships `method: ["full", "min_soc"]` deliberately — `full` is the arm #220 broke, and reverting that
+fix makes this module fail with the original `TypeError`.
 """
 import json
 
@@ -130,6 +135,58 @@ def check_the_premise():
     # test_scenario_run_backend_switch).
     assert sheets == ['ctsp', 'industry'], sheets
 
+    # And an EV on each sheet. This fixture is the only place either agent type exercises the EV
+    # path at all, and that path was broken in three independent ways until #218/#219/#220 -- so
+    # reverting `ev.share` to 0 would take the coverage away and leave every test here green.
+    check_the_ev_premise()
+
+
+def check_the_ev_premise():
+    """Both sheets must ship an EV, with its nested `charging_scheme` parameters filled.
+
+    The two halves are separate on purpose and both were real. `ev/owner` catches `ev.share` going
+    back to 0. The nested parameters catch **#219**, which is the failure that does not announce
+    itself: the Creator completed successfully and wrote `NaN`, so the workbook had the columns and
+    the scenario built, and only the Executor fell over -- with an `IntCastingNaNError` naming
+    neither the EV nor the Creator.
+
+    Per sheet, never workbook-wide, for the same reason as `check_the_premise`: the ctsp block was
+    the broken one, and letting the industry sheet vouch for it is how #218 stayed invisible.
+    """
+    import pandas as pd
+
+    # Written only when `_add_info_indexed` descends into nested config (#219). The flat spelling
+    # (`min_soc_val`) is what the ctsp block carried until #218, and the Executor cannot read it.
+    nested = ('ev/charging_scheme/min_soc/val',
+              'ev/charging_scheme/min_soc_time/val',
+              'ev/charging_scheme/min_soc_time/time',
+              'ev/charging_scheme/price_sensitive/threshold')
+
+    with pd.ExcelFile(CONFIG_ROOT / SCENARIO / 'agents.xlsx') as book:
+        for sheet in book.sheet_names:
+            frame = book.parse(sheet, index_col=0)
+
+            assert 'ev/owner' in frame.columns and frame['ev/owner'].fillna(0).sum() > 0, (
+                f'the {sheet} sheet declares no EV owner, so this scenario no longer covers the EV '
+                f'path for {sheet} -- and nothing else in the repository does (#218/#219/#220)')
+
+            absent = [column for column in nested if column not in frame.columns]
+            assert not absent, (
+                f'the {sheet} sheet is missing {absent}; it carries the pre-nesting flat spelling '
+                f'that #218 removed, which the Executor cannot read')
+
+            # Present is not filled. #219 wrote the columns and left every value NaN, so a
+            # membership check alone reproduces exactly the blind spot this guards against.
+            empty = [column for column in nested if frame[column].isna().all()]
+            assert not empty, (
+                f'the {sheet} sheet has {empty} present but entirely NaN -- that is #219 exactly: '
+                f'the Creator reports success and writes nothing')
+
+
+def test_the_fixture_still_ships_an_ev_on_both_sheets():
+    """The EV premise as a named test, in the fast tier, for the reason below."""
+    check_the_ev_premise()
+
 
 def test_the_fixture_still_ships_a_backend_worth_switching_away_from():
     """The premise as a named test, so it runs in the fast tier and fails there by name.
@@ -211,6 +268,50 @@ def test_both_agent_types_wrote_a_row_for_every_timestep(run):
             for agent_type in ('ctsp', 'industry') for table in ('setpoints.ft', 'forecasts.ft')}
 
     assert set(rows.values()) == {24}, rows
+
+
+@pytest.mark.e2e
+@pytest.mark.solver
+def test_both_agent_types_modelled_their_ev(run):
+    """The EV reached the Executor and was carried through the run, per agent type.
+
+    **What this can and cannot claim.** It asserts the EV was modelled and tracked, not that it
+    charged: both EVs enter the horizon already at capacity, so the `full` scheme correctly demands
+    nothing and their `setpoints` column is legitimately all zero. Asserting a non-zero setpoint
+    here would be asserting a property of the drawn driving profile, and it would fail the first
+    time the seed moved.
+
+    That the run *exercises* #220 rather than merely tolerating it is established by reverting the
+    fix: `__constraint_cs_full` then raises `TypeError` and this whole module fails. Verified, and
+    the reason the fixture ships `method: ["full", "min_soc"]` rather than `min_soc` alone.
+    """
+    _, fingerprint = run
+
+    problems = []
+    for agent_type in ('ctsp', 'industry'):
+        meters = fingerprint.get(f'agents/{agent_type}/meters.ft', {}).get('columns', {})
+        socs = fingerprint.get(f'agents/{agent_type}/socs.ft', {}).get('columns', {})
+
+        # `socs` columns are keyed by bare plant id, which does not say what kind of plant it is --
+        # and every agent here also owns a battery, so `any soc moved` is satisfied by the battery
+        # alone and would pass with no EV in the scenario at all. `meters` columns carry the plant
+        # type in the name, so the EV's id is taken from there and then required in `socs`.
+        ev_ids = [column[:-len('_ev_electricity')] for column in meters
+                  if column.endswith('_ev_electricity')]
+        if not ev_ids:
+            problems.append(f'{agent_type}: no EV appears in meters.ft, so none was modelled')
+            continue
+
+        for ev_id in ev_ids:
+            if ev_id not in socs:
+                problems.append(f'{agent_type}: EV {ev_id} has no state of charge')
+            elif not socs[ev_id]['max'] > 0:
+                problems.append(f'{agent_type}: EV {ev_id} soc never leaves zero, which is '
+                                f'indistinguishable from never having been modelled')
+
+    assert not problems, (
+        'the EV did not reach the Executor: ' + '; '.join(problems) +
+        '. This scenario is the only EV coverage either agent type has (#218/#219/#220)')
 
 
 @pytest.mark.e2e

@@ -37,8 +37,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   being that it ships **`framework: linopy`, not the default**. The scenario is built with
   `new_scenario_from_files`, so `agents.xlsx` is what the Creator reads and the #206 read-back has
   to ask it for a backend it does *not* ship; shipping `linopy` makes that request `poi`, the fast
-  one. It also declares **no EV**, because the EV path does not work for either type — four
-  separate defects, filed rather than worked around and listed in `tests/README.md`
+  one. It declared **no EV** when it landed, because the EV path did not work for either type; the
+  three fixes below changed that, and it now carries one on each sheet
+- **The EV path works for `ctsp` and `industry`, and the fixture above now exercises it.** It
+  shipped `ev.share: 0` because raising it failed in five ways, each hiding the next: two stale
+  spellings and an unregistered forecast model in `config_templates`' ctsp block (#218), the
+  Creator writing `NaN` into every nested `charging_scheme` parameter for *both* classes (#219),
+  and PyOptInterface refusing to build `charging_scheme.method: full` at all (#220). All three
+  issues are closed and `tests/README.md` keeps the sequence.
+
+  The share is now `1` on both sheets, and it is guarded rather than merely set:
+  `check_the_ev_premise` fails by name if it returns to 0, and separately if the nested columns are
+  present but entirely NaN — which is #219's exact signature, since that defect wrote the columns
+  and left them empty while the Creator reported success
 - **A golden master for the grid stage and §14a, which had none.** The only scenario the golden
   master pinned sets `electricity.active: False` and calculates no grid, so no committed reference
   number had ever come from the power flow, the variable grid fees or direct power control — while
@@ -314,6 +325,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **The Creator silently wrote `NaN` into every nested `charging_scheme` parameter, for `ctsp` and
+  `industry` (#219).** `_add_info_indexed` iterated `config.items()` at the top level only, so a
+  dict value matched no column and was skipped without a word — while `_add_info_simple`, which
+  `sfh` uses for exactly this key, recurses. `ev/charging_scheme/min_soc/val`,
+  `.../min_soc_time/{val,time}` and `.../price_sensitive/threshold` were never written and **the
+  Creator reported success**, leaving the Executor to fail later with an `IntCastingNaNError` that
+  named neither the EV nor the Creator.
+
+  **Neither obvious repair works, which is why this is not a one-line diff.** The block those two
+  classes pass is the only *mixed* one in the repository — `method` is a per-agent distribution
+  list, the nested leaves are scalars — so adding recursion alone reaches `len(0.5)` and raises,
+  and copying `sfh`'s `_add_info_simple` call fills the nested columns while silently stringifying
+  `method` into `"['full', 'min_soc']"` for every agent, which is the same class of defect one
+  level down. The helper now descends into nested config and dispatches **per leaf** on the value's
+  own type: a list is drawn per agent as before, a scalar is written to every agent that owns the
+  device and left NaN for those that do not.
+
+  **No shipped scenario moves and neither golden reference does.** The 35 call sites read only
+  three config subkeys, and across every `agents.yaml` in the repository `sizing` (501 leaves) and
+  `parameters` (52 leaves) are lists throughout and never nested — so both halves of the change are
+  provable no-ops for the other 33 sites. That audit is a test rather than a claim
+  (`test_no_other_call_site_passes_a_nested_or_scalar_config`), so it fails if a future config
+  stops agreeing
+- **`charging_scheme.method: full` could not work for any agent type on the default backend
+  (#220).** PyOptInterface's `__constraint_cs_full` handed `add_linear_constraint` the whole
+  variable array and a whole `Series`, where it takes one expression and a scalar right-hand side,
+  so it raised `TypeError` on construction. It now adds one constraint per timestep, exactly as the
+  sibling `__constraint_cs_min_soc` already did; linopy's implementation takes arrays natively, so
+  this was PyOptInterface-port fallout rather than a modelling disagreement.
+
+  **This was latent rather than live**: no shipped scenario asked for `full` until
+  `ctsp_industry` turned its EV share on, and `min_soc` was the only charging scheme any test or
+  scenario had ever exercised on either backend. `tests/unit/.../test_mpc_charging_schemes.py` is
+  the matrix that was missing — all four methods against both backends, with the scheme list
+  derived from the backends' own dispatch so a fifth cannot be added without covering it
+- **`config_templates`' `ctsp` block was stale in three places, none of them reachable by reading
+  the code (#218).** Its EV block asked for forecast method `ev_close`, which nothing registers
+  (`sfh` and `industry` both say `arrival`); stated `charging_scheme` in a pre-nesting flat schema
+  (`min_soc_val`, …) that the Executor does not read; and named its forecast sub-block
+  `random_forest_classifier:` where the registered model is `rfr`. All three are the #212 pattern —
+  a change that landed in `sfh` and `industry` and not in the `ctsp` copy — and all three were
+  latent until a scenario declared a `ctsp` agent with an EV.
+
+  Config only; nothing generated moves, because no scenario outside the new fixture declares the
+  type at all
 - **Creating a CTSP agent from a grid file crashed on ordinary demand values (#212).**
   `Ctsp._inflexible_load_grid` sized the load as `(df['demand'] * 1e6).astype('Int64')`, and
   `demand * 1e6` is not exactly representable in float64 for **349 of the 10 000** three-decimal MW

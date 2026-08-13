@@ -12,7 +12,8 @@
 #                       #206 read-back asks it for poi -- the value it does not ship. Shipping the
 #                       non-default here is what lets that request run on the fast backend.
 #   solver: highs       so the fixture needs no licence.
-#   ev share 0          the ctsp EV block cannot run: see tests/README.md.
+#   ev share 1          both types carry an EV. This is the only scenario that exercises the EV
+#                       path for either type; it was 0 until #218/#219/#220 were fixed.
 #   number_of 1 each    one agent per type, so the workbook has two sheets.
 ctsp:
   ################################ general ################################
@@ -433,7 +434,7 @@ ctsp:
 
   ################################ electric vehicles (EV) ####################################
   ev:
-    share: [0, 0]                               # no EVs -- see the header of this file
+    share: [1, 1]                               # every agent has an EV -- see the header of this file
                                                 # unit: 1 [0, 1]
 
     num: [1, 1]                                 # number of EVs per type
@@ -481,31 +482,32 @@ ctsp:
                                                 #   - min_soc_time:    reach certain state-of-charge until
                                                 #                      given time each day
 
-      price_sensitive_threshold: [0.05, 0.05]   # threshold price
-                                                # unit: €/kWh
-                                                # note: applies to method: price_sensitive
+      price_sensitive:                          # price sensitive charging parameters
+        threshold: 0.05                         # threshold price
+                                                # unit: €/kWh (-inf, inf)
 
-      min_soc_val: [0.5, 0.5]                   # minimum SoC the EV needs to reach before it leaves again
-                                                # unit: 1
-                                                # note: applies to method: min_soc
+      min_soc:                                  # minimum SoC charging parameters
+        val: 0.5                                # minimum SoC the EV needs to reach before it leaves again
+                                                # unit: 1 [0, 1]
 
-      min_soc_time_val: [0.8, 0.8]              # minimum SoC the EV needs to reach before certain time of day
-                                                # unit: 1
+      min_soc_time:
+        val: 0.8                                # minimum SoC the EV needs to reach before certain time of day
+                                                # unit: 1 [0, 1]
                                                 # note: applies to method: min_soc_time
 
-      min_soc_time_time: [8, 8]                 # time of day that EV needs to have reached specified SoC
+        time: 8.5                               # time of day that EV needs to have reached specified SoC
                                                 # unit: h [0, 24)
                                                 # note: applies to method: min_soc_time
 
     fcast:
-      method: ev_close                          # EV availability forecasting technique
+      method: arrival                           # EV availability forecasting technique
                                                 # options:
-                                                #   - perfect:  perfect knowledge of the future
-                                                #   - ev_close: perfect knowledge of the current
-                                                #               availability cycle once the vehicle arrives
-                                                #   - random_forest_classifier
+                                                #   - perfect: perfect knowledge of the future
+                                                #   - arrival: perfect knowledge of the current
+                                                #              availability cycle once the vehicle arrives
+                                                #   - rfr:     random forest regressor
 
-      random_forest_classifier:
+      rfr:
         features: ['time']                      # used features in weather file to fit the model
 
   ################################ batteries ####################################
@@ -1113,7 +1115,7 @@ industry:
 
   ################################ electric vehicles (EV) ####################################
   ev:
-    share: [0, 0]                               # no EVs -- see the header of this file
+    share: [1, 1]                               # every agent has an EV -- see the header of this file
                                                 # unit: 1 [0, 1]
 
     num: [1, 2]                                 # number of EVs per type
