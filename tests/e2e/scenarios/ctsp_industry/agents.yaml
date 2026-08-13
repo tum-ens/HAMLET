@@ -5,16 +5,22 @@
 # Test fixture: the only scenario in the repository that declares ctsp or industry agents.
 # Built from config_templates/agents.yaml's ctsp: and industry: blocks.
 # tests/README.md states what it covers and what is load-bearing about it -- read that before
-# changing any of the four values below, each of which a test depends on.
+# changing any of the four values below. Each is asserted by tests/e2e/test_ctsp_industry.py,
+# so moving one fails there by name rather than quietly removing what it covers.
 #
 #   framework: linopy   NOT the default, deliberately. This scenario is built with
 #                       new_scenario_from_files, so agents.xlsx is what the Creator reads, and the
 #                       #206 read-back asks it for poi -- the value it does not ship. Shipping the
 #                       non-default here is what lets that request run on the fast backend.
-#   solver: highs       so the fixture needs no licence.
 #   ev share 1          both types carry an EV. This is the only scenario that exercises the EV
 #                       path for either type; it was 0 until #218/#219/#220 were fixed.
+#   charging_scheme     the distribution must keep offering "full", and some agent must draw it:
+#     method            that is the arm #220 broke, and this is the only place anything exercises
+#                       it. Moving the fixture to min_soc used to leave every test green.
 #   number_of 1 each    one agent per type, so the workbook has two sheets.
+#
+# solver: highs is NOT in that list -- nothing asserts it, and run_example rewrites it anyway.
+# It is here so the fixture needs no licence.
 ctsp:
   ################################ general ################################
   general:

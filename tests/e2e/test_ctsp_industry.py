@@ -73,6 +73,11 @@ REQUESTED_SOLVER = 'highs'
 #: satisfied by a folder that exists and is empty.
 AGENT_TABLES = ('meters.ft', 'setpoints.ft', 'socs.ft', 'timeseries.ft', 'forecasts.ft')
 
+#: The workbook column holding each agent's drawn charging scheme, and the draw that exercises
+#: #220. Asserted by `check_the_ev_premise` -- see there for why it is the drawn value.
+SCHEME_COLUMN = 'ev/charging_scheme/method'
+SCHEME_EXERCISING_220 = 'full'
+
 
 @pytest.fixture(scope='module')
 def run(tmp_path_factory):
@@ -144,11 +149,19 @@ def check_the_premise():
 def check_the_ev_premise():
     """Both sheets must ship an EV, with its nested `charging_scheme` parameters filled.
 
-    The two halves are separate on purpose and both were real. `ev/owner` catches `ev.share` going
-    back to 0. The nested parameters catch **#219**, which is the failure that does not announce
-    itself: the Creator completed successfully and wrote `NaN`, so the workbook had the columns and
-    the scenario built, and only the Executor fell over -- with an `IntCastingNaNError` naming
-    neither the EV nor the Creator.
+    The halves are separate on purpose and each was real. `ev/owner` catches `ev.share` going back
+    to 0. The nested parameters catch a workbook **built while #219 was present** -- note the
+    scope: this reads the committed `agents.xlsx`, so it catches a bad fixture, never a bad helper.
+    `tests/unit/creator/agents/test_add_info_indexed.py` is what catches the defect itself, and it
+    is the only thing that does; a panel confirmed that reverting the helper leaves this module
+    green, because `new_scenario_from_files` never runs the Creator.
+
+    #219 is worth guarding here anyway because of *how* it failed: the Creator completed
+    successfully and wrote `NaN`, so the workbook had the columns and the scenario built. Whether
+    it then crashed depended on the draw -- `min_soc` reads the nested values and raises
+    `IntCastingNaNError`, while `full` never reads them and the run completes with a silently
+    wrong plant. A committed workbook full of NaN is exactly the thing no run would have told us
+    about.
 
     Per sheet, never workbook-wide, for the same reason as `check_the_premise`: the ctsp block was
     the broken one, and letting the industry sheet vouch for it is how #218 stayed invisible.
@@ -162,7 +175,19 @@ def check_the_ev_premise():
               'ev/charging_scheme/min_soc_time/time',
               'ev/charging_scheme/price_sensitive/threshold')
 
+    # Both loops below are comprehensions over `nested`, so emptying it turns both assertions into
+    # tautologies and this whole guard into a no-op -- demonstrated by a panel, which emptied it
+    # and got a green run. `AGENT_TABLES` already carries this guard; this tuple did not.
+    assert nested, 'the nested column list is empty, so the checks below assert nothing'
+
     with pd.ExcelFile(CONFIG_ROOT / SCENARIO / 'agents.xlsx') as book:
+        # And that the loop runs at all. `test_the_fixture_still_ships_an_ev_on_both_sheets` calls
+        # this directly, without `check_the_premise`'s sheet-list assertion in front of it, so an
+        # empty or renamed workbook would otherwise skip every check below in silence.
+        assert sorted(book.sheet_names) == ['ctsp', 'industry'], (
+            f'{SCENARIO}/agents.xlsx has sheets {sorted(book.sheet_names)}; the per-sheet checks '
+            f'below iterate that list, so anything else silently checks nothing')
+
         for sheet in book.sheet_names:
             frame = book.parse(sheet, index_col=0)
 
@@ -181,6 +206,26 @@ def check_the_ev_premise():
             assert not empty, (
                 f'the {sheet} sheet has {empty} present but entirely NaN -- that is #219 exactly: '
                 f'the Creator reports success and writes nothing')
+
+    # And that some agent actually drew `full`, which nothing checked until it was pointed out:
+    # the value is named load-bearing in `tests/README.md` and this module's header, and moving the
+    # fixture to `min_soc` left every test here green while removing the only exercise of #220.
+    # Demonstrated, not assumed -- the edit was made and the module still passed 5/5.
+    #
+    # This is deliberately a property of the *drawn* value rather than of the distribution the YAML
+    # offers, and so it is seed-dependent on purpose. If a reseed makes both agents draw `min_soc`,
+    # the #220 coverage is genuinely gone and that is worth a red test, not a shrug.
+    drawn = set()
+    with pd.ExcelFile(CONFIG_ROOT / SCENARIO / 'agents.xlsx') as book:
+        for sheet in book.sheet_names:
+            column = book.parse(sheet, index_col=0).get(SCHEME_COLUMN)
+            if column is not None:
+                drawn |= set(column.dropna())
+
+    assert SCHEME_EXERCISING_220 in drawn, (
+        f'no agent in {SCENARIO} draws {SCHEME_EXERCISING_220!r} -- the sheets draw {sorted(drawn)}. '
+        f'That is the arm #220 broke, and it is the only place any scenario exercises it, so this '
+        f'fixture no longer covers #220 even though every other assertion here still passes')
 
 
 def test_the_fixture_still_ships_an_ev_on_both_sheets():

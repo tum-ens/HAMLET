@@ -330,8 +330,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   dict value matched no column and was skipped without a word — while `_add_info_simple`, which
   `sfh` uses for exactly this key, recurses. `ev/charging_scheme/min_soc/val`,
   `.../min_soc_time/{val,time}` and `.../price_sensitive/threshold` were never written and **the
-  Creator reported success**, leaving the Executor to fail later with an `IntCastingNaNError` that
-  named neither the EV nor the Creator.
+  Creator reported success**.
+
+  **Whether anything then failed depended on the draw, and that is the worst part.** An agent
+  drawing `min_soc` reads the nested value and the Executor dies on an `IntCastingNaNError` naming
+  neither the EV nor the Creator; an agent drawing `full` never reads it, so the run **completes**
+  with a silently invalid plant. Confirmed by rebuilding the fixture with the old helper: the
+  Creator succeeded, the workbook carried four NaN columns, and the scenario ran to completion.
+  That silence is the argument for the workbook check in `check_the_ev_premise`, which is the only
+  thing that would have caught it without a `min_soc` draw.
 
   **Neither obvious repair works, which is why this is not a one-line diff.** The block those two
   classes pass is the only *mixed* one in the repository — `method` is a per-agent distribution
@@ -356,10 +363,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   this was PyOptInterface-port fallout rather than a modelling disagreement.
 
   **This was latent rather than live**: no shipped scenario asked for `full` until
-  `ctsp_industry` turned its EV share on, and `min_soc` was the only charging scheme any test or
-  scenario had ever exercised on either backend. `tests/unit/.../test_mpc_charging_schemes.py` is
-  the matrix that was missing — all four methods against both backends, with the scheme list
-  derived from the backends' own dispatch so a fifth cannot be added without covering it
+  `ctsp_industry` turned its EV share on — every shipped workbook drew `min_soc`. And **no test had
+  ever built the charging-scheme constraints on the POI backend at all**, which is precisely why it
+  survived: `test_mpc_poi_components.py` constructs the components and stops short of
+  `define_constraints`. On linopy both `full` and `min_soc` were already exercised, by
+  `test_mpc_ev.py`. `tests/unit/.../test_mpc_charging_schemes.py` is the matrix that was missing —
+  all four methods against both backends, with the scheme list derived from the backends' own
+  dispatch so a fifth cannot be added without covering it
 - **`config_templates`' `ctsp` block was stale in three places, none of them reachable by reading
   the code (#218).** Its EV block asked for forecast method `ev_close`, which nothing registers
   (`sfh` and `industry` both say `arrival`); stated `charging_scheme` in a pre-nesting flat schema
@@ -368,8 +378,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   a change that landed in `sfh` and `industry` and not in the `ctsp` copy — and all three were
   latent until a scenario declared a `ctsp` agent with an EV.
 
-  Config only; nothing generated moves, because no scenario outside the new fixture declares the
-  type at all
+  Config only. `config_templates/` is not read at runtime by any scenario, and no scenario outside
+  the new fixture declares either type — so **nothing generated outside the fixture moves**. The
+  fixture's own `agents.xlsx` does move and is regenerated here: its `ctsp` sheet gains the nested
+  `charging_scheme` and `rfr` column names in place of the flat and `random_forest_classifier`
+  ones, which is this fix and not the EV share change
 - **Creating a CTSP agent from a grid file crashed on ordinary demand values (#212).**
   `Ctsp._inflexible_load_grid` sized the load as `(df['demand'] * 1e6).astype('Int64')`, and
   `demand * 1e6` is not exactly representable in float64 for **349 of the 10 000** three-decimal MW

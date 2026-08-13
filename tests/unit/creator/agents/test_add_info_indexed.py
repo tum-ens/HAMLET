@@ -151,14 +151,61 @@ def test_the_appendix_still_reaches_the_leaf(probe):
     assert filled(frame, 'ev/charging_scheme/min_soc/val_0') == [0.5, 0.5]
 
 
+def subkeys_read_by_call_sites():
+    """Which `config[...]` subkeys the `_add_info_indexed` call sites actually pass.
+
+    Read out of the source with `ast` rather than written down here. A hardcoded list is the half
+    of this audit that would pass by omission: a new call site passing a fourth subkey would break
+    the blast-radius argument with nothing going red.
+    """
+    import ast
+
+    subkeys, sites = set(), 0
+    for path in sorted((REPO_ROOT / 'hamlet' / 'creator' / 'agents').glob('*.py')):
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            name = function.attr if isinstance(function, ast.Attribute) else getattr(function, 'id', None)
+            if name != '_add_info_indexed':
+                continue
+            keywords = {keyword.arg: keyword.value for keyword in node.keywords}
+            config = keywords.get('config')
+            # `self._add_info_indexed(... config=value ...)` is the helper's own recursion, not a
+            # call site; every real one subscripts the plant config.
+            if isinstance(config, ast.Subscript) and isinstance(config.slice, ast.Constant):
+                subkeys.add(config.slice.value)
+                sites += 1
+    return subkeys, sites
+
+
+def test_the_call_sites_still_read_only_the_subkeys_this_audit_covers():
+    """Half of the #219 blast-radius argument, and the half a config walk cannot see.
+
+    The argument is "the other 33 call sites cannot be affected, because the subkeys they pass are
+    flat lists everywhere". `test_no_other_call_site_passes_a_nested_or_scalar_config` checks the
+    second clause against every config; this checks the first against the source, so a new call
+    site reading something else fails here rather than silently widening the blast radius.
+    """
+    subkeys, sites = subkeys_read_by_call_sites()
+
+    assert sites == 35, f'expected 35 `_add_info_indexed` call sites, found {sites}'
+    assert subkeys == {'sizing', 'parameters', 'charging_scheme'}, (
+        f'the call sites now read {sorted(subkeys)}. The #219 audit covered exactly '
+        f"{sorted({'sizing', 'parameters', 'charging_scheme'})}, so a new subkey means the "
+        f'blast-radius argument has to be re-made, not assumed')
+
+
 def test_no_other_call_site_passes_a_nested_or_scalar_config():
     """The Part 1 audit, re-derived from the tree so it fails when the tree stops agreeing.
 
-    The 35 `_add_info_indexed` call sites read exactly three config subkeys. `charging_scheme` is
-    the only one that is ever nested, and the only one with scalar leaves; `sizing` and
-    `parameters` are lists throughout. That is *why* changing the shared helper could not move a
-    golden reference, so it is checked rather than believed -- if a future config nests a `sizing`
-    block, this fails and the blast-radius argument gets re-made instead of assumed.
+    The `_add_info_indexed` call sites read exactly three config subkeys -- pinned by the test
+    above, and taken from it here rather than restated. `charging_scheme` is the only one that is
+    ever nested, and the only one with scalar leaves; `sizing` and `parameters` are lists
+    throughout. That is *why* changing the shared helper could not move a golden reference, so it
+    is checked rather than believed -- if a future config nests a `sizing` block, this fails and
+    the blast-radius argument gets re-made instead of assumed.
 
     Derived by walking every `agents.yaml`, not from a list of files: a list would pass by
     omission the moment someone adds a scenario.
@@ -166,11 +213,16 @@ def test_no_other_call_site_passes_a_nested_or_scalar_config():
     yaml = YAML(typ='safe')
     offenders = {'nested': [], 'scalar': []}
 
+    # `charging_scheme` is excluded because it is the one this fix is *about*; the other two are
+    # taken from the call sites rather than named here, so adding a subkey widens this walk too.
+    audited = subkeys_read_by_call_sites()[0] - {'charging_scheme'}
+    assert audited, 'no subkeys to audit, so the walk below checks nothing'
+
     def walk(node, path, source):
         if isinstance(node, dict):
             for key, value in node.items():
                 here = path + [str(key)]
-                if key in ('sizing', 'parameters') and isinstance(value, dict):
+                if key in audited and isinstance(value, dict):
                     for leaf, leaf_value in value.items():
                         where = f'{source}:{"/".join(here + [str(leaf)])}'
                         if isinstance(leaf_value, dict):

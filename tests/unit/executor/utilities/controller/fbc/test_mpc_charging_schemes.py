@@ -12,12 +12,14 @@ linopy implementation takes arrays natively, so this was POI-port fallout rather
 disagreement.
 
 **It was latent, not live** — no shipped scenario asked for `full` until `ctsp_industry` turned its
-EV share on, which is the same change that needed #219. Worth saying plainly, because `min_soc` is
-the only method any test or scenario had ever exercised, on either backend.
+EV share on, which is the same change that needed #219. Every shipped workbook drew `min_soc`.
 
-`tests/unit/.../test_mpc_poi_components.py` deliberately needs no solver and so only *constructs*
-the components. That is exactly why this defect survived: it lives in `define_constraints`. These
-tests build a real model, so they skip where HiGHS cannot be loaded.
+**What was missing was the POI half specifically.** `test_mpc_ev.py` already exercised `full` on
+linopy, including a `@pytest.mark.solver` case that solves it — so this was never an untested
+*scheme*, it was an untested *backend*. `test_mpc_poi_components.py` deliberately needs no solver
+and therefore only *constructs* the components, stopping short of `define_constraints`, which is
+exactly where the defect lived. These tests build a real model, so they skip where HiGHS cannot be
+loaded.
 """
 import datetime
 

@@ -213,7 +213,7 @@ and `run_example` rewrites it anyway; it is there so the fixture needs no licenc
 | `framework: linopy` | **Not the default, deliberately.** The scenario is built with `new_scenario_from_files`, so `agents.xlsx` is what the Creator reads and the #206 read-back has to ask it for something it does not ship. Shipping `linopy` makes that request `poi` — the fast backend — so the read-back costs **26–36 s** where the same assertion against `grid_golden` cost **232–272 s** (4 and 2 runs, same harness and machine; quote the band, this runner's spread is wide). |
 | two agent **types** | `create_agents_file_from_config` writes one sheet per type, so declaring both gives `agents.xlsx` **two sheets**. `grid_golden` has one, and the per-sheet half of the backend switch had no real fixture until this one. (`number_of: 1` is a separate choice — it is what pins the 24-row assertions.) |
 | `ev` share `1` | this is the **only** EV coverage either agent type has. `check_the_ev_premise` fails by name if it goes back to 0, and separately if the nested `charging_scheme` columns are present but entirely NaN — which is #219 exactly. |
-| `charging_scheme.method` `["full", "min_soc"]` | `full` is the arm #220 broke. Reverting that fix makes the whole e2e module fail with the original `TypeError`, so the fixture exercises the defect rather than merely tolerating it — verified by reverting, not assumed. |
+| `charging_scheme.method` `["full", "min_soc"]` | `full` is the arm #220 broke, and this is the only place anything exercises it. Reverting that fix makes the whole e2e module fail with the original `TypeError` — verified by reverting, not assumed. `check_the_ev_premise` asserts some agent actually **draws** `full`, deliberately a property of the draw rather than of the distribution: if a reseed makes both agents draw `min_soc` the #220 coverage is genuinely gone and that is worth a red test. This row was unguarded until a review panel changed the fixture to `min_soc` and got a green run. |
 
 ### The EV path took three fixes to turn on
 
@@ -252,12 +252,17 @@ leaves are scalars. So plain recursion reaches `len(0.5)` and raises, and copyin
 `"['full', 'min_soc']"` for every agent — the same class of defect one level down. The helper now
 dispatches per leaf on the value's own type.
 
-Changing that shared helper was safe because of an audit which
-`test_no_other_call_site_passes_a_nested_or_scalar_config` re-derives rather than restates: the 35
-`_add_info_indexed` call sites read only three config subkeys, and across every `agents.yaml` in
-the repository `sizing` (501 leaves) and `parameters` (52 leaves) are lists throughout and never
-nested. That is why neither golden reference moved, and the test fails if a future config stops
-agreeing.
+Changing that shared helper was safe because of a two-part audit, and **both parts are tests rather
+than claims** — each would otherwise pass by omission as the other changed:
+
+| part | test | what it re-derives |
+|---|---|---|
+| the 35 call sites read only `sizing`, `parameters`, `charging_scheme` | `test_the_call_sites_still_read_only_the_subkeys_this_audit_covers` | parses the call sites with `ast`, so a new site reading a fourth subkey fails |
+| those subkeys are flat lists in every config | `test_no_other_call_site_passes_a_nested_or_scalar_config` | walks every `agents.yaml`: `sizing` 501 leaves, `parameters` 52, all lists, none nested |
+
+The second takes its subkey set from the first rather than hardcoding it. That pairing is why
+neither golden reference moved — verified on Linux/x86_64, and separately by building
+`simple_scenario` under both the old and new helper and getting a byte-identical workbook.
 
 ## The scenario format version
 
