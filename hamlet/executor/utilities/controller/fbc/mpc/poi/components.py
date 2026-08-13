@@ -569,8 +569,11 @@ class Ev(POIComps):
                                index=self.timesteps).astype(int)
 
         # Define the constraint
-        model.add_linear_constraint(var_soc, poi.ConstraintSense.GreaterEqual, target_soc,
-                                    name=f'{self.name}_soc_scheme')
+        # Note: one constraint per timestep, as in `__constraint_cs_min_soc`. PyOptInterface takes a
+        #       single expression and a scalar rhs, where linopy's copy takes the arrays natively.
+        for timestep in self.timesteps:
+            model.add_linear_constraint(var_soc[timestep], poi.ConstraintSense.GreaterEqual,
+                                        target_soc[timestep], name=f'{self.name}_soc_scheme_{timestep}')
 
     def __constraint_cs_min_soc(self, model, variables):
         """Define constraints to ensure a minimum state of charge is met.
