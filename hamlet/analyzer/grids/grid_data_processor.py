@@ -13,16 +13,24 @@ class GridDataProcessor(DataProcessorBase):
         # Initialize specific grid paths for active grids in the configuration.
         self.specific_grid_path = {}
 
+        # The grid file the scenario was built from, which is also the name the Executor saves the
+        # network under. It is named per generation method -- `electricity.xlsx` for `file`,
+        # `topology.xlsx` for `topology` -- so it has to be read rather than assumed.
+        self.specific_grid_file = {}
+
         for scenario_name, grid_config in config['grids'].items():
             for grid_type, grid_details in grid_config.items():
                 # Ensure the grid type exists in the specific path dictionary
                 if grid_type not in self.specific_grid_path:
                     self.specific_grid_path[grid_type] = {}
+                    self.specific_grid_file[grid_type] = {}
 
                 # Add the grid path if the grid type is active
                 if grid_details['active']:
                     self.specific_grid_path[grid_type][scenario_name] = os.path.join(path[scenario_name], 'grids',
                                                                                      grid_type)
+                    generation = grid_details['generation']
+                    self.specific_grid_file[grid_type][scenario_name] = generation[generation['method']]['file']
 
     def process_electricity_transformer_loading(self):
         """
@@ -83,8 +91,11 @@ class GridDataProcessor(DataProcessorBase):
         results_summary = {}
 
         for scenario_name, scenario_path in self.specific_grid_path['electricity'].items():
-            # Load grid data into a Pandapower network object
-            ppnet = pp.from_excel(os.path.join(scenario_path, 'electricity.xlsx'))
+            # Load grid data into a Pandapower network object, under the name the config gives it
+            # rather than a hardcoded `electricity.xlsx` -- which only the `file` generation method
+            # produces, so this raised on every topology-built scenario.
+            ppnet = pp.from_excel(os.path.join(scenario_path,
+                                               self.specific_grid_file['electricity'][scenario_name]))
 
             # Initialize geodata for visualization
             ppnet.line_geodata = pd.DataFrame(columns=ppnet.line_geodata.columns)

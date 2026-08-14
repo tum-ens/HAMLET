@@ -64,8 +64,22 @@ dependencies = [
     # solver, which is the premise of their equivalence test.
     "highsbox==1.10.0",
     "hplib==1.9",
+    # The two soft pandapower dependencies the Analyzer's grid topology plot reaches: `igraph`
+    # lays the buses out (`create_generic_coordinates`) and `plotly` draws the figure
+    # (`pandapower.plotting.plotly`). Both were declared nowhere, so that plot raised ImportError
+    # for every user. Core rather than extras because shipped Analyzer code calls them on a
+    # shipped scenario, not anything a user opts into (#227).
+    "igraph==1.0.0",
+    "plotly==5.22.0",
     "linopy==0.3.11",
-    "matplotlib==3.9.0",
+    # A ceiling HAMLET carries on pandapower's behalf, exactly like the xarray one below.
+    # pandapower 2.14.8 calls `matplotlib.cm.get_cmap` (plotting/plotly/get_colors.py:84), which
+    # matplotlib removed in 3.9 -- so on 3.9.0, which this pinned until #228, the Analyzer's grid
+    # topology plot raised `AttributeError` for every user. pandapower declares only
+    # `matplotlib>=...`, so no resolver will enforce this; `tests/unit/test_dependency_constraints.py`
+    # does. Raise it when pandapower is upgraded, not before, and re-run the golden master --
+    # pandapower is the power flow engine.
+    "matplotlib==3.8.4",
     "networkx==3.3",         # module-level in the grid code; arrived transitively until now
     "numpy==1.26.4",
     "openpyxl==3.1.4",       # pandas' engine for the XLSX scenario configs (`pd.ExcelFile`)

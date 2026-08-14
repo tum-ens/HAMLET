@@ -212,6 +212,113 @@ verified to produce byte-identical scenarios and identical results. The column n
 reference contain those seeded agent and plant ids, so changing how ids are generated will fail
 this test — correctly, since agent identities would genuinely have changed.
 
+## The Analyzer's data processors
+
+`tests/e2e/test_analyzer_processors.py` pins what the Analyzer computes, against committed
+references at `tests/e2e/analyzer/<scenario>.json`. Its module docstring says what is pinned and
+why; this section covers what a reader of the suite needs that the file cannot say about itself.
+
+Before it, nothing asserted on the Analyzer's **output**. `test_simple_scenario` ran it and checked
+the process printed `E2E_OK`; `integration/analyzer/test_results_format_check.py` constructs it six
+times and asserts only on its refusal to read an incompatible scenario format. **Four of the six
+processors had never executed at all** — `test_simple_scenario` calls two plotters, and that
+example has no grid.
+
+**It adds no scenario run**, because both its requests are byte-identical to ones the `e2e` job
+already makes. `test_the_pinned_runs_are_shared_with_an_existing_module` rebuilds them from the
+owning modules' constants and fails if either side drifts; nothing else would notice, since both
+modules would still pass while the job quietly grew two more example runs. That guard is why
+`test_grid_examples.NEEDS_RECEIPT` is a module constant rather than a literal in its fixture — it
+is part of the cache key, and a literal is not derivable from outside.
+
+Four properties of the reduction are load-bearing and are pinned by
+`tests/unit/test_analyzer_outputs.py` in the fast tier rather than only inside a minutes-long job:
+every recorded statistic is **reproducible across processes** (two processors group by Categorical
+columns, so *row order* is not — **#229**); a column of numbers held as **`object` is still
+numeric** (`process_total_balancing` builds one, and `select_dtypes('number')` would skip the
+Analyzer output that most directly becomes a figure); an **empty return fails separately and
+first**, checked against the committed reference as well as the live run; and a **value/index
+misalignment is visible**. `tests/analyzer_outputs.py` gives the reasoning for each.
+
+That last one is the subtlest and it was added after a review panel broke all six processors with
+every assertion green. Sum, min, max and a distinct count are invariant under any permutation of
+values against the index, so "right numbers, wrong row" — positional indexing written back onto a
+sorted frame, an off-by-one interval convention, a price series sorted into a duration curve — was
+unassertable. `ordered` is a position-weighted total taken in **stringified-index order**: it
+catches the permutation without reintroducing the #229 flake (the weights come from the index's
+string form, never a Categorical encoding) and is compared with the same relative tolerance as
+every other float, rather than being a digest that would flake on a last-place difference between
+platforms. Text columns take a digest, where exact comparison is safe.
+
+`tests/integration/analyzer/test_market_data_processor_multi_market.py` covers the one branch the
+two pinned scenarios cannot reach: `process_agent_balancing` accumulates across markets, and no
+scenario in the repository has more than one. It builds two `market_transactions.ft` files
+directly, so the branch costs milliseconds rather than a scenario run.
+
+### What this needed before it could run at all
+
+`process_electricity_grid_topology` could not run **anywhere**, for two independent reasons, and
+both are worth keeping because of how they stayed hidden.
+
+It loaded the saved network as the hardcoded `electricity.xlsx`, which only the `file`
+grid-generation method produces — a `topology`-built scenario writes `topology.xlsx`. It now reads
+the name from the same `grids.yaml` key the Executor saves under. Both conventions are pinned, and
+that is why the two scenarios differ in generation method rather than being the two most convenient
+runs.
+
+In the end `plot_electricity_grid_topology` was broken **five** independent ways and had never
+produced a figure for anybody. Each fix revealed the next, which is the point of the list:
+
+| # | breakage |
+|---|---|
+| 1 | `igraph` undeclared — one `grep` hit in the whole repo, in the call that needs it |
+| 2 | the grid file loaded under a hardcoded `electricity.xlsx` |
+| 3 | `plotly` undeclared, needed by `pandapower.plotting.plotly` to draw the figure |
+| 4 | the **plotter's** results path missing its `grids` component, so `res_line.csv` was read from a directory that never exists — `GridDataProcessor` had it right and the plotter's copy did not |
+| 5 | pandapower 2.14.8 calling `matplotlib.cm.get_cmap`, removed in matplotlib 3.9 |
+| 6 | and once it finally drew, it wrote a `temp-plot.html` into the working directory and opened a browser — pandapower's `draw_traces` saves an HTML copy unconditionally, defaulting to the caller's cwd |
+
+`igraph` and `plotly` are **runtime** dependencies, not test ones, because shipped Analyzer code
+reaches them on a shipped scenario (#227); matplotlib is pinned below 3.9 as a ceiling carried on
+pandapower's behalf, like the existing xarray one.
+`tests/unit/test_dependency_constraints.py` holds all three, and the first of those tests exists
+because of a trap worth naming: declaring a dependency in a *group* keeps the whole suite green
+while the plot stays broken for everyone who installed HAMLET, since the test environment installs
+the groups.
+
+**None of the five was visible because `PlotterBase.plot_all` caught every exception and printed
+it** (#228), so `Analyzer.plot_all()` reported success whatever happened. It now runs every plot
+and raises an `ExceptionGroup` for those that failed — both halves pinned by
+`tests/unit/analyzer/test_plotter_base.py`, since raising at the first failure would be a
+different regression (and was `GridPlotter`'s). `test_every_plot_the_analyzer_offers_can_be_drawn`
+is the e2e assertion that would have caught all five on the first push and could not exist before.
+
+The lesson generalises past this file: **coverage.py marks a line that raises as executed**, so
+"runs but unasserted" and "has never worked" look identical when the caller swallows everything.
+
+### Where the agent meter series is cut (#230)
+
+`tests/integration/analyzer/test_agent_meter_truncation.py`, and it is in the fast tier rather
+than the e2e layer for a reason worth reading before moving it.
+
+`meters.ft` is allocated for the whole forecast horizon, so the rows past the simulated end are
+all-zero padding and must be dropped — otherwise every plot ends in a flat run of zeros, and the
+first padding row reads as one enormous negative flow, since the meters are cumulative. The rule
+was `meters.abs().idxmax().max()`: the row at which some meter *peaked*, which is the last
+recorded row only while a meter is still rising at the end.
+
+**Every agent of all three runnable scenarios owns a continuously-rising load, so the old rule
+returned the right answer for all 13 of them.** The committed analyzer reference therefore did not
+move when this was fixed and cannot move if it is reverted — the e2e layer can never pin it. What
+breaks it is an agent owning only PV and a battery, both of which flatten after sunset: on real
+`grid_golden` readings restricted to those two plants, the old rule returned **19 of 25
+timesteps**, dropping the entire evening battery discharge.
+
+The same method also took its time axis from `timestamps`, which leaked out of the per-agent loop
+— so the index of every plot came from whichever agent the filesystem yielded last, i.e.
+`os.listdir` order (!202 again). It is now read from the first agent and checked against every
+other.
+
 ## The `ctsp_industry` fixture
 
 `tests/e2e/scenarios/ctsp_industry/` is the only scenario anywhere in the repository that declares

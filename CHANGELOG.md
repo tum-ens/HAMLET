@@ -10,6 +10,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Added
+- **The Analyzer's data processors are pinned against committed reference numbers (#222).** Of
+  HAMLET's three top-level components, the Creator and the Executor are heavily pinned and the
+  Analyzer had nothing asserted on what it *computes*: the test that ran it checked the process
+  printed `E2E_OK`, and the one that constructs it in the fast tier asserts only on its refusal to
+  read an incompatible scenario format. **Four of the six processors had never executed at all.** A
+  regression that plotted the wrong column, dropped an agent or rescaled a series was caught by
+  nothing, in the one component whose output goes into a paper.
+
+  `tests/e2e/test_analyzer_processors.py` pins all six `process_*` methods against
+  `tests/e2e/analyzer/<scenario>.json`. **The processors are pinned and the plotters are not**,
+  deliberately: those methods return the numbers that become the figures, so a wrong figure becomes
+  a red test, where an image comparison would be brittle enough to teach people to re-baseline
+  without looking. Nothing is enumerated — the data-processor *classes* are discovered by walking
+  `hamlet.analyzer` and their `process_*` methods off each class, so a new one is pinned by default.
+
+  **It adds no scenario run.** Both pinned scenarios make requests byte-identical to ones the
+  `e2e` job already makes, so the run cache hands over the existing run, and a test rebuilds both
+  requests from the owning modules' own constants and fails if that ever stops being true.
+
+  Two scenarios rather than one because they differ in grid *generation method*, which is what
+  caught the first defect below. `simple_scenario` is deliberately not pinned: it sets
+  `electricity.active: False`, so both grid processors return `{}`, and recording an empty return
+  as though it were coverage is the vacuity the file exists to avoid — non-emptiness is asserted
+  separately, and against the committed reference as well as the live run.
+
+  **A review panel broke all six processors with every assertion green**, and closing that is the
+  most useful thing in this entry. Sum, minimum, maximum and a distinct count are invariant under
+  any permutation of values against the index, so the whole family of "right numbers, wrong row"
+  defects — positional indexing written back onto a sorted frame, an off-by-one interval
+  convention, a price series sorted into a duration curve — was unassertable. Each column now also
+  carries a position-weighted total taken in stringified-index order, which catches the
+  permutation without reintroducing the row-order flake it sits next to (#229). Two smaller holes
+  the same panel found are closed with it: a brand-new output column was reported by nothing, and
+  the anti-vacuity guard accepted an all-NaN column because pandas totals one to `0.0`
+- **The Analyzer's per-agent balancing is verified to accumulate across markets.** No scenario in
+  the repository has more than one market, so the `+=` in `process_agent_balancing` had never
+  executed; changing it to `=` left the entire end-to-end suite green while the figure would have
+  shown one market instead of the scenario. Covered by
+  `tests/integration/analyzer/test_market_data_processor_multi_market.py`, which writes two
+  `market_transactions.ft` files directly and so runs in milliseconds rather than costing a run
 - **The first coverage of the `ctsp` and `industry` agent types, which had none of any kind.** No
   `agents.yaml` outside `config_templates/` declared either type and no test imported either class,
   so ~1900 lines of Creator and both Executor agent classes were never executed — while the two
@@ -350,6 +390,93 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **`Analyzer.plot_all()` could not fail, so nothing it did was ever checked (#228).**
+  `PlotterBase.plot_all` caught every exception and printed it, and `GridPlotter.plot_all` called
+  its plots directly and so stopped at the first. Both now run every plot and raise an
+  `ExceptionGroup` naming those that failed — the plots are still all attempted, because one
+  failing must not cost the others, but a caller and a test now learn that something did.
+
+  **This is what had been hiding `plot_electricity_grid_topology`, which was broken in five
+  independent ways and had therefore never produced a figure for anybody.** Each fix revealed the
+  next: `igraph` undeclared; the grid file loaded under a hardcoded name; `plotly` undeclared; the
+  plotter's results path missing its `grids` component, so it read `res_line.csv` from a directory
+  that never exists; and pandapower 2.14.8 calling `matplotlib.cm.get_cmap`, which matplotlib
+  removed in 3.9. All five are fixed, and `test_every_plot_the_analyzer_offers_can_be_drawn` now
+  asserts `Analyzer.plot_all()` completes on both pinned scenarios — the assertion that would have
+  caught every one of them on the first push, and which could not exist while the exceptions were
+  being printed.
+
+  A sixth thing surfaced the moment that plot ran for the first time: **it wrote a `temp-plot.html`
+  into whatever directory the run started in**, and opened a browser. pandapower's `draw_traces`
+  saves an HTML copy unconditionally and defaults it to the working directory. Both are fixed — the
+  copy goes to a temporary file, since the figure is returned to the caller and the decorator is
+  what saves it where the user asked, and the browser opens only under an interactive matplotlib
+  backend, mirroring what `plt.show()` already does. The same test asserts that plotting leaves the
+  working directory empty
+- **The Analyzer's per-agent balancing plotted rows that do not exist (#229).** The market
+  processors group by `id_agent` and `type_transaction`, which arrive as **Categorical**. That
+  cost two things. A Categorical sorts by its *local integer encoding* — the order values were
+  first seen in that process — so identical runs returned the same rows in a different order and a
+  per-agent bar chart reordered between them. And a Categorical keeps every category whether a row
+  still uses it or not, so `groupby` emitted a row for each unused combination: **the retailer,
+  which the code filters out explicitly one line earlier, came back as a block of all-zero rows**,
+  along with every agent and transaction-type pair that never traded. Both are fixed by casting
+  the two keys to plain strings where the transactions are read.
+
+  The committed analyzer reference moves and the movement is the fix: `process_agent_balancing`
+  20 → 16 rows (`grid_golden`) and 24 → 17 (`scenario_with_grid`), `process_average_pricing`
+  188 → 106 and 188 → 100 with its NaN count dropping 88 → 6 and 93 → 5. **Every column sum is
+  unchanged** — the rows removed were empty. `price_in.min` moves off `0.0` for `grid_golden`
+  because the phantom rows had been setting it
+- **matplotlib is pinned below 3.9** while pandapower 2.14.8 is in use, a ceiling HAMLET carries
+  on pandapower's behalf exactly like the existing xarray one. pandapower calls
+  `matplotlib.cm.get_cmap`, removed in 3.9, and declares only a floor, so no resolver enforces
+  this; `tests/unit/test_dependency_constraints.py` does. The golden master was re-run on 3.8.4
+  and does not move — matplotlib is not in the simulation path
+- **The Analyzer's grid topology plot could not read a `topology`-built grid.**
+  `GridDataProcessor.process_electricity_grid_topology` loaded the saved network by the hardcoded
+  name `electricity.xlsx`, which only the `file` grid-generation method produces — a scenario built
+  with `generation.method: topology` writes `topology.xlsx`, so the processor raised
+  `UserWarning: File ... does not exist!!` on every one of them, `tests/e2e/scenarios/grid_golden`
+  and `examples/create_scenario_with_topology` included. It now reads the filename from the same
+  `grids.yaml` key the Executor saves the network under, so the two cannot disagree.
+
+  Both conventions are now pinned (#222), which is why the two scenarios in the new analyzer
+  reference differ in generation method rather than being the two most convenient runs.
+
+  **The same method also called `create_generic_coordinates(..., library='igraph')` while `igraph`
+  was declared nowhere in the repository** — one `grep` hit, in that call — so it raised
+  `ImportError` in every environment `uv sync` produces and `plot_electricity_grid_topology` had
+  never worked for anybody (#227). `igraph` is now a **runtime** dependency: it is reached by
+  shipped Analyzer code on a shipped scenario, not by anything a user opts into. Held there by
+  `tests/unit/test_dependency_constraints.py`, which asserts specifically that it is not in a
+  dependency *group* — that would keep the suite green while the plot stayed broken for everyone
+  who installed HAMLET, since the test environment installs the groups.
+
+  Neither defect was visible because `PlotterBase.plot_all` catches every exception and prints it,
+  so `Analyzer.plot_all()` reports success whatever happens (#228, filed). A third, found while
+  building the reference: the market processors group by Categorical columns and so return rows in
+  a process-dependent order, which reorders a per-agent bar chart between identical runs (#229,
+  filed)
+- **The Analyzer cut every agent's meter series at the wrong row (#230).** `meters.ft` is allocated
+  for the whole forecast horizon, so the rows past the simulated end are all-zero padding and have
+  to be dropped. The rule was `meters.abs().idxmax().max()` — the row at which some meter *peaked*,
+  which is the last recorded row only while a meter is still rising at the end. An agent whose
+  meters have all flattened by then lost the remaining timesteps silently.
+
+  It is now found as the last row carrying any reading. **No committed number moves**, because
+  every agent of all three runnable scenarios owns a continuously-rising load and so the old rule
+  happened to return the right answer for all 13 of them — which is exactly why this was worth
+  fixing before a scenario existed that it broke. On real `grid_golden` readings restricted to the
+  plants a PV-and-battery-only agent would own, the old rule returns **19 of 25 timesteps**,
+  dropping the entire evening battery discharge. Pinned by
+  `tests/integration/analyzer/test_agent_meter_truncation.py`, in the fast tier because the e2e
+  reference cannot see this in either direction.
+
+  The same method took its time axis from a `timestamps` variable that leaked out of the per-agent
+  loop, so the index of every plot came from whichever agent the filesystem yielded last — that is
+  `os.listdir` order, the same hazard as !202. It is now taken from the first agent and checked
+  against every other, with a named error if they disagree
 - **A guard inside a fixture consumed only by `xfail(strict=True)` tests was not a guard.**
   `pytest.mark.xfail(strict=True)` converts a fixture *setup error* into a silent `xfailed`
   (verified on pytest 8.3.5). In `e2e/test_backend_equivalence.py` the `linopy_results` fixture is

@@ -27,12 +27,34 @@ class PlotterBase:
         plot_functions = [func for func in dir(self) if (callable(getattr(self, func)) and
                           getattr(getattr(self, func), 'is_plot', False))]
 
-        # iterate through all functions and plot results
+        self.run_plots(plot_functions, **kwargs)
+
+    def run_plots(self, plot_functions, **kwargs):
+        """Run every plot, then raise whatever failed.
+
+        Both halves matter. **Every plot is attempted**, because one failing must not cost the
+        others -- that is why the failures are collected rather than raised at the first. And
+        **they are raised**, not printed: printing them meant `Analyzer.plot_all()` could not fail
+        whatever happened underneath, so `plot_electricity_grid_topology` sat broken for the whole
+        life of the module in three independent ways (an undeclared `igraph`, a hardcoded grid
+        filename, and a results path missing a directory component) and nothing ever said so. See
+        #228.
+
+        Raised as an `ExceptionGroup` so a caller sees all of them with their tracebacks intact,
+        rather than the first one standing in for the rest.
+        """
+        failures = {}
         for func in plot_functions:
             try:
                 getattr(self, func)(**kwargs)
-            except Exception as e:
-                print(f"Error in {func}: {e}")
+            except Exception as error:  # noqa: BLE001 - re-raised in the group below
+                failures[func] = error
+
+        if failures:
+            raise ExceptionGroup(
+                f'{len(failures)} of {len(plot_functions)} plots failed in '
+                f'{type(self).__name__}: {sorted(failures)}',
+                list(failures.values()))
 
     def get_plotting_data(self, data_name, **kwargs):
         """

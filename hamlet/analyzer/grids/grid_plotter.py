@@ -1,5 +1,7 @@
+import matplotlib
 import matplotlib.pyplot as plt
 import os
+import tempfile
 import pandas as pd
 import pandapower.plotting.plotly as pplotly
 import hamlet.constants as c
@@ -19,20 +21,31 @@ class GridPlotter(PlotterBase):
                 if grid_type not in self.specific_grid_path:
                     self.specific_grid_path[grid_type] = {}
 
-                # Add the grid path if the grid type is active
+                # Add the grid path if the grid type is active. The `grids` component is not
+                # optional: results are written to <results>/grids/<type>/, which is what
+                # `GridDataProcessor` builds. Without it this pointed at a directory that never
+                # exists and `plot_electricity_grid_topology` -- the only plot that reads this
+                # rather than going through the data processor -- raised FileNotFoundError every
+                # time. Unseen because `plot_all` printed the exception (#228).
                 if grid_details['active']:
-                    self.specific_grid_path[grid_type][scenario_name] = os.path.join(path[scenario_name], grid_type)
+                    self.specific_grid_path[grid_type][scenario_name] = os.path.join(
+                        path[scenario_name], 'grids', grid_type)
 
     def plot_all(self, **kwargs):
-        """Plot all results for active grids based on configuration."""
+        """Plot all results for active grids based on configuration.
+
+        Overridden so that a grid type which is switched off is skipped rather than attempted --
+        `simple_scenario` sets `electricity.active: False` and has no grid results to read. The
+        plots that do run are run through the base class, so their failures are reported the same
+        way; this used to call them directly and so stopped at the first one.
+        """
         for grid_type, path_dict in self.specific_grid_path.items():
             if path_dict:
                 plot_functions = [func for func in dir(self) if callable(getattr(self, func)) and
                                   func.startswith('plot_' + grid_type)]
 
                 # Execute all plot functions for the grid type
-                for func in plot_functions:
-                    getattr(self, func)(**kwargs)
+                self.run_plots(plot_functions, **kwargs)
 
     @decorator_plot_function
     def plot_electricity_transformer_loading(self, **kwargs):
@@ -77,8 +90,11 @@ class GridPlotter(PlotterBase):
         result_figs = {}
         grid_topology = super().get_plotting_data(data_name='electricity_grid_topology')
 
-        # Iterate through each scenario
-        for scenario_name, scenario_path in self.path.items():
+        # Iterate through each scenario with an active electricity grid. Not `self.path`, which is
+        # <results>/grids and so is missing the grid-type component -- `res_line.csv` lives in
+        # <results>/grids/electricity/ -- and which also lists scenarios whose grid is switched
+        # off, for which `grid_topology` holds no entry at all.
+        for scenario_name, scenario_path in self.specific_grid_path['electricity'].items():
             ppnet = grid_topology[scenario_name]
 
             # Read line result data
@@ -136,9 +152,24 @@ class GridPlotter(PlotterBase):
                 size=6
             )
 
-            # Combine traces and draw the figure
-            fig = pplotly.draw_traces(bus_trace + line_trace + ext_grid_trace, showlegend=False, auto_open=False)
-            fig.show()
+            # Combine traces and draw the figure.
+            #
+            # `draw_traces` writes an HTML copy to `filename` unconditionally -- there is no flag
+            # to stop it, only to move it -- and its default is `temp-plot.html` in the *current
+            # working directory*. Pointed at a temporary file instead, because the figure is
+            # returned to the caller and `decorator_plot_function` is what saves it where the user
+            # asked; otherwise plotting silently litters whatever directory the run started in.
+            with tempfile.TemporaryDirectory() as scratch:
+                fig = pplotly.draw_traces(bus_trace + line_trace + ext_grid_trace, showlegend=False,
+                                          auto_open=False,
+                                          filename=os.path.join(scratch, 'topology.html'))
+
+            # Opening a browser is for an interactive session. `plt.show()` is already a no-op
+            # under a non-interactive matplotlib backend, and this is the plotly equivalent of the
+            # same test, so that a headless run -- CI, or a script -- neither opens a window nor
+            # writes a second temporary file.
+            if matplotlib.get_backend().lower() != 'agg':
+                fig.show()
 
             # Store the figure in the results dictionary
             result_figs[scenario_name] = fig
