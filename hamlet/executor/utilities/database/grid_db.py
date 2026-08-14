@@ -42,6 +42,12 @@ class GridDB:
 
         self.results = {}  # grid simulation results
 
+        #: Result keys already written to disk during this run. A key in here has an open CSV
+        #: whose header is written, so later flushes append instead of starting a new file.
+        #: Tracked rather than inferred from the file existing, so that a stale file left in a
+        #: scenario folder cannot be appended to.
+        self.flushed_results = set()
+
         self.restriction_commands = {}  # dict for store and exchange grid restriction commands
 
         self.energy_type = None  # energy type of the grid
@@ -55,6 +61,59 @@ class GridDB:
     def save_grid(self, **kwargs):
         """Save the grid results to the given path."""
         raise NotImplementedError('The save_grid function must be implemented for each grids type.')
+
+    def save_and_drop_past_results(self, path):
+        """Write settled grid results to their CSVs and drop them from memory.
+
+        `results` holds one DataFrame per key per timestep -- seven keys on an electricity grid --
+        appended by `Grid._write_result_to_grid_db` and, before this, never drained. The executor
+        deepcopies the whole database every timestep (`executor/setup.py`), so an ever-growing
+        list of frames is copied on every step: measured on design 6, the deepcopy grew from
+        0.038 s to 0.810 s over 1000 steps, **linearly**, and detaching `results` and re-copying
+        the same object at the same step accounted for 100 % of that growth. It is also 0.19 MB
+        per step of live memory, which is where a 2.9 GB RSS at step 600 came from.
+
+        The market tables have had `save_and_drop_past_records` for exactly this reason; this is
+        the same idea for the grid.
+
+        **Only results older than the newest timestep are written.** A timestep can be re-run --
+        `while not grid_ok` in the executor rolls the database back and simulates it again, and
+        `enwg_14a` rewrites the last entry of its keys when that happens -- so the newest
+        timestep's frames are not settled and must stay in memory. Everything before it is.
+
+        Append order and index are unchanged, so the finished CSV is byte-identical to the one a
+        single `pd.concat` at the end would have produced.
+        """
+        for key, data in self.results.items():
+            if len(data) < 2:
+                # Nothing settled: the only frame present is the newest timestep's, or there is
+                # none at all.
+                continue
+
+            newest = max(str(frame[c.TC_TIMESTAMP].iloc[0]) for frame in data)
+            settled = [frame for frame in data if str(frame[c.TC_TIMESTAMP].iloc[0]) != newest]
+            if not settled:
+                continue
+
+            self._append_results(path, key, settled)
+            self.results[key] = [frame for frame in data
+                                 if str(frame[c.TC_TIMESTAMP].iloc[0]) == newest]
+
+    def _append_results(self, path, key, frames):
+        """Append `frames` to `key`'s CSV, writing the header only on the first write of a run."""
+        folder = os.path.join(path, self.grid_type)
+        os.makedirs(folder, exist_ok=True)
+        file_path = os.path.join(folder, key + '.csv')
+
+        first = key not in self.flushed_results
+        if frames:
+            pd.concat(frames).to_csv(file_path, mode='w' if first else 'a', header=first)
+            self.flushed_results.add(key)
+        elif first:
+            # Drained to nothing and never written: the file still has to exist and be empty of
+            # rows rather than absent, which is what the undrained code produced.
+            pd.DataFrame().to_csv(file_path)
+            self.flushed_results.add(key)
 
     def filter_energy_types(self) -> dict:
         """
@@ -129,6 +188,58 @@ class ElectricityGridDB(GridDB):
             case _:
                 raise ValueError(f"Unknown grid creation method: {self.grid_config['method']}")
 
+        self._set_heat_pump_minimum_power(regions)
+
+    def _set_heat_pump_minimum_power(self, regions: dict):
+        """Write each heat pump's Section 14a minimum controllable power onto its grid element.
+
+        `EnWG14a` reduces a device only as far as the power the regulation guarantees it, and for
+        a heat pump that floor is not the flat threshold that applies to EVs and batteries.
+        BNetzA BK6-22-300 sets it by the device's *grid connection* power:
+
+            P_min = 0.4 * P_rated    if P_rated > 11 kW
+            P_min = threshold        otherwise
+
+        The same floor enters the EMS variant of the control, where the per-device minima are
+        summed with the simultaneity factor fixed at 1. Source: Chu (2024), "Comparative
+        Techno-Economic Analysis of Grid-Serving Control Methods Using Agent-Based Modeling",
+        equations 2.1 to 2.3 -- the thesis the Section 14a implementation here comes from.
+
+        `enwg_14a` reads this as a `hp_min_control` column on the load table and **nothing had
+        ever written it**, so direct power control raised `KeyError: 'hp_min_control'` the first
+        time a heat pump took part in a reduction. Nothing caught it because nothing ever reached
+        it: no shipped example enables direct power control, and the study the implementation was
+        written for ran with `direct_power_control.active: False`.
+
+        Computed here, after both creation methods, because the rated power lives in the agent's
+        plant configuration rather than in the grid file, so neither method has it to hand while
+        it builds its elements, and both need the same answer.
+        """
+        loads = self.grid.load
+        if loads.empty or 'load_type' not in loads.columns:
+            return
+
+        restrictions = self.grid_config.get('restrictions', {}) or {}
+        threshold_w = ((restrictions.get('enwg_14a', {}) or {})
+                       .get('direct_power_control', {}).get('threshold', 4200))
+
+        minimum_w = {}
+        for region in regions.values():
+            for agents in region.agents.values():
+                for agent in agents.values():
+                    for plant_id, plant in agent.plants.items():
+                        if plant['type'] != c.P_HP:
+                            continue
+                        rated = (plant.get('sizing') or {}).get('power')
+                        minimum_w[plant_id] = (
+                            c.ENWG14A_HP_SCALING_FACTOR * rated
+                            if rated is not None and rated > c.ENWG14A_HP_SCALING_LIMIT
+                            else threshold_w)
+
+        loads['hp_min_control'] = [
+            minimum_w.get(plant_id, threshold_w) * c.WH_TO_MWH if load_type == c.P_HP else 0.0
+            for plant_id, load_type in zip(loads[c.TC_ID_PLANT], loads['load_type'])]
+
     def save_grid(self, path):
         """
         Save the grid results to the given path.
@@ -145,10 +256,8 @@ class ElectricityGridDB(GridDB):
 
         # save grid simulation results
         for key, data in self.results.items():
-            if data:
-                file_name = key + '.csv'
-                result_df = pd.concat(data)
-                result_df.to_csv(os.path.join(path, self.grid_type, file_name))
+            if data or key in self.flushed_results:
+                self._append_results(path, key, data)
 
     def _create_grid_from_file(self, regions: dict):
         """
@@ -239,6 +348,42 @@ class ElectricityGridDB(GridDB):
                         agent_id = self.grid.bus.loc[index, column]
                         agents_bus[agent_id] = index
 
+        # Every agent must have been assigned to a bus, and an agent that was not is not something
+        # this method can paper over: it would simply be absent from the network, so the power flow
+        # would be solved for a feeder that is missing one of its participants and would report a
+        # loading that is too low. Reported as a bare `KeyError` on an opaque id in #205.
+        #
+        # The usual cause is that the scenario was created with `new_scenario_from_configs`, which
+        # draws fresh random agent ids, rather than with `new_scenario_from_files`, which takes them
+        # from `agents.xlsx`. The `topology` method is inherently two-pass -- create the scenario,
+        # then write the ids it produced into the topology file -- so the ids in that file are only
+        # meaningful for the scenario they were read off.
+        # Only agents that actually place an element need a bus. The loop below indexes
+        # `agents_bus` from inside `for plant_id, plant in agent.plants.items()`, and only for
+        # plant types in the electricity load/sgen lists -- so an agent owning nothing electrical
+        # never needed one. Two such agents exist in practice: a heat-only agent, and the parent
+        # of a set of sub-agents, which `RegionDB.__register_all_agents` registers via
+        # `register_sub_agent` and therefore leaves with `plants = {}`. Requiring a bus for those
+        # would reject scenarios that ran before this check existed.
+        electrical = set(self.relevant_plant_type['load']) | set(self.relevant_plant_type['sgen'])
+        scenario_agents = {agent_id: agent
+                           for region in regions.values()
+                           for agents in region.agents.values()
+                           for agent_id, agent in agents.items()
+                           if any(plant['type'] in electrical for plant in agent.plants.values())}
+        unassigned = [agent_id for agent_id in scenario_agents if agent_id not in agents_bus]
+        if unassigned:
+            topology_file = self.grid_config['generation']['topology']['file']
+            raise ValueError(
+                f"{len(unassigned)} of {len(scenario_agents)} agents are not assigned to a bus in "
+                f"'{topology_file}': {', '.join(sorted(unassigned))}. Every agent of the scenario "
+                f"must appear in one of that file's 'agent' columns on the bus sheet. Note that the "
+                f"ids are those of the scenario that was actually created -- if it was created with "
+                f"`new_scenario_from_configs`, they are freshly drawn and cannot match a topology "
+                f"file written for an earlier scenario; use `new_scenario_from_files` so that the "
+                f"ids come from 'agents.xlsx'."
+            )
+
         # add grid elements according to agent plants
         for region_name, region in regions.items():
             for agent_type, agents in region.agents.items():
@@ -256,9 +401,14 @@ class ElectricityGridDB(GridDB):
                             pp.create_sgen(self.grid, bus=agents_bus[agent_id], p_mw=0, plant_type=plant['type'],
                                            **kw_args)
 
-        # write data back to the grid
-        self.grid.load.dropna(subset=[c.TC_ID_AGENT], inplace=True)
-        self.grid.sgen.dropna(subset=[c.TC_ID_AGENT], inplace=True)
+        # Write data back to the grid, dropping the topology file's own placeholder rows -- the
+        # ones this method did not create and so did not give an `id_agent`. The column only
+        # exists once something has been created, so a scenario whose agents own no generation at
+        # all (no PV, no battery) has an untouched `sgen` table and nothing to drop.
+        for table_name in ('load', 'sgen'):
+            table = getattr(self.grid, table_name)
+            if c.TC_ID_AGENT in table.columns:
+                table.dropna(subset=[c.TC_ID_AGENT], inplace=True)
 
     def __get_grid_element_dataframe(self, element_name: str, type_field: str, add_columns: list) -> (
     pd.DataFrame, list):
@@ -275,8 +425,13 @@ class ElectricityGridDB(GridDB):
             df (pd.DataFrame): grid element dataframe.
             df_plant_types (list): list of plant type names in the dataframe.
         """
-        # get dataframe and unpack description column
-        df = f.add_info_from_col(df=getattr(self.grid, element_name).copy(), col='description', drop=False)
+        # Two grid-file conventions exist and both are supported, distinguished by whether
+        # `type_field` is a real column. See `_read_packed_metadata` for why `description` is only
+        # ever read as a fallback, and #205 / #216 for what happened when each was assumed to be
+        # the only one.
+        df = getattr(self.grid, element_name).copy()
+        if type_field not in df.columns:
+            df = self._read_packed_metadata(df=df, element_name=element_name, type_field=type_field)
         df = df.loc[df[type_field].isin(self.relevant_plant_type[element_name])]  # remove unnecessary plants from grid
         df[add_columns] = 0  # add additional columns
 
@@ -286,6 +441,65 @@ class ElectricityGridDB(GridDB):
         bus_df.reset_index(inplace=True)
         bus_df = bus_df[['bus', 'zone']]
         df = df.reset_index().merge(bus_df, how="left").set_index('index')
+
+        return df
+
+    def _read_packed_metadata(self, df: pd.DataFrame, element_name: str, type_field: str) -> pd.DataFrame:
+        """
+        Unpack HAMLET's per-element metadata out of the `description` column.
+
+        Only called when `type_field` is absent as a real column, i.e. for grid files written in
+        the packed convention. See the note below for why the distinction is made by the caller
+        rather than here.
+
+        Args:
+            df (pd.DataFrame): the raw pandapower element table.
+            element_name (string): name of grid element (normally load or sgen).
+            type_field (string): the column the caller needs (`load_type` or `plant_type`).
+
+        Returns:
+            df (pd.DataFrame): the element table with the packed keys added as columns.
+        """
+        # A HAMLET grid file may carry its per-element metadata (`load_type`/`plant_type`, `owner`,
+        # `agent_type`, `file`, sizings) in either of two places, and which one is used is a
+        # property of the file, not of HAMLET:
+        #
+        #   real columns  -- what `_create_grid_from_topology` writes, and what the paper's design 6
+        #                    network carries. There `description` is the network operator's prose:
+        #                    96 of 469 loads and 134 of 263 sgens have none at all, and those that
+        #                    do are text that merely contains colons ('2022: 17209 kWh'). Parsing it
+        #                    raised, and anything that had parsed would have been joined back into
+        #                    `self.grid.load` -- so succeeding would have been worse than crashing.
+        #                    That is #216, and it is why the parse is not unconditional.
+        #   packed        -- `key:value,key:value` inside `description`, with no metadata columns at
+        #                    all. `examples/create_scenario_with_grid/.../electricity.xlsx` is
+        #                    written this way, so removing the parse outright made the file method
+        #                    unusable on the one example that exercises it. That is #205.
+        #
+        # Hence: real columns win, `description` is the fallback, and a file that is in neither
+        # convention is rejected here rather than several frames deeper on a missing column.
+        # An empty table carries no metadata because it carries nothing at all, and a feeder with
+        # no generation on it is an ordinary network rather than a malformed one. Give the caller
+        # the column it filters on and let it filter nothing.
+        if df.empty:
+            df[type_field] = pd.Series(dtype='object')
+            return df
+
+        if 'description' in df.columns and df['description'].notna().all():
+            try:
+                df = f.add_info_from_col(df=df, col='description', drop=False)
+            except (AttributeError, ValueError):
+                pass
+
+        if type_field not in df.columns:
+            raise ValueError(
+                f"The {element_name} table of grid file "
+                f"'{self.grid_config['generation'][self.grid_config['generation']['method']]['file']}' "
+                f"carries no '{type_field}' information. A grid file used with `generation.method: "
+                f"file` must provide HAMLET's per-element metadata either as real columns "
+                f"('{type_field}', 'owner', 'agent_type', 'file', ...) or packed into a "
+                f"'description' column as 'key:value,key:value'. Neither was found."
+            )
 
         return df
 
@@ -355,9 +569,25 @@ class ElectricityGridDB(GridDB):
             inflexible_load_index (int): Index of the matching inflexible load.
 
         """
-        inflexible_load_for_agent_index = load_df[(load_df['bus'] == agent.account[c.K_GENERAL]['bus']) &
-                                                  (load_df['load_type'] == c.P_INFLEXIBLE_LOAD) &
-                                                  (load_df['agent_type'] == agent.agent_type)].index
+        candidates = load_df[(load_df['bus'] == agent.account[c.K_GENERAL]['bus']) &
+                             (load_df['load_type'] == c.P_INFLEXIBLE_LOAD) &
+                             (load_df['agent_type'] == agent.agent_type)]
+
+        # An inflexible load already claimed by an earlier agent is not a candidate. Without this,
+        # two agents that look alike to the matcher -- same bus, same type, same profile file --
+        # both match the *same* row, the second overwrites the first's `id_agent`, and the first
+        # agent then appears nowhere in the network at all. `_create_grid_from_file` iterates
+        # agents greedily and mutates `load_df` as it goes, so "already assigned" is exactly the
+        # state this filter has to see.
+        #
+        # The failure was silent, which is the reason it is worth a filter rather than a comment:
+        # `__process_elements` drops rows with no `id_agent`, so the power flow solved happily for
+        # a feeder missing one of its participants and simply reported a loading that was too low.
+        # With the filter the second agent finds no candidate and raises below, naming itself.
+        if c.TC_ID_AGENT in candidates.columns:
+            candidates = candidates[candidates[c.TC_ID_AGENT].isna()]
+
+        inflexible_load_for_agent_index = candidates.index
 
         # count numbers for each plant for this inflexible load by iterating all inflexible loads at this bus,
         # compare counts with agent to find out which inflexible load is the right one
@@ -386,6 +616,21 @@ class ElectricityGridDB(GridDB):
                     # finished assigning inflexible load, further inflexible load won't be considered
                     return load_df, inflexible_load_index
 
+        # Falling out of the loop means the grid file and the scenario disagree about this agent.
+        # The caller unpacks the return value, so returning `None` here surfaced as
+        # `TypeError: cannot unpack non-iterable NoneType object` with nothing identifying the
+        # agent -- #201, and the second half of #205. Silently skipping the agent is not the
+        # alternative: its plants would stay unassigned and the power flow would run on a feeder
+        # that is missing them.
+        raise ValueError(
+            f"No inflexible load in the grid file matches agent '{agent.agent_id}' "
+            f"(type '{agent.agent_type}', bus {agent.account[c.K_GENERAL]['bus']}). "
+            f"{len(inflexible_load_for_agent_index)} inflexible load(s) of that type sit at that "
+            f"bus, and none of them owns the plant set the agent declares "
+            f"({dict(plants_df['type'].value_counts())}) with a matching profile file. The grid "
+            f"file and the scenario's agent configuration describe different agents."
+        )
+
     def __assign_plants_for_agent(self, element_df: pd.DataFrame, plants_df: pd.DataFrame, inflexible_load_index: int,
                                   agent, type_field: str):
         """
@@ -407,6 +652,13 @@ class ElectricityGridDB(GridDB):
             plants_df (pd.DataFrame): Updated `plants_df` with unassigned plants after allocation.
 
         """
+        # `owner` is how a grid file says which inflexible load a plant belongs to. A table with
+        # no rows, or one that never declares ownership, simply has nothing to attribute this way
+        # -- the caller's `__find_remaining_unassigned_plants` fallback still gets its turn. Before
+        # this, either case was a bare `KeyError: 'owner'` naming nothing.
+        if element_df.empty or 'owner' not in element_df.columns:
+            return element_df, plants_df
+
         owned_plants_df = element_df[element_df['owner'] == inflexible_load_index]
 
         for grid_index in owned_plants_df.index:  # assign other plants
@@ -487,7 +739,14 @@ class ElectricityGridDB(GridDB):
         """
 
         agent_plants_count = agent_plants_count[element_name]
-        owned_plants_df = element_df[element_df['owner'] == inflexible_load_index]
+        # As in `__assign_plants_for_agent`: no rows, or no `owner` column, means nothing declares
+        # itself owned by this inflexible load. That is an empty ownership set, not an error --
+        # and it still has to be *compared* against the agent's plant counts below rather than
+        # skipped, or an agent owning plants would match a load that owns none.
+        if element_df.empty or 'owner' not in element_df.columns:
+            owned_plants_df = element_df.iloc[0:0]
+        else:
+            owned_plants_df = element_df[element_df['owner'] == inflexible_load_index]
 
         # compare plant count
         for plant_type in agent_plants_count.keys():

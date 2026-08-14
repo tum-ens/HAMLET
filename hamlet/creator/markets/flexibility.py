@@ -4,8 +4,7 @@ __license__ = ""
 __maintainer__ = "TUM-Doepfert"
 __email__ = "markus.doepfert@tum.de"
 
-import pandas as pd
-from markets import Markets
+from hamlet.creator.markets.markets import Markets
 
 
 class FlexibilityMarket(Markets):

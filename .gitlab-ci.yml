@@ -1,0 +1,272 @@
+# HAMLET CI — see CI_CD_Guide.md for the overview, and issue #200 for why this exists.
+#
+# The suite is layered and the layers are run as separate jobs on purpose, so a failure says
+# which kind of thing broke rather than just "tests failed":
+#
+#   fast    unit + integration, no simulation                ~2 min
+#   e2e     every shipped example, end to end               ~20 min
+#   golden  two scenarios against committed numbers          ~6 min
+#
+# Measured on this runner, pipeline 3233720, against a 40-minute per-job timeout. These numbers are
+# not stable and are not meant to be — the point of stating them is that `e2e` is the job with the
+# least headroom, so anything that adds a scenario run to it is a decision. It grew from 12 to 20
+# minutes when !230 added one `grid_golden` run under `linopy`; !233 replaced that run with a much
+# smaller one and took most of it back. Two paired observations on this runner, each pair being
+# !232 (which still carries the old run) against !233 in the same batch:
+#     1572 s -> 1171 s   and   1100 s -> 761 s
+# The absolute level moves a lot between batches and the delta does not: -401 s and -339 s. Quote
+# the delta, not the level. Re-measure rather than adjust these by feel.
+#
+# `golden` is the one that catches a change in *results* rather than in behaviour someone thought
+# to assert. Of the defects found while assembling !195, most were caught by review or ad-hoc
+# measurement rather than by a test; this is the job that would have caught them.
+#
+# No solver licence is required: the example runs on HiGHS, which is installed with HAMLET.
+#
+# Requires a registered runner with the Docker executor, and CI/CD enabled for the project
+# (Settings -> General -> Visibility). Neither is on by default; both are in place as of 2026-08-07.
+
+stages:
+  - lint
+  - test
+
+default:
+  # NOT -slim. The slim image has no compiler, and psutil==5.9.0 predates cp311 manylinux wheels
+  # so it is built from source; installing gcc per job cost 4 minutes of a 20-minute budget on the
+  # first pipeline. python:3.11 ships gcc 14 and git 2.47, is pulled once and then cached by the
+  # runner, and needs no apt step at all.
+  image: python:3.11
+  interruptible: true
+  # Transient network and registry failures are not signal.
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+variables:
+  # The golden master compares committed numbers, and the Creator draws agent ids and plant
+  # sizings from seeded `random`. Hash randomisation would move them.
+  PYTHONHASHSEED: "0"
+  # No display on a runner; matplotlib is imported by the analyzer.
+  MPLBACKEND: "Agg"
+  # Only pip left is the one that installs uv itself; point it at the same persistent volume so
+  # even that one wheel stops being fetched every job.
+  PIP_CACHE_DIR: "/cache/pip"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  # A single PyPI read timeout failed the `lint` job on 2026-08-07 and needed a human to retry it.
+  # The runner is a laptop on a shared connection, so transient timeouts are expected rather than
+  # exceptional; pip should ride them out instead of reddening the pipeline.
+  PIP_RETRIES: "5"
+  PIP_DEFAULT_TIMEOUT: "30"
+  # A volume the runner mounts into every job (config.toml: volumes = ["/cache"]), so uv's cache
+  # survives between jobs and pipelines without GitLab archiving it.
+  UV_CACHE_DIR: "/cache/uv"
+  GIT_DEPTH: "20"
+
+# One pipeline per change: on the merge request while one is open, on the branch otherwise.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+# ----------------------------------------------------------------------------------------------
+# Shared setup
+# ----------------------------------------------------------------------------------------------
+# Dependencies come from `uv.lock`, and HAMLET is installed rather than reached via sys.path.
+# This file carries no copy of the dependency list and no generator for one — `env.yml` and
+# `ci/requirements_from_env.py` are both gone. That duplication is how `develop` ended up with an
+# env.yml that could not import hamlet.
+#
+# `--locked` rather than `--frozen`: it fails the job if `pyproject.toml` and `uv.lock` disagree,
+# so a dependency edit that was never locked cannot reach `develop` and be discovered later by
+# whoever next creates a fresh environment.
+#
+# Installs run through `uv` into a venv on /cache. Measured on this runner, same 24 packages, warm
+# cache, one timed install per fresh container:
+#
+#   pip install                     1005 s   <- 1.2 GB across 23,868 files, copied one at a time
+#   uv pip install --system          223 s   <- still copies: cache and target are different
+#                                               filesystems, so uv cannot link
+#   uv venv on /cache + install         1 s   <- same filesystem, so uv hardlinks
+#
+# pip was never network-bound here: every trace shows a 100 % cache hit, zero downloads and zero
+# wheel builds. The cost was purely writing files, which is why the fix is to stop writing them.
+#
+# UV_CACHE_DIR points at /cache, a volume the runner mounts into every job container
+# (config.toml: volumes = ["/cache"]), rather than at a GitLab `cache:` entry. GitLab's cache would
+# tar and untar 1.2 GB per job (79 s + 88 s measured) to protect an install that now takes a
+# second. The trade is that the cache is per-runner and not portable; a fresh runner repopulates it
+# once -- that first job pays ~1240 s, every job afterwards does not.
+.python:
+  before_script:
+    - pip install --quiet uv==0.12.2
+    # The venv lives on /cache, the same filesystem as UV_CACHE_DIR, which is the whole point:
+    # uv hardlinks out of its cache when it can and copies when it cannot. Installing into the
+    # image's site-packages puts target and cache on different filesystems and forces the copy.
+    #
+    # UV_PROJECT_ENVIRONMENT is what keeps that true under `uv sync`, which otherwise creates
+    # `.venv` in the checkout — a different filesystem from /cache, which is exactly the 1 s ->
+    # 223 s case above. Do not drop this in the name of simplification.
+    #
+    # Per job id rather than shared, so three concurrent jobs cannot race to create or replace one
+    # venv. This costs almost no disk: the files are hardlinks into the cache, not copies.
+    - export UV_PROJECT_ENVIRONMENT="/cache/venv-$CI_JOB_ID"
+    - uv sync --locked --quiet
+    - export PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH"
+    - python -c "import sys; print('python:', sys.executable)"
+    # Neither `tensorflow` nor `gurobipy` is installed here — they are extras, and this proves the
+    # claim that justifies them: that nothing under `hamlet/` needs either at import time.
+    - python -c "import hamlet; print('hamlet:', hamlet.__file__)"
+  after_script:
+    # $UV_PROJECT_ENVIRONMENT is not carried into after_script's shell, so spell the path out again.
+    - rm -rf "/cache/venv-$CI_JOB_ID"
+
+# ----------------------------------------------------------------------------------------------
+# Lint
+# ----------------------------------------------------------------------------------------------
+# Deliberately errors only: undefined names, broken syntax, `assert (x, y)` and friends. The
+# repository has no linter configuration and no agreed style, so a full rule set would report
+# thousands of findings that say nothing about correctness and would train everyone to ignore the
+# pipeline. Widening it is now unblocked — pyproject.toml exists and the rules could live there —
+# but that is a change to what the pipeline enforces, not to how it installs, so it is deliberately
+# left for its own commit.
+lint:
+  stage: lint
+  script:
+    # ruff's version comes from the `lint` group in pyproject.toml, resolved through uv.lock, so it
+    # is pinned in one place along with everything else. `--only-group` skips HAMLET and its whole
+    # dependency tree: this job needs a linter, not an environment.
+    - pip install --quiet uv==0.12.2
+    - export UV_PROJECT_ENVIRONMENT="/cache/venv-$CI_JOB_ID"
+    - uv sync --locked --quiet --only-group lint
+    - export PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH"
+    # `packaging/` is linted too: it is not imported by `hamlet`, so nothing else would catch a
+    # syntax error in it -- and it runs at interpreter startup in every environment HAMLET is
+    # installed into, which is the worst place to discover one.
+    - ruff check --select E9,F63,F7,F82 --output-format=full hamlet/ tests/ packaging/
+  after_script:
+    - rm -rf "/cache/venv-$CI_JOB_ID"
+
+# The `dependency-exclusions` job is gone with the script it ran. It re-checked that `tensorflow`
+# and `psycopg2` were not imported at module scope, because CI installed a hand-maintained subset
+# of env.yml and those two omissions were claims about the source rather than about size.
+#
+# That guard is now structural instead of asserted. `psycopg2` is not a dependency at all, and
+# `tensorflow` is an extra that no job installs — so if a module-scope `import tensorflow` ever
+# appears under `hamlet/`, the `fast` job fails at collection, on the commit that caused it. A
+# separate job asserting the same thing would only be a second place to keep the claim.
+
+# ----------------------------------------------------------------------------------------------
+# Test
+# ----------------------------------------------------------------------------------------------
+# pytest.ini deselects e2e and golden by default, so this needs no marker.
+#
+# `-rs` on every invocation: a skip count on its own says how many tests did not run, never which.
+# Skips here are load-bearing rather than incidental -- the Gurobi half of the solver x framework
+# matrix skips on any runner without a licence, and !212 used the per-platform skip split as
+# evidence that a fix had landed -- and `-q` suppresses the report header that names them locally.
+# Without this, telling "the Gurobi cells skipped, as expected" from "a test silently stopped
+# running" means downloading the JUnit artifact.
+fast:
+  stage: test
+  extends: .python
+  script:
+    - python -m pytest -q -rs --junitxml=report-fast.xml
+  timeout: 40 minutes
+  artifacts:
+    when: always
+    reports:
+      junit: report-fast.xml
+    expire_in: 1 week
+
+e2e:
+  stage: test
+  extends: .python
+  script:
+    - python -m pytest -q -rs -m e2e --junitxml=report-e2e.xml
+  timeout: 40 minutes
+  artifacts:
+    when: always
+    reports:
+      junit: report-e2e.xml
+    expire_in: 1 week
+
+golden:
+  stage: test
+  extends: .python
+  script:
+    - python -m pytest -q -rs -m golden --junitxml=report-golden.xml
+  timeout: 40 minutes
+  artifacts:
+    when: always
+    reports:
+      junit: report-golden.xml
+    expire_in: 1 week
+
+# ----------------------------------------------------------------------------------------------
+# macOS
+# ----------------------------------------------------------------------------------------------
+# A second platform, on an Apple M4 Mac mini registered as a project runner tagged
+# `macos, arm64`. It exists because Linux CI cannot see platform-specific breakage, and this
+# repository has now been bitten by that twice: agent selection depended on filesystem ordering
+# until !202, and `framework: poi` crashes the interpreter on Windows while Linux is unaffected
+# (#202). macOS was the measurement that showed the second one is a Windows loader problem rather
+# than a conflict between the two HiGHS builds.
+#
+# **Manual, and allowed to fail.** The runner is a private machine on a home network, so it is not
+# always reachable. A required job pinned to it would leave pipelines hanging whenever it is off,
+# which is a worse failure than having no macOS coverage. Run it from the pipeline view when a
+# change plausibly touches platform behaviour -- solver wiring, file discovery, path handling,
+# native dependencies. Make it automatic only if the machine becomes reliably available.
+#
+# The runner is registered with `run_untagged = false`, so it cannot pick up the jobs above even
+# though they carry no tags. That is deliberate: they are measured on x86_64 (see `golden`).
+macos:
+  stage: test
+  tags:
+    - macos
+  when: manual
+  allow_failure: true
+  variables:
+    # Alongside the checkout rather than on a separate filesystem, so uv still hardlinks out of
+    # its cache instead of copying. Same reasoning as `.python` above, different paths.
+    #
+    # `$CI_PROJECT_DIR` is safe to use here; `$HOME` is not. GitLab expands its own variables in
+    # this block, but a shell variable it does not know expands to the empty string -- which is
+    # how the first version of this job asked for `/.cache/uv` and failed on a read-only `/`.
+    # Anything built from `$HOME` therefore has to be exported in `before_script`, where the
+    # shell does the expanding.
+    UV_PROJECT_ENVIRONMENT: "$CI_PROJECT_DIR/.venv"
+  before_script:
+    # There is no image to bake tooling into, so `uv` is installed on the machine itself. It lives
+    # in ~/.local/bin, which a job shell does not have on PATH.
+    - export PATH="$HOME/.local/bin:$PATH"
+    # The globals point at /cache, a Docker volume the Linux runner mounts into each container.
+    # The shell executor has no such volume and cannot write to `/`, so both move under the
+    # runner's own home -- where they persist between jobs for exactly the same reason.
+    - export UV_CACHE_DIR="$HOME/.cache/uv"
+    - export PIP_CACHE_DIR="$HOME/.cache/pip"
+    - uv --version
+    - uv sync --locked
+    - export PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH"
+    - python -c "import hamlet; print('hamlet:', hamlet.__file__)"
+  script:
+    # The fast tier only. `pytest.ini` deselects e2e, golden and benchmark by default, and two of
+    # those should stay deselected here for reasons rather than convenience:
+    #
+    #   golden  — the committed reference is architecture-coupled and does not reproduce on arm64
+    #             (#203). Row counts move, so this would fail by construction, not by regression.
+    #   e2e     — runs the example twice; worth adding once this job has earned its keep.
+    #
+    # What this does cover is every unit and integration test on a third OS and a second CPU
+    # architecture, including the PyOptInterface tests that Windows has to skip entirely.
+    - python -m pytest -q -rs --junitxml=report-macos.xml
+  timeout: 40 minutes
+  artifacts:
+    when: always
+    reports:
+      junit: report-macos.xml
+    expire_in: 1 week

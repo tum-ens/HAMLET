@@ -4,9 +4,10 @@ __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
-import os
-import sys
+import io
 import logging
+import os
+from contextlib import redirect_stdout
 
 import numpy as np
 
@@ -14,6 +15,8 @@ from linopy.io import read_netcdf
 
 from hamlet.executor.utilities.controller.fbc.mpc.linopy.components import *
 from hamlet.executor.utilities.controller.fbc.mpc.mpc_base import MpcBase
+from hamlet.executor.utilities.controller.solver_options import (quiet_options,
+                                                                 reproducibility_options)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -208,9 +211,8 @@ class Linopy(MpcBase):
         balance. That has to be visible: an agent that shed 3 kW must not look identical to one
         that served it.
 
-        Note: this reports through `logging` rather than `warnings`. The executor installs a
-        blanket `warnings.filterwarnings("ignore")` at import time, so a warning here would
-        never reach the user and the shed energy would be silent.
+        Reported through `logging`, not `warnings`, which deduplicates by source line and would
+        report only the first agent that shed. Pinned by `tests/.../test_slack_wiring.py`.
         """
 
         for name, variable in self.model.variables.items():
@@ -231,12 +233,21 @@ class Linopy(MpcBase):
         solver = self.ems.get('solver')
         match solver:
             case 'gurobi' | 'highs':
-                sys.stdout = open(os.devnull, 'w')  # deactivate printing from linopy
-                solver_options = {'OutputFlag': 0, 'LogToConsole': 0}
-                if self.ems.get('time_limit') is not None:
-                    solver_options.update({'TimeLimit': self.ems['time_limit'] / 60})
-                status = self.model.solve(solver_name=solver, **solver_options)
-                sys.stdout = sys.__stdout__  # re-activate printing
+                # The flags are what silence the solver; the redirect is a cheap guard, not the
+                # mechanism. Measured per solve on a real MPC model, stdout lines under
+                # highs: 52 with the old Gurobi-named options (two of them
+                # `ERROR: getOptionIndex: Option "OutputFlag" is unknown`), 1 with these -- the
+                # HiGHS banner, emitted from C before options apply. **The old
+                # `sys.stdout = open(os.devnull, 'w')` never suppressed any of it**, because
+                # HiGHS writes to file descriptor 1 and that only rebinds a Python attribute;
+                # only an fd-level redirect can, as `tests/backend_matrix._silenced` does.
+                # `redirect_stdout` is kept because it is exception-safe where the assignment was
+                # not: that leaked a handle per solve, never restored on a raise, and restored to
+                # `sys.__stdout__` rather than the caller's stdout. It captures 0 bytes today.
+                solver_options = quiet_options(solver)
+                solver_options.update(reproducibility_options(solver, self.ems.get('time_limit')))
+                with redirect_stdout(io.StringIO()):
+                    status = self.model.solve(solver_name=solver, **solver_options)
             case _:
                 raise ValueError(f"Unsupported solver: {solver}")
 

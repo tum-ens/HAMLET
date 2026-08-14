@@ -5,7 +5,6 @@ __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
 import os
-import pickle
 from datetime import datetime
 import polars as pl
 import hamlet.constants as c
@@ -310,12 +309,27 @@ class Database:
 
             # Save results to region
             # Tables that are to be expanded
-            market_db.set_market_transactions(pl.concat([market_db.market_transactions]
-                                                        + results[c.TN_MARKET_TRANSACTIONS], how='vertical'))
+            # `new_rows` is what keeps `MarketDB`'s net-energy cache incremental; without it the
+            # cache is dropped and every agent goes back to scanning the whole table.
+            # `rechunk=True` on the three tables that are appended to rather than replaced.
+            # polars' `concat` defaults to `rechunk=False` and `filter` preserves chunking, so
+            # without it every timestep leaves one more chunk behind and nothing ever removes
+            # them. Measured on design 6: the rows are bounded -- `save_and_drop_past_records`
+            # holds `market_transactions` to ~78k, oscillating -- while the chunks grew 50 ->
+            # 7018 over 150 timesteps, monotonically, about 48 per step. That is why this phase
+            # kept getting slower while the table it works on was getting *smaller*, which is
+            # also what rules out row count as the cause.
+            new_transactions = pl.concat(results[c.TN_MARKET_TRANSACTIONS], how='vertical')
+            market_db.set_market_transactions(
+                pl.concat([market_db.market_transactions, new_transactions], how='vertical',
+                          rechunk=True),
+                new_rows=new_transactions)
             market_db.set_bids_cleared(pl.concat([market_db.bids_cleared]
-                                                 + results[c.TN_BIDS_CLEARED], how='vertical'))
+                                                 + results[c.TN_BIDS_CLEARED], how='vertical',
+                                                 rechunk=True))
             market_db.set_offers_cleared(pl.concat([market_db.offers_cleared]
-                                                   + results[c.TN_OFFERS_CLEARED], how='vertical'))
+                                                   + results[c.TN_OFFERS_CLEARED], how='vertical',
+                                                   rechunk=True))
             # Note: Positions matched are not used in the current version
             # market_db.set_positions_matched(pl.concat(results[c.TN_POSITIONS_MATCHED], how='vertical'))
             # Tables that are to be overwritten
@@ -325,16 +339,31 @@ class Database:
         # Update local market price in forecasters
         self.__regions[region].update_local_market_in_forecasters()
 
-    def post_grids(self, grid_type: str, grid):
+    def post_grids(self, grid_type: str, grid, path_results: str = None):
         """
         Post the given grid results to the given region.
 
         Args:
             grid_type: type of grid.
             grid: new grid db to be written into Database.
+            path_results: results folder. When given, results that can no longer change are
+                written out and dropped from memory -- see `GridDB.save_and_drop_past_results`.
+                Optional so that a caller which does not write results still works.
 
         """
         self.__grids[grid_type] = grid
+
+        if path_results is not None:
+            grid.save_and_drop_past_results(
+                self.__grid_results_path(os.path.dirname(path_results)))
+
+    def __grid_results_path(self, base: str) -> str:
+        """Where `save_grid` writes, from the same `base` that `save_database` is given.
+
+        Duplicating the construction would let the two drift apart and split one run's results
+        across two folders, so both go through here.
+        """
+        return os.path.join(base, list(self.__regions.keys())[0], 'grids')
 
     """static methods"""
 
@@ -371,67 +400,57 @@ class Database:
             ```
 
         """
-        # TODO: Make a more performant customized implementation to get the market data in lem (get_bids_offers())
-        filters = {}    # filters to be applied
-        new_columns_count = 0   # number of new columns added to df
-        new_columns = []    # names of new columns added to df
+        # A datetime value used to be compared by materialising it as a **full-length literal
+        # column** on the table, comparing two columns row-wise, and dropping the column again --
+        # per call. The cost of that scales with the table, and this is the hottest query in the
+        # market stage: 24 calls per timestep, 95 % of `get_bids_offers`, ~11 % of a design 6
+        # timestep. Casting the literal to the column's own dtype answers the same question
+        # without touching the table. Measured on real captured calls, one per size bucket of the
+        # live distribution: 6.3x at 488 rows, 7.6x at 691, 11.1x at 1082, 10.0x at 1892.
+        #
+        # The cast is what the temporary column was for: polars will not compare a naive `pl.lit`
+        # datetime against a tz-aware column of a different time unit, so the literal has to be
+        # given the column's `time_unit` and `time_zone`. Taking the dtype off the schema rather
+        # than off a selected column keeps that free.
+        schema = market.schema
 
-        # generate filter for each column
-        for i in range(len(by)):
-            filters[by[i]] = False  # init an empty list, will be filled with statements
-
-            for value in values[i]:
-                # check if value is a datetime object
+        predicates = []
+        for column, column_values in zip(by, values):
+            dtype = schema[column]
+            matches = None
+            for value in column_values:
+                # `pl.lit(...).cast(dtype)` covers the datetime case and is a no-op for the rest,
+                # but casting unconditionally would coerce a mistyped filter value silently
+                # instead of raising, so it stays limited to the case that needs it.
                 if isinstance(value, datetime):
-                    # get time info from original dataframe
-                    datetime_index = market.select(by[i])
-                    dtype = datetime_index.dtypes[0]
-                    time_unit = dtype.time_unit
-                    time_zone = dtype.time_zone
-
-                    # generate a new column with current timestep and adjust data type
-                    column_name = 'new_columns_' + str(new_columns_count)
-                    market = market.with_columns(pl.lit(value)
-                                                 .alias(column_name)
-                                                 .cast(pl.Datetime(time_unit=time_unit, time_zone=time_zone)))
-
-                    # update new columns count and name
-                    new_columns_count += 1
-                    new_columns.append(column_name)
-
-                    # filtering
-                    filters[by[i]] = filters[by[i]] | (pl.col(by[i]) == pl.col(column_name))
+                    term = pl.col(column) == pl.lit(value).cast(dtype)
                 else:
-                    filters[by[i]] = filters[by[i]] | (pl.col(by[i]) == value)
+                    term = pl.col(column) == value
+                matches = term if matches is None else (matches | term)
+            if matches is not None:
+                predicates.append(matches)
 
-        # combine filters for all columns according to if inclusive
-        if inclusive:
-            filter = True
-            for column in filters.keys():
-                filter = filter & filters[column]
-        else:
-            filter = False
-            for column in filters.keys():
-                filter = filter | (filters[column])
+        if not predicates:
+            return market
 
-        # filtering
-        filtered_market = market.filter(filter)
+        combined = predicates[0]
+        for predicate in predicates[1:]:
+            combined = (combined & predicate) if inclusive else (combined | predicate)
 
-        # delete added columns
-        if new_columns:
-            filtered_market = filtered_market.drop(new_columns)
-
-        return filtered_market
+        return market.filter(combined)
 
     """save database"""
 
-    def save_database(self, path: str, save_restriction_commands_only):
+    def save_database(self, path: str):
         """
         Save the database to the specified path.
 
+        Called once, at the end of a run. It used to take `save_restriction_commands_only`, which
+        the multiprocessing path set per timestep so that workers could pickle the grid's
+        restriction commands out of the results folder and read them back. That path is gone.
+
         Args:
             path: The path to save the database to.
-            save_restriction_commands_only: only save grid restriction commands (for parallel execution).
 
         """
 
@@ -444,16 +463,10 @@ class Database:
             self.__regions[region].save_region(path=os.path.join(path, region))
 
         # save grid data
-        grid_path = os.path.join(path, list(self.__regions.keys())[0], 'grids')
+        grid_path = self.__grid_results_path(path)
 
         for grid_type, grid in self.__grids.items():
-            if save_restriction_commands_only:      # only save restriction commands
-                file_name = grid_type + '_restriction.pickle'
-                with open(os.path.join(grid_path, file_name), 'wb') as handle:
-                    pickle.dump(grid.restriction_commands, handle)
-
-            else:   # save whole grid database
-                grid.save_grid(grid_path)
+            grid.save_grid(grid_path)
 
     ########################################## PRIVATE METHODS ##########################################
 

@@ -19,7 +19,8 @@ another to test, for example, other market clearing algorithms, trading strategi
 the tool is to provide a common platform for researchers to develop and test their own market designs and to compare 
 their results with other market designs.
 
-A documentation is currently being developed and will be available soon.
+The documentation is available at [hamlet-ens.readthedocs.io](https://hamlet-ens.readthedocs.io); its
+sources live in `docs/`.
 
 HAMLET was developed and is maintained by the 
 [Chair of Renewable and Sustainable Energy Systems](https://www.epe.ed.tum.de/en/ens/homepage/) of the [Technical
@@ -38,14 +39,14 @@ HAMLET offers...
 so you only need to adapt the components you want to investigate and/or improve on
 
 ## Installation
-HAMLET is completely based on Python to keep the installation process simple. This installation guide will
-explain how to get HAMLET to run using PyCharm, Gurobi and Anaconda as example. However, other IDEs and package managers
-are perfectly suitable as well.
+HAMLET is completely based on Python to keep the installation process simple. Its dependencies are
+defined once, in `pyproject.toml`, and pinned to exact versions in the committed `uv.lock`.
 
-#### Install the following software:
-	- IDE: e.g. PyCharm
-	- Package Manager: e.g. Anaconda
-	- Solver: e.g. Gurobi* or CPLEX. GLPK can be used although this is non-ideal.
+No solver installation is required to get started: HAMLET installs the open-source solver HiGHS as
+part of its environment, and `examples/create_simple_scenario` — the example used to test your
+installation below — is configured to use it. A commercial solver such as Gurobi* or CPLEX is
+optional and is usually faster on larger scenarios; the remaining examples are configured for
+Gurobi.
 
     *Installation explained later in this README
 
@@ -53,24 +54,74 @@ are perfectly suitable as well.
 You can download or clone the repository to a local directory of your choice. You can use version control tools such as 
 GitHub Desktop, Sourcetree, GitKraken or pure Git. The link for pure Git is: 
 
-`git clone https://github.com/tum-ewk/hamlet.git`
+`git clone https://github.com/tum-ens/HAMLET.git`
 
-If using PyCharm, clone the repository, for example, to `./PyCharmProjects/hamlet/`
-###
-#### Create a virtual python environment
-	- Open the AnacondaPrompt.
-	- Type `conda env create -f ./PycharmProjects/hamlet/env.yml`
-	- Take care to set the correct (absolute) path to your cloned repository.
+If you only want to run HAMLET rather than work on its history, add `--depth=1`: a full clone
+fetches about 350 MB of history, a shallow one about 13 MB. Either way the working tree is the
+same, so the checkout is ~90 MB rather than ~430 MB.
 
-#### Activate the environment
-	- Open PyCharm
-	- Go to 'File->Open'
-	- Navigate to PyCharmProjects and open hamlet
-	- When the project has opened, go to 
-         `File->Settings->Project->Python Interpreter->Show all->Add->Conda Environment
-          ->Existing environment->Select folder->OK`
+`git clone --depth=1 https://github.com/tum-ens/HAMLET.git`
 
-#### Install a solver (we recommend Gurobi)
+Development happens on GitLab at [gitlab.lrz.de/tum-ens/HAMLET](https://gitlab.lrz.de/tum-ens/HAMLET);
+the GitHub repository above is a mirror of it.
+
+#### Create the environment
+
+HAMLET uses [uv](https://docs.astral.sh/uv/) ([installation
+instructions](https://docs.astral.sh/uv/getting-started/installation/)). From the repository root:
+
+```bash
+uv sync
+```
+
+That is the whole installation. It creates `.venv/`, fetches Python 3.11 if you do not already
+have it, installs the exact versions recorded in `uv.lock`, and installs HAMLET itself in editable
+mode — so `import hamlet` works from any directory, with no `PYTHONPATH` and no `sys.path` lines
+in your scripts.
+
+Run things through `uv run`, which uses that environment without your having to activate it:
+
+```bash
+uv run python -m pytest        # the fast test tier
+uv run python run.py
+```
+
+Optional components are extras, installed only if you ask for them:
+
+```bash
+uv sync --extra tensorflow     # the two neural-network forecast models (~600 MB)
+uv sync --extra gurobi         # the Gurobi backend; see the next section
+uv sync --extra notebooks      # Jupyter, for examples/*/run.ipynb
+```
+
+<details>
+<summary>Prefer conda, or plain pip?</summary>
+
+Both work. Neither reads `uv.lock`, so they resolve whatever is current rather than what was
+tested — use `uv sync` if you want the environment this repository is developed against.
+
+```bash
+conda create -n hamlet python=3.11 && conda activate hamlet && pip install -e .
+```
+
+```bash
+python3.11 -m venv .venv && . .venv/bin/activate && pip install -e .
+```
+
+The `env.yml` that used to be here is gone. It was a second dependency list alongside the code,
+and a version it failed to pin is what once made `import hamlet` fail outright on a fresh install.
+</details>
+
+#### Point your IDE at it
+	- Open the repository in your IDE.
+	- Select the interpreter at `.venv/` in the repository root. In PyCharm:
+	  `File->Settings->Project->Python Interpreter->Add->Existing environment`.
+
+#### Optional: install a commercial solver (e.g. Gurobi)
+Skip this step unless you need it — the examples run on HiGHS, which is already installed. To use
+Gurobi instead, install it as below and set `solver: gurobi` under `optimization` in the
+scenario's `agents.yaml`.
+
 	- Go to gurobi.com
 	- Create an account with your university email 
 	- When the account has been activated, log in and download the newest Gurobi solver.
@@ -79,7 +130,7 @@ If using PyCharm, clone the repository, for example, to `./PyCharmProjects/hamle
 
 ### Test your installation
     - Navigate to ./PycharmProjects/hamlet/examples
-	- Choose one of the example scenarios (e.g. create_simple_scenario)
+	- Choose `create_simple_scenario`, which needs no solver licence (the other examples are configured for Gurobi)
     - Run the jupyter notebook `run.ipynb`
     - If everything is installed correctly, the notebook should run without errors and you should see the results of the example scenario.
 

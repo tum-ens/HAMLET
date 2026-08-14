@@ -1,0 +1,146 @@
+"""Unit -- a grid imported from a network operator can be read.
+
+`ElectricityGridDB.__get_grid_element_dataframe` used to unpack pandapower's `description` column
+as `key:value,key:value` *unconditionally*, before filtering. In a network imported from an
+operator that column holds free-form text, so the unpack either raised or invented columns.
+
+**It is read as a fallback again, and that is not a regression -- read this before changing it.**
+Some grid files really do pack HAMLET's metadata into `description`, and
+`examples/create_scenario_with_grid`'s `electricity.xlsx` is one of them; removing the reader
+outright made that example unreadable (#205). What was wrong was reading `description`
+*unconditionally*, not reading it at all. `__get_grid_element_dataframe` now reads it only when
+`type_field` is absent as a real column, so every case below -- all of which declare `load_type`
+as a real column, exactly as an imported network does once HAMLET's metadata is added -- never
+reaches the parser. The packed convention is covered in
+`tests/integration/executor/test_grid_registration.py`. Making either branch unconditional again
+breaks the other one's files; the repository has now done it in both directions.
+
+Measured on the paper's design 6 grid, which is the first real network anything here has been run
+against:
+
+- **96 of 469 loads and 134 of 263 sgens carry no description**, giving
+  `AttributeError: 'NoneType' object has no attribute 'split'`.
+- Of those that do, most are prose containing colons -- `'Anlagenart: Photovoltaik \\n Energieart:
+  Sonne \\n Baujahr: 2022 \\n ...'`, `'2022: 17209 kWh'` -- giving
+  `ValueError: too many values to unpack (expected 2)`.
+
+Both fixtures below are taken from that data. The second matters more than the first: a
+description that happens to parse would have had its invented columns joined on and written back
+into `self.grid.load`, so *succeeding* would have been worse than crashing.
+
+Nothing in the suite caught this because both shipped grid examples failed earlier for unrelated
+reasons, so no test had ever reached this code with a network in it. Both run again as of #205,
+and `tests/e2e/test_grid_examples.py` runs them.
+"""
+import pandapower as pp
+import pytest
+
+import hamlet.constants as c
+from hamlet.executor.utilities.database.grid_db import ElectricityGridDB
+
+#: Verbatim shapes from the design 6 workbook.
+PROSE = ('Anlagenart: Photovoltaik \n Energieart: Sonne \n Baujahr: 2022 \n Q-Modellierung: \n '
+         'Bis 2011 -> cosphi = 1')
+SEMICOLONS = 'hvac: COP_ASHP_radiator_40;dhw: COP_ASHP_water_50'
+CONSUMPTION = '2022: 17209 kWh'
+
+
+def network(descriptions):
+    """A two-bus network whose loads carry `descriptions`, one per load."""
+    net = pp.create_empty_network()
+    first = pp.create_bus(net, vn_kv=0.4, zone='region')
+    second = pp.create_bus(net, vn_kv=0.4, zone='region')
+    pp.create_ext_grid(net, bus=first)
+    pp.create_line(net, from_bus=first, to_bus=second, length_km=0.1, std_type='NAYY 4x50 SE')
+
+    for index, description in enumerate(descriptions):
+        pp.create_load(net, bus=second, p_mw=0.001, load_type=c.P_INFLEXIBLE_LOAD,
+                       description=description, name=f'load_{index}')
+    return net
+
+
+@pytest.fixture
+def grid_db():
+    db = ElectricityGridDB.__new__(ElectricityGridDB)
+    db.energy_type = c.ET_ELECTRICITY
+    db.relevant_plant_type = db.filter_energy_types()
+    db.relevant_plant_type[c.OM_STORAGE].remove(c.P_EV)
+    db.relevant_plant_type[c.OM_LOAD].append(c.P_EV)
+    db.relevant_plant_type['sgen'] = db.relevant_plant_type.pop(c.OM_GENERATION)
+    db.relevant_plant_type['sgen'].extend(db.relevant_plant_type[c.OM_STORAGE])
+    return db
+
+
+def elements(db, net):
+    """The private method under test, reached the way `_create_grid_from_file` reaches it."""
+    db.grid = net
+    return db._ElectricityGridDB__get_grid_element_dataframe(
+        element_name='load', type_field='load_type', add_columns=[c.TC_ID_PLANT, 'p_mw', 'q_mvar'])
+
+
+@pytest.mark.parametrize('description, label', [
+    (None, 'no description at all'),
+    (PROSE, 'prose with colons and newlines'),
+    (SEMICOLONS, 'semicolon-separated, not comma'),
+    (CONSUMPTION, 'a year and a quantity'),
+])
+def test_a_real_description_does_not_stop_the_grid_being_read(grid_db, description, label):
+    """Each of these raised before the fix -- the first with AttributeError, the rest ValueError."""
+    result = elements(grid_db, network([description]))
+
+    assert len(result) == 1, label
+
+
+def test_a_mixed_network_reads_every_row(grid_db):
+    """The real shape: some rows described, some not, none of it HAMLET's format."""
+    result = elements(grid_db, network([None, PROSE, SEMICOLONS, CONSUMPTION, None]))
+
+    assert len(result) == 5
+
+
+def test_no_columns_are_invented_from_the_description(grid_db):
+    """The half that would have been silent. `Anlagenart` is not a HAMLET field.
+
+    A parse that succeeded would have joined these on and written them back into `grid.load`.
+    """
+    result = elements(grid_db, network([PROSE, CONSUMPTION]))
+
+    for invented in ('Anlagenart', 'Energieart', 'Baujahr', '2022', 'hvac', 'dhw'):
+        assert invented not in result.columns
+
+
+def test_a_parseable_description_is_not_read_when_the_real_column_is_there(grid_db):
+    """The precedence rule itself: real columns win, and `description` is not looked at at all.
+
+    Every other case in this file mixes in a description that *cannot* parse, so the fallback's
+    own internal guards (`notna().all()`, and the `except` around the parse) absorb the mutation
+    and deleting the precedence check `if type_field not in df.columns` leaves the whole suite
+    green. A reviewer demonstrated exactly that. Here every description parses cleanly, so that
+    one line is the only thing between the network and a set of invented columns.
+
+    `Baujahr` is a real field in the paper's design 6 workbook, so this is the shape an operator
+    export actually has rather than a contrived one.
+    """
+    result = elements(grid_db, network(['Baujahr:2022', 'Baujahr:2011']))
+
+    assert len(result) == 2
+    assert 'Baujahr' not in result.columns, (
+        'the description was parsed even though load_type is present as a real column, so an '
+        'operator export would have had its prose joined into the network')
+
+
+def test_the_real_columns_still_arrive(grid_db):
+    """What the method is actually for, pinned so the fix cannot be bought at its expense."""
+    result = elements(grid_db, network([None, PROSE]))
+
+    assert result['load_type'].tolist() == [c.P_INFLEXIBLE_LOAD] * 2
+    assert result['zone'].tolist() == ['region'] * 2
+    assert result[c.TC_ID_PLANT].tolist() == [0, 0]
+
+
+def test_irrelevant_plant_types_are_still_filtered_out(grid_db):
+    """The filter runs on `load_type`, a real column, and is unaffected by any of this."""
+    net = network([None])
+    pp.create_load(net, bus=1, p_mw=0.001, load_type='not-a-hamlet-plant', description=PROSE)
+
+    assert len(elements(grid_db, net)) == 1

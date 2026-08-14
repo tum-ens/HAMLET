@@ -1,0 +1,205 @@
+### HAMLET packaging and dependency definition.
+#
+# This file plus `uv.lock` are the *only* dependency definitions in the repository. `env.yml`,
+# `requirements.txt`, `docs/requirements.txt` and `ci/requirements_from_env.py` are all gone; each
+# of them was a second list, and a second list is how `develop` came to ship an environment that
+# could not `import hamlet` (see the xarray note under [project.dependencies]).
+#
+#   uv sync                     the environment this repository is developed and tested in
+#   uv sync --extra tensorflow  adds the two optional neural forecast models
+#   uv run python -m pytest     the fast tier
+#
+# Every version below is exact. That is deliberate and it is not the end state: the pins reproduce
+# the environment the committed golden master was measured in, so that changing how HAMLET is
+# installed cannot be confused with changing what it computes. Relaxing them to ranges is a
+# separate, measured step -- as is moving off Python 3.11.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hamlet"
+description = "Hierarchical Agent-based Markets for Local Energy Trading"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Markus Doepfert", email = "markus.doepfert@tum.de" },
+    { name = "Jiahe Chu" },
+    { name = "Hoda Hamdy" },
+]
+maintainers = [
+    { name = "Chair of Renewable and Sustainable Energy Systems, Technical University of Munich" },
+]
+keywords = ["agent-based", "energy", "local energy market", "simulation", "smart grid"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering",
+]
+
+# Read from the VERSION file rather than restated here -- the same reason there is one dependency
+# list. `RELEASE_PROCEDURE.md` bumps VERSION; nothing else needs to know.
+dynamic = ["version"]
+
+# Deliberately narrow. `uv lock` resolves *universally* across this whole range, so an open
+# `>=3.11` would record resolutions for 3.12/3.13 that nobody here has ever run. Widening the
+# interpreter is its own measured step, kept separate from this one so that a change in results
+# has exactly one candidate cause. See ROADMAP item #4.
+requires-python = ">=3.11,<3.12"
+
+# ----------------------------------------------------------------------------------------------
+# Core -- what `import hamlet` and a HiGHS simulation need, and nothing else.
+# ----------------------------------------------------------------------------------------------
+dependencies = [
+    "highspy==1.10.0",       # the solver HAMLET ships; the example and the whole suite run on it
+    # The same HiGHS as `highspy`, shipped as a loadable `highs.dll` / `libhighs.so`. Separate
+    # package because `highspy` bundles HiGHS inside its `_core` extension and exposes no shared
+    # library, which is what PyOptInterface needs -- without this, `solver: highs` is unavailable
+    # under `framework: poi` and POI silently requires a system Gurobi. Keep this equal to the
+    # `highspy` pin above: it is what makes the linopy and POI backends solve with an identical
+    # solver, which is the premise of their equivalence test.
+    "highsbox==1.10.0",
+    "hplib==1.9",
+    # The two soft pandapower dependencies the Analyzer's grid topology plot reaches: `igraph`
+    # lays the buses out (`create_generic_coordinates`) and `plotly` draws the figure
+    # (`pandapower.plotting.plotly`). Both were declared nowhere, so that plot raised ImportError
+    # for every user. Core rather than extras because shipped Analyzer code calls them on a
+    # shipped scenario, not anything a user opts into (#227).
+    "igraph==1.0.0",
+    "plotly==5.22.0",
+    "linopy==0.3.11",
+    # A ceiling HAMLET carries on pandapower's behalf, exactly like the xarray one below.
+    # pandapower 2.14.8 calls `matplotlib.cm.get_cmap` (plotting/plotly/get_colors.py:84), which
+    # matplotlib removed in 3.9 -- so on 3.9.0, which this pinned until #228, the Analyzer's grid
+    # topology plot raised `AttributeError` for every user. pandapower declares only
+    # `matplotlib>=...`, so no resolver will enforce this; `tests/unit/test_dependency_constraints.py`
+    # does. Raise it when pandapower is upgraded, not before, and re-run the golden master --
+    # pandapower is the power flow engine.
+    "matplotlib==3.8.4",
+    "networkx==3.3",         # module-level in the grid code; arrived transitively until now
+    "numpy==1.26.4",
+    "openpyxl==3.1.4",       # pandas' engine for the XLSX scenario configs (`pd.ExcelFile`)
+    "pandapower==2.14.8",
+    "pandas==2.2.3",
+    "polars==0.20.31",
+    "pvlib==0.10.5",
+    "pyarrow==17.0.0",       # required by every `polars.DataFrame.to_pandas()` call, of which there are many
+    "pyoptinterface==0.2.8",
+    "pytz==2024.1",          # module-level in the executor; arrived transitively until now
+    "ruamel.yaml==0.18.6",
+    "scikit-learn==1.5.0",
+    "sktime==0.30.1",        # module-level at forecasts/models.py:15 for one ARIMA model, so it is core
+    "tqdm==4.66.4",
+    "windpowerlib==0.2.2",
+    # NOT HAMLET's dependency -- it arrives through linopy, and it is here because it is a real
+    # constraint rather than a coincidence of resolution. linopy 0.3.11 imports
+    # `xarray.core.rolling`, which xarray removed after 2024.6.0; with xarray unconstrained a
+    # resolver takes the newest and `import hamlet` fails outright, with a traceback naming
+    # neither package. This happened, twice.
+    #
+    # Being stated here rather than only in uv.lock is the point: `uv lock --upgrade` cannot move
+    # it, so the resolver can no longer reproduce the bug on its own.
+    #
+    # It will not catch a *linopy* bump for you, though, and that is worth being exact about:
+    # linopy declares only a floor. Every release from 0.3.13 to 0.9.0 asks for `xarray>=2024.2.0`
+    # and never an upper bound, so raising the linopy pin conflicts with nothing and resolves
+    # cleanly. This ceiling is one HAMLET carries on linopy's behalf. What enforces it is
+    # `tests/unit/test_dependency_constraints.py`, which fails on the commit that relaxes either
+    # pin. Do not relax them without replacing linopy.
+    "xarray==2024.6.0",
+    # polars' engine for `pl.read_excel`, which `hamlet.functions.read_file` calls for any xlsx
+    # requested as a polars frame (functions.py:189). It was in neither env.yml nor the conda
+    # environment, so that branch raised `ModuleNotFoundError: required package 'xlsx2csv' not
+    # found` rather than reading anything -- a latent break, not a regression. Pure Python, no
+    # build step.
+    "xlsx2csv==0.8.6",
+    "xlsxwriter==3.2.0",     # pandas' engine for the agents.xlsx the Creator writes
+]
+
+# ----------------------------------------------------------------------------------------------
+# Extras -- installed by users who want them, never needed to run the suite.
+# ----------------------------------------------------------------------------------------------
+[project.optional-dependencies]
+# ~600 MB, and imported inside the two functions that use it (forecasts/models.py:322, :527),
+# never at module scope. Nothing else in HAMLET touches it, so it is not paid at import time.
+tensorflow = ["tensorflow==2.16.2"]
+
+# Optional and fully supported: set `solver: gurobi` under `optimization`. Not needed for the
+# example, the test suite or CI, all of which run on HiGHS. `from pyoptinterface import gurobi`
+# at poi/components.py:13 looks like it would block this and does not -- that import succeeds
+# without gurobipy present; only `gurobi.Env()` raises, and the POI tests already skip on
+# `is_library_loaded()`.
+gurobi = ["gurobipy==11.0.2"]
+
+# `examples/*/run.ipynb`. Notebooks only; nothing under `hamlet/` imports it.
+notebooks = ["jupyter==1.1.1"]
+
+# ----------------------------------------------------------------------------------------------
+# Development groups (PEP 735) -- installed by `uv sync`, and never installable by a consumer of
+# the published package, which is what makes them the right home for pytest.
+# ----------------------------------------------------------------------------------------------
+[dependency-groups]
+test = ["pytest==8.3.5"]
+lint = ["ruff==0.16.1"]
+docs = ["sphinx==8.1.3", "sphinx-rtd-theme==3.0.2"]
+dev = [{ include-group = "test" }, { include-group = "lint" }]
+
+[project.urls]
+Homepage = "https://github.com/tum-ens/HAMLET"
+Documentation = "https://hamlet-ens.readthedocs.io"
+Repository = "https://gitlab.lrz.de/tum-ens/HAMLET"
+Changelog = "https://gitlab.lrz.de/tum-ens/HAMLET/-/blob/develop/CHANGELOG.md"
+
+# ----------------------------------------------------------------------------------------------
+# Build
+# ----------------------------------------------------------------------------------------------
+[tool.hatch.version]
+path = "VERSION"
+pattern = "(?P<version>[^\\s]+)"
+
+# `hamlet/` only. `examples/`, `input_data/`, `config_templates/` and `scenarios/` are repository
+# content, not package data: they are inputs a user supplies or copies, not code the package
+# executes. `input_data/` alone is 152 tracked files and is half-gitignored already; shipping it
+# would bury a large, separately-versioned data set inside a code artifact.
+#
+# The three non-Python files under `hamlet/` are a different matter and must ship. `plots.mplstyle`
+# in particular is loaded relative to `__file__` at analyzer/setup.py:16, which runs at import
+# time -- omit it and `import hamlet` fails.
+[tool.hatch.build.targets.wheel]
+packages = ["hamlet"]
+
+# Two files land at the *top level* of site-packages rather than inside the package, and both have
+# to: a `.pth` is only executed by `site` if it sits directly in a site directory, and the module
+# it calls must be importable without importing `hamlet` -- which would drag `pandas` into every
+# Python process in the environment. Together they close the "import `hamlet` before `pandas`"
+# rule that #202's fix imposed on Windows callers, which had to go before `poi` could be the
+# default. See `packaging/hamlet_msvcp140_hook.py`.
+[tool.hatch.build.targets.wheel.force-include]
+"packaging/hamlet_msvcp140_hook.py" = "hamlet_msvcp140_hook.py"
+"packaging/hamlet-msvcp140.pth" = "hamlet-msvcp140.pth"
+
+# The editable install must carry the hook too, or the environment this repository is developed
+# and tested in would be the one configuration where it is absent -- and `tests/unit/
+# test_msvcp140_hook.py` would be asserting something no contributor actually runs.
+[tool.hatch.build.targets.editable.force-include]
+"packaging/hamlet_msvcp140_hook.py" = "hamlet_msvcp140_hook.py"
+"packaging/hamlet-msvcp140.pth" = "hamlet-msvcp140.pth"
+
+# The sdist carries what is needed to build and to check the build: the package, the suite, and
+# the metadata. Not the input data, not the examples' outputs.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/hamlet",
+    "/packaging",
+    "/tests",
+    "/pytest.ini",
+    "/VERSION",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/CITATION.cff",
+]

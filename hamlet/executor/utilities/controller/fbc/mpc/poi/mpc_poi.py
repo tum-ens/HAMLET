@@ -8,6 +8,8 @@ import logging
 
 from hamlet.executor.utilities.controller.fbc.mpc.mpc_base import MpcBase
 from hamlet.executor.utilities.controller.fbc.mpc.poi.components import *
+from hamlet.executor.utilities.controller.poi_solver import (apply_reproducibility_options,
+                                                             create_model, raise_unless_optimal)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,14 +33,9 @@ AVAILABLE_PLANTS = {
 
 class POI(MpcBase):
     def get_model(self, **kwargs):
-        env = gurobi.Env(empty=True)
-        env.set_raw_parameter("OutputFlag", 0)
-        env.start()
-        model = gurobi.Model(env)
-        model.set_model_attribute(poi.ModelAttribute.Silent, True)
-        model.set_raw_parameter("OutputFlag", 0)
-        model.set_raw_parameter("LogToConsole", 0)
-        return model
+        # `self.ems` is still the whole ems block here; the base narrows it to the fbc controller
+        # only after the model exists.
+        return create_model(self.ems[c.C_CONTROLLER][c.C_FBC][c.C_OPTIM].get('solver'))
 
     def get_available_plants(self):
         return AVAILABLE_PLANTS
@@ -179,8 +176,8 @@ class POI(MpcBase):
         The shed energy is never written to the setpoints, so without this an agent that shed
         3 kW is indistinguishable in the results from one that served it.
 
-        Note: reported through `logging`, not `warnings` -- the executor installs a blanket
-        `warnings.filterwarnings("ignore")` at import time.
+        Reported through `logging`, not `warnings`, which deduplicates by source line and would
+        report only the first agent that shed. Pinned by `tests/.../test_slack_wiring.py`.
         """
 
         for name, variables in self.variables.items():
@@ -198,21 +195,16 @@ class POI(MpcBase):
 
     def run(self):
 
-        # Solve the optimization problem
+        # Solve the optimization problem. The model was already created and silenced for this
+        # solver in `get_model`, so only the reproducibility options are left to apply.
         solver = self.ems[c.C_OPTIM].get('solver')
-        match solver:
-            case 'gurobi':
-                if self.ems[c.C_OPTIM].get('time_limit') is not None:
-                    self.model.set_raw_parameter('TimeLimit', self.ems[c.C_OPTIM]['time_limit'] / 60)
-                self.model.optimize()
-                status = self.model.get_model_attribute(poi.ModelAttribute.TerminationStatus)
-            case _:
-                raise ValueError(f"Unsupported solver: {solver}")
+        time_limit = self.ems[c.C_OPTIM].get('time_limit')
+        apply_reproducibility_options(self.model, solver, time_limit)
+        self.model.optimize()
+        status = self.model.get_model_attribute(poi.ModelAttribute.TerminationStatus)
 
-        # Check if the solution is optimal
-        if status not in [poi.TerminationStatusCode.OPTIMAL, poi.TerminationStatusCode.TIME_LIMIT]:
-            print(f'Exited with status "{status}". \n ')
-            # raise ValueError(f"Optimization failed: {status}")
+        # Anything short of a proven optimum is an error, the time limit included
+        raise_unless_optimal(status, self.agent.agent_id, time_limit)
 
         # Surface any energy that was shed or dumped to close the balance
         self._warn_on_slack()

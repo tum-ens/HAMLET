@@ -1,8 +1,10 @@
-import os
-import sys
+from pathlib import Path
 
-# Adjust the path as needed
-sys.path.insert(0, os.path.abspath('../../hamlet'))
+# The `sys.path.insert(0, '../../hamlet')` that used to be here was dead: it put the *inside* of
+# the package on the path, so `import hamlet` would never have worked through it -- and nothing
+# needs it to. There is not one `automodule`/`autoclass`/`autosummary` directive under
+# `docs/source/`; the documentation is hand-written and imports nothing. That is also why the
+# docs build installs Sphinx alone rather than HAMLET and its whole dependency tree.
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
@@ -10,7 +12,9 @@ sys.path.insert(0, os.path.abspath('../../hamlet'))
 project = 'HAMLET'
 copyright = '2024, Markus Doepfert'
 author = 'Markus Doepfert'
-release = '1.0.0'
+# Read from the same `VERSION` file that `pyproject.toml` reads, rather than restated here. It
+# said 1.0.0 while the repository was on 1.2.0.
+release = Path(__file__).resolve().parents[2].joinpath('VERSION').read_text(encoding='utf-8').strip()
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

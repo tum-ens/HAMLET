@@ -145,19 +145,19 @@ class Market(POIComps):
         market_power = self.limit('market_power')
         self.add_variable_to_model(model, variables, name=f'{self.name}_{self.energy_type}',
                                    lower=-market_power, upper=market_power,
-                                   integer=True)
+                                   integer=False)
 
         # Define the target variable (what was previously bought/sold on the market)
         self.add_variable_to_model(model, variables, name=f'{self.name}_{self.energy_type}_target',
-                                   lower=self.market_power, upper=self.market_power, integer=True)
+                                   lower=self.market_power, upper=self.market_power, integer=False)
 
         # Define the deviation variable for positive and negative deviations
         # Deviation when more is bought/sold on the market than according to the market
         self.add_variable_to_model(model, variables, name=f'{self.name}_{self.energy_type}_deviation_pos',
-                                   lower=0, upper=self.balancing_power, integer=True)
+                                   lower=0, upper=self.balancing_power, integer=False)
         # Deviation when less is needed from the grid than according to the market
         self.add_variable_to_model(model, variables, name=f'{self.name}_{self.energy_type}_deviation_neg',
-                                   lower=0, upper=self.balancing_power, integer=True)
+                                   lower=0, upper=self.balancing_power, integer=False)
 
     def define_constraints(self, model, variables):
         # Define the deviation constraint
@@ -328,24 +328,22 @@ class Hp(POIComps):
         # Define the target and deviation variables (refers to the heat power)
         self._define_target_and_deviations_variables(model, variables)
 
+    def define_constraints(self, model, variables):
+        # Add constraint that the heat power is the electricity power times the cop
+        self.__constraint_cop(model, variables)
 
-def define_constraints(self, model, variables):
-    # Add constraint that the heat power is the electricity power times the cop
-    self.__constraint_cop(model, variables)
+        # Define the deviation constraint that shows the relationship between the power and the target
+        self._constraint_target_deviation(model, variables, energy_type=c.ET_ELECTRICITY)
 
-    # Define the deviation constraint that shows the relationship between the power and the target
-    self._constraint_target_deviation(model, variables, energy_type=c.ET_ELECTRICITY)
+    def __constraint_cop(self, model, variables):
+        """Add constraint that the heat power is the electricity power times the cop"""
+        # Define the variables
+        var_electricity = variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}']
+        var_heat = variables[f'{self.name}_{self.comp_type}_{c.ET_HEAT}']
 
-
-def __constraint_cop(self, model, variables):
-    """Add constraint that the heat power is the electricity power times the cop"""
-    # Define the variables
-    var_electricity = variables[f'{self.name}_{self.comp_type}_{c.ET_ELECTRICITY}']
-    var_heat = variables[f'{self.name}_{self.comp_type}_{c.ET_HEAT}']
-
-    # Add the constraint
-    model.add_linear_constraint(var_heat + var_electricity * self.cop_heat, poi.ConstraintSense.Equal, 0,
-                                name=f'{self.name}_cop')
+        # Add the constraint
+        model.add_linear_constraint(var_heat + var_electricity * self.cop_heat, poi.ConstraintSense.Equal, 0,
+                                    name=f'{self.name}_cop')
 
 
 class Ev(POIComps):

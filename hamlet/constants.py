@@ -7,7 +7,42 @@ __email__ = "markus.doepfert@tum.de"
 # This file contains all constants used in the project
 import polars as pl
 
+# SCENARIO FORMAT
+# The on-disk layout of a generated scenario folder, NOT the version of HAMLET itself (that is
+# `VERSION`). The two are deliberately independent: a release that changes no scenario file must
+# not invalidate everybody's scenarios, and a change to the scenario format between releases must
+# not go undetected because the release number happened not to move.
+#
+# The Creator stamps this into `general/general.json`; the Executor and the Analyzer refuse to
+# read a scenario carrying anything else. A scenario with no stamp at all predates the versioning
+# and is treated as incompatible -- see `functions.check_scenario_format`.
+#
+# WHEN TO BUMP IT
+#   Bump when a scenario folder written by the current Creator would be misread by the previous
+#   Executor, or vice versa. In practice that is one of two situations:
+#
+#   (a) The *shape* changed -- a file or a column was added, removed or renamed.
+#       `tests/integration/creator/test_scenario_format_shape.py` fails and tells you so; this
+#       case is mechanical, and it runs in the default test suite.
+#   (b) The *meaning* changed while the shape stayed the same -- a column now holds something
+#       different from what it held before. Nothing structural can see this. The signal is the
+#       golden master moving because of a change to what the *Creator writes*, rather than to
+#       what the Executor computes with it. Version 1 exists because of exactly such a change
+#       (the retailer in/out convention), which is why this rule is written down rather than
+#       left to the test.
+#
+#   Bumping means: change the number here, and commit the matching
+#   `tests/integration/creator/format/scenario_format_v<N>.json`. Never edit a reference file
+#   belonging to an older version -- those record what that version's scenarios looked like.
+#
+# HISTORY
+#   1  Current. Retailer columns follow one convention: `_out` is the direction the agent pays
+#      for. Scenarios generated before this are unstamped, and are rejected because running them
+#      through the current Executor silently applies grid fees and levies to feed-in.
+SCENARIO_FORMAT_VERSION = 1
+
 # KEYS
+K_SCENARIO_FORMAT_VERSION = 'scenario_format_version'  # key holding the stamp in general.json
 K_GENERAL = 'general'
 K_GRID = 'grids'
 K_WEATHER = 'weather'
@@ -79,6 +114,13 @@ G_ELECTRICITY = ET_ELECTRICITY
 G_HEAT = ET_HEAT
 G_COOLING = ET_COOLING
 G_H2 = ET_H2
+
+# Key under which the grid stage records each element's horizon profile on a pandapower net, for
+# the restriction stage to run the horizon from. It lives here rather than on either class because
+# `grids/electricity.py` writes it and `grid_restrictions/enwg_14a.py` reads it, and those two
+# already import each other through `grid_restriction.py` -- naming it on either side is a circular
+# import. `pandapowerNet` is a dict, so the key rides along through `deepcopy`.
+GRID_HORIZON_PROFILES = 'hamlet_horizon_profiles'
 
 # SYMBOLS (symbols used for the units in the tables)
 S_POWER = 'P'
@@ -320,6 +362,12 @@ C_OPTIM = 'optimization'  # category of rtc and fbc: optimization; parent class 
 C_RL = 'rl'  # category of fbc: reinforcement learning
 C_POI = 'poi'  # subcategory of mpc and optim: PyOptInterface package
 C_LINOPY = 'linopy'  # subcategory of mpc and optim: Linopy package
+
+# Section 14a EnWG (BNetzA BK6-22-300, eq. 2.1 in Chu 2024): a heat pump or room cooling system
+# whose *grid connection* power exceeds 11 kW may be dimmed to 40 % of that power. Below the
+# limit, the flat guaranteed minimum applies instead -- the same one EVs and batteries get.
+ENWG14A_HP_SCALING_LIMIT = 11_000  # W
+ENWG14A_HP_SCALING_FACTOR = 0.4
 
 # MARKET TRADING STRATEGIES
 MTS_ZI = 'zi'

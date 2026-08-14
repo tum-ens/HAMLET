@@ -4,43 +4,43 @@ Both backends are selectable per agent, so a scenario that switches `framework` 
 same model. The POI backends previously had no slack at all: an infeasible agent aborted the
 run under `poi` and was absorbed under `linopy`, with no warning either way.
 
-PyOptInterface needs a solver shared library, which is not always present (`highspy` bundles
-HiGHS inside its extension rather than exposing a .dll). These tests skip when none is loadable.
+PyOptInterface needs a solver shared library, which `highspy` does not provide -- it bundles HiGHS
+inside its extension rather than exposing a .dll, so HAMLET ships `highsbox` for this. These tests
+skip when no backend can actually solve, which is not the same as "no library loaded": Gurobi's
+library loads without a licence and only fails at `optimize()`. See `available_backend`.
 """
 import numpy as np
 import pytest
 
 import hamlet.constants as c
+from tests.poi_support import available_backend
 
+# Safe to import the helpers above first: they touch `pyoptinterface` only inside their bodies.
 poi = pytest.importorskip('pyoptinterface')
 
 
-def available_backend():
-    """The first PyOptInterface solver whose shared library is actually loadable."""
-    for name in ('gurobi', 'highs', 'copt'):
-        try:
-            module = __import__(f'pyoptinterface.{name}', fromlist=[name])
-        except ImportError:
-            continue
-        if getattr(module, 'is_library_loaded', lambda: False)():
-            return module
-    return None
+@pytest.fixture(scope='session')
+def backend():
+    """The solver these tests run against, resolved on first use rather than at import.
+
+    Deliberately a fixture and not a module-level constant, so that importing this file never
+    loads a solver library. Collection then stays clean even on a platform where loading one is
+    hazardous, and a machine with no solver at all skips rather than errors.
+    """
+    module = available_backend()
+    if module is None:
+        pytest.skip('no PyOptInterface solver library is loadable')
+    return module
 
 
-BACKEND = available_backend()
-requires_poi = pytest.mark.skipif(BACKEND is None,
-                                  reason='no PyOptInterface solver library is loadable')
-
-
-@requires_poi
 @pytest.mark.solver
-def test_slack_closes_an_otherwise_infeasible_balance():
+def test_slack_closes_an_otherwise_infeasible_balance(backend):
     """A demand the bounded market cannot cover must be shed, not raised as infeasible.
 
     Mirrors what the POI controllers now build: a balance equation with a `gen`/`load` slack
     pair, each penalised at the value of lost load.
     """
-    model = BACKEND.Model()
+    model = backend.Model()
 
     # Market able to supply at most 2 kW against a 5 kW load
     market = model.add_variable(name='market', lb=0, ub=2000)
@@ -63,11 +63,10 @@ def test_slack_closes_an_otherwise_infeasible_balance():
     assert model.get_value(load_slack) == pytest.approx(0)
 
 
-@requires_poi
 @pytest.mark.solver
-def test_slack_stays_at_zero_when_the_market_can_cover_the_load():
+def test_slack_stays_at_zero_when_the_market_can_cover_the_load(backend):
     """Adding a penalised slack must not change a problem that was already feasible."""
-    model = BACKEND.Model()
+    model = backend.Model()
 
     market = model.add_variable(name='market', lb=0, ub=10_000)
     gen_slack = model.add_variable(name='gen_slack', lb=0, ub=np.inf)

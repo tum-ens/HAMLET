@@ -7,7 +7,7 @@ __email__ = "markus.doepfert@tum.de"
 import polars as pl
 
 import hamlet.constants as c
-from hamlet.executor.utilities.controller.controller_base import ControllerBase
+from hamlet.executor.utilities.controller.controller_base import ControllerBase, derive_energy_types
 
 
 class RtcBase(ControllerBase):
@@ -16,10 +16,8 @@ class RtcBase(ControllerBase):
 
         # Store the mapping of the components to the energy types and operation modes
         self.mapping = kwargs['mapping']
-        # Identify all unique energy types
-        self.energy_types = set()
-        for mapping in self.mapping.values():
-            self.energy_types.update(mapping.keys())
+        # Identify all unique energy types, in an order that does not depend on the process (see #216)
+        self.energy_types = derive_energy_types(self.mapping)
 
         # Get the timetable and filter it to only include the rows with the current timestep
         self.timetable = kwargs[c.TN_TIMETABLE]
@@ -215,21 +213,31 @@ class RtcBase(ControllerBase):
         return self.meters
 
     def _get_market_results(self):
+        """This agent's already-settled energy per market, at the current timestep.
+
+        This used to scan the whole `market_transactions` table right here -- filter to the agent,
+        filter to the timestep, sum -- which every agent did on every timestep. Measured on design
+        6 (104 agents, three months), it is why this phase grew from 2.6 s to 7.9 s per timestep
+        over 140 steps while every other phase stayed flat. `MarketDB.get_rtc_market_result`
+        answers the same question from a running sum instead.
+
+        **It counts the same transaction types as the trading strategy** -- `retail`, `market` and
+        `balancing`, named once in `MarketDB.NET_TRANSACTION_TYPES`. It used not to: `grid` and
+        `levies` rows, which clone the netted transactions and carry identical energy, were summed
+        here as though they were traded energy.
+
+        Adding the filter moved nothing, and that was measured rather than assumed: filtered and
+        unfiltered sums agree on 96 of 96 calls on the shipped example and 1040 of 1040 on the
+        paper's design 6, a scenario whose table does hold 890 `grid` and 890 `levies` rows. Fees
+        are written when a delivery timestep is *settled*, and the executor runs agents before
+        markets, so the timestep this asks about holds only ex-ante trades. The filter makes that
+        independent of ordering rather than silently dependent on it.
+        """
         self.market_results = {}
         for market_type, market in self.market.items():
             for market_name, data in market.items():
-                # Get transactions table
-                transactions = data.market_transactions
-                # Filter for agent ID
-                transactions = transactions.filter(pl.col(c.TC_ID_AGENT) == self.agent.agent_id)
-                # Filter for current timestamp
-                transactions = transactions.filter(pl.col(c.TC_TIMESTEP) == self.timestamp)
-                # Fill NaN values with 0
-                transactions = transactions.fill_null(0)
-                # Get net energy amount for market
-                self.market_results[market_name] = (transactions.select(pl.sum(c.TC_ENERGY_IN).cast(pl.Int64)
-                                                                        - pl.sum(c.TC_ENERGY_OUT).cast(pl.Int64))
-                                                    .to_series().to_list()[0])
+                self.market_results[market_name] = data.get_rtc_market_result(
+                    agent_id=self.agent.agent_id, timestep=self.timestamp)
 
         return self.market_results
 

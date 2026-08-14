@@ -1,9 +1,18 @@
 .idea
 
-# Folders
-input_data/*
+# Run output
 scenarios/*
 results/*
+
+# `input_data/` is tracked source and must not be listed here; a blanket rule hid a needed
+# input once already. See tests/unit/test_gitignore_input_data.py.
+
+# Bulk data belongs outside the repository
+*.zip
+*.rar
+*.7z
+*.tar.gz
+*.tgz
 
 # C extensions
 *.so

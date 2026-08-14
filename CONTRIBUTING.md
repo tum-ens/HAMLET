@@ -7,8 +7,9 @@
 - [GitLab](https://gitlab.com/) as a public repository. Please create an account.
 - [Git](https://git-scm.com/) for version control. [Git How To](https://githowto.com/) and [Git Cheat Sheet](https://training.github.com/downloads/github-git-cheat-sheet.pdf) provide an introduction into working with Git.
 - Development Environment Setup:
-  - Clone the repository and set up a virtual environment as described in the `README.md`.
-  - Install all necessary dependencies using `pip install -r requirements.txt`.
+  - Clone the repository and run `uv sync`, as described in the `README.md`. That installs the
+    exact dependency versions recorded in `uv.lock`, the development tools, and HAMLET itself in
+    editable mode.
 
 ### Optional: Setting Up SSH for GitLab
 To simplify authentication, consider setting up SSH keys for GitLab. Follow [GitLab’s SSH key setup guide](https://docs.gitlab.com/ee/user/ssh.html) for instructions.
@@ -43,9 +44,11 @@ Add your name and details to [CITATION.cff](CITATION.cff).
 The workflow for contributing to this project has been inspired by the workflow described by [Vincent Driessen](https://nvie.com/posts/a-successful-git-branching-model/).
 
 ##### Branches and their purpose
-* main - holds the current stable version
-* develop - holds all current developments
+* `master` - holds the current stable version
+* `develop` - holds all current developments, and is the default branch
 * see other types below
+
+Both are protected with push access **No one**: everything lands by merge request.
 
 ### 1. Describe the issue on GitLab
 Create [an issue](https://docs.gitlab.com/ee/user/project/issues/#create-an-issue) in the GitLab repository. 
@@ -60,28 +63,40 @@ There are two ways to create the branch:
 2. Create a new branch directly in GitLab from the issue
 
 #### Naming convention for branches
-Naming convention for branches: `type`-`issue-nr`-`short-description`
+Naming convention for branches: `type`/`short-description`, with the issue number in the
+description when there is an issue: `type`/`issue-nr`-`short-description`.
 
 ##### `type`
-* feature - used for new features
-* hotfix - used for quick fixes, should be branched from the release branch
-* release - used for preparing a new release, should be branched from the develop branch
+The type is the kind of change, not the kind of branch. In use:
 
-Note: The majority of the development will be done in `feature` branches.
+| `type` | for |
+|---|---|
+| `fix` | a defect in existing behaviour |
+| `feat` | new capability |
+| `chore` | housekeeping with no behavioural change — dependencies, ignore rules, metadata |
+| `test` | test coverage or test infrastructure |
+| `perf` | a change made for speed, with the measurement in the merge request |
+| `refactor` | restructuring that deliberately changes no behaviour |
+| `docs` | documentation only |
+| `ci` | pipeline and runner configuration |
+| `release` | preparing a release |
 
 ##### `issue-nr`
-The `issueNumber` should be taken from Step 1. Do not use the "#". 
+Taken from Step 1, without the `#`, as the first part of the description — `fix/204-solver-determinism`.
+Omit it when there is no issue; not every change needs one, and a branch named after an issue that
+does not exist is worse than one named after what it does.
 
 ##### `short-description`
 Describe shortly what the branch is about. Usually, the title of the issue.
 
 ##### Other hints
-- Separate words with `-` (minus)
+- Separate the type with `/` and words with `-` (minus)
 - Avoid using capital letters
 - Do not put your name to the branch name, it's a collaborative project
 - Branch names should be precise and informative
 
-Examples of branch names: `feature-42-add-new-ontology-class`, `feature-911-branch-naming-convention`, `hotfix-404-update-api`, `release-v0.10.0`
+Examples of branch names: `fix/204-solver-determinism`, `feat/pyproject-uv-lock`,
+`test/solver-backend-matrix`, `chore/drop-psutil`, `perf/15-grid-14a`, `release/v1.2.0`
 
 #### 2.1. Create a new branch
 
@@ -98,7 +113,7 @@ git pull
 
 3. Create a new feature branch:
 ```bash
-git checkout -b feature-1314-my-feature
+git checkout -b feat/1314-my-feature
 ```
 
 ##### Option 2: Create a new branch directly in GitLab from the issue
@@ -217,7 +232,7 @@ Following these steps will help ensure the project remains robust, maintainable,
 Push your `local` branch on the remote server `origin`. <br>
 If your branch does not exist on the remote server yet, use:
 ```bash
-git push --set-upstream origin feature-1314-my-feature
+git push --set-upstream origin feat/1314-my-feature
 ```
 
 Then push regularly with:
@@ -227,7 +242,7 @@ git push
 
 ### 5. Submit a merge request (MR)
 Follow the GitLab guide [Creating merge requests](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html). <br>
-The MR should be directed: `base: develop` <- `compare: feature-1-collaboration`. <br>
+The MR should be directed: `base: develop` <- `compare: feat/1-collaboration`. <br>
 Add the line `Close #<issue-number>` in the description of your MR.
 When it is merged, it [automatically closes](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically) the issue. <br>
 Assign a reviewer and get in contact.

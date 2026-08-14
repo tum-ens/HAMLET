@@ -897,15 +897,16 @@ sfh:
                                                 #   - rb: rule-based (not implemented yet)
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy optimization problem is solved
-                                                #   - poi: poi optimization problem is solved
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization problem
                                                 # unit: s
@@ -923,15 +924,16 @@ sfh:
                                                 # note: cannot exceed forecast horizon
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    poi mpc to forecast and optimize
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization
                                                 # unit: s
@@ -1504,31 +1506,32 @@ ctsp:
                                                 #   - min_soc_time:    reach certain state-of-charge until
                                                 #                      given time each day
 
-      price_sensitive_threshold: [0.05, 0.05]   # threshold price
-                                                # unit: €/kWh
-                                                # note: applies to method: price_sensitive
+      price_sensitive:                          # price sensitive charging parameters
+        threshold: 0.05                         # threshold price
+                                                # unit: €/kWh (-inf, inf)
 
-      min_soc_val: [0.5, 0.5]                   # minimum SoC the EV needs to reach before it leaves again
-                                                # unit: 1
-                                                # note: applies to method: min_soc
+      min_soc:                                  # minimum SoC charging parameters
+        val: 0.5                                # minimum SoC the EV needs to reach before it leaves again
+                                                # unit: 1 [0, 1]
 
-      min_soc_time_val: [0.8, 0.8]              # minimum SoC the EV needs to reach before certain time of day
-                                                # unit: 1
+      min_soc_time:
+        val: 0.8                                # minimum SoC the EV needs to reach before certain time of day
+                                                # unit: 1 [0, 1]
                                                 # note: applies to method: min_soc_time
 
-      min_soc_time_time: [8, 8]                 # time of day that EV needs to have reached specified SoC
+        time: 8.5                               # time of day that EV needs to have reached specified SoC
                                                 # unit: h [0, 24)
                                                 # note: applies to method: min_soc_time
 
     fcast:
-      method: ev_close                          # EV availability forecasting technique
+      method: arrival                           # EV availability forecasting technique
                                                 # options:
-                                                #   - perfect:  perfect knowledge of the future
-                                                #   - ev_close: perfect knowledge of the current
-                                                #               availability cycle once the vehicle arrives
-                                                #   - random_forest_classifier
+                                                #   - perfect: perfect knowledge of the future
+                                                #   - arrival: perfect knowledge of the current
+                                                #              availability cycle once the vehicle arrives
+                                                #   - rfr:     random forest regressor
 
-      random_forest_classifier:
+      rfr:
         features: ['time']                      # used features in weather file to fit the model
 
   ################################ batteries ####################################
@@ -1570,15 +1573,16 @@ ctsp:
                                                 #   - rb: rule-based (not implemented yet)
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy optimization problem is solved
-                                                #   - poi: poi optimization problem is solved
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization problem
                                                 # unit: s
@@ -1596,15 +1600,16 @@ ctsp:
                                                 # note: cannot exceed forecast horizon
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    poi mpc to forecast and optimize
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization
                                                 # unit: s
@@ -2249,15 +2254,16 @@ industry:
                                                 #   - rb: rule-based (not implemented yet)
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy optimization problem is solved
-                                                #   - poi: poi optimization problem is solved
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization problem
                                                 # unit: s
@@ -2275,15 +2281,16 @@ industry:
                                                 # note: cannot exceed forecast horizon
 
         optimization:
-          framework: linopy                     # Framework used to create optimization problem
+          framework: poi                        # Framework used to create optimization problem
                                                 # options:
-                                                #   - linopy: linopy mpc to forecast and optimize
-                                                #   - poi:    poi mpc to forecast and optimize
+                                                #   - linopy: the reference implementation POI is validated against
+                                                #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
           solver: gurobi                        # solver used for optimization
                                                 # options:
                                                 #   - gurobi
-                                                #   - highs: only with linopy
+                                                #   - highs: open source, installed with HAMLET
 
           time_limit: 120                       # time limit for optimization
                                                 # unit: s
@@ -2545,15 +2552,16 @@ producer:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -2571,15 +2579,16 @@ producer:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -2818,15 +2827,16 @@ producer:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -2844,15 +2854,16 @@ producer:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3088,15 +3099,16 @@ producer:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3114,15 +3126,16 @@ producer:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3278,15 +3291,16 @@ storage:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3304,15 +3318,16 @@ storage:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3463,15 +3478,16 @@ storage:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3489,15 +3505,16 @@ storage:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s
@@ -3648,15 +3665,16 @@ storage:
                                                   #   - rb: rule-based (not implemented yet)
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy optimization problem is solved
-                                                  #   - poi: poi optimization problem is solved
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi: PyOptInterface, the default. Much faster per
+                                                #          solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization problem
                                                   # unit: s
@@ -3674,15 +3692,16 @@ storage:
                                                   # note: cannot exceed forecast horizon
 
           optimization:
-            framework: linopy                     # Framework used to create optimization problem
+            framework: poi                        # Framework used to create optimization problem
                                                   # options:
-                                                  #   - linopy: linopy mpc to forecast and optimize
-                                                  #   - poi:    poi mpc to forecast and optimize
+                                                  #   - linopy: the reference implementation POI is validated against
+                                                  #   - poi:    PyOptInterface, the default. Much faster per
+                                                #             solve than linopy on the same solver
 
             solver: gurobi                        # solver used for optimization
                                                   # options:
                                                   #   - gurobi
-                                                  #   - highs: only with linopy
+                                                  #   - highs: open source, installed with HAMLET
 
             time_limit: 120                       # time limit for optimization
                                                   # unit: s

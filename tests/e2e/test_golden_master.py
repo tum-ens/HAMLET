@@ -1,4 +1,4 @@
-"""Golden master — the shipped example, compared against committed reference numbers.
+"""Golden master — shipped scenarios, compared against committed reference numbers.
 
 Every other test here pins a property someone thought to check. This one pins the numbers
 themselves, so a change that moves results has to be acknowledged rather than noticed. Of the
@@ -11,7 +11,32 @@ than by a test failing; this is the test that would have caught them.
 change you meant to make. If it is, regenerate the reference and commit it *with* the change,
 so the review sees the numbers move:
 
-    HAMLET_UPDATE_GOLDEN=1 python -m pytest tests -m golden
+    HAMLET_UPDATE_GOLDEN=1 python -m pytest tests -m golden               # every scenario
+    HAMLET_UPDATE_GOLDEN=simple_scenario python -m pytest tests -m golden  # just this one
+
+Name the scenario when more than one is pinned. `1` rewrites every reference, so a re-baseline
+aimed at one change also commits any unrelated movement in the others.
+
+**One legitimate cause of movement is not a defect: a different equally-optimal solution.** The
+agent models are degenerate MILPs -- a battery or EV can very often shift charging between
+timesteps at identical cost -- so changing the solver, or the *modelling backend* that presents
+the same model to it, can break a tie the other way. The chosen state of charge then feeds the
+next timestep, and a receding-horizon run amplifies one tie into visibly different trajectories.
+Measured for `framework: linopy` vs `poi`: the two MPC models are mathematically identical
+(verified by exporting both to LP and matching constraints by shape) and their first-timestep
+objectives agree to ~1e-12, yet by step 23 the run-level numbers differ by tens of percent. An
+agent owning neither a battery nor an EV stays at ~1e-13 throughout, having no state to carry a
+divergence forward.
+
+Telling the two apart, when the numbers move:
+
+- *Degeneracy* leaves the objective unchanged at equal state. Structure holds (same tables, same
+  row counts, no column added or dropped) and the divergence appears as a discrete jump at some
+  timestep rather than from the first one.
+- *A defect* shows a difference from the first timestep at identical state, or moves structure.
+
+So a solver or backend change may be re-baselined once the movement is shown to be of the first
+kind; a change that was meant to be numerically inert may not.
 
 Reproducibility rests on seeding `random` and `numpy.random` and pinning `PYTHONHASHSEED`. The
 Creator draws agent ids, plant ownership and sizings from all three. Verified: two seeded runs
@@ -21,142 +46,190 @@ The reference records per-table row counts and, for every numeric column, the su
 maximum. Agent ids are random-but-seeded, so tables are grouped by kind rather than by agent --
 that keeps the reference readable and stable against an id-scheme change, while still moving the
 moment the physics does.
+
+**Adding a scenario.** Append a `GoldenScenario` to `SCENARIOS` and create its reference with
+`HAMLET_UPDATE_GOLDEN=<name>`. Each scenario carries its own reference file, named after it, and
+is run once for the whole module however many assertions read it. A scenario earns its place by
+reaching code the others do not, and costs a full run in the `golden` CI job every time:
+
+- `simple_scenario` -- the shipped example. Sets `electricity.active: False`, so it pins nothing
+  the grid stage produces.
+- `grid_golden` -- a deliberately weak feeder under §14a. Pins the power flow, the variable grid
+  fees and direct power control, none of which the other scenario reaches. It lives under
+  `tests/e2e/scenarios/` rather than `examples/` because it is tuned to overload rather than to
+  be copied; `tests/e2e/test_grid_restrictions.py` asserts *that* the restriction fires, while
+  this file pins the numbers it produces.
 """
 import json
 import os
-import subprocess
-import sys
-from collections import defaultdict
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-EXAMPLE = REPO_ROOT / 'examples' / 'create_simple_scenario'
-SCENARIO_NAME = 'simple_scenario'
-REFERENCE = Path(__file__).parent / 'golden' / f'{SCENARIO_NAME}.json'
+from tests.scenario_run import REPO_ROOT
 
-SEED = 20260804
+
+class GoldenScenario(NamedTuple):
+    """One scenario, pinned against one committed reference.
+
+    `name` is both the scenario's config folder and the reference's filename, so the mapping
+    between a scenario and its numbers stays greppable in both directions. It is also what
+    `test_solver_backend_smoke.py` reads when checking that the backend cell it defers to this
+    module is still covered here.
+
+    `container` is the repository-relative directory that *holds* the scenario folder -- not the
+    folder itself, because that is what `run_example` takes. Shipped examples sit under
+    `examples/<example>/` and are a user's entry point; a scenario built purely to pin behaviour
+    -- deliberately undersized, tuned to reach a particular code path -- sits under
+    `tests/e2e/scenarios/` instead, because putting it in `examples/` would advertise it as
+    something to copy. `creator_method` follows from where the agent ids have to come from.
+    """
+
+    container: str
+    name: str
+    creator_method: str = 'new_scenario_from_configs'
+
+    @property
+    def config_dir(self):
+        return REPO_ROOT.joinpath(*self.container.split('/'))
+
+    @property
+    def reference(self):
+        return Path(__file__).parent / 'golden' / f'{self.name}.json'
+
+
+#: Every scenario the golden master pins. See "Adding a scenario" in the module docstring.
+SCENARIOS = [
+    GoldenScenario(container='examples/create_simple_scenario', name='simple_scenario'),
+    # The grid scenario. `simple_scenario` sets `electricity.active: False`, so until this one
+    # nothing here pinned a single number produced by the grid stage, the §14a restrictions or the
+    # power flow. `new_scenario_from_files` because its topology assigns agents to buses by id,
+    # and only that entry point keeps the ids `agents.xlsx` declares -- creating from configs
+    # redraws them and the assignment stops meaning anything.
+    GoldenScenario(container='tests/e2e/scenarios', name='grid_golden',
+                   creator_method='new_scenario_from_files'),
+]
+
 # Solver output is bit-stable on a fixed platform, but HiGHS and polars versions move; this is
 # loose enough to survive that and far tighter than any real modelling change.
 RELATIVE_TOLERANCE = 1e-6
 
-RUNNER = """
-import os, random, sys
-import numpy as np
-sys.path.insert(0, r"{repo}")
-random.seed({seed})
-np.random.seed({seed})
-from hamlet import Creator, Executor
-Creator(path=r"{config_dir}").new_scenario_from_configs()
-Executor(r"{scenarios}/{name}", num_workers=1).run()
-print("RUN_OK")
-"""
+
+@pytest.fixture(scope='module', params=SCENARIOS, ids=lambda pinned: pinned.name)
+def scenario(request):
+    """The scenario under test. Parametrised here so each one is run once for the whole module."""
+    return request.param
 
 
-def table_kind(path, root):
-    """The table's identity, with the random agent id replaced by its type."""
-    parts = Path(path).relative_to(root).parts
-    # agents/<type>/<random id>/<table>.ft  ->  agents/<type>/<table>.ft
-    if parts and parts[0] == 'agents' and len(parts) == 4:
-        return f'agents/{parts[1]}/{parts[3]}'
-    return '/'.join(parts)
+def check_every_committed_reference_is_still_pinned():
+    """`SCENARIOS` and `golden/*.json` must agree, and neither may be empty.
+
+    Parametrising this module created a way for the whole file to stop asserting anything without
+    a job going red: with `SCENARIOS = []`, `pytest -m golden` reports `4 skipped` and exits 0 in
+    under a second, because an empty parameter set skips rather than fails. Before, dropping the
+    pinning meant deleting the tests, which a reviewer sees.
+
+    Comparing against the committed references rather than against a hardcoded name is what makes
+    this generalise: any scenario that has been pinned stays pinned, not just the first one.
+    Removing one on purpose means deleting its reference in the same commit, which is exactly the
+    visible act that ought to be required.
+
+    Run from two tests, deliberately. Markers decide jobs, and `pytest.ini` deselects `golden` by
+    default, so a single test cannot sit in both the fast tier and the golden job — and this needs
+    to be in both. The golden job is the one someone re-runs in isolation from the pipeline view,
+    and in isolation it is the only thing standing between an empty `SCENARIOS` and a green tick.
+    """
+    pinned = {pinned_scenario.name for pinned_scenario in SCENARIOS}
+    committed = {path.stem for path in (Path(__file__).parent / 'golden').glob('*.json')}
+
+    assert pinned, (
+        'SCENARIOS is empty, so the golden master pins nothing and `pytest -m golden` passes by '
+        'skipping every test')
+    assert committed <= pinned, (
+        f'these scenarios have a committed reference but are no longer in SCENARIOS, so nothing '
+        f'compares against them: {sorted(committed - pinned)}. Delete the reference in the same '
+        f'commit if that is intended')
 
 
-def fingerprint(results_root):
-    """Row counts and per-column statistics, grouped by table kind."""
-    import polars as pl
-
-    grouped = defaultdict(lambda: {'files': 0, 'rows': 0, 'columns': {}})
-    for path in sorted(Path(results_root).rglob('*.ft')):
-        frame = pl.read_ipc(path, memory_map=False)
-        entry = grouped[table_kind(path, results_root)]
-        entry['files'] += 1
-        entry['rows'] += len(frame)
-        for column, dtype in zip(frame.columns, frame.dtypes):
-            if not dtype.is_numeric() or frame[column].null_count() == len(frame):
-                continue
-            stats = entry['columns'].setdefault(column, {'sum': 0.0, 'min': None, 'max': None})
-            stats['sum'] += float(frame[column].sum() or 0)
-            low, high = frame[column].min(), frame[column].max()
-            if low is not None:
-                stats['min'] = float(low) if stats['min'] is None else min(stats['min'], float(low))
-                stats['max'] = float(high) if stats['max'] is None else max(stats['max'], float(high))
-
-    return {kind: entry for kind, entry in sorted(grouped.items())}
+def test_every_committed_reference_is_still_pinned():
+    """The fast-tier arm. See `check_every_committed_reference_is_still_pinned`."""
+    check_every_committed_reference_is_still_pinned()
 
 
-@pytest.fixture(scope='module')
-def actual(tmp_path_factory):
-    """Run the example once, seeded, against a temp copy of the config."""
-    import shutil
-
-    base = tmp_path_factory.mktemp('golden')
-    scenarios, results = base / 'scenarios', base / 'results'
-    config = base / SCENARIO_NAME
-    shutil.copytree(EXAMPLE / SCENARIO_NAME, config)
-    scenarios.mkdir()
-    results.mkdir()
-
-    setup = config / 'setup.yaml'
-    text = setup.read_text(encoding='utf-8')
-    for old, new in (('input: ../../input_data', f'input: {(REPO_ROOT / "input_data").as_posix()}'),
-                     ('scenarios: ../../scenarios', f'scenarios: {scenarios.as_posix()}'),
-                     ('results: ../../results', f'results: {results.as_posix()}')):
-        assert old in text, f'{old!r} not found in setup.yaml'
-        text = text.replace(old, new)
-    setup.write_text(text, encoding='utf-8')
-
-    script = RUNNER.format(repo=REPO_ROOT, config_dir=config.as_posix(), seed=SEED,
-                           scenarios=scenarios, name=SCENARIO_NAME)
-    completed = subprocess.run(
-        [sys.executable, '-c', script], capture_output=True, text=True,
-        encoding='utf-8', errors='replace', timeout=3600,
-        env={**os.environ, 'MPLBACKEND': 'Agg', 'PYTHONIOENCODING': 'utf-8',
-             'PYTHONHASHSEED': '0'})
-    assert 'RUN_OK' in completed.stdout, completed.stderr[-4000:]
-
-    try:
-        yield fingerprint(results / SCENARIO_NAME)
-    finally:
-        shutil.rmtree(base, ignore_errors=True)
+@pytest.mark.golden
+def test_every_committed_reference_is_still_pinned_in_the_golden_job():
+    """The golden-job arm, so that job is self-sufficient when run alone."""
+    check_every_committed_reference_is_still_pinned()
 
 
 @pytest.fixture(scope='module')
-def expected(actual):
-    """The committed reference, regenerated in place when explicitly asked for."""
-    if os.environ.get('HAMLET_UPDATE_GOLDEN'):
-        REFERENCE.parent.mkdir(parents=True, exist_ok=True)
-        REFERENCE.write_text(json.dumps(actual, indent=2, sort_keys=True) + '\n',
+def actual(scenario, scenario_runs):
+    """Run the example once, seeded, against a temp copy of the config.
+
+    The run and the fingerprint live in `tests/scenario_run.py`, shared with the backend
+    equivalence tests -- the poi arm of those compares against this reference, which only means
+    anything if both reduce results the same way. (It was the linopy arm until `poi` became the
+    default; the control has to be whichever backend the shipped config selects.)
+
+    Requested through `scenario_runs` so that a module making the *identical* request shares this
+    run rather than paying for its own -- `test_grid_restrictions` makes exactly this request for
+    `grid_golden`. Note that no backend is named here and that is deliberate: this fixture must
+    run whatever the shipped config selects (`test_solver_backend_smoke` asserts as much), which
+    makes it a different request from the equivalence test's `framework='poi'` arm, and the two
+    correctly do not share. See `tests/scenario_cache.py`.
+    """
+    return scenario_runs.run(scenario.config_dir, scenario.name,
+                             creator_method=scenario.creator_method).fingerprint
+
+
+@pytest.fixture(scope='module')
+def expected(scenario, actual):
+    """The committed reference, regenerated in place when explicitly asked for.
+
+    `HAMLET_UPDATE_GOLDEN` takes a scenario name, or `1`/`all` for every scenario. Naming one
+    matters once more than one is pinned: a re-baseline aimed at a change in one scenario would
+    otherwise also rewrite the others, so an unrelated movement in a scenario you were not
+    thinking about gets committed as though it had been reviewed.
+    """
+    reference = scenario.reference
+    update = os.environ.get('HAMLET_UPDATE_GOLDEN')
+    if update and update in ('1', 'all', scenario.name):
+        reference.parent.mkdir(parents=True, exist_ok=True)
+        reference.write_text(json.dumps(actual, indent=2, sort_keys=True) + '\n',
                              encoding='utf-8')
-        pytest.skip(f'reference regenerated at {REFERENCE.relative_to(REPO_ROOT)}; '
+        pytest.skip(f'reference regenerated at {reference.relative_to(REPO_ROOT)}; '
                     f'review the diff and commit it with the change that caused it')
+    if update:
+        pytest.skip(f'HAMLET_UPDATE_GOLDEN={update} does not name this scenario '
+                    f'({scenario.name}), so its reference was left alone')
 
-    assert REFERENCE.exists(), (
-        f'no golden reference at {REFERENCE.relative_to(REPO_ROOT)}. Create one with '
+    assert reference.exists(), (
+        f'no golden reference at {reference.relative_to(REPO_ROOT)}. Create one with '
         f'HAMLET_UPDATE_GOLDEN=1 python -m pytest tests -m golden')
 
-    return json.loads(REFERENCE.read_text(encoding='utf-8'))
+    return json.loads(reference.read_text(encoding='utf-8'))
 
 
 @pytest.mark.golden
-def test_the_same_tables_are_produced(actual, expected):
+def test_the_same_tables_are_produced(scenario, actual, expected):
     """A table appearing or disappearing is a result change like any other."""
-    assert sorted(actual) == sorted(expected)
+    assert sorted(actual) == sorted(expected), scenario.name
 
 
 @pytest.mark.golden
-def test_row_counts_match(actual, expected):
+def test_row_counts_match(scenario, actual, expected):
     """Catches trades appearing or vanishing, which several defects here did."""
     differences = {kind: (entry['rows'], expected[kind]['rows'])
                    for kind, entry in actual.items()
                    if kind in expected and entry['rows'] != expected[kind]['rows']}
 
-    assert not differences, f'row counts moved (actual, expected): {differences}'
+    assert not differences, (
+        f'{scenario.name}: row counts moved (actual, expected): {differences}')
 
 
 @pytest.mark.golden
-def test_column_statistics_match(actual, expected):
+def test_column_statistics_match(scenario, actual, expected):
     """The substance: every numeric column's total, minimum and maximum.
 
     Reported all at once rather than failing on the first, because when the model changes it is
@@ -183,7 +256,7 @@ def test_column_statistics_match(actual, expected):
                         f'(delta {value - other:+,.3f})')
 
     assert not differences, (
-        'the shipped example now produces different numbers:\n  '
+        f'{scenario.name} now produces different numbers:\n  '
         + '\n  '.join(differences[:40])
         + (f'\n  ... and {len(differences) - 40} more' if len(differences) > 40 else '')
         + '\n\nIf this change was intended, regenerate the reference with '
@@ -191,11 +264,11 @@ def test_column_statistics_match(actual, expected):
 
 
 @pytest.mark.golden
-def test_no_column_was_dropped(actual, expected):
+def test_no_column_was_dropped(scenario, actual, expected):
     """A column disappearing is easy to miss when only the ones present are compared."""
     missing = [f'{kind}:{column}'
                for kind, entry in expected.items() if kind in actual
                for column in entry['columns']
                if column not in actual[kind]['columns']]
 
-    assert not missing, f'columns no longer produced: {missing}'
+    assert not missing, f'{scenario.name}: columns no longer produced: {missing}'

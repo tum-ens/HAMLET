@@ -294,13 +294,13 @@
       },
       "Aap6N3EMAbmr8Ns_hp_electricity": {
         "max": 0.0,
-        "min": -3476.0,
-        "sum": -37445.0
+        "min": -3481.0,
+        "sum": -37519.0
       },
       "Aap6N3EMAbmr8Ns_hp_heat": {
-        "max": 20270.0,
+        "max": 20292.0,
         "min": 0.0,
-        "sum": 217039.0
+        "sum": 217419.0
       },
       "BgdtLeH87ZJDwIh_inflexible-load_electricity": {
         "max": 0.0,
@@ -309,8 +309,8 @@
       },
       "BxPoL5lLvP3UXWq_ev_electricity": {
         "max": 0.0,
-        "min": -366.0,
-        "sum": -5124.0
+        "min": -1044.0,
+        "sum": -16600.0
       },
       "JmprVAPBiP8h1lE_pv_electricity": {
         "max": 13624.0,
@@ -319,13 +319,13 @@
       },
       "MHHIT2EvTDkWJh2_ev_electricity": {
         "max": 0.0,
-        "min": -373.0,
-        "sum": -2154.0
+        "min": -18424.0,
+        "sum": -77761.0
       },
       "NM8yjx266keGQjn_battery_electricity": {
         "max": 342.0,
-        "min": -3307.0,
-        "sum": -35552.0
+        "min": -3418.0,
+        "sum": -40212.0
       },
       "USpzpkW21dyKD7K_heat_heat": {
         "max": 0.0,
@@ -334,38 +334,38 @@
       },
       "WAvCGhwEtmUtnae_heat-storage_heat": {
         "max": 8850.0,
-        "min": -5670.0,
-        "sum": 41383.0
+        "min": -5896.0,
+        "sum": 41003.0
       },
       "XH9FBgR486jdI5i_hp_electricity": {
         "max": 0.0,
-        "min": -3613.0,
-        "sum": -42148.0
+        "min": -3708.0,
+        "sum": -42254.0
       },
       "XH9FBgR486jdI5i_hp_heat": {
-        "max": 19551.0,
+        "max": 20063.0,
         "min": 0.0,
-        "sum": 223166.0
+        "sum": 223853.0
       },
       "YxZdGoOEwWuymtn_hp_electricity": {
         "max": 0.0,
         "min": -815.0,
-        "sum": -12344.0
+        "sum": -12335.0
       },
       "YxZdGoOEwWuymtn_hp_heat": {
-        "max": 3673.0,
+        "max": 3672.0,
         "min": 0.0,
-        "sum": 56212.0
+        "sum": 56123.0
       },
       "aqbiQlTWoVQnNgA_heat-storage_heat": {
-        "max": 1708.0,
+        "max": 1750.0,
         "min": 0.0,
-        "sum": 18423.0
+        "sum": 18512.0
       },
       "eaeyiqJ8wQZPnbA_battery_electricity": {
         "max": 522.0,
-        "min": -5430.0,
-        "sum": -64572.0
+        "min": -5217.0,
+        "sum": -43895.0
       },
       "fvjQOjvDgwAJfKJ_heat_heat": {
         "max": 0.0,
@@ -378,9 +378,9 @@
         "sum": 276603.0
       },
       "oL8eCt0IDsmSfoZ_heat-storage_heat": {
-        "max": 5708.0,
-        "min": -1149.0,
-        "sum": 46838.0
+        "max": 5723.0,
+        "min": -1660.0,
+        "sum": 46173.0
       },
       "tBqmhfIXCf7w91Q_hp_electricity": {
         "max": 0.0,
@@ -451,7 +451,7 @@
       "BxPoL5lLvP3UXWq_ev_electricity": {
         "max": 0.0,
         "min": -2840.0,
-        "sum": -12298.0
+        "sum": -11619.0
       },
       "JmprVAPBiP8h1lE_pv_electricity": {
         "max": 2196.0,
@@ -460,13 +460,13 @@
       },
       "MHHIT2EvTDkWJh2_ev_electricity": {
         "max": 0.0,
-        "min": -7200.0,
-        "sum": -17980.0
+        "min": -48.0,
+        "sum": -48.0
       },
       "NM8yjx266keGQjn_battery_electricity": {
-        "max": 1508.0,
-        "min": -1458.0,
-        "sum": 1224.0
+        "max": 1198.0,
+        "min": -1440.0,
+        "sum": 3092.0
       },
       "USpzpkW21dyKD7K_heat_heat": {
         "max": -138.0,
@@ -481,37 +481,37 @@
       "XH9FBgR486jdI5i_hp_electricity": {
         "max": 0.0,
         "min": -361.0,
-        "sum": -1606.0
+        "sum": -1514.0
       },
       "XH9FBgR486jdI5i_hp_heat": {
         "max": 2146.0,
         "min": 0.0,
-        "sum": 8858.0
+        "sum": 8398.0
       },
       "YxZdGoOEwWuymtn_hp_electricity": {
         "max": 0.0,
-        "min": -181.0,
-        "sum": -977.0
+        "min": -105.0,
+        "sum": -965.0
       },
       "YxZdGoOEwWuymtn_hp_heat": {
-        "max": 766.0,
+        "max": 445.0,
         "min": 0.0,
-        "sum": 4316.0
+        "sum": 4291.0
       },
       "aqbiQlTWoVQnNgA_heat-storage_heat": {
-        "max": 271.0,
-        "min": -594.0,
-        "sum": 977.0
+        "max": 261.0,
+        "min": -273.0,
+        "sum": 1002.0
       },
       "continuous_electricity": {
-        "max": 7727.0,
-        "min": -2572.0,
-        "sum": 18641.0
+        "max": 1508.0,
+        "min": -2837.0,
+        "sum": -2227.0
       },
       "eaeyiqJ8wQZPnbA_battery_electricity": {
-        "max": 2360.0,
-        "min": -3362.0,
-        "sum": 1916.0
+        "max": 1936.0,
+        "min": -2021.0,
+        "sum": 2201.0
       },
       "fvjQOjvDgwAJfKJ_heat_heat": {
         "max": -46.0,
@@ -526,15 +526,15 @@
       "oL8eCt0IDsmSfoZ_heat-storage_heat": {
         "max": 1334.0,
         "min": -1994.0,
-        "sum": 9548.0
+        "sum": 10008.0
       },
       "tBqmhfIXCf7w91Q_hp_electricity": {
         "max": 0.0,
-        "min": -236.0,
+        "min": -234.0,
         "sum": -417.0
       },
       "tBqmhfIXCf7w91Q_hp_heat": {
-        "max": 1403.0,
+        "max": 1395.0,
         "min": 0.0,
         "sum": 2443.0
       },
@@ -570,39 +570,39 @@
   "agents/sfh/socs.ft": {
     "columns": {
       "BxPoL5lLvP3UXWq": {
-        "max": 40329.0,
+        "max": 40928.0,
         "min": 0.0,
-        "sum": 976877.0
+        "sum": 987215.0
       },
       "MHHIT2EvTDkWJh2": {
-        "max": 60053.0,
+        "max": 67329.0,
         "min": 0.0,
-        "sum": 1446422.0
+        "sum": 1514468.0
       },
       "NM8yjx266keGQjn": {
-        "max": 3439.0,
+        "max": 3554.0,
         "min": 0.0,
-        "sum": 39983.0
+        "sum": 46180.0
       },
       "WAvCGhwEtmUtnae": {
-        "max": 14229.0,
+        "max": 14444.0,
         "min": 0.0,
-        "sum": 184893.0
+        "sum": 185108.0
       },
       "aqbiQlTWoVQnNgA": {
         "max": 2750.0,
         "min": 0.0,
-        "sum": 47181.0
+        "sum": 46999.0
       },
       "eaeyiqJ8wQZPnbA": {
-        "max": 5500.0,
+        "max": 5311.0,
         "min": 0.0,
-        "sum": 70553.0
+        "sum": 51559.0
       },
       "oL8eCt0IDsmSfoZ": {
-        "max": 10255.0,
+        "max": 10739.0,
         "min": 0.0,
-        "sum": 187053.0
+        "sum": 187488.0
       },
       "xfQ5sPV3ZiaAoh6": {
         "max": 4458.0,
@@ -984,28 +984,28 @@
   "markets/electricity/continuous/bids_cleared.ft": {
     "columns": {
       "energy_in": {
-        "max": 7873.0,
+        "max": 7600.0,
         "min": 1.0,
-        "sum": 578144.0
+        "sum": 621442.0
       },
       "index": {
-        "max": 498.0,
+        "max": 575.0,
         "min": 0.0,
-        "sum": 124251.0
+        "sum": 165600.0
       },
       "price_in": {
-        "max": 11809500.0,
+        "max": 11400000.0,
         "min": 500.0,
-        "sum": 585715000.0
+        "sum": 628350000.0
       },
       "price_pu_in": {
         "max": 1500.0,
         "min": 500.0,
-        "sum": 547500.0
+        "sum": 608000.0
       }
     },
     "files": 1,
-    "rows": 499
+    "rows": 576
   },
   "markets/electricity/continuous/bids_uncleared.ft": {
     "columns": {},
@@ -1017,67 +1017,67 @@
       "energy_in": {
         "max": 7873.0,
         "min": 0.0,
-        "sum": 619825.0
+        "sum": 706732.0
       },
       "energy_out": {
-        "max": 7873.0,
+        "max": 7600.0,
         "min": 0.0,
-        "sum": 625594.0
+        "sum": 666708.0
       },
       "index": {
-        "max": 1192.0,
+        "max": 1347.0,
         "min": 0.0,
-        "sum": 711028.0
+        "sum": 907878.0
       },
       "price_in": {
-        "max": 11809500.0,
+        "max": 14171400.0,
         "min": 0.0,
-        "sum": 640718400.0
+        "sum": 740227800.0
       },
       "price_out": {
-        "max": 11809500.0,
+        "max": 11400000.0,
         "min": 0.0,
-        "sum": 586821400.0
+        "sum": 629207600.0
       },
       "price_pu_in": {
         "max": 1800.0,
         "min": 500.0,
-        "sum": 806700.0
+        "sum": 868800.0
       },
       "price_pu_out": {
         "max": 1500.0,
         "min": 0.0,
-        "sum": 555100.0
+        "sum": 616000.0
       }
     },
     "files": 1,
-    "rows": 1193
+    "rows": 1348
   },
   "markets/electricity/continuous/offers_cleared.ft": {
     "columns": {
       "energy_out": {
-        "max": 7873.0,
+        "max": 7600.0,
         "min": 1.0,
-        "sum": 578144.0
+        "sum": 621442.0
       },
       "index": {
-        "max": 498.0,
+        "max": 575.0,
         "min": 0.0,
-        "sum": 124251.0
+        "sum": 165600.0
       },
       "price_out": {
-        "max": 11809500.0,
+        "max": 11400000.0,
         "min": 500.0,
-        "sum": 585715000.0
+        "sum": 628350000.0
       },
       "price_pu_out": {
         "max": 1500.0,
         "min": 500.0,
-        "sum": 547500.0
+        "sum": 608000.0
       }
     },
     "files": 1,
-    "rows": 499
+    "rows": 576
   },
   "markets/electricity/continuous/offers_uncleared.ft": {
     "columns": {},

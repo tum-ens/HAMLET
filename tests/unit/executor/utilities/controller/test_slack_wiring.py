@@ -8,6 +8,7 @@ These pin two properties that are easy to break silently and that no solve would
 """
 import inspect
 import logging
+from types import SimpleNamespace
 
 import pytest
 
@@ -56,27 +57,58 @@ class TestSlackIsReported:
 
     @pytest.mark.parametrize('module', [mpc_linopy, optim_linopy], ids=['mpc', 'rtc'])
     def test_it_reports_through_logging_not_warnings(self, module):
-        """Regression: `warnings.warn` is dead in this package.
+        """Regression: the slack report must not go through `warnings.warn`.
 
-        `hamlet/executor/setup.py` installs a blanket `warnings.filterwarnings("ignore")` at
-        import time, so a warning raised here never reaches the user. The shed energy would be
-        completely silent, which is exactly the failure the slack is meant to make survivable
-        rather than invisible.
+        It originally could not: `hamlet/executor/setup.py` installed a blanket
+        `warnings.filterwarnings("ignore")` at import, so a warning raised here reached nobody
+        and the shed energy was completely silent. That filter is gone (#199), so this is no
+        longer the *only* thing standing between the report and the user -- but `warnings`
+        deduplicates by source line, so a single `warn` here would report the first agent that
+        shed and stay quiet for every one after it. `logging` is the right channel for a
+        per-agent, per-timestep report, and this pins it.
         """
         source = inspect.getsource(module.Linopy._warn_on_slack)
 
         assert 'LOGGER' in source
         assert 'warnings.warn' not in source
 
-    def test_a_warning_actually_escapes_the_package_filters(self, caplog):
-        """The end-to-end property: importing hamlet must not silence this message."""
-        import hamlet  # noqa: F401  -- installs the blanket warnings filter
+    @pytest.mark.parametrize('module', [mpc_linopy, optim_linopy], ids=['mpc', 'rtc'])
+    def test_the_report_actually_comes_out_of_the_controller(self, module, caplog):
+        """The end-to-end property: a used slack produces a record naming the agent and the peak.
 
-        logger = logging.getLogger(mpc_linopy.__name__)
-        with caplog.at_level(logging.WARNING, logger=mpc_linopy.__name__):
-            logger.warning('energy balance closed with %.1f W of slack', 3000.0)
+        This used to log to `logging.getLogger(mpc_linopy.__name__)` itself and assert `caplog`
+        saw it, which tested the standard library — it called no HAMLET code, and a review panel
+        confirmed it stayed green with the blanket `filterwarnings("ignore")` reinstated, i.e.
+        under the exact regression its own docstring named. (It could never have caught that in
+        any case: warning filters do not affect `logging`.)
 
-        assert any('slack' in record.message for record in caplog.records)
+        `_warn_on_slack` is now driven on a stub model instead, so the assertion is that *the
+        controller* reports, at the threshold it claims to use.
+        """
+        import numpy as np
+
+        peak = module.Linopy.SLACK_REPORTING_THRESHOLD + 1000.0
+        probe = object.__new__(module.Linopy)
+        probe.agent = SimpleNamespace(agent_id='agent_under_test')
+        probe.model = SimpleNamespace(variables={
+            'balance_electricity_slack': SimpleNamespace(
+                solution=SimpleNamespace(values=np.array([0.0, -peak, 0.0]))),
+            # A large ordinary variable, to pin that the report is selected by the `_slack`
+            # suffix rather than by magnitude. Its name must not end in `_slack` -- the first
+            # draft called it `not_a_slack`, which does, and the test duly reported it.
+            'power_electricity': SimpleNamespace(
+                solution=SimpleNamespace(values=np.array([1e9]))),
+        })
+
+        with caplog.at_level(logging.WARNING, logger=module.__name__):
+            probe._warn_on_slack()
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert len(messages) == 1, (
+            f'expected exactly one report -- the slack variable, not the ordinary one -- '
+            f'got {messages}')
+        assert 'agent_under_test' in messages[0] and 'balance_electricity_slack' in messages[0], (
+            f'the report does not name the agent and the variable: {messages[0]}')
 
     @pytest.mark.parametrize('module', [mpc_linopy, optim_linopy], ids=['mpc', 'rtc'])
     def test_the_solve_path_reports_before_returning(self, module):

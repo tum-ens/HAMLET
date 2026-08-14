@@ -143,7 +143,7 @@ class ElectricityMarket(Markets):
                 tt_frequency[c.TC_TIMESTEP] = pd.date_range(
                     start=start_frequency,
                     end=time_opening + pd.Timedelta(timing['horizon'][1], unit='seconds'),
-                    freq=f'{timing["duration"]}S',
+                    freq=f'{timing["duration"]}s',
                     inclusive='left')  # 'left' as the end time step is not included
 
                 # Add timestamp (at which time are all actions to be executed)

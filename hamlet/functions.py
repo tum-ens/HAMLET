@@ -37,11 +37,17 @@ def create_folder(path: str, delete: bool = True) -> None:
     # Create main folder if does not exist
     if not os.path.exists(path):
         os.makedirs(path)
-    else:
-        if delete:
-            shutil.rmtree(path)
-            os.makedirs(path)
-    time.sleep(0.01)
+    elif delete:
+        shutil.rmtree(path)
+        os.makedirs(path)
+        # Only after a delete, and this is the reason the sleep exists at all: on Windows a
+        # directory that `shutil.rmtree` has just removed can still be reported as present for a
+        # short while, so recreating it immediately can raise. Nothing analogous can happen when
+        # the folder was merely created or already existed, and paying it there is what made this
+        # the most expensive part of the executor's market stage -- 0.039 s per timestep on the
+        # paper's design 6, three calls a timestep, each sleeping 10 ms to create directories
+        # that already existed.
+        time.sleep(0.01)
 
 
 def copy_folder(src: str, dst: str, only_files: bool = False, delete: bool = True) -> None:
@@ -77,6 +83,83 @@ def copy_folder(src: str, dst: str, only_files: bool = False, delete: bool = Tru
                 shutil.rmtree(dst)
                 shutil.copytree(src, dst)
         time.sleep(0.01)
+
+
+class ScenarioFormatError(RuntimeError):
+    """A scenario folder was written in a format this version of HAMLET does not read."""
+
+
+def check_scenario_format(general: dict, path: str, allow_incompatible: bool = False) -> int | None:
+    """Checks the scenario format stamp in a scenario's (or a result folder's) `general.json`.
+
+    The Creator writes `c.SCENARIO_FORMAT_VERSION` into `general.json`; every reader calls this
+    before using anything else out of the folder. It exists because the failure it prevents is
+    silent: a scenario generated before the retailer in/out convention was normalised runs
+    through the current Executor without error and applies grid fees and levies to feed-in.
+
+    A missing stamp is not treated as "old but probably fine" -- it is precisely the case above,
+    because the stamp was introduced together with that fix.
+
+    Args:
+        general: the parsed contents of `general/general.json`.
+        path: the scenario or results folder, named in the error message.
+        allow_incompatible: proceed anyway. For deliberately re-reading an old scenario; the
+            caller has to say so explicitly, and the reason is reported.
+
+    Returns:
+        The version found, or None if there was no stamp and the check was overridden.
+
+    Raises:
+        ScenarioFormatError: the stamp is missing or does not match, and it was not overridden.
+    """
+
+    found = general.get(c.K_SCENARIO_FORMAT_VERSION) if isinstance(general, dict) else None
+    expected = c.SCENARIO_FORMAT_VERSION
+
+    if found == expected:
+        return found
+
+    if found is None:
+        problem = (f'This scenario carries no format version, so it was generated before HAMLET '
+                   f'started stamping one.\n\n'
+                   f'  scenario: {path}\n'
+                   f'  found:    no version stamp\n'
+                   f'  expected: scenario format version {expected}\n\n'
+                   f'Versioning was introduced together with the fix to the retailer in/out '
+                   f'convention. An unstamped scenario predates that fix, and running it through '
+                   f'this version of HAMLET applies grid fees and levies to feed-in instead of '
+                   f'to consumption -- producing plausible but wrong numbers, with no error and '
+                   f'no warning. That is what this check exists to stop.')
+    else:
+        if not isinstance(found, int):
+            direction = 'this version of HAMLET does not recognise'
+        elif found > expected:
+            direction = 'newer than this version of HAMLET can read'
+        else:
+            direction = 'older than this version of HAMLET reads'
+        problem = (f'This scenario is in a format {direction}.\n\n'
+                   f'  scenario: {path}\n'
+                   f'  found:    scenario format version {found}\n'
+                   f'  expected: scenario format version {expected}\n\n'
+                   f'The two formats differ in a way that changes results rather than raising an '
+                   f'error, which is why this is refused rather than attempted.')
+
+    if allow_incompatible:
+        print(f'WARNING: reading an incompatible scenario because allow_incompatible_scenario=True.'
+              f'\n{problem}\n'
+              f'Results from this run cannot be trusted and must not be compared against results '
+              f'from a scenario in format version {expected}.')
+        return found
+
+    raise ScenarioFormatError(
+        f'{problem}\n\n'
+        f'Remedy: re-create this scenario with the current Creator. Your scenario *configuration* '
+        f'(setup.yaml, agents.xlsx, markets.yaml, grids.yaml) does not need to change -- only the '
+        f'generated scenario folder does:\n\n'
+        f'    from hamlet import Creator\n'
+        f'    Creator(path=<your config folder>).new_scenario_from_configs()\n\n'
+        f'If you are deliberately reading an old scenario and accept that its numbers are not '
+        f'comparable, pass allow_incompatible_scenario=True.')
 
 
 def load_file(path: str, index: int = 0, df: str = 'pandas', parse_dates: bool | list | None = None,

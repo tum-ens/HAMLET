@@ -87,27 +87,17 @@ class EnWG14a(GridRestrictionBase):
         timestep_column = pd.date_range(start=self.timestamp + pd.DateOffset(seconds=2 * resolution),
                                         periods=horizon - 2, freq=pd.DateOffset(seconds=resolution))
 
-        # add output writer to grid for time series calculation
-        ow = OutputWriter(grid, range(int(horizon)))
-        ow.log_variable('res_line', 'loading_percent')
-        ow.log_variable('res_trafo', 'loading_percent')
-        ow.log_variable('res_trafo', 'p_lv_mw')
-        ow.log_variable('res_bus', 'vm_pu')  # notice the voltage drop is currently not considered
-
-        # run time series calculation
-        # Note: verbose=False suppresses pandapower's own progress bar, which would otherwise be
-        # printed once per horizon on every timestep. It does not suppress warnings or errors.
+        # run the horizon's power flows
         try:
-            run_timeseries(grid, range(int(horizon)), verbose=False)
+            results = self.__run_horizon_power_flows(grid, int(horizon))
         except pp.powerflow.LoadflowNotConverged:  # avoid stopping the simulation when load flow not converged
             print('Load flow not converged for timestamp: ', str(self.timestamp))
             return 0
 
         # get time series simulation results
-        timeseries_results = ow.output
-        trafo_loading_total = timeseries_results['res_trafo.loading_percent']
-        line_loading_total = timeseries_results['res_line.loading_percent']
-        trafo_lv_power = timeseries_results['res_trafo.p_lv_mw']
+        trafo_loading_total = results['res_trafo.loading_percent']
+        line_loading_total = results['res_line.loading_percent']
+        trafo_lv_power = results['res_trafo.p_lv_mw']
 
         # calculate variable grid fees and loading
         variable_grid_fees_for_bus = {}  # initialize
@@ -622,8 +612,105 @@ class EnWG14a(GridRestrictionBase):
 
         return control_target
 
+    #: Result series the fee calculation reads, as (pandapower result table, column).
+    HORIZON_RESULTS = (('res_trafo', 'loading_percent'),
+                       ('res_line', 'loading_percent'),
+                       ('res_trafo', 'p_lv_mw'),
+                       ('res_bus', 'vm_pu'))  # the voltage drop is currently not considered
+
     @staticmethod
-    def __calculate_shortest_path_to_trafo(grid, trafo_lv_bus_index: int) -> dict:
+    def __compile_profiles(grid, horizon):
+        """One array per (element, variable), from whichever form the net carries.
+
+        `Electricity` records the profiles directly under `c.GRID_HORIZON_PROFILES`, because
+        building `ConstControl` objects only to read them back here cost 0.298 s per timestep and
+        bought nothing once `run_timeseries` was gone.
+
+        The controller path below is **not dead code**. `run_timeseries` can only be driven by real
+        controllers, so it is the only way to build the oracle this loop is tested against -- see
+        `test_horizon_power_flows.py`. It is also what a net assembled by anything other than
+        `Electricity` would carry.
+        """
+        recorded = grid.get(c.GRID_HORIZON_PROFILES)
+        if recorded:
+            return {key: (np.asarray(list(by_index.keys())).ravel(),
+                          np.column_stack([values[:horizon] for values in by_index.values()]))
+                    for key, by_index in recorded.items()}
+
+        profiles = {}
+        for _, entry in grid.controller.iterrows():
+            controller = entry['object']
+            column = (controller.profile_name[0] if isinstance(controller.profile_name, list)
+                      else controller.profile_name)
+            values = controller.data_source.df[column].to_numpy()[:horizon]
+            key = (controller.element, controller.variable)
+            profiles.setdefault(key, ([], []))
+            profiles[key][0].append(controller.element_index)
+            profiles[key][1].append(values)
+
+        return {key: (np.asarray(indices).ravel(), np.column_stack(columns))
+                for key, (indices, columns) in profiles.items()}
+
+    def __run_horizon_power_flows(self, grid, horizon: int) -> dict:
+        """The horizon's power flows, as `{'<table>.<column>': DataFrame(step x element)}`.
+
+        Replaces `pandapower.timeseries.run_timeseries`, which cost **2.07 s per simulated
+        timestep** on design 6 while the flows themselves are ~3 ms each -- so ~0.07 s of it was
+        power flow and the rest was the time-series framework: per-controller stepping, the
+        OutputWriter, and a DataFrame append per logged variable per step.
+
+        Not numba. That was measured too, with numba installed and pandapower confirming it usable:
+        `run_timeseries` moved 2.065 s to 2.075 s. At this network size the numerics were never
+        the cost.
+
+        The output keeps the OutputWriter's shape -- index is the time step, columns are element
+        indices -- because the fee calculation indexes it by line and transformer id.
+        """
+        profiles = self.__compile_profiles(grid, horizon)
+        collected = {f'{table}.{column}': [] for table, column in self.HORIZON_RESULTS}
+
+        for step in range(horizon):
+            for (element, variable), (indices, values) in profiles.items():
+                getattr(grid, element).loc[indices, variable] = values[step]
+
+            pp.runpp(grid)
+
+            for table, column in self.HORIZON_RESULTS:
+                collected[f'{table}.{column}'].append(getattr(grid, table)[column].copy())
+
+        return {name: pd.DataFrame(rows, index=range(horizon))
+                for name, rows in collected.items()}
+
+    def __calculate_shortest_path_to_trafo(self, grid, trafo_lv_bus_index: int) -> dict:
+        """The paths below one transformer, computed once per run rather than once per timestep.
+
+        The answer is a function of the *topology* -- `grid.bus`, `grid.line` and the graph between
+        them -- and the topology does not change while a scenario runs. Each timestep writes
+        `p_mw` and `q_mvar` onto loads and sgens and nothing else, so recomputing this was repeated
+        work by construction: measured on design 6, **0.609 s of a 7.8 s timestep**, second only to
+        the time-series power flow inside this same method.
+
+        The cache lives on the `GridDB` because that is what survives a timestep. `EnWG14a` does
+        not -- `Electricity.execute` constructs a new one every time -- so an instance attribute
+        would have cached nothing and looked like it worked.
+
+        If a scenario ever does change topology mid-run, this is where it breaks. Nothing in HAMLET
+        does today, and `test_shortest_path_cache.py` pins the invariant it rests on: the cached
+        answer equals a freshly computed one after a timestep's parameters have been written.
+        """
+        cache = getattr(self.grid_db, '_shortest_path_cache', None)
+        if cache is None:
+            cache = {}
+            self.grid_db._shortest_path_cache = cache
+
+        if trafo_lv_bus_index not in cache:
+            cache[trafo_lv_bus_index] = self.__compute_shortest_path_to_trafo(
+                grid, trafo_lv_bus_index)
+
+        return cache[trafo_lv_bus_index]
+
+    @staticmethod
+    def __compute_shortest_path_to_trafo(grid, trafo_lv_bus_index: int) -> dict:
         """
         Calculate the shortest path between a transformer and each bus connected under this transformer.
 

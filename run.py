@@ -1,6 +1,3 @@
-import sys
-sys.path.append("..")  # Add the parent directory to the Python path for execution outside an IDEimport sys
-sys.path.append("./")  # Add the current directory to the Python path for execution in VSCode
 from hamlet import Creator, Executor, Analyzer
 
 
