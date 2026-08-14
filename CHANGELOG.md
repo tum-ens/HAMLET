@@ -10,6 +10,73 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Added
+- **§14a's `individual` device control is covered, and its priority order is asserted as an
+  order (#232).** `EnWG14a` has two direct-power-control methods. `grid_golden` selects `ems`, and
+  the other — `__individual_device_control`, 66 statements — was reachable by **no scenario in the
+  repository**: the three configs that switch the restriction on run no electricity grid, the two
+  that run a grid apply no restriction. Its device priority policy (batteries first because
+  curtailing one costs no comfort, heat pumps last because it costs the most) was vacuously green
+  under the golden master and under `test_grid_restrictions.py` alike. `config_templates/grids.yaml`
+  meets all three conditions and selects `individual`, so the branch nothing ran is the one a new
+  user's scenario is copied from.
+
+  Covered by a second `grid_golden` run rather than a sibling scenario, since the blocker was
+  configuration and not code.
+
+  **Switching the method is not enough, and that is the substance of this entry.** Instrumented
+  with only that edit, the method runs 152 times and 151 of those calls see at most one
+  controllable device class above the 4200 W floor; no heat pump is ever above it. The single call
+  that sees two is asked to shed 1749 W from a battery and an EV holding 957 W of headroom between
+  them, so both are taken to the floor and the order is immaterial. **Reversing both documented
+  priority orders against that configuration leaves all 152 calls byte-identical** — a fixture
+  built on it would have been green under the very mutation the issue was filed about.
+
+  The missing condition is that the reduction budget must run out *part-way through* the order,
+  which is governed by the floor — it sets each device's headroom — and not by the device count.
+  So the fixture lowers it to 1000 W. Lowering it cannot reorder the policy, because the sequence
+  of the device loops is a literal constant in the source; what the floor changes is *which*
+  devices enter those loops and how much each gives, which is the point. The `ems` tests in the
+  same file keep §14a's real 4200 W, and the constant is called `LOWERED_THRESHOLD_W` so a reader
+  cannot take 1000 W for the regulation's number.
+
+  **The ordering test asserts an invariant over whatever the run produced** — no higher-priority
+  device is left above the floor while a lower-priority one is curtailed — rather than a pinned
+  trajectory. Changing the order changes the commands, which moves the re-simulated power flow and
+  therefore the whole run, so a trajectory-pinned test would go red under the mutation for the
+  wrong reason and equally red under an unrelated solver change. A separate test asserts the
+  *premise*, that the run really reaches a bus where a battery and an EV compete and one where an
+  EV and a heat pump do, so a fixture that quietly stops producing either pair fails naming the
+  pair it lost instead of leaving the invariant to pass over the half it can still see.
+
+  **Each adjacency was mutated separately**, because one arm of a full reversal can go red while
+  the other asserts nothing: swapping only `battery` with `ev` fails on a battery left charging
+  4500 W above the floor while its owner's EV was curtailed; swapping only `ev` with `hp` fails on
+  a heat pump curtailed while the EV beside it still drew 7200 W; reversing both fails too.
+
+  A fourth test asserts the commands were **obeyed** — the `individual` analogue of the `ems`
+  test that #205 added, and not covered by it, because the two methods take different routes into
+  the backend and write the same `res_direct_power_control` column with opposite signs. It also
+  pins the half of §14a nothing asserted: that a command never cuts a device *below* its
+  guaranteed floor. Every other assertion here is about curtailing too little or in the wrong
+  order, and none would notice the method curtailing too hard.
+
+  **It costs the `e2e` job one additional scenario run**, unlike #222 below — the config edits
+  make it a genuinely different request, so the run cache cannot serve it from an existing one.
+  Quote it as a band and not a level: the marginal cost measured between 64 s and 186 s on the
+  same machine depending on load, which is the same caveat `tests/scenario_cache.py` already makes
+  about its own 70–125 s figure.
+
+  **A third of the method still never executes, and the file says so with counts** — 34 of its 66
+  statements. The over-generation branch is 23 of them: across six instrumented runs, 817
+  dispatches entered over-consumption 169 times and neither branch 648 times, and over-generation
+  not once, and no threshold edit would help since every battery ships `b2g_0 = 0.0` and every EV
+  `v2g_0 = 0` (filed as #233). The heat pump loop's body is the other 11: under the shipped order
+  the EV above it always absorbs the whole budget, so the loop is entered and its body is not.
+  A review panel confirmed the consequence by mutation — deleting the heat-pump loop, disabling
+  the `hp_min_control` clamp, forcing the over-11 kW arm and halving the scaling factor all stay
+  green — and the module docstring names those four so the coverage is not read as protecting
+  them. Relevant to #209, which proposes changing exactly that arithmetic.
+
 - **The Analyzer's data processors are pinned against committed reference numbers (#222).** Of
   HAMLET's three top-level components, the Creator and the Executor are heavily pinned and the
   Analyzer had nothing asserted on what it *computes*: the test that ran it checked the process
