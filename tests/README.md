@@ -74,6 +74,10 @@ The measurable saving today is one run — `grid_golden`, 70–125 s — and **o
 selects both markers**, e.g. `pytest tests -m "e2e or golden"`. The `e2e` and `golden` CI jobs are
 separate processes, so nothing is shared between them.
 
+Not every duplicate of a scenario name is a missed saving: `test_grid_restrictions.py` asks for
+`grid_golden` twice on purpose, with different `config_edits`, and those are two different
+requests that must not share a run. The cache is what makes that safe to write.
+
 ## The solver x framework matrix
 
 `framework` (`linopy` | `poi`) and `solver` (`highs` | `gurobi`) are independent per-agent options,
@@ -188,6 +192,13 @@ flow, the variable grid fees and direct power control. It lives in `tests/e2e/sc
 than `examples/` because it is tuned to overload rather than to be copied, and
 `e2e/test_grid_restrictions.py` asserts *that* the restriction fires while the golden master pins
 what it produces.
+
+That file also runs `grid_golden` a **second** time, under config edits selecting §14a's
+`individual` direct-power-control method and lowering its floor, to assert the device priority
+order (#232). That run is not pinned by the golden master and is not shared with the one above —
+`config_edits` makes it a different request — so it costs the `e2e` job one extra scenario run.
+See `INDIVIDUAL_EDITS` in that file for why the floor has to move, and for the third of the
+method that still never executes.
 
 **To pin another scenario**, append a `GoldenScenario(container, name)` and create its reference
 with `HAMLET_UPDATE_GOLDEN=<name>`. One earns its place by reaching code the others do not, and costs
