@@ -23,8 +23,9 @@ class MarketDataProcessor(DataProcessorBase):
         for scenario_name, results_path in self.path.items():
             scenario_data = self._get_market_transactions_for_scenario(path=results_path, scenario_data={})
             for market_name, market_transactions in scenario_data.items():
-                # Extract unique transaction types
-                transaction_types = market_transactions[c.TC_TYPE_TRANSACTION].unique().tolist()
+                # Extract unique transaction types. Sorted so the bars keep one order between runs;
+                # `unique` returns them in order of appearance, which is a property of the data.
+                transaction_types = sorted(market_transactions[c.TC_TYPE_TRANSACTION].unique().tolist())
                 result_df = pd.DataFrame(index=transaction_types, columns=['cost', 'revenue'])
 
                 # Compute cost and revenue for each transaction type
@@ -134,7 +135,22 @@ class MarketDataProcessor(DataProcessorBase):
             market_transactions = pd.read_feather(os.path.join(path, 'market_transactions.ft'))
 
             # Filter out retailer transactions
-            market_transactions = market_transactions[market_transactions[c.TC_ID_AGENT] != 'retailer']
+            market_transactions = market_transactions[
+                market_transactions[c.TC_ID_AGENT] != 'retailer'].copy()
+
+            # The grouping keys arrive as Categorical, which costs two things, and fixing it here
+            # rather than at each `groupby` keeps the three processors consistent (#229).
+            #
+            # A Categorical sorts by its *local integer encoding* -- the order values were first
+            # seen in this process -- so grouping on one returns the same rows in a different order
+            # from run to run, and a per-agent bar chart reorders between two runs of the same
+            # scenario. And a Categorical keeps every category whether or not a row still uses it,
+            # so `groupby` emits a row for each unused combination: the retailer filtered out
+            # immediately above came back as a block of all-zero rows in the figure, along with
+            # every agent and transaction-type pair that never traded.
+            for column in (c.TC_ID_AGENT, c.TC_TYPE_TRANSACTION):
+                if isinstance(market_transactions[column].dtype, pd.CategoricalDtype):
+                    market_transactions[column] = market_transactions[column].astype(str)
 
             scenario_data[path] = market_transactions
 

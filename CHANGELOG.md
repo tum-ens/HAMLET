@@ -390,6 +390,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **`Analyzer.plot_all()` could not fail, so nothing it did was ever checked (#228).**
+  `PlotterBase.plot_all` caught every exception and printed it, and `GridPlotter.plot_all` called
+  its plots directly and so stopped at the first. Both now run every plot and raise an
+  `ExceptionGroup` naming those that failed — the plots are still all attempted, because one
+  failing must not cost the others, but a caller and a test now learn that something did.
+
+  **This is what had been hiding `plot_electricity_grid_topology`, which was broken in five
+  independent ways and had therefore never produced a figure for anybody.** Each fix revealed the
+  next: `igraph` undeclared; the grid file loaded under a hardcoded name; `plotly` undeclared; the
+  plotter's results path missing its `grids` component, so it read `res_line.csv` from a directory
+  that never exists; and pandapower 2.14.8 calling `matplotlib.cm.get_cmap`, which matplotlib
+  removed in 3.9. All five are fixed, and `test_every_plot_the_analyzer_offers_can_be_drawn` now
+  asserts `Analyzer.plot_all()` completes on both pinned scenarios — the assertion that would have
+  caught every one of them on the first push, and which could not exist while the exceptions were
+  being printed.
+
+  A sixth thing surfaced the moment that plot ran for the first time: **it wrote a `temp-plot.html`
+  into whatever directory the run started in**, and opened a browser. pandapower's `draw_traces`
+  saves an HTML copy unconditionally and defaults it to the working directory. Both are fixed — the
+  copy goes to a temporary file, since the figure is returned to the caller and the decorator is
+  what saves it where the user asked, and the browser opens only under an interactive matplotlib
+  backend, mirroring what `plt.show()` already does. The same test asserts that plotting leaves the
+  working directory empty
+- **The Analyzer's per-agent balancing plotted rows that do not exist (#229).** The market
+  processors group by `id_agent` and `type_transaction`, which arrive as **Categorical**. That
+  cost two things. A Categorical sorts by its *local integer encoding* — the order values were
+  first seen in that process — so identical runs returned the same rows in a different order and a
+  per-agent bar chart reordered between them. And a Categorical keeps every category whether a row
+  still uses it or not, so `groupby` emitted a row for each unused combination: **the retailer,
+  which the code filters out explicitly one line earlier, came back as a block of all-zero rows**,
+  along with every agent and transaction-type pair that never traded. Both are fixed by casting
+  the two keys to plain strings where the transactions are read.
+
+  The committed analyzer reference moves and the movement is the fix: `process_agent_balancing`
+  20 → 16 rows (`grid_golden`) and 24 → 17 (`scenario_with_grid`), `process_average_pricing`
+  188 → 106 and 188 → 100 with its NaN count dropping 88 → 6 and 93 → 5. **Every column sum is
+  unchanged** — the rows removed were empty. `price_in.min` moves off `0.0` for `grid_golden`
+  because the phantom rows had been setting it
+- **matplotlib is pinned below 3.9** while pandapower 2.14.8 is in use, a ceiling HAMLET carries
+  on pandapower's behalf exactly like the existing xarray one. pandapower calls
+  `matplotlib.cm.get_cmap`, removed in 3.9, and declares only a floor, so no resolver enforces
+  this; `tests/unit/test_dependency_constraints.py` does. The golden master was re-run on 3.8.4
+  and does not move — matplotlib is not in the simulation path
 - **The Analyzer's grid topology plot could not read a `topology`-built grid.**
   `GridDataProcessor.process_electricity_grid_topology` loaded the saved network by the hardcoded
   name `electricity.xlsx`, which only the `file` grid-generation method produces — a scenario built

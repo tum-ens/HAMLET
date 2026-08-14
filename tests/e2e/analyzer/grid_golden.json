@@ -1211,9 +1211,9 @@
           "dtype": "f",
           "kind": "numeric",
           "max": 923140500.0,
-          "min": 0.0,
+          "min": 131200.0,
           "nulls": 0,
-          "ordered": 33196368252.0,
+          "ordered": 30608967964.0,
           "sum": 3101974966.0
         },
         "price_out": {
@@ -1222,18 +1222,18 @@
           "max": 276449000.0,
           "min": 0.0,
           "nulls": 0,
-          "ordered": 7963056800.0,
+          "ordered": 7503548800.0,
           "sum": 795546100.0
         }
       },
       "index": {
-        "distinct": 20,
-        "length": 20,
+        "distinct": 16,
+        "length": 16,
         "max": "sxD33636ge7OVDI|retail",
         "min": "FTEBlY05iAXL6vU|balancing",
         "nlevels": 2
       },
-      "rows": 20
+      "rows": 16
     }
   },
   "MarketDataProcessor.process_average_pricing": {
@@ -1244,19 +1244,19 @@
           "kind": "numeric",
           "max": 0.01874,
           "min": 0.00521,
-          "nulls": 88,
-          "ordered": 101.226,
-          "sum": 1.4318600000000004
+          "nulls": 6,
+          "ordered": 78.02508000000002,
+          "sum": 1.43186
         }
       },
       "index": {
-        "distinct": 188,
-        "length": 188,
+        "distinct": 106,
+        "length": 106,
         "max": "2021-03-20 21:00:00+00:00|retail",
         "min": "2021-03-18 23:00:00+00:00|balancing",
         "nlevels": 2
       },
-      "rows": 188
+      "rows": 106
     }
   },
   "MarketDataProcessor.process_total_balancing": {

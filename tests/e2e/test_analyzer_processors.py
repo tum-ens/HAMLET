@@ -175,6 +175,50 @@ def test_the_empty_return_is_not_evidence():
 # --------------------------------------------------------------------------------------------
 
 @pytest.mark.e2e
+def test_every_plot_the_analyzer_offers_can_be_drawn(scenario, scenario_runs):
+    """`Analyzer.plot_all()` completes, which nothing checked and which was false for years.
+
+    This is the assertion that would have caught all five defects behind #227/#228/#230 on the
+    first push. It could not exist while `PlotterBase.plot_all` printed its exceptions instead of
+    raising them, so `plot_electricity_grid_topology` accumulated an undeclared `igraph`, an
+    undeclared `plotly`, a hardcoded grid filename, a results path missing its `grids` component,
+    and a `matplotlib.cm.get_cmap` call pandapower makes and matplotlib 3.9 removed -- five
+    independent breakages, none of which any test could see.
+
+    Deliberately not a golden-master-style comparison: it asserts the figures can be *produced*,
+    not what they look like. What they contain is pinned by the processor references above, which
+    is the split this whole module argues for.
+    """
+    os.environ.setdefault('MPLBACKEND', 'Agg')
+
+    from hamlet.analyzer.setup import Analyzer
+
+    entry = scenario_runs.run(scenario.config_dir, scenario.name,
+                              creator_method=scenario.creator_method,
+                              needs_receipt=scenario.needs_receipt)
+
+    # Run from a directory of its own, because plotting must not write into the one it is called
+    # from. pandapower's `draw_traces` drops a `temp-plot.html` next to the caller unless it is
+    # told otherwise, and with `save_path=None` this test would otherwise leave one in the
+    # repository root -- where it was very nearly committed.
+    scratch = entry.base / 'plot_cwd'
+    scratch.mkdir(exist_ok=True)
+    previous = Path.cwd()
+    os.chdir(scratch)
+    try:
+        # save_path=None so nothing is saved deliberately; the figures are still built, which is
+        # the part that fails.
+        Analyzer(path={scenario.name: str(entry.results)}).plot_all(save_path=None)
+    finally:
+        os.chdir(previous)
+
+    stray = sorted(path.name for path in scratch.iterdir())
+    assert not stray, (
+        f'{scenario.name}: plotting wrote {stray} into the working directory. A plot call must '
+        f'save where it is asked to and nowhere else')
+
+
+@pytest.mark.e2e
 def test_the_same_outputs_are_produced(scenario, actual, expected):
     """An output appearing or disappearing is a result change like any other."""
     differences = []

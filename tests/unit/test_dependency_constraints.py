@@ -58,16 +58,14 @@ def test_xarray_stays_pinned_at_the_last_version_linopy_can_use():
         'so no resolver will catch this for you.')
 
 
-def test_igraph_is_a_runtime_dependency_and_not_a_development_one():
-    """The Analyzer's grid topology plot needs it, so a user must get it (#227).
+#: pandapower treats these as optional, and the Analyzer's grid topology plot calls both --
+#: `igraph` to lay the buses out, `plotly` to draw the figure. Neither was declared anywhere, so
+#: that plot raised `ImportError` for every user of every version (#227).
+PANDAPOWER_SOFT_DEPENDENCIES = ('igraph', 'plotly')
 
-    It is asserted against `[project.dependencies]` specifically, because moving it back into a
-    dependency group is invisible to every other test: the test environment installs the groups,
-    so the suite stays green while `plot_electricity_grid_topology` raises `ImportError` for
-    everyone who installed HAMLET. That is the state this test exists to prevent returning to --
-    it was undeclared entirely until #222, and nothing noticed because `PlotterBase.plot_all`
-    swallows the exception (#228).
-    """
+
+def declared():
+    """`(runtime, grouped)` package names, from pyproject rather than from the environment."""
     import tomllib
 
     pyproject = tomllib.loads(PYPROJECT.read_text(encoding='utf-8'))
@@ -76,29 +74,64 @@ def test_igraph_is_a_runtime_dependency_and_not_a_development_one():
     grouped = {name.split('==')[0].strip()
                for group in pyproject.get('dependency-groups', {}).values()
                for name in group if isinstance(name, str)}
-
-    assert 'igraph' in runtime, (
-        'igraph must be a runtime dependency: hamlet/analyzer/grids/grid_data_processor.py calls '
-        'pandapower create_generic_coordinates(library="igraph"), which is shipped Analyzer code '
-        f'on a shipped scenario. Found instead in dependency groups: {sorted(grouped)}')
-    assert 'igraph' not in grouped, 'igraph is declared twice; the runtime entry is the real one'
+    return runtime, grouped
 
 
-def test_the_analyzer_can_import_what_its_topology_plot_needs():
-    """The dependency, asserted as the capability rather than as a line in a file.
+@pytest.mark.parametrize('package', PANDAPOWER_SOFT_DEPENDENCIES)
+def test_the_analyzers_plotting_dependencies_are_runtime_not_development(package):
+    """Asserted against `[project.dependencies]` specifically, and that is the whole point.
 
-    Complements the declaration check above: that one fails on the commit that moves the pin, this
-    one on an environment where the pin did not take.
+    Moving one of these into a dependency *group* is invisible to every other test, because the
+    test environment installs the groups: the suite stays green while
+    `plot_electricity_grid_topology` raises for everyone who installed HAMLET. That is the state
+    this test exists to prevent returning to -- both were undeclared entirely until #227, and
+    nothing noticed because `PlotterBase.plot_all` printed the exception instead of raising it
+    (#228).
+    """
+    runtime, grouped = declared()
+
+    assert package in runtime, (
+        f'{package} must be a runtime dependency: hamlet/analyzer/grids/ reaches it through '
+        f'pandapower on a shipped scenario, so it is not something a user opts into. Found '
+        f'instead in dependency groups: {sorted(grouped)}')
+    assert package not in grouped, (
+        f'{package} is declared twice; the runtime entry is the real one')
+
+
+def test_matplotlib_stays_below_the_version_pandapower_cannot_use():
+    """A ceiling HAMLET carries on pandapower's behalf, like the xarray one above.
+
+    pandapower 2.14.8 calls `matplotlib.cm.get_cmap`, removed in matplotlib 3.9, so on 3.9.0 the
+    grid topology plot raised `AttributeError` for every user. pandapower declares only a floor on
+    matplotlib, so no resolver enforces this.
+    """
+    assert requirement('matplotlib') == '==3.8.4', (
+        'matplotlib must stay below 3.9 while pandapower 2.14.8 is in use: pandapower calls '
+        'matplotlib.cm.get_cmap, which 3.9 removed. Raise it together with pandapower, and re-run '
+        'the golden master when you do -- pandapower is the power flow engine.')
+
+
+def test_the_analyzer_can_actually_draw_a_grid_topology():
+    """The capability, not the declaration -- these fail in different situations.
+
+    The tests above fail on the commit that moves a pin; this one fails in an environment where a
+    pin did not take, and it is deliberately expressed as the three things the plot needs rather
+    than as three imports, because two of the three failures were not import errors.
     """
     import importlib
 
-    importlib.import_module('igraph')
+    for package in PANDAPOWER_SOFT_DEPENDENCIES:
+        importlib.import_module(package)
 
+    from matplotlib import cm
     from pandapower.plotting import generic_geodata
 
     assert getattr(generic_geodata, 'IGRAPH_INSTALLED', True), (
-        'pandapower cannot see igraph, so create_generic_coordinates(library="igraph") will raise '
-        'and the Analyzer grid topology plot is unavailable')
+        'pandapower cannot see igraph, so create_generic_coordinates(library="igraph") raises and '
+        'the grid topology plot is unavailable')
+    assert hasattr(cm, 'get_cmap'), (
+        'matplotlib.cm.get_cmap is gone, which pandapower 2.14.8 calls while colouring the '
+        'topology figure')
 
 
 def test_linopy_stays_pinned_so_the_xarray_ceiling_is_reconsidered_deliberately():

@@ -266,18 +266,35 @@ the name from the same `grids.yaml` key the Executor saves under. Both conventio
 that is why the two scenarios differ in generation method rather than being the two most convenient
 runs.
 
-It also calls `create_generic_coordinates(..., library='igraph')`, and **`igraph` was declared
-nowhere in the repository** — one `grep` hit, in that call — so it raised `ImportError` in every
-environment `uv sync` produces. It is now a **runtime** dependency, not a test one, because it is
-reached by shipped Analyzer code on a shipped scenario (#227). Two tests in
-`tests/unit/test_dependency_constraints.py` hold it there, and the first exists because of a trap:
-declaring it in a dependency *group* would keep the whole suite green while the plot stayed broken
-for everyone who installed HAMLET, since the test environment installs the groups.
+In the end `plot_electricity_grid_topology` was broken **five** independent ways and had never
+produced a figure for anybody. Each fix revealed the next, which is the point of the list:
 
-Neither was visible because `PlotterBase.plot_all` catches every exception and prints it, so
-`Analyzer.plot_all()` reports success whatever happens (**#228**). The lesson generalises past this
-file: **coverage.py marks a line that raises as executed**, so "runs but unasserted" and "has never
-worked" look identical when the caller swallows everything.
+| # | breakage |
+|---|---|
+| 1 | `igraph` undeclared — one `grep` hit in the whole repo, in the call that needs it |
+| 2 | the grid file loaded under a hardcoded `electricity.xlsx` |
+| 3 | `plotly` undeclared, needed by `pandapower.plotting.plotly` to draw the figure |
+| 4 | the **plotter's** results path missing its `grids` component, so `res_line.csv` was read from a directory that never exists — `GridDataProcessor` had it right and the plotter's copy did not |
+| 5 | pandapower 2.14.8 calling `matplotlib.cm.get_cmap`, removed in matplotlib 3.9 |
+| 6 | and once it finally drew, it wrote a `temp-plot.html` into the working directory and opened a browser — pandapower's `draw_traces` saves an HTML copy unconditionally, defaulting to the caller's cwd |
+
+`igraph` and `plotly` are **runtime** dependencies, not test ones, because shipped Analyzer code
+reaches them on a shipped scenario (#227); matplotlib is pinned below 3.9 as a ceiling carried on
+pandapower's behalf, like the existing xarray one.
+`tests/unit/test_dependency_constraints.py` holds all three, and the first of those tests exists
+because of a trap worth naming: declaring a dependency in a *group* keeps the whole suite green
+while the plot stays broken for everyone who installed HAMLET, since the test environment installs
+the groups.
+
+**None of the five was visible because `PlotterBase.plot_all` caught every exception and printed
+it** (#228), so `Analyzer.plot_all()` reported success whatever happened. It now runs every plot
+and raises an `ExceptionGroup` for those that failed — both halves pinned by
+`tests/unit/analyzer/test_plotter_base.py`, since raising at the first failure would be a
+different regression (and was `GridPlotter`'s). `test_every_plot_the_analyzer_offers_can_be_drawn`
+is the e2e assertion that would have caught all five on the first push and could not exist before.
+
+The lesson generalises past this file: **coverage.py marks a line that raises as executed**, so
+"runs but unasserted" and "has never worked" look identical when the caller swallows everything.
 
 ### Where the agent meter series is cut (#230)
 

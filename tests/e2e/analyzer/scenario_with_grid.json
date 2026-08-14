@@ -1957,7 +1957,7 @@
           "max": 425905500.0,
           "min": 0.0,
           "nulls": 0,
-          "ordered": 13590514000.0,
+          "ordered": 10601886700.0,
           "sum": 1298359100.0
         },
         "price_out": {
@@ -1966,18 +1966,18 @@
           "max": 161872500.0,
           "min": 0.0,
           "nulls": 0,
-          "ordered": 3601630800.0,
+          "ordered": 2771275000.0,
           "sum": 402624100.0
         }
       },
       "index": {
-        "distinct": 24,
-        "length": 24,
-        "max": "retailer|retail",
-        "min": "E8WgD8VkNsrlVa2|balancing",
+        "distinct": 17,
+        "length": 17,
+        "max": "pOJbg8jfOJJx5cy|retail",
+        "min": "E8WgD8VkNsrlVa2|grid",
         "nlevels": 2
       },
-      "rows": 24
+      "rows": 17
     }
   },
   "MarketDataProcessor.process_average_pricing": {
@@ -1988,19 +1988,19 @@
           "kind": "numeric",
           "max": 0.018,
           "min": 0.008,
-          "nulls": 93,
-          "ordered": 98.02,
-          "sum": 1.33
+          "nulls": 5,
+          "ordered": 69.41000000000001,
+          "sum": 1.3299999999999998
         }
       },
       "index": {
-        "distinct": 188,
-        "length": 188,
+        "distinct": 100,
+        "length": 100,
         "max": "2021-03-25 21:00:00+00:00|retail",
         "min": "2021-03-23 23:00:00+00:00|balancing",
         "nlevels": 2
       },
-      "rows": 188
+      "rows": 100
     }
   },
   "MarketDataProcessor.process_total_balancing": {
