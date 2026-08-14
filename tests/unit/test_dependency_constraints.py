@@ -58,6 +58,49 @@ def test_xarray_stays_pinned_at_the_last_version_linopy_can_use():
         'so no resolver will catch this for you.')
 
 
+def test_igraph_is_a_runtime_dependency_and_not_a_development_one():
+    """The Analyzer's grid topology plot needs it, so a user must get it (#227).
+
+    It is asserted against `[project.dependencies]` specifically, because moving it back into a
+    dependency group is invisible to every other test: the test environment installs the groups,
+    so the suite stays green while `plot_electricity_grid_topology` raises `ImportError` for
+    everyone who installed HAMLET. That is the state this test exists to prevent returning to --
+    it was undeclared entirely until #222, and nothing noticed because `PlotterBase.plot_all`
+    swallows the exception (#228).
+    """
+    import tomllib
+
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding='utf-8'))
+    runtime = {name.split('==')[0].split('[')[0].strip()
+               for name in pyproject['project']['dependencies']}
+    grouped = {name.split('==')[0].strip()
+               for group in pyproject.get('dependency-groups', {}).values()
+               for name in group if isinstance(name, str)}
+
+    assert 'igraph' in runtime, (
+        'igraph must be a runtime dependency: hamlet/analyzer/grids/grid_data_processor.py calls '
+        'pandapower create_generic_coordinates(library="igraph"), which is shipped Analyzer code '
+        f'on a shipped scenario. Found instead in dependency groups: {sorted(grouped)}')
+    assert 'igraph' not in grouped, 'igraph is declared twice; the runtime entry is the real one'
+
+
+def test_the_analyzer_can_import_what_its_topology_plot_needs():
+    """The dependency, asserted as the capability rather than as a line in a file.
+
+    Complements the declaration check above: that one fails on the commit that moves the pin, this
+    one on an environment where the pin did not take.
+    """
+    import importlib
+
+    importlib.import_module('igraph')
+
+    from pandapower.plotting import generic_geodata
+
+    assert getattr(generic_geodata, 'IGRAPH_INSTALLED', True), (
+        'pandapower cannot see igraph, so create_generic_coordinates(library="igraph") will raise '
+        'and the Analyzer grid topology plot is unavailable')
+
+
 def test_linopy_stays_pinned_so_the_xarray_ceiling_is_reconsidered_deliberately():
     """The pins are a pair. Moving one without the other is the mistake this guards."""
     assert requirement('linopy') == '==0.3.11', (

@@ -64,6 +64,11 @@ dependencies = [
     # solver, which is the premise of their equivalence test.
     "highsbox==1.10.0",
     "hplib==1.9",
+    # pandapower's layout backend for `create_generic_coordinates`, which the Analyzer's grid
+    # topology plot calls. An optional pandapower dependency, so it was declared nowhere and that
+    # plot raised ImportError for every user; core rather than an extra because it is reached by
+    # shipped Analyzer code on a shipped scenario, not by anything a user opts into (#227).
+    "igraph==1.0.0",
     "linopy==0.3.11",
     "matplotlib==3.9.0",
     "networkx==3.3",         # module-level in the grid code; arrived transitively until now
@@ -129,10 +134,7 @@ notebooks = ["jupyter==1.1.1"]
 # the published package, which is what makes them the right home for pytest.
 # ----------------------------------------------------------------------------------------------
 [dependency-groups]
-# `igraph` is pandapower's layout backend for `create_generic_coordinates`, which the Analyzer's
-# grid topology processor calls. Test-only, so that processor still raises for a user who installs
-# HAMLET -- that half is #227; here it is what lets the suite pin the processor at all (#222).
-test = ["igraph==1.0.0", "pytest==8.3.5"]
+test = ["pytest==8.3.5"]
 lint = ["ruff==0.16.1"]
 docs = ["sphinx==8.1.3", "sphinx-rtd-theme==3.0.2"]
 dev = [{ include-group = "test" }, { include-group = "lint" }]

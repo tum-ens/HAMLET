@@ -268,13 +268,39 @@ runs.
 
 It also calls `create_generic_coordinates(..., library='igraph')`, and **`igraph` was declared
 nowhere in the repository** — one `grep` hit, in that call — so it raised `ImportError` in every
-environment `uv sync` produces. `igraph` is now in the `test` dependency group, which is what lets
-the suite pin it; it is still broken for anyone who *installs* HAMLET, and that half is **#227**.
+environment `uv sync` produces. It is now a **runtime** dependency, not a test one, because it is
+reached by shipped Analyzer code on a shipped scenario (#227). Two tests in
+`tests/unit/test_dependency_constraints.py` hold it there, and the first exists because of a trap:
+declaring it in a dependency *group* would keep the whole suite green while the plot stayed broken
+for everyone who installed HAMLET, since the test environment installs the groups.
 
 Neither was visible because `PlotterBase.plot_all` catches every exception and prints it, so
 `Analyzer.plot_all()` reports success whatever happens (**#228**). The lesson generalises past this
 file: **coverage.py marks a line that raises as executed**, so "runs but unasserted" and "has never
 worked" look identical when the caller swallows everything.
+
+### Where the agent meter series is cut (#230)
+
+`tests/integration/analyzer/test_agent_meter_truncation.py`, and it is in the fast tier rather
+than the e2e layer for a reason worth reading before moving it.
+
+`meters.ft` is allocated for the whole forecast horizon, so the rows past the simulated end are
+all-zero padding and must be dropped — otherwise every plot ends in a flat run of zeros, and the
+first padding row reads as one enormous negative flow, since the meters are cumulative. The rule
+was `meters.abs().idxmax().max()`: the row at which some meter *peaked*, which is the last
+recorded row only while a meter is still rising at the end.
+
+**Every agent of all three runnable scenarios owns a continuously-rising load, so the old rule
+returned the right answer for all 13 of them.** The committed analyzer reference therefore did not
+move when this was fixed and cannot move if it is reverted — the e2e layer can never pin it. What
+breaks it is an agent owning only PV and a battery, both of which flatten after sunset: on real
+`grid_golden` readings restricted to those two plants, the old rule returned **19 of 25
+timesteps**, dropping the entire evening battery discharge.
+
+The same method also took its time axis from `timestamps`, which leaked out of the per-agent loop
+— so the index of every plot came from whichever agent the filesystem yielded last, i.e.
+`os.listdir` order (!202 again). It is now read from the first agent and checked against every
+other.
 
 ## The `ctsp_industry` fixture
 

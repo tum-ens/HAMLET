@@ -592,6 +592,7 @@ dependencies = [
     { name = "highsbox" },
     { name = "highspy" },
     { name = "hplib" },
+    { name = "igraph" },
     { name = "linopy" },
     { name = "matplotlib" },
     { name = "networkx" },
@@ -627,7 +628,6 @@ tensorflow = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "igraph" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -639,7 +639,6 @@ lint = [
     { name = "ruff" },
 ]
 test = [
-    { name = "igraph" },
     { name = "pytest" },
 ]
 
@@ -649,6 +648,7 @@ requires-dist = [
     { name = "highsbox", specifier = "==1.10.0" },
     { name = "highspy", specifier = "==1.10.0" },
     { name = "hplib", specifier = "==1.9" },
+    { name = "igraph", specifier = "==1.0.0" },
     { name = "jupyter", marker = "extra == 'notebooks'", specifier = "==1.1.1" },
     { name = "linopy", specifier = "==0.3.11" },
     { name = "matplotlib", specifier = "==3.9.0" },
@@ -676,7 +676,6 @@ provides-extras = ["gurobi", "notebooks", "tensorflow"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "igraph", specifier = "==1.0.0" },
     { name = "pytest", specifier = "==8.3.5" },
     { name = "ruff", specifier = "==0.16.1" },
 ]
@@ -685,10 +684,7 @@ docs = [
     { name = "sphinx-rtd-theme", specifier = "==3.0.2" },
 ]
 lint = [{ name = "ruff", specifier = "==0.16.1" }]
-test = [
-    { name = "igraph", specifier = "==1.0.0" },
-    { name = "pytest", specifier = "==8.3.5" },
-]
+test = [{ name = "pytest", specifier = "==8.3.5" }]
 
 [[package]]
 name = "highsbox"

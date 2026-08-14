@@ -401,15 +401,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Both conventions are now pinned (#222), which is why the two scenarios in the new analyzer
   reference differ in generation method rather than being the two most convenient runs.
 
-  **Two further defects in the same method are filed rather than fixed here**, both of which are
-  why this one survived: it also calls `create_generic_coordinates(..., library='igraph')` and
-  `igraph` is declared nowhere in the repository, so it raises `ImportError` in every environment
-  `uv sync` produces (#227 — `igraph` is added to the `test` dependency group so the suite can pin
-  the processor, which does not fix it for a user); and `PlotterBase.plot_all` catches every
-  exception and prints it, so `Analyzer.plot_all()` reports success whatever happens (#228). A
-  third, found while building the reference: the market processors group by Categorical columns
-  and so return rows in a process-dependent order, which reorders a per-agent bar chart between
-  identical runs (#229)
+  **The same method also called `create_generic_coordinates(..., library='igraph')` while `igraph`
+  was declared nowhere in the repository** — one `grep` hit, in that call — so it raised
+  `ImportError` in every environment `uv sync` produces and `plot_electricity_grid_topology` had
+  never worked for anybody (#227). `igraph` is now a **runtime** dependency: it is reached by
+  shipped Analyzer code on a shipped scenario, not by anything a user opts into. Held there by
+  `tests/unit/test_dependency_constraints.py`, which asserts specifically that it is not in a
+  dependency *group* — that would keep the suite green while the plot stayed broken for everyone
+  who installed HAMLET, since the test environment installs the groups.
+
+  Neither defect was visible because `PlotterBase.plot_all` catches every exception and prints it,
+  so `Analyzer.plot_all()` reports success whatever happens (#228, filed). A third, found while
+  building the reference: the market processors group by Categorical columns and so return rows in
+  a process-dependent order, which reorders a per-agent bar chart between identical runs (#229,
+  filed)
+- **The Analyzer cut every agent's meter series at the wrong row (#230).** `meters.ft` is allocated
+  for the whole forecast horizon, so the rows past the simulated end are all-zero padding and have
+  to be dropped. The rule was `meters.abs().idxmax().max()` — the row at which some meter *peaked*,
+  which is the last recorded row only while a meter is still rising at the end. An agent whose
+  meters have all flattened by then lost the remaining timesteps silently.
+
+  It is now found as the last row carrying any reading. **No committed number moves**, because
+  every agent of all three runnable scenarios owns a continuously-rising load and so the old rule
+  happened to return the right answer for all 13 of them — which is exactly why this was worth
+  fixing before a scenario existed that it broke. On real `grid_golden` readings restricted to the
+  plants a PV-and-battery-only agent would own, the old rule returns **19 of 25 timesteps**,
+  dropping the entire evening battery discharge. Pinned by
+  `tests/integration/analyzer/test_agent_meter_truncation.py`, in the fast tier because the e2e
+  reference cannot see this in either direction.
+
+  The same method took its time axis from a `timestamps` variable that leaked out of the per-agent
+  loop, so the index of every plot came from whichever agent the filesystem yielded last — that is
+  `os.listdir` order, the same hazard as !202. It is now taken from the first agent and checked
+  against every other, with a named error if they disagree
 - **A guard inside a fixture consumed only by `xfail(strict=True)` tests was not a guard.**
   `pytest.mark.xfail(strict=True)` converts a fixture *setup error* into a silent `xfailed`
   (verified on pytest 8.3.5). In `e2e/test_backend_equivalence.py` the `linopy_results` fixture is
