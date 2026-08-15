@@ -195,15 +195,53 @@ class ElectricityGridDB(GridDB):
 
         `EnWG14a` reduces a device only as far as the power the regulation guarantees it, and for
         a heat pump that floor is not the flat threshold that applies to EVs and batteries.
-        BNetzA BK6-22-300 sets it by the device's *grid connection* power:
+        BK6-22-300 Anlage 1 Ziffer 4.5.1 sets it by the device's **Netzanschlussleistung**:
 
-            P_min = 0.4 * P_rated    if P_rated > 11 kW
-            P_min = threshold        otherwise
+            P_min = 0.4 * P_connection    if P_connection > 11 kW
+            P_min = threshold             otherwise
 
-        The same floor enters the EMS variant of the control, where the per-device minima are
-        summed with the simultaneity factor fixed at 1. Source: Chu (2024), "Comparative
-        Techno-Economic Analysis of Grid-Serving Control Methods Using Agent-Based Modeling",
-        equations 2.1 to 2.3 -- the thesis the Section 14a implementation here comes from.
+        The same quantity triggers the EMS variant (Ziffer 4.5.2, `P_Summe WP` is defined as the
+        sum of the *Netzanschlussleistungen*), where the per-device minima are summed with the
+        simultaneity factor fixed at 1.
+
+        **`sizing['power']` is not that quantity: it is the heat pump's *thermal* output.** The
+        agent config sizes it from annual heat demand (`agents.yaml`, "20 MWh/a heat demand equals
+        10 kW"), and the RTC treats it as the bound on the *heat* variable while deriving the
+        electrical one by dividing it by the COP (`rtc/optim/*/components.py`). A
+        Netzanschlussleistung is electrical -- it is what the connection is rated to supply -- so
+        testing a thermal figure against an 11 kW electrical limit compares two different physical
+        quantities, and with typical COPs it overstates the connection by a factor of two to five.
+        That is what this method used to do, and it made the floor it wrote a number the
+        regulation does not describe.
+
+        The electrical rating is recovered from the device's reference COP, which every heat pump
+        spec carries and which nothing else in HAMLET reads:
+
+            P_connection = sizing['power'] / cop_ref
+
+        This mirrors what the model itself does: the RTC's electrical bound on a heat pump is
+        `sizing['power'] / cop`, so dividing by a COP is already how HAMLET turns this thermal
+        figure into an electrical one. `cop_ref` is the static, per-model choice of that divisor,
+        and a declared connection power has to be static.
+
+        **Two things it is not.** It is not the catalogue device's nameplate: hplib pairs
+        `COP_ref` with its own `P_th_h_ref`/`P_el_h_ref` (8500 W / 3953 W for the Bosch unit),
+        whereas `sizing['power']` is the *scenario's* thermal sizing, drawn from the agent's
+        annual heat demand and unrelated to the catalogue machine. The quotient is the connection
+        this modelled installation would declare, not the one on the datasheet. And it is not a
+        worst case: `COP_ref` is measured at a cold reference point, so it is the right basis for
+        a rating, but the actual draw at a given timestep can fall either side of it. The
+        direction of that error is model-dependent and is deliberately not claimed here. The
+        alternative -- the maximum of the RTC's own electrical cap over the run -- never
+        understates but makes the connection power depend on the weather in the simulated window,
+        which a Netzanschlussleistung cannot.
+
+        A heat pump with no usable `sizing['power']` or no `cop_ref` falls back to the flat
+        threshold rather than guessing a rating, because the alternative is a NaN in this column
+        and **NaN here does not disable the reduction, it maximises it**: `enwg_14a`'s
+        `min(budget, p_mw - hp_min_control)` returns the budget when the second term is NaN, and
+        `Series.sum()` skips NaN so the EMS path reads the floor as zero. Either way the pump is
+        curtailed to nothing, which is the one outcome the regulation forbids.
 
         `enwg_14a` reads this as a `hp_min_control` column on the load table and **nothing had
         ever written it**, so direct power control raised `KeyError: 'hp_min_control'` the first
@@ -230,15 +268,42 @@ class ElectricityGridDB(GridDB):
                     for plant_id, plant in agent.plants.items():
                         if plant['type'] != c.P_HP:
                             continue
-                        rated = (plant.get('sizing') or {}).get('power')
+                        connection_w = self._heat_pump_connection_power(agent, plant_id, plant)
                         minimum_w[plant_id] = (
-                            c.ENWG14A_HP_SCALING_FACTOR * rated
-                            if rated is not None and rated > c.ENWG14A_HP_SCALING_LIMIT
+                            c.ENWG14A_HP_SCALING_FACTOR * connection_w
+                            if connection_w is not None
+                            and connection_w > c.ENWG14A_HP_SCALING_LIMIT
                             else threshold_w)
 
         loads['hp_min_control'] = [
             minimum_w.get(plant_id, threshold_w) * c.WH_TO_MWH if load_type == c.P_HP else 0.0
             for plant_id, load_type in zip(loads[c.TC_ID_PLANT], loads['load_type'])]
+
+    @staticmethod
+    def _heat_pump_connection_power(agent, plant_id, plant):
+        """A heat pump's Netzanschlussleistung in watts, or None if it cannot be determined.
+
+        `sizing['power']` is thermal and `specs[plant_id]['cop_ref']` is the device's reference
+        COP, so their quotient is the rated electrical input. See
+        `_set_heat_pump_minimum_power` for why that quotient rather than the thermal figure, and
+        for what the reference point does and does not cover.
+
+        Returns None rather than a guess when either half is missing, or when `cop_ref` is below
+        1: the caller then falls back to the flat threshold. A zero COP would divide by zero, and
+        a COP below 1 would claim a connection larger than the heat the pump produces.
+
+        A non-positive `sizing['power']` needs no guard of its own and does not get one. It
+        yields a non-positive connection, which cannot exceed the 11 kW limit, so the caller
+        reaches the same flat threshold by the same comparison every other small pump takes. A
+        guard here would be a branch no test could distinguish from its absence.
+        """
+        rated_thermal_w = (plant.get('sizing') or {}).get('power')
+        cop_ref = (getattr(agent, 'specs', None) or {}).get(plant_id, {}).get('cop_ref')
+
+        if rated_thermal_w is None or cop_ref is None or cop_ref < 1:
+            return None
+
+        return rated_thermal_w / cop_ref
 
     def save_grid(self, path):
         """
