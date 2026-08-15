@@ -197,12 +197,17 @@ class ElectricityGridDB(GridDB):
         a heat pump that floor is not the flat threshold that applies to EVs and batteries.
         BK6-22-300 Anlage 1 Ziffer 4.5.1 sets it by the device's **Netzanschlussleistung**:
 
-            P_min = 0.4 * P_connection    if P_connection > 11 kW
-            P_min = threshold             otherwise
+            P_min = 0.4 * P_connection    if P_connection > 11 kW    (Ziffer 4.5.1 Satz 2)
+            P_min = threshold             otherwise                  (Ziffer 4.5.1 Satz 1)
 
-        The same quantity triggers the EMS variant (Ziffer 4.5.2, `P_Summe WP` is defined as the
-        sum of the *Netzanschlussleistungen*), where the per-device minima are summed with the
-        simultaneity factor fixed at 1.
+        with the factor 0.4 fixed by Satz 3. The same quantity triggers the EMS variant, where
+        `P_Summe WP` is defined (Ziffer 4.5.2 Satz 5) as the sum of the *Netzanschlussleistungen*.
+        `enwg_14a` gives an EMS-controlled agent the plain sum of these per-device floors. **That
+        is not Ziffer 4.5.2's total**, which is `Max(0,4 x P_Summe WP; 0,4 x P_Summe Klima) +
+        (n - 1) x GZF x 4,2 kW` -- one Sockel plus a flat 4,2 kW per further device under a
+        tabulated simultaneity factor. The two agree for a single device and diverge either way
+        beyond one. A long-standing simplification, described here as what it is rather than as
+        "4.5.2 with the simultaneity factor fixed at 1", which it is not.
 
         **`sizing['power']` is not that quantity: it is the heat pump's *thermal* output.** The
         agent config sizes it from annual heat demand (`agents.yaml`, "20 MWh/a heat demand equals
@@ -210,7 +215,8 @@ class ElectricityGridDB(GridDB):
         electrical one by dividing it by the COP (`rtc/optim/*/components.py`). A
         Netzanschlussleistung is electrical -- it is what the connection is rated to supply -- so
         testing a thermal figure against an 11 kW electrical limit compares two different physical
-        quantities, and with typical COPs it overstates the connection by a factor of two to five.
+        quantities, and at the shipped reference COPs of 2.15 to 3.52 it overstates the connection
+        by those same factors.
         That is what this method used to do, and it made the floor it wrote a number the
         regulation does not describe.
 
