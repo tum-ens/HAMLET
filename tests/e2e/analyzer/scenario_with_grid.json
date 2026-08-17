@@ -1002,11 +1002,11 @@
         "hp_min_control": {
           "dtype": "f",
           "kind": "numeric",
-          "max": 0.0308,
+          "max": 0.01432558139534884,
           "min": 0.0,
           "nulls": 0,
-          "ordered": 0.14712,
-          "sum": 0.036879999999999996
+          "ordered": 0.08077674418604652,
+          "sum": 0.01852558139534884
         },
         "id_agent": {
           "distinct": 5,

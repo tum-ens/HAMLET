@@ -280,10 +280,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `grid_golden`'s four heat pumps are rated 2800–9800 W thermal against reference COPs of
   2.15–3.13, so their connection powers are 1.3–4.6 kW, far below 11 kW, and their floors stay at
   the 4200 W threshold. `examples/create_scenario_with_grid` is the exception: its 77 000 W and
-  15 200 W pumps move from 30 800 W and 6 080 W to **14 325.6 W and 4 200 W**. Nothing catches
-  that today — the grid is written as `.xlsx` and `fingerprint()` globs only `*.ft` and `*.csv` —
-  and it is inert while that scenario ships `restrictions.apply: []`, but a user switching §14a on
-  there gets different curtailment than the same config gave before.
+  15 200 W pumps move from 30 800 W and 6 080 W to **14 325.6 W and 4 200 W**. It is inert while
+  that scenario ships `restrictions.apply: []`, but a user switching §14a on there gets different
+  curtailment than the same config gave before.
+
+  **The Analyzer reference is what caught that**, and it is the only reference that moves:
+  `tests/e2e/analyzer/scenario_with_grid.json` pins three statistics of the `hp_min_control`
+  column — `sum` 0.036880 → 0.018526, `max` 0.030800 → 0.014326, `ordered` 0.147120 → 0.080777 —
+  and nothing else in the file changes. Regenerated with `HAMLET_UPDATE_ANALYZER` and committed
+  alongside, with the numbers checked against the regulation rather than accepted: 0.014326 MW is
+  exactly `0.4 × (77 000 / 2.15)` and the sum is that plus the 4200 W threshold the smaller pump
+  now falls back to. The golden master's own fingerprint would *not* have caught it — it globs
+  `*.ft`/`*.csv` and the grid is written as `.xlsx` — so the analyzer oracle from !241 is the only
+  thing standing between this column and a silent change.
 
   **The arithmetic is now asserted, in process, for the first time**
   (`tests/integration/executor/test_enwg_14a_heat_pump_reduction.py`). No scenario can reach it.
