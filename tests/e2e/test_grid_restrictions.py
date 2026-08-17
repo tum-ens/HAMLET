@@ -37,26 +37,42 @@ deliberate and is the price of the coverage; `INDIVIDUAL_EDITS` argues it, and t
 above are what keep the real 4200 W under test.
 
 **What that still does not reach.** Stated in full, with counts, because a partial list reads as
-a complete one -- **34 of the method's 66 statements still never execute**:
+a complete one. Of the method's 63 statements, **this file reaches none of the over-generation
+branch and none of the heat-pump body**:
 
-* The **over-generation** branch (`enwg_14a.py:421-465`), **23 statements**. `grid_golden` never
+* The **over-generation** branch (`enwg_14a.py:429-474`), **23 statements**. `grid_golden` never
   over-generates -- across six instrumented runs, 817 dispatches into the method entered
   over-consumption 169 times and neither branch 648 times, and over-generation not once. Nor
   would a threshold edit reach it: every battery ships `b2g_0 = 0.0` and every EV `v2g_0 = 0`, so
   the branch's two device filters cannot match as this fixture is configured. #233.
-* The **heat-pump loop's body** (`enwg_14a.py:396-419`), **11 statements**, though the loop
-  itself is entered. No heat pump is ever curtailed under the shipped order -- correctly, since
-  the EV above it absorbs the whole budget first -- so the guard runs and the body does not. Two
-  statements are unreachable outright rather than merely unreached: the §14a scaling arm at
-  `:406` needs a heat pump drawing over 11 kW and all four here are rated 2800-9800 W, and the
-  `hp_min_control` clamp at `:410` is identically false while every heat pump is under 11 kW,
-  because `hp_min_control` then equals the threshold and the reduction is already capped at
-  `p_mw - threshold`. #209 would change that arithmetic; it would not by itself make it reachable.
+* The **heat-pump body**, in both methods -- and **the two fixtures miss it for different
+  reasons**, which is worth stating separately because one explanation does not cover both. The
+  four pumps peak at 234, 578, 578 and **1880 W**, with means of 43-157 W. Only the last is
+  anywhere near the 4200 W floor, and it reaches **99.9 % of its own RTC electrical bound**
+  (`max(sizing/cop_t, ts P_electricity_heat)`, 1856-2042 W for that pump) at its peak timestep,
+  so it is rating-limited there, not demand-limited. The other three run at 11-68 % of theirs.
+  * Under the `ems` fixture's 4200 W threshold, `load_df`'s filter drops every pump before the
+    arithmetic runs. Instrumented over one run: **zero** dispatches into `__control_via_ems` saw
+    a heat pump at all.
+  * Under `INDIVIDUAL_EDITS`' **1000 W** threshold they are not filtered, and the loop is
+    entered -- measured, once, with one pump at 1940 W. Its body still does not execute, because
+    the EV ahead of it has taken the whole budget by then and the loop's guard is false. The
+    pump receives no command.
 
-**Measured, not inferred: four mutations inside that body stay green** -- deleting the heat-pump
-loop, disabling the `hp_min_control` clamp, forcing the over-11 kW arm, and changing the scaling
-factor from 0.6 to 0.3. A review panel ran all four. Do not read the coverage below as protecting
-them.
+  **What it would take to reach the body is therefore an open question, not a settled one.** The
+  one pump that gets close is at its rating, so a larger rating might raise its draw -- or might
+  not, if the heat demand behind it is what actually binds over the rest of the run. Either way
+  `.ai/context.md` warns what changing this fixture's sizing does to the overload it exists to
+  produce, and `test_the_feeder_actually_overloads` is what catches it (#209, #232).
+
+**Measured, not inferred: mutations inside that body stay green here.** A review panel ran four
+against the pre-#209 code -- deleting the heat-pump loop, disabling the `hp_min_control` clamp,
+forcing the over-11 kW arm, and changing the scaling factor. Do not read the coverage below as
+protecting the heat-pump arithmetic; `tests/integration/executor/test_enwg_14a_heat_pump_reduction.py`
+is what does, in process. It reaches every *statement* of the over-consumption branch -- and the
+distinction matters here: **this file covers line 396's guard only on its false arm**, since the
+loop is entered and the body never runs, so `res_direct_power_control.csv` names no heat pump for
+the whole run. The integration file covers both arms.
 
 So this file pins *which* device §14a curtails first and *that* the device obeyed. It does not
 pin how much is taken off a heat pump.

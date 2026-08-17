@@ -197,8 +197,9 @@ That file also runs `grid_golden` a **second** time, under config edits selectin
 `individual` direct-power-control method and lowering its floor, to assert the device priority
 order (#232). That run is not pinned by the golden master and is not shared with the one above —
 `config_edits` makes it a different request — so it costs the `e2e` job one extra scenario run.
-See `INDIVIDUAL_EDITS` in that file for why the floor has to move, and for the third of the
-method that still never executes.
+See `INDIVIDUAL_EDITS` in that file for why the floor has to move, and its module docstring for
+what neither fixture reaches. The heat-pump arithmetic they cannot reach is covered in process by
+`tests/integration/executor/test_enwg_14a_heat_pump_reduction.py`.
 
 **To pin another scenario**, append a `GoldenScenario(container, name)` and create its reference
 with `HAMLET_UPDATE_GOLDEN=<name>`. One earns its place by reaching code the others do not, and costs

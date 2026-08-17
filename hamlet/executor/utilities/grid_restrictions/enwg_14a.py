@@ -345,7 +345,21 @@ class EnWG14a(GridRestrictionBase):
             # count number of relevant 14a devices at bus
             load_df = deepcopy(grid.load[grid.load['bus'] == bus][(grid.load['load_type'] == c.P_EV) |
                                                                   (grid.load['load_type'] == c.P_HP)])
-            load_df = load_df[load_df['p_mw'] > threshold]
+
+            # A device is a candidate only if it draws above **its own** Mindestleistung, which is
+            # what it is guaranteed and therefore all it can give (Ziffer 4.5). For an EV that is
+            # the flat threshold; for a heat pump it is `hp_min_control`, which is larger wherever
+            # the connection power exceeds 11 kW. Filtering both on the flat threshold admitted
+            # pumps with nothing to give, and the reduction computed for them came out negative --
+            # a command to consume *more* during an overload, which the RTC pins rather than
+            # treats as a bound. `hp_min_control` is 0 for non-heat-pumps, hence the clip.
+            #
+            # Direktansteuerung binds each device on its own (Ziffer 4.5.1), which is why this is
+            # a per-device test here and deliberately is *not* one in `__control_via_ems`: under
+            # Ziffer 4.5.2 the guarantee is one total for the whole installation, so an agent
+            # already below its combined floor owes nothing even where a single device of its own
+            # still has headroom.
+            load_df = load_df[load_df['p_mw'] > load_df['hp_min_control'].clip(lower=threshold)]
 
             # check if battery is charging
             battery_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][grid.sgen['plant_type'] == c.P_BATTERY])
@@ -398,16 +412,21 @@ class EnWG14a(GridRestrictionBase):
                     agent_id = load_df.loc[hp_index, c.TC_ID_AGENT]
                     plant_id = load_df.loc[hp_index, c.TC_ID_PLANT]
 
-                    # check if hp power > 0.011, if yes apply scaling factor (according to 14a)
-                    if load_df.loc[hp_index, 'p_mw'] <= 0.011:  # hp power <= 11 kW, reduce to threshold
-                        hp_reduction = min(p_mw_to_be_reduced - p_mw_14a_reduced, load_df.loc[hp_index, 'p_mw'] -
-                                           threshold)
-                    else:  # hp power > 11 kW, reduce to hp power * scaling factor (0.4)
-                        hp_reduction = min(p_mw_to_be_reduced - p_mw_14a_reduced, load_df.loc[hp_index, 'p_mw'] * 0.6)
-
-                    # hp power can only be reduced to minimal possible power with feasibility
-                    if hp_reduction > load_df.loc[hp_index, 'p_mw'] - load_df.loc[hp_index, 'hp_min_control']:
-                        hp_reduction = load_df.loc[hp_index, 'p_mw'] - load_df.loc[hp_index, 'hp_min_control']
+                    # §14a guarantees a heat pump its Mindestleistung and no more: everything
+                    # above `hp_min_control` may be taken, nothing below it. That column already
+                    # carries both branches of BK6-22-300 Anlage 1 Ziffer 4.5.1 -- the flat
+                    # threshold, or 40 % of the Netzanschlussleistung above 11 kW -- computed per
+                    # device in `grid_db._set_heat_pump_minimum_power`, which is the one place
+                    # that knows the device's rating. Testing the *instantaneous* draw against
+                    # 11 kW here, as this used to, applies the rule to the wrong quantity (#209).
+                    #
+                    # No lower clamp is needed here and none is written: the filter above admits
+                    # only pumps drawing above their own floor, so this subtraction is positive by
+                    # construction, and the loop guard makes the budget positive too. A clamp
+                    # would be a branch no test could distinguish from its absence.
+                    hp_reduction = min(p_mw_to_be_reduced - p_mw_14a_reduced,
+                                       load_df.loc[hp_index, 'p_mw'] -
+                                       load_df.loc[hp_index, 'hp_min_control'])
 
                     p_mw_14a_reduced += hp_reduction
 
@@ -535,26 +554,44 @@ class EnWG14a(GridRestrictionBase):
                                 len(load_df[load_df[c.TC_ID_AGENT] == agent][load_df['load_type'] == c.P_EV]) *
                                 threshold)
 
-                # total reducible hp power
-                # calculate reducible power for hp with power <= 11 kW
-                hp_reduction_normal = (load_df[load_df[c.TC_ID_AGENT] == agent][(load_df['load_type'] == c.P_HP) &
-                                                                                (load_df['p_mw'] <= 0.011)]['p_mw']
-                                       .sum() - len(
-                    load_df[load_df[c.TC_ID_AGENT] == agent][(load_df['load_type'] == c.P_HP) &
-                                                             (load_df['p_mw'] <= 0.011)]) * threshold)
-
-                # calculate reducible power for hp with power > 11 kW using a scaling factor 0.4
-                hp_reduction_scalar = (load_df[load_df[c.TC_ID_AGENT] == agent][(load_df['load_type'] == c.P_HP) &
-                                                                                (load_df['p_mw'] > 0.011)]['p_mw'].sum()
-                                       * 0.6)
-
-                # hp power can only be reduced to minimal possible power with feasibility
-                hp_reduction_max = (
-                        load_df[load_df[c.TC_ID_AGENT] == agent][load_df['load_type'] == c.P_HP]['p_mw'].sum() -
-                        load_df[load_df[c.TC_ID_AGENT] == agent][load_df['load_type'] == c.P_HP]
-                        ['hp_min_control'].sum())
-
-                hp_reduction = min(hp_reduction_normal + hp_reduction_scalar, hp_reduction_max)
+                # total reducible hp power: everything the agent's heat pumps hold above their
+                # §14a Mindestleistung. `hp_min_control` carries that floor per device, from
+                # BK6-22-300 Anlage 1 Ziffer 4.5.1 -- the flat threshold, or 40 % of the
+                # Netzanschlussleistung above 11 kW -- so no test on the instantaneous draw
+                # belongs here (#209).
+                #
+                # Ziffer 4.5.2, the rule for EMS control proper, is *not* what this computes: it
+                # grants `Max(0,4 x P_Summe WP; 0,4 x P_Summe Klima) + (n - 1) x GZF x 4,2 kW`,
+                # over the sum of the connection powers and with a simultaneity factor from a
+                # table. Summing per-device 4.5.1 floors is that formula with GZF fixed at 1, the
+                # simplification `grid_db._set_heat_pump_minimum_power` documents.
+                #
+                # Floored at zero, and floored on the **aggregate** rather than per device --
+                # which is where this deliberately differs from `__individual_device_control`.
+                # Under EMS control the guarantee is a single total: Ziffer 4.5.2 Satz 6 lets the
+                # Betreiber deploy `den insgesamt gewaehrten Sollwert ... nach eigener Massgabe`,
+                # so an agent whose heat pumps together sit below their combined floor owes
+                # nothing, even if one of them individually has headroom. Direktansteuerung binds
+                # each device separately (Ziffer 4.5.1), so the other method clamps per device and
+                # the two answer differently on the same input. Both are correct for their own
+                # control mode; `test_the_two_methods_clamp_at_different_granularities` pins it.
+                #
+                # **The size of that total is not Ziffer 4.5.2's.** That grants
+                # `Max(0,4 x P_Summe WP; 0,4 x P_Summe Klima) + (n - 1) x GZF x 4,2 kW` -- one
+                # Sockel plus a flat 4,2 kW per further device, scaled by a simultaneity factor
+                # from a table. HAMLET grants the plain sum of the per-device 4.5.1 floors, which
+                # coincides with that only for a single device and diverges in *either* direction
+                # beyond one: higher for several small pumps, lower for several large ones. That
+                # is a modelling simplification older than #209 and is not what this change is
+                # about, but it is not "4.5.2 with GZF = 1" either, and calling it that is how it
+                # stayed unexamined.
+                #
+                # Without the floor the subtraction goes negative and the command pushes the agent
+                # up, and a negative share then misallocates the bus reduction. This is not a NaN
+                # guard: `max(0.0, NaN)` is 0.0, and the NaN case is prevented upstream by
+                # `grid_db._set_heat_pump_minimum_power`'s threshold fallback.
+                agent_hps = load_df[(load_df[c.TC_ID_AGENT] == agent) & (load_df['load_type'] == c.P_HP)]
+                hp_reduction = max(0.0, agent_hps['p_mw'].sum() - agent_hps['hp_min_control'].sum())
 
                 # calculate total reduction
                 total_reduction = battery_reduction + ev_reduction + hp_reduction
@@ -605,8 +642,18 @@ class EnWG14a(GridRestrictionBase):
             if agent not in control_target.keys():
                 control_target[agent] = {}
 
-            reduced_p_agent = int(reducible_power_for_agent[agent] / sum(reducible_power_for_agent.values()) *
-                                  power_reduction_at_bus * c.MWH_TO_WH)  # distribute power reduction to each agent
+            # distribute power reduction to each agent, in proportion to what each can give.
+            #
+            # The total is zero whenever every controllable device at the bus already sits at its
+            # §14a floor, which the iteration in `__calculate_direct_power_control` reaches
+            # routinely: the pass that drove them there leaves the next one with nothing. Every
+            # per-agent term is non-negative, so a zero total means every term is zero, and the
+            # division is 0.0 / 0.0 -- NaN directly, not by way of an infinity. `int(NaN)` then
+            # raises and kills the timestep rather than the reduction. Nothing left to give means
+            # nobody's share moves.
+            total_reducible = sum(reducible_power_for_agent.values())
+            reduced_p_agent = int(reducible_power_for_agent[agent] / total_reducible *
+                                  power_reduction_at_bus * c.MWH_TO_WH) if total_reducible > 0 else 0
 
             control_target[agent]['ems'] = total_p_agent + reduced_p_agent
 
