@@ -53,6 +53,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   4500 W above the floor while its owner's EV was curtailed; swapping only `ev` with `hp` fails on
   a heat pump curtailed while the EV beside it still drew 7200 W; reversing both fails too.
 
+  *(The `ev`/`hp` half of that was true when written and is no longer: #234 moved this fixture's
+  heat pumps out of the overloading timestep, and the swap is now green. Re-measured, recorded in
+  `EXERCISED_ADJACENCIES`, and tracked as #235 — see the #234 entry under Fixed.)*
+
   A fourth test asserts the commands were **obeyed** — the `individual` analogue of the `ems`
   test that #205 added, and not covered by it, because the two methods take different routes into
   the backend and write the same `res_direct_power_control` column with opposite signs. It also
@@ -244,9 +248,91 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   The second arm holds even if a future refactor makes the test and the implementation mirror the
   same wrong idea.
 
+  **The discriminator now fails closed, which is the half that stops this recurring.** Reading the
+  right key is not enough on its own: the branch tests one literal and sends everything else to
+  the soil model, so any `hp_type` the code does not recognise still gets an air unit's physics
+  wrong in exactly the way #234 did — per spec file, silently. `config_templates/agents.yaml`
+  invites users to name their own spec file, so that is reachable rather than hypothetical. An
+  unrecognised value now raises. `'hp'`, the value #234 actually read, is not in the accepted set,
+  so this check is what would have turned the original defect into an error on its first run.
+
+  Relatedly, `__make_timeseries` called the spec function inside `except KeyError` and reported
+  everything it raised as "Time series creation from spec file not available for plant type hp" —
+  false, and a dead end for whoever has to fix the file. Only the registry lookup can raise that
+  now, so a spec missing `model` or `hp_type` says which key is missing.
+
   **Containment, measured.** Of the 49 files `grid_golden`'s Creator writes, three differ, all
   three the air-unit agents' `timeseries.ft`, and within them only the six heat-pump columns. The
   one `Brine/Water` agent's file is byte-identical: it took the `else` branch before and after.
+
+  **All four committed references move, and each was checked rather than accepted.** Structure
+  holds in both golden scenarios — same tables, no column added or dropped.
+
+  **Direction is up in every realised quantity.** `grid_golden`'s `hp_electricity` total goes
+  -10.307 to -13.005 (+26 %) in the Analyzer aggregate, and per agent in `meters.ft` the three air
+  units draw 33-35 % more over the run (e.g. 4.668 to 6.290 kWh). One table moves the other way
+  and it is not a counter-example: `setpoints.ft` spans 2021-03-19 22:00 to 2021-03-20 21:00 —
+  entirely *after* the simulated day — so it holds the forecast horizon left over when the run
+  ended, a plan for a day never simulated. Its heat-pump values fall because the corrected COPs
+  make the pump more expensive to run, which is the fix working rather than against it.
+
+  **Row counts move for three reasons, not one.** `simple_scenario` clears 40 more bids and
+  offers. `grid_golden`'s six power-flow tables (`res_bus`, `res_line`, `res_load`, `res_sgen`,
+  `res_trafo`, `res_ext_grid`) lose 10 % of their rows because the grid stage writes one row per
+  power-flow *pass* and the run now has one overload event instead of two — a **more** severe one
+  (149.6 % against 132.0 %) at 04:00 rather than 01:00 and 05:00; `res_direct_power_control.csv`
+  halves, 4 rows to 2, for the same reason, and `res_variable_grid_fee.csv` does not move at all.
+  And `grid_golden`'s three market tables shrink 9 % as the changed dispatch clears fewer trades.
+  Every one of the 24 timesteps is present in both runs.
+
+  `load:hp_min_control`, the column !244 moved in `analyzer/scenario_with_grid.json`, does not
+  move again and appears nowhere in the diff: it derives from `sizing['power'] / cop_ref`, both
+  static and independent of the inlet temperature.
+
+  **Two §14a assertions were re-established rather than regenerated.**
+  `test_the_curtailment_command_was_respected` and `test_the_individual_commands_were_respected`
+  allowed 1 W of slack on a cap, on the stated ground that a converging sequence lands on 0 W. The
+  more severe overload does not converge within `max_iteration: 3`: the last kept pass sits at
+  100.053 % of the 15 kVA transformer, an 8 W overload across the feeder, of which the largest
+  per-agent share measured is 3 W. That slack is now `POWER_FLOW_MARGIN_W`, 10 W, sized from the
+  residual and one to two orders of magnitude below the hundreds of watts a discarded cap shows.
+
+  The single constant was also **split**, because two mechanisms had been sharing it. A §14a
+  `control_result` is computed and written out with no power flow between, so the iteration
+  residual cannot reach it; the only thing that can move it is a one-watt truncation.
+  `COMMAND_MARGIN_W` stays at 1 W and is what the §14a **floor guarantee** now uses — the one
+  assertion in the file about curtailing *too hard*, checking a statutory minimum, which at 10 W
+  would have accepted a device capped 9 W under its guarantee. The ordering test picks its margin
+  per peer, by whether that peer's number came from a command or from the power flow.
+
+  `test_both_priority_adjacencies_are_exercised` reported *neither* adjacency exercised, and half
+  of that was its own measurement: it read the **post-control** power flow, where a device
+  curtailed to its floor has zero headroom and drops out of the very filter meant to find it. Read
+  on the uncontrolled first pass, `('battery', 'ev')` is exercised more strongly than before — a
+  battery at 5500 W taken to the 1000 W floor while the EV beside it gives only the remaining
+  238 W. `controllable_devices` takes a `power_flow_pass` argument and the guard, renamed
+  `test_the_reachable_priority_adjacencies_are_exercised`, asks the first pass.
+
+  `('ev', 'hp')` is genuinely gone and is **#235**, not a tuning problem: correct air-source COPs
+  move the heat pumps to midday PV hours, and at the one timestep this feeder overloads the four
+  pumps draw 0, 0, 0 and 4 W. Measured by mutation — reordering the device loops in `enwg_14a.py`,
+  the battery/EV swap still fails the ordering test and the EV/heat-pump swap is now green — and
+  the docstrings that claimed otherwise say so. `EXERCISED_ADJACENCIES` states the gap, and the
+  guard asserts **equality** against it so a fixture that reaches the pair again fails too.
+
+  Two further guards in the same file were found by review to be weaker than they read.
+  `test_devices_are_curtailed_in_priority_order`'s `compared > 0` — there to stop the test passing
+  by never looking — counted *every* higher-priority device beside a curtailed one, including
+  devices far below the floor that could not have produced a verdict either way; at 04:00 that is
+  four heat pumps drawing 0, 0, 0 and 4 W. It now counts only peers that were commanded or are
+  themselves above the floor. And several instrumentation figures in the module docstring — the
+  pumps' peak draws, the dispatch counts, the "zero dispatches saw a heat pump" claim — were
+  measured before #234 on a run this change moves; they are now marked as such rather than read as
+  current, and every `enwg_14a.py` line reference in the file, stale by 14 lines since #209, has
+  been corrected.
+
+  `calc_brine_temp` being applied to the `Water/Water` unit is a separate modelling question and
+  is **#236**.
 
 - **§14a applied its 11 kW rule to two quantities the regulation does not name, and the heat-pump
   arithmetic that did so had never been asserted (#209).** BK6-22-300 Anlage 1 attaches both the
