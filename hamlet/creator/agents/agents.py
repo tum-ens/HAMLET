@@ -38,6 +38,13 @@ pd.options.mode.chained_assignment = None  # default='warn'
 EV_COL_AVAILABILITY = 'availability'
 
 
+#: The `hp_type` values `__timeseries_from_specs_hp` knows how to simulate, and the only ones it
+#: accepts. hplib's vocabulary (`hplib_database.csv`), carried by every shipped spec file.
+#: `Outdoor Air/Water` takes ambient air as its source; the other two take `calc_brine_temp`.
+#: Applying a soil model to the water/water unit is a separate modelling question -- #236.
+HP_TYPES = frozenset({'Outdoor Air/Water', 'Brine/Water', 'Water/Water'})
+
+
 class Agents:
     """
     A class used to generate all agents, including different types such as single-family homes (sfh), multi-family homes (mfh),
@@ -855,7 +862,29 @@ class Agents:
 
         # obtain the model type of the heat pump predefined in agents.xlsx
         hp_model = specs['model']
-        hp_type = specs['type']
+        # `specs['type']` is the plant type ('hp') for every spec file; the air/brine
+        # discriminator is a separate key. Reading the wrong one ran every air-source unit on
+        # soil inlet temperature -- see issue #234.
+        hp_type = specs['hp_type']
+
+        # **Refused rather than defaulted, because #234 was a silent default.** The branch below
+        # tests one literal and sends everything else to the soil model, so an `hp_type` this
+        # code does not recognise gets an air unit's physics wrong in exactly the way #234 did,
+        # per spec file, with nothing red. That is the shape of the original defect one level
+        # down, and it is not hypothetical: `config_templates/agents.yaml` invites a user to name
+        # their own spec file, and 'hp' -- the value #234 actually read -- is not in this set, so
+        # this check is what would have turned that defect into an error on the first run.
+        #
+        # These three are hplib's own vocabulary, not HAMLET's: the shipped specs are exports of
+        # `hplib_database.csv` and its `Group` column encodes the same fact independently
+        # (1/4 air, 2/5 brine, 3/6 water). Cross-checking against `parameters` below would be a
+        # genuine second opinion rather than a restatement, and is worth doing if this list ever
+        # has to grow.
+        if hp_type not in HP_TYPES:
+            raise ValueError(
+                f"heat pump spec '{hp_model}' declares hp_type {hp_type!r}, which is not one of "
+                f"{sorted(HP_TYPES)}. Refusing rather than guessing: the unrecognised value would "
+                f"silently be simulated on a ground-source inlet temperature, which is #234.")
         dtemp_transfer_loss = 5  # delta T of inlet and outlet in the secondary side is fixed at 5K
         # TODO: Currently temperature levels are fixed, but should be read from the config file
         supply_temp = {c.P_HEAT: 40, c.P_DHW: 55}
@@ -1031,12 +1060,17 @@ class Agents:
         if isinstance(file, dict):
             specs = file
             try:
-                # Use the plant-specific specs function to create a time series from the spec data
-                file = self.plants[plant_dict['type']]['specs'](specs=file, plant=plant_dict)
+                # Look up the plant-specific specs function...
+                make_timeseries = self.plants[plant_dict['type']]['specs']
             except KeyError:
                 # If the specs function is not available for this plant type, raise an error
                 raise KeyError(f'Time series creation from spec file not available for plant type '
                                f'{plant_dict["type"]}.')
+            # ...and call it *outside* the try. Wrapping the call caught every KeyError raised
+            # inside the specs function -- a spec file missing `model` or `hp_type`, say -- and
+            # reported it as "no specs function for this plant type", which sends the reader after
+            # the wrong thing entirely. Only the lookup above can raise the error this handles.
+            file = make_timeseries(specs=file, plant=plant_dict)
 
         # Apply a special function to the time series if specified
         if func_ts := self.plants[plant_dict['type']].get('func_ts'):

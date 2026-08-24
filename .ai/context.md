@@ -243,6 +243,18 @@ backend whose `apply_grid_commands` silently does nothing — which is what `poi
 base class before !209 — looks identical to one that obeys. Restoring that no-op fails exactly one
 test and leaves the other three green.
 
+**Direct power control has two methods and `grid_golden` selects `ems`; the other is covered by a
+second run of the same fixture (#232).** `__individual_device_control` curtails named devices in a
+priority order — battery, EV, heat pump — and no shipped config reaches it, while
+`config_templates/grids.yaml` selects it, so it is what a copied scenario runs.
+`test_grid_restrictions.py` reaches it with `config_edits`. **Selecting the method is not enough,
+and this is the trap:** the order is only observable where the reduction budget runs out *part-way*
+through it, and that is governed by the §14a floor, which sets each device's headroom — not by how
+many device classes are present. At the shipped 4200 W this fixture's devices sit too close to the
+floor, both go to it whatever the order, and reversing both documented orders leaves all 152 calls
+byte-identical. The second fixture therefore also lowers the floor to 1000 W, and costs the `e2e`
+job one extra run (~185 s). Its over-generation half is reachable by nothing (#233).
+
 **The grid stage itself is covered since #205, and it was not before.** Both grid-enabled examples
 run again and `tests/e2e/test_grid_examples.py` runs them, asserting that a power flow was solved
 and that every load and sgen belongs to an agent. Nothing else here would notice the stage

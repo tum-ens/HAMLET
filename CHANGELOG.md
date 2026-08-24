@@ -10,6 +10,79 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Added
+- **§14a's `individual` device control is covered, and its priority order is asserted as an
+  order (#232).** `EnWG14a` has two direct-power-control methods. `grid_golden` selects `ems`, and
+  the other — `__individual_device_control`, 66 statements — was reachable by **no scenario in the
+  repository**: the three configs that switch the restriction on run no electricity grid, the two
+  that run a grid apply no restriction. Its device priority policy (batteries first because
+  curtailing one costs no comfort, heat pumps last because it costs the most) was vacuously green
+  under the golden master and under `test_grid_restrictions.py` alike. `config_templates/grids.yaml`
+  meets all three conditions and selects `individual`, so the branch nothing ran is the one a new
+  user's scenario is copied from.
+
+  Covered by a second `grid_golden` run rather than a sibling scenario, since the blocker was
+  configuration and not code.
+
+  **Switching the method is not enough, and that is the substance of this entry.** Instrumented
+  with only that edit, the method runs 152 times and 151 of those calls see at most one
+  controllable device class above the 4200 W floor; no heat pump is ever above it. The single call
+  that sees two is asked to shed 1749 W from a battery and an EV holding 957 W of headroom between
+  them, so both are taken to the floor and the order is immaterial. **Reversing both documented
+  priority orders against that configuration leaves all 152 calls byte-identical** — a fixture
+  built on it would have been green under the very mutation the issue was filed about.
+
+  The missing condition is that the reduction budget must run out *part-way through* the order,
+  which is governed by the floor — it sets each device's headroom — and not by the device count.
+  So the fixture lowers it to 1000 W. Lowering it cannot reorder the policy, because the sequence
+  of the device loops is a literal constant in the source; what the floor changes is *which*
+  devices enter those loops and how much each gives, which is the point. The `ems` tests in the
+  same file keep §14a's real 4200 W, and the constant is called `LOWERED_THRESHOLD_W` so a reader
+  cannot take 1000 W for the regulation's number.
+
+  **The ordering test asserts an invariant over whatever the run produced** — no higher-priority
+  device is left above the floor while a lower-priority one is curtailed — rather than a pinned
+  trajectory. Changing the order changes the commands, which moves the re-simulated power flow and
+  therefore the whole run, so a trajectory-pinned test would go red under the mutation for the
+  wrong reason and equally red under an unrelated solver change. A separate test asserts the
+  *premise*, that the run really reaches a bus where a battery and an EV compete and one where an
+  EV and a heat pump do, so a fixture that quietly stops producing either pair fails naming the
+  pair it lost instead of leaving the invariant to pass over the half it can still see.
+
+  **Each adjacency was mutated separately**, because one arm of a full reversal can go red while
+  the other asserts nothing: swapping only `battery` with `ev` fails on a battery left charging
+  4500 W above the floor while its owner's EV was curtailed; swapping only `ev` with `hp` fails on
+  a heat pump curtailed while the EV beside it still drew 7200 W; reversing both fails too.
+
+  *(The `ev`/`hp` half of that was true when written and is no longer: #234 moved this fixture's
+  heat pumps out of the overloading timestep, and the swap is now green. Re-measured, recorded in
+  `EXERCISED_ADJACENCIES`, and tracked as #235 — see the #234 entry under Fixed.)*
+
+  A fourth test asserts the commands were **obeyed** — the `individual` analogue of the `ems`
+  test that #205 added, and not covered by it, because the two methods take different routes into
+  the backend and write the same `res_direct_power_control` column with opposite signs. It also
+  pins the half of §14a nothing asserted: that a command never cuts a device *below* its
+  guaranteed floor. Every other assertion here is about curtailing too little or in the wrong
+  order, and none would notice the method curtailing too hard.
+
+  **It costs the `e2e` job one additional scenario run**, unlike #222 below — the config edits
+  make it a genuinely different request, so the run cache cannot serve it from an existing one.
+  Quote it as a band and not a level: the marginal cost measured between 64 s and 186 s on the
+  same machine depending on load, which is the same caveat `tests/scenario_cache.py` already makes
+  about its own 70–125 s figure.
+
+  **A third of the method still never executes, and the file says so with counts** — 34 of its 66
+  statements. The over-generation branch is 23 of them: across six instrumented runs, 817
+  dispatches entered over-consumption 169 times and neither branch 648 times, and over-generation
+  not once, and no threshold edit would help since every battery ships `b2g_0 = 0.0` and every EV
+  `v2g_0 = 0` (filed as #233). The heat pump loop's body is the other 11: under the shipped order
+  the EV above it always absorbs the whole budget, so the loop is entered and its body is not.
+  A review panel confirmed the consequence by mutation — deleting the heat-pump loop, disabling
+  the `hp_min_control` clamp, forcing the over-11 kW arm and halving the scaling factor all stay
+  green — and the module docstring names those four so the coverage is not read as protecting
+  them. Relevant to #209, which changed exactly that arithmetic; the counts above describe the
+  method as it stood before that change, and the §14a entry at the top of this file carries the
+  ones that hold now.
+
 - **The Analyzer's data processors are pinned against committed reference numbers (#222).** Of
   HAMLET's three top-level components, the Creator and the Executor are heavily pinned and the
   Analyzer had nothing asserted on what it *computes*: the test that ran it checked the process
@@ -151,6 +224,223 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   default; run it with `pytest -m benchmark -s`. In a Linux container: **2.68 ms** per solve for
   PyOptInterface against **191.76 ms** for linopy, and the split shows why — linopy spends 138.89
   ms building a model that HiGHS then solves in 52.86 ms
+
+### Fixed
+
+- **Every air-source heat pump was simulated on soil inlet temperature (#234).**
+  `agents.py:858` read the air/brine discriminator from `specs['type']`, which is the *plant*
+  type and is the literal `'hp'` in all nine shipped spec files. The comparison at `:887` was
+  therefore never true, so `t_in_primary` was always `calc_brine_temp(t_amb)` — soil, which the
+  function exists to model as far warmer than winter air. The discriminator is `specs['hp_type']`,
+  which the same files carry alongside it (`"Outdoor Air/Water"`, `"Brine/Water"`,
+  `"Water/Water"`). Read in exactly two places and consumed nowhere else, so the fix is one line.
+
+  **The error vanishes in mild weather and is largest when a distribution grid is most stressed.**
+  On the shipped Bosch unit at 40 °C flow with a 5 K transfer loss, `hplib` gives COP 1.00 at
+  −15 °C ambient against 4.64 on the brine path — 7.6× the electrical draw. At +7 °C the two agree
+  to within 2 %. Correcting it can only raise winter draw, never lower it.
+
+  Nothing failed, because the COP series is an *input* to every downstream number: the golden
+  master pinned the output of the wrong series. `tests/integration/creator/`
+  `test_heat_pump_inlet_temperature.py` asserts the series itself, two ways — exactly against an
+  hplib call of its own, and physically, on the fact that `calc_brine_temp` has a floor near
+  3 °C over the shipped weather file and so cannot produce a low COP however cold the air gets.
+  The second arm holds even if a future refactor makes the test and the implementation mirror the
+  same wrong idea.
+
+  **The discriminator now fails closed, which is the half that stops this recurring.** Reading the
+  right key is not enough on its own: the branch tests one literal and sends everything else to
+  the soil model, so any `hp_type` the code does not recognise still gets an air unit's physics
+  wrong in exactly the way #234 did — per spec file, silently. `config_templates/agents.yaml`
+  invites users to name their own spec file, so that is reachable rather than hypothetical. An
+  unrecognised value now raises. `'hp'`, the value #234 actually read, is not in the accepted set,
+  so this check is what would have turned the original defect into an error on its first run.
+
+  Relatedly, `__make_timeseries` called the spec function inside `except KeyError` and reported
+  everything it raised as "Time series creation from spec file not available for plant type hp" —
+  false, and a dead end for whoever has to fix the file. Only the registry lookup can raise that
+  now, so a spec missing `model` or `hp_type` says which key is missing.
+
+  **Containment, measured.** Of the 49 files `grid_golden`'s Creator writes, three differ, all
+  three the air-unit agents' `timeseries.ft`, and within them only the six heat-pump columns. The
+  one `Brine/Water` agent's file is byte-identical: it took the `else` branch before and after.
+
+  **All four committed references move, and each was checked rather than accepted.** Structure
+  holds in both golden scenarios — same tables, no column added or dropped.
+
+  **Direction is up in every realised quantity.** `grid_golden`'s `hp_electricity` total goes
+  -10.307 to -13.005 (+26 %) in the Analyzer aggregate, and per agent in `meters.ft` the three air
+  units draw 33-35 % more over the run (e.g. 4.668 to 6.290 kWh). One table moves the other way
+  and it is not a counter-example: `setpoints.ft` spans 2021-03-19 22:00 to 2021-03-20 21:00 —
+  entirely *after* the simulated day — so it holds the forecast horizon left over when the run
+  ended, a plan for a day never simulated. Its heat-pump values fall because the corrected COPs
+  make the pump more expensive to run, which is the fix working rather than against it.
+
+  **Row counts move for three reasons, not one.** `simple_scenario` clears 40 more bids and
+  offers. `grid_golden`'s six power-flow tables (`res_bus`, `res_line`, `res_load`, `res_sgen`,
+  `res_trafo`, `res_ext_grid`) lose 10 % of their rows because the grid stage writes one row per
+  power-flow *pass* and the run now has one overload event instead of two — a **more** severe one
+  (149.6 % against 132.0 %) at 04:00 rather than 01:00 and 05:00; `res_direct_power_control.csv`
+  halves, 4 rows to 2, for the same reason, and `res_variable_grid_fee.csv` does not move at all.
+  And `grid_golden`'s three market tables shrink 9 % as the changed dispatch clears fewer trades.
+  Every one of the 24 timesteps is present in both runs.
+
+  `load:hp_min_control`, the column !244 moved in `analyzer/scenario_with_grid.json`, does not
+  move again and appears nowhere in the diff: it derives from `sizing['power'] / cop_ref`, both
+  static and independent of the inlet temperature.
+
+  **Two §14a assertions were re-established rather than regenerated.**
+  `test_the_curtailment_command_was_respected` and `test_the_individual_commands_were_respected`
+  allowed 1 W of slack on a cap, on the stated ground that a converging sequence lands on 0 W. The
+  more severe overload does not converge within `max_iteration: 3`: the last kept pass sits at
+  100.053 % of the 15 kVA transformer, an 8 W overload across the feeder, of which the largest
+  per-agent share measured is 3 W. That slack is now `POWER_FLOW_MARGIN_W`, 10 W, sized from the
+  residual and one to two orders of magnitude below the hundreds of watts a discarded cap shows.
+
+  The single constant was also **split**, because two mechanisms had been sharing it. A §14a
+  `control_result` is computed and written out with no power flow between, so the iteration
+  residual cannot reach it; the only thing that can move it is a one-watt truncation.
+  `COMMAND_MARGIN_W` stays at 1 W and is what the §14a **floor guarantee** now uses — the one
+  assertion in the file about curtailing *too hard*, checking a statutory minimum, which at 10 W
+  would have accepted a device capped 9 W under its guarantee. The ordering test picks its margin
+  per peer, by whether that peer's number came from a command or from the power flow.
+
+  `test_both_priority_adjacencies_are_exercised` reported *neither* adjacency exercised, and half
+  of that was its own measurement: it read the **post-control** power flow, where a device
+  curtailed to its floor has zero headroom and drops out of the very filter meant to find it. Read
+  on the uncontrolled first pass, `('battery', 'ev')` is exercised more strongly than before — a
+  battery at 5500 W taken to the 1000 W floor while the EV beside it gives only the remaining
+  238 W. `controllable_devices` takes a `power_flow_pass` argument and the guard, renamed
+  `test_the_reachable_priority_adjacencies_are_exercised`, asks the first pass.
+
+  `('ev', 'hp')` is genuinely gone and is **#235**, not a tuning problem: correct air-source COPs
+  move the heat pumps to midday PV hours, and at the one timestep this feeder overloads the four
+  pumps draw 0, 0, 0 and 4 W. Measured by mutation — reordering the device loops in `enwg_14a.py`,
+  the battery/EV swap still fails the ordering test and the EV/heat-pump swap is now green — and
+  the docstrings that claimed otherwise say so. `EXERCISED_ADJACENCIES` states the gap, and the
+  guard asserts **equality** against it so a fixture that reaches the pair again fails too.
+
+  Two further guards in the same file were found by review to be weaker than they read.
+  `test_devices_are_curtailed_in_priority_order`'s `compared > 0` — there to stop the test passing
+  by never looking — counted *every* higher-priority device beside a curtailed one, including
+  devices far below the floor that could not have produced a verdict either way; at 04:00 that is
+  four heat pumps drawing 0, 0, 0 and 4 W. It now counts only peers that were commanded or are
+  themselves above the floor. And several instrumentation figures in the module docstring — the
+  pumps' peak draws, the dispatch counts, the "zero dispatches saw a heat pump" claim — were
+  measured before #234 on a run this change moves; they are now marked as such rather than read as
+  current, and every `enwg_14a.py` line reference in the file, stale by 14 lines since #209, has
+  been corrected.
+
+  `calc_brine_temp` being applied to the `Water/Water` unit is a separate modelling question and
+  is **#236**.
+
+- **§14a applied its 11 kW rule to two quantities the regulation does not name, and the heat-pump
+  arithmetic that did so had never been asserted (#209).** BK6-22-300 Anlage 1 attaches both the
+  11 kW test and the 40 % floor to a heat pump's **Netzanschlussleistung** — Ziffer 4.5.1 Satz 2
+  for direct control, with the factor 0.4 fixed by Satz 3, and Ziffer 4.5.2 Satz 3 for EMS
+  control, where Satz 5 defines `P_Summe WP` as the sum of the *Netzanschlussleistungen*. The
+  Begründung (Beschluss p. 37, §4.5.4) settles it:
+  0.4 was picked because it is roughly 4.2 kW / 11 kW, which is only coherent if the threshold and
+  the factor measure the same quantity. Two separate places got that quantity wrong.
+
+  `grid_db._set_heat_pump_minimum_power` tested **thermal** power. A heat pump's `sizing['power']`
+  in HAMLET is its heat output — sized from annual heat demand, and divided by the COP wherever
+  the model wants an electrical figure — so comparing it against an 11 kW *electrical* limit
+  overstated the connection by the COP, which for the shipped specs is 2.15 to 3.52. The floor is
+  now derived from the device's reference COP, `sizing['power'] / specs[plant]['cop_ref']`. That
+  mirrors what the model already does — the RTC's own electrical bound is `sizing['power'] / cop`
+  — with a static per-model divisor, which is what a declared connection power needs. It is *not*
+  the catalogue device's nameplate: hplib pairs `COP_ref` with its own `P_th_h_ref`, while
+  `sizing['power']` is the scenario's sizing, so the quotient is the connection this modelled
+  installation would declare. `cop_ref` ships with every heat pump spec and nothing had ever read
+  it. A heat pump with no usable rating or COP falls back to the flat threshold rather than
+  guessing — the alternative is a NaN in the column, and NaN there does not disable the
+  curtailment but maximises it.
+
+  `enwg_14a` tested the **instantaneous** draw, at six literal sites across both control methods
+  (`0.011` and `0.6`, never the constants). Both methods now read the per-device floor from
+  `hp_min_control` and reduce to it, which is what Ziffer 4.5.1 says and what the clamp underneath
+  them was already doing: the branch computed an intermediate the clamp then overrode, so the two
+  readings agreed on every output a clamp bounded, which is why this survived so long. Deleting it
+  leaves one *computation* of the rule, in `grid_db`, with `ENWG14A_HP_SCALING_LIMIT` /
+  `ENWG14A_HP_SCALING_FACTOR` its only constants. (`constants.py` still states the rule in prose
+  beside them.)
+
+  Two defects the same arithmetic was hiding are fixed with it. **A heat pump could be commanded
+  to consume *more* during an overload:** its floor is 40 % of the connection power while the
+  filter admitting it to the control was the flat threshold, so a pump between the two passed the
+  filter and produced a negative reduction — an upward command, which the RTC pins rather than
+  treats as a bound, and which in the `individual` method was also credited back to the running
+  budget so the next device was asked for too little.
+
+  `__individual_device_control` now admits a device only if it draws above **its own**
+  Mindestleistung, which for an EV is the flat threshold and for a heat pump is `hp_min_control`.
+  A pump with nothing to give is therefore not controlled at all, rather than commanded to what
+  it is already drawing — a real difference, because `apply_grid_commands` pins the RTC's target
+  to whatever arrives. `__control_via_ems` deliberately keeps the flat-threshold filter and
+  clamps the agent *aggregate* instead: Ziffer 4.5.2 grants one total for the installation and
+  Satz 6 lets the Betreiber spend it as it likes, so an agent already below its combined floor
+  owes nothing even where one of its devices still has headroom. The two methods answer
+  differently on the same bus, and both are right for their own control mode.
+
+  **And the EMS per-agent share divided by zero** once every device at a bus sat on its floor,
+  which the iteration reaches routinely, raising `ValueError: cannot convert float NaN to integer`
+  and killing the timestep rather than the reduction.
+
+  **The golden master does not move, which was confirmed by running it, but one number does.**
+  `grid_golden`'s four heat pumps are rated 2800–9800 W thermal against reference COPs of
+  2.15–3.13, so their connection powers are 1.3–4.6 kW, far below 11 kW, and their floors stay at
+  the 4200 W threshold. `examples/create_scenario_with_grid` is the exception: its 77 000 W and
+  15 200 W pumps move from 30 800 W and 6 080 W to **14 325.6 W and 4 200 W**. It is inert while
+  that scenario ships `restrictions.apply: []`, but a user switching §14a on there gets different
+  curtailment than the same config gave before.
+
+  **The Analyzer reference is what caught that**, and it is the only reference that moves:
+  `tests/e2e/analyzer/scenario_with_grid.json` pins three statistics of the `hp_min_control`
+  column — `sum` 0.036880 → 0.018526, `max` 0.030800 → 0.014326, `ordered` 0.147120 → 0.080777 —
+  and nothing else in the file changes. Regenerated with `HAMLET_UPDATE_ANALYZER` and committed
+  alongside, with the numbers checked against the regulation rather than accepted: 0.014326 MW is
+  exactly `0.4 × (77 000 / 2.15)` and the sum is that plus the 4200 W threshold the smaller pump
+  now falls back to. The golden master's own fingerprint would *not* have caught it — it globs
+  `*.ft`/`*.csv` and the grid is written as `.xlsx` — so the analyzer oracle from !241 is the only
+  thing standing between this column and a silent change.
+
+  **The arithmetic is now asserted, in process, for the first time**
+  (`tests/integration/executor/test_enwg_14a_heat_pump_reduction.py`). No scenario can reach it.
+  Under the 4200 W threshold `grid_golden`'s four pumps peak at 234, 578, 578 and 1880 W and are
+  filtered out before either method's heat-pump terms run — zero dispatches into
+  `__control_via_ems` ever saw one. Under the `individual` fixture's lowered 1000 W floor they are
+  not filtered and the loop is entered, once, with one pump at 1940 W — but the EV ahead of it has
+  taken the budget, so the body still never executes and no heat pump appears in
+  `res_direct_power_control.csv`. What it would take to reach it from a scenario is left open
+  rather than asserted: the one pump that gets close sits at 99.9 % of its own RTC electrical
+  bound at that timestep, so its rating may be what binds there even though the other three run
+  far below theirs. Driving the two methods directly covers **40 of
+  `__individual_device_control`'s 63 statements**, up from a body that never ran at all; the
+  remaining 23 are the over-generation branch (#233). Fifteen mutations were run against the new
+  tests, covering each control method separately, and all fifteen fail them.
+
+- **§14a is now asserted against the Festlegung rather than against itself
+  (`tests/integration/executor/test_enwg_14a_conformance.py`, 188 cases).** The tests above pin
+  the numbers the implementation produces; these ask whether any result the two methods can
+  produce satisfies what BK6-22-300 Anlage 1 guarantees, over a sweep of ten device sets at three
+  loadings. Four properties, each written from the text and not from the code — the Mindestleistung
+  is never breached (Ziffer 4.5), no device is ever told to consume more than it already does
+  (Ziffer 4.1), no more is taken than the overload requires (Ziffer 4.3 Satz 1), and a heat pump's
+  floor is Ziffer 4.5.1's rather than whatever `hp_min_control` happens to hold. **32 of the 188
+  fail against the pre-#209 implementation**, so the file detects the violations rather than
+  describing the code.
+
+  **Two knowing departures from the text are asserted as departures**, so the file cannot be read
+  as claiming more conformance than there is. HAMLET grants an EMS-controlled agent the plain sum
+  of its per-device Ziffer 4.5.1 floors, where Ziffer 4.5.2 Satz 3 grants a Sockel plus
+  `(n − 1) × GZF × 4,2 kW`; the two agree for one device and diverge either way beyond that. And
+  **§14a never curtails over-generation at all**, in either method: `p_mw_to_be_reduced` is
+  negative when the bus exports, so `__individual_device_control`'s per-device guard
+  (`0 < negative`) is never true and `__control_via_ems` always returns the negative budget, which
+  makes its reducible cap dead code and its setpoint slacker than the status quo. Both are pinned
+  as characterisation tests rather than xfails, so fixing either turns them red deliberately
+  instead of quietly green.
 
 ### Changed
 
@@ -677,10 +967,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   registration rather than in the control because the rated power lives in the agent's plant
   configuration and not in the grid file, so both grid-creation methods need the same answer.
 
-  **Known deviation, unchanged and worth an issue of its own:** `enwg_14a` decides whether the
-  11 kW rule applies by comparing the heat pump's *instantaneous* power against 11 kW, where the
-  regulation means grid connection power. It cannot over-curtail — the minimum computed here caps
-  the reduction — but it is not what the regulation says
+  **Known deviation, since fixed under #209 — see the §14a entry above:** `enwg_14a` decided
+  whether the 11 kW rule applies by comparing the heat pump's *instantaneous* power against 11 kW,
+  where the regulation means grid connection power. The rated power this entry describes was also
+  the thermal one, which is not the connection power either
 
 - **Grid registration could drop an agent from the network and report success (follow-up to
   #205).** Two agents the matcher cannot tell apart — same bus, same agent type, same profile file
