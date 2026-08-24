@@ -40,37 +40,48 @@ above are what keep the real 4200 W under test.
 a complete one. Of the method's 63 statements, **this file reaches none of the over-generation
 branch and none of the heat-pump body**:
 
-* The **over-generation** branch (`enwg_14a.py:429-474`), **23 statements**. `grid_golden` never
-  over-generates -- across six instrumented runs, 817 dispatches into the method entered
-  over-consumption 169 times and neither branch 648 times, and over-generation not once. Nor
-  would a threshold edit reach it: every battery ships `b2g_0 = 0.0` and every EV `v2g_0 = 0`, so
-  the branch's two device filters cannot match as this fixture is configured. #233.
-* The **heat-pump body**, in both methods -- and **the two fixtures miss it for different
-  reasons**, which is worth stating separately because one explanation does not cover both. The
-  four pumps peak at 234, 578, 578 and **1880 W**, with means of 43-157 W. Only the last is
-  anywhere near the 4200 W floor, and it reaches **99.9 % of its own RTC electrical bound**
-  (`max(sizing/cop_t, ts P_electricity_heat)`, 1856-2042 W for that pump) at its peak timestep,
-  so it is rating-limited there, not demand-limited. The other three run at 11-68 % of theirs.
-  * Under the `ems` fixture's 4200 W threshold, `load_df`'s filter drops every pump before the
-    arithmetic runs. Instrumented over one run: **zero** dispatches into `__control_via_ems` saw
-    a heat pump at all.
-  * Under `INDIVIDUAL_EDITS`' **1000 W** threshold they are not filtered, and the loop is
-    entered -- measured, once, with one pump at 1940 W. Its body still does not execute, because
-    the EV ahead of it has taken the whole budget by then and the loop's guard is false. The
-    pump receives no command.
+**Read the dispatch counts below as pre-#234 measurements.** #234 corrected air-source heat pumps,
+which raised their draw, moved the overloading timestep and changed how many times the method is
+entered; nothing has re-instrumented them since, and the golden diff shows the run did move
+(`res_direct_power_control.csv` went from 4 rows to 2). The *conclusions* they support still hold
+and are checked by tests that run today -- `test_the_reachable_priority_adjacencies_are_exercised`
+for which classes compete, `EXERCISED_ADJACENCIES` for the heat-pump one -- but do not quote the
+numbers as current.
 
-  **What it would take to reach the body is therefore an open question, not a settled one.** The
-  one pump that gets close is at its rating, so a larger rating might raise its draw -- or might
-  not, if the heat demand behind it is what actually binds over the rest of the run. Either way
-  `.ai/context.md` warns what changing this fixture's sizing does to the overload it exists to
-  produce, and `test_the_feeder_actually_overloads` is what catches it (#209, #232).
+* The **over-generation** branch (`enwg_14a.py:440-483`), **23 statements**. `grid_golden` never
+  over-generates -- across six instrumented runs *before #234*, 817 dispatches into the method
+  entered over-consumption 169 times and neither branch 648 times, and over-generation not once.
+  Nor would a threshold edit reach it, and *this* part does not depend on the instrumentation:
+  every battery ships `b2g_0 = 0.0` and every EV `v2g_0 = 0`, so the branch's two device filters
+  cannot match as this fixture is configured, whatever the dispatch count. #233.
+* The **heat-pump body**, in both methods -- and **the two fixtures miss it for different
+  reasons**, which is worth stating separately because one explanation does not cover both.
+  * Under the `ems` fixture's 4200 W threshold, `load_df`'s filter dropped every pump before the
+    arithmetic ran: instrumented over one run *before #234*, **zero** dispatches into
+    `__control_via_ems` saw a heat pump at all. Since #234 the pumps are larger -- `meters.ft`
+    records one drawing 6290 W over the run, above the 4200 W floor -- so the filter no longer
+    excludes them on principle and this bullet is **not observed rather than established**. What
+    still holds is the outcome: `res_direct_power_control.csv` names no heat pump.
+  * Under `INDIVIDUAL_EDITS`' **1000 W** threshold they are no longer filtered in principle,
+    but since #234 no heat pump is above that floor at the one timestep this feeder overloads --
+    the four draw 0, 0, 0 and 4 W there, having moved to midday PV hours once they stopped being
+    simulated on soil inlet temperature. The pump receives no command. (Before #234 the loop was
+    entered, measured once with one pump at 1940 W, and its body still did not execute because
+    the EV ahead of it had taken the whole budget.) See `EXERCISED_ADJACENCIES`; #235.
+
+  **What it would take to reach the body is therefore an open question, not a settled one**, and
+  #234 has moved it: the pumps are no longer small, they are merely *idle at the wrong hour*. They
+  now run at midday under PV while this feeder overloads overnight, so the obstacle is timing
+  rather than sizing -- which is a different problem from the one this paragraph used to describe.
+  #235 carries it. `.ai/context.md` warns what changing this fixture's sizing does to the overload
+  it exists to produce, and `test_the_feeder_actually_overloads` is what catches it (#209, #232).
 
 **Measured, not inferred: mutations inside that body stay green here.** A review panel ran four
 against the pre-#209 code -- deleting the heat-pump loop, disabling the `hp_min_control` clamp,
 forcing the over-11 kW arm, and changing the scaling factor. Do not read the coverage below as
 protecting the heat-pump arithmetic; `tests/integration/executor/test_enwg_14a_heat_pump_reduction.py`
 is what does, in process. It reaches every *statement* of the over-consumption branch -- and the
-distinction matters here: **this file covers line 396's guard only on its false arm**, since the
+distinction matters here: **this file covers line 410's guard only on its false arm**, since the
 loop is entered and the body never runs, so `res_direct_power_control.csv` names no heat pump for
 the whole run. The integration file covers both arms.
 
@@ -102,7 +113,10 @@ CREATOR_METHOD = 'new_scenario_from_files'
 #:
 #: **The first edit selects the method; the second is what makes its priority order observable,
 #: and without it this whole half of the file would be green under any ordering.** Measured over
-#: one instrumented run with only the first edit applied: the method is dispatched into 152 times,
+#: one instrumented run with only the first edit applied, **before #234** (which moved the
+#: overloading timestep, so the counts below have not been re-instrumented -- the conclusion is
+#: re-established by `test_the_reachable_priority_adjacencies_are_exercised`, which runs today):
+#: the method is dispatched into 152 times,
 #: and 151 of those calls see at most one controllable device class above the 4200 W floor. The
 #: one call that sees two is asked to shed 1749 W from devices that together have 957 W of
 #: headroom, so both go to the floor and the order they are taken in changes nothing -- reversing
@@ -116,9 +130,9 @@ CREATOR_METHOD = 'new_scenario_from_files'
 #: At 1000 W they do not, and the order decides who gives way.
 #:
 #: **Lowering it cannot reorder the policy, because the sequence of the device loops is a literal
-#: constant** (`enwg_14a.py:356`, `:376`, `:395` -- battery, then EV, then heat pump, in that
+#: constant** (`enwg_14a.py:370`, `:390`, `:409` -- battery, then EV, then heat pump, in that
 #: order in the source). What `threshold` does change is which devices enter those loops
-#: (`:348`, `:352` filter on it) and how much each is asked to give; it also reaches
+#: (`:362`, `:366` filter on it) and how much each is asked to give; it also reaches
 #: `grid_db._set_heat_pump_minimum_power`, which writes `hp_min_control` from the same key. So the
 #: lower floor changes *who competes*, which is the point, and cannot change *who wins*, which is
 #: what makes it a fair test of the order. What it does *not* test is §14a's actual 4200 W number,
@@ -142,16 +156,65 @@ LOWERED_THRESHOLD_W = 1000
 #: no comfort, heat pumps last because it costs the most.
 PRIORITY = ('battery', 'ev', 'hp')
 
-#: Slack when asking whether a device is still above the floor, in watts. Commands are whole watts
-#: (`int(... * c.MWH_TO_WH)`) while the power flow answers in floats, and `optim_poi`'s
-#: `__apply_individual_control` pins the plant's target to the command rather than recomputing it,
-#: so the realised power need not land on the command exactly. Measured margin is 0 W.
+#: The adjacencies of `PRIORITY` this fixture can actually put into competition, which is **not**
+#: all of them. Written out rather than derived from `PRIORITY` so the gap is a stated fact with a
+#: reason attached, and so that a fixture change which reaches a new pair fails the test below
+#: rather than passing it quietly.
 #:
-#: Note the truncation runs the *other* way from the `ems` tests above: `int()` truncates toward
-#: zero and this method's commands are negative for a consuming device, so rounding can only put a
-#: device at or slightly *below* its floor, never above. Same `+ 1`, different mechanism -- the
-#: `ems` case is a cap recomputed from each pass's power flow.
-MARGIN_W = 1
+#: `('ev', 'hp')` is unreachable **since #234**, and the reason is physical rather than a matter of
+#: tuning. Before it, air-source heat pumps were simulated on soil inlet temperature, which made
+#: winter operation about half as expensive as it should be and left them running overnight,
+#: alongside the EV charging that overloads this feeder. With ambient inlet temperature the MPC
+#: moves them to midday under PV. The pair still exists -- bus 3 at 11:00 has a heat pump at
+#: 2004 W against an EV at 1598 W -- but the transformer is at 11.6 % there, so no command is
+#: issued; and at 04:00, where the transformer hits 149.6 % and every command is issued, the four
+#: heat pumps draw 0, 0, 0 and 4 W uncontrolled.
+#:
+#: **No §14a setting recovers it, which is why this is a constant and not a retune.** `threshold`
+#: decides who enters the loops, and no floor above zero admits a 4 W pump; a floor low enough to
+#: would admit one with nothing to give, which is the "two competing devices, budget never
+#: exhausted" state `INDIVIDUAL_EDITS` exists to avoid. The transformer rating that would move the
+#: overload lives in `topology.xlsx`, which `config_edits` cannot reach.
+#:
+#: **What it costs is stated where it is paid**: see `test_devices_are_curtailed_in_priority_order`,
+#: whose sensitivity to an EV/heat-pump reversal is gone and is measured to be gone. #235.
+EXERCISED_ADJACENCIES = {('battery', 'ev')}
+
+#: Slack, in watts, on a quantity the **power flow** produced. **Sized from the residual overload
+#: at the iteration cap, not chosen.**
+#:
+#: `grids.yaml` sets `max_iteration: 3`, and the restricted timestep does not reach a fixed point
+#: within it: the last kept pass leaves the transformer at 100.053 % of its `sn_mva = 0.015`, an
+#: overload of 8 W across the whole feeder. Every measured margin is a share of that 8 W, and the
+#: largest is 3 W. 10 W covers it with room for a solver or pandapower bump to move the last pass
+#: a little, and is 1 % of the smallest command the run issues (1000 W).
+#:
+#: **It has to stay far below the signal it is there to detect.** A backend that discards the cap
+#: leaves a gap of hundreds of watts -- see `test_the_curtailment_command_was_respected` -- one to
+#: two orders of magnitude above this, so it must not grow toward that. If a future change pushes
+#: the residual past 10 W, the answer is to ask why the sequence stopped converging, not to widen
+#: this again.
+#:
+#: Was 1 W until #234, when it applied to both kinds of quantity. Correcting air-source heat pumps
+#: raised winter draw and made the overload far more severe (132.0 % -> 149.6 % at the first
+#: pass), which is what left 3 W on the table instead of 0.
+POWER_FLOW_MARGIN_W = 10
+
+#: Slack, in watts, on a quantity a §14a **command** carries. Deliberately an order of magnitude
+#: tighter than `POWER_FLOW_MARGIN_W`, because the two have nothing to do with each other and the
+#: wider one is not earned here.
+#:
+#: A `control_result` is computed by `enwg_14a` and written straight out; no power flow touches it,
+#: so the iteration residual above cannot reach it. The only thing that can move it off a round
+#: number is `int(... * c.MWH_TO_WH)`, one watt at most -- and that truncates toward zero against
+#: negative consuming-device commands, so it can only land a device at or slightly *below* its
+#: floor, never above. Measured margin on the device taken to its floor is 0 W.
+#:
+#: **The site that matters is the §14a floor guarantee**, `allowed_w >= LOWERED_THRESHOLD_W - ...`.
+#: That is the one assertion in this file about curtailing *too hard*, and it is checking a
+#: statutory minimum. At 10 W a command capping a device 9 W under its guarantee would pass; at
+#: 1 W it does not. Nothing about the power flow justifies giving that assertion the looser bound.
+COMMAND_MARGIN_W = 1
 
 
 @pytest.fixture(scope='module')
@@ -264,11 +327,18 @@ def test_the_curtailment_command_was_respected(grid_results):
     point (`res_trafo.csv` carries 4 rows at each of them). The last row is the state the run
     actually kept, which is what the assertion is about.
 
-    The cap is recomputed from each pass's power flow, so at the end of a converging sequence it
-    sits exactly on the power drawn -- the margins here are 0 W, and the `+ 1` below is what
-    absorbs the rounding. Under a backend that ignores the cap the sequence does not converge at
-    all: the draw stays at its uncontrolled value while the cap keeps asking for less, and the
-    gap is hundreds of watts.
+    The cap is recomputed from each pass's power flow, so **where the sequence converges it sits
+    exactly on the power drawn and the margin is 0 W**. Where it does not -- and at
+    `max_iteration: 3` this one does not -- the last kept pass is still slightly overloaded, and
+    the cap it was computed from is correspondingly slightly below what the agent drew. The
+    residual is bounded by that overload: the last pass leaves the transformer at 100.053 % of
+    `sn_mva = 0.015`, which is 8 W across the whole feeder, and the largest per-agent margin
+    measured is 3 W. See `POWER_FLOW_MARGIN_W`.
+
+    Under a backend that ignores the cap the sequence does not converge at all: the draw stays at
+    its uncontrolled value while the cap keeps asking for less, and the gap is hundreds of watts.
+    That is two orders of magnitude above the tolerance, which is what keeps this test able to
+    tell the two apart.
     """
     commands = read_csv(grid_results, 'res_direct_power_control.csv')
     bus = read_csv(grid_results, 'res_bus.csv')
@@ -289,7 +359,7 @@ def test_the_curtailment_command_was_respected(grid_results):
 
         drawn_w = rows['p_mw'].iloc[-1] * 1e6
         cap_w = command['control_result']
-        assert drawn_w <= cap_w + 1, (
+        assert drawn_w <= cap_w + POWER_FLOW_MARGIN_W, (
             f'{command["id_agent"]} was capped at {cap_w:.0f} W at {command["timestamp"]} but drew '
             f'{drawn_w:.0f} W, so the grid operator\'s command was accepted and then ignored')
         checked += 1
@@ -321,8 +391,8 @@ def individual_results(scenario_runs):
                              config_edits=INDIVIDUAL_EDITS).results
 
 
-def controllable_devices(results, threshold_w):
-    """Every §14a-controllable device's final draw at every timestep, in watts.
+def controllable_devices(results, threshold_w, power_flow_pass=-1):
+    """Every §14a-controllable device's draw at every timestep, in watts.
 
     Joined from three tables because no one of them carries both identity and power. The grid's
     own `topology.xlsx` -- written into the results, so this reads what the run actually built --
@@ -335,12 +405,25 @@ def controllable_devices(results, threshold_w):
     the grid, and comparing raw `p_mw` would rank a charging battery below every load.
 
     A restricted timestep carries one row per power-flow pass (`grids.yaml` sets
-    `max_iteration: 3`); the last is the state the run kept, which is the same choice
-    `test_the_curtailment_command_was_respected` makes and for the same reason. **`.nth(-1)` and
-    not `.last()`** -- pandas' `GroupBy.last()` is the last *non-NA* value per column
-    independently, so a final pass that wrote a NaN power would silently hand back an earlier
-    pass, and the caller would then assert about a state the run did not keep. No pass writes NaN
-    today, which is what makes the distinction easy to get wrong and cheap to get right.
+    `max_iteration: 3`), and **which pass you want depends on what you are asking**:
+
+    * `power_flow_pass=-1`, the default: the last pass, the state the run kept. This is what
+      "did the device obey?" and "was a peer still above the floor?" are about, and it is the
+      same choice `test_the_curtailment_command_was_respected` makes.
+    * `power_flow_pass=0`: the first pass, the **uncontrolled** state, before any command was
+      issued. This is what "were two device classes competing here?" is about. Asking that of the
+      last pass is a category error and reports a false negative: §14a curtails a device to its
+      floor and no further, so a device that gave *everything* it had ends the timestep with
+      exactly zero headroom and disappears from a `headroom_w > 0` filter -- precisely the device
+      whose participation the question was about. Measured on this fixture at 04:00 bus 2: a
+      battery drawing 5500 W uncontrolled is taken to the 1000 W floor, and the EV beside it gives
+      only the remaining 238 W. Read on the last pass that reads as "no battery was competing".
+
+    **`.nth(...)` and not `.first()`/`.last()`** -- pandas' `GroupBy.last()` is the last *non-NA*
+    value per column independently, so a final pass that wrote a NaN power would silently hand
+    back an earlier pass, and the caller would then assert about a state the run did not keep. No
+    pass writes NaN today, which is what makes the distinction easy to get wrong and cheap to get
+    right.
     """
     import pandas as pd
 
@@ -351,7 +434,7 @@ def controllable_devices(results, threshold_w):
                                       ('sgen', 'plant_type', 'res_sgen')):
         identity = book.parse(sheet).rename(columns={'Unnamed: 0': 'element'})
         power = read_csv(results, f'{table}.csv').rename(columns={'Unnamed: 0': 'element'})
-        power = power.groupby(['element', 'timestamp'], as_index=False).nth(-1)
+        power = power.groupby(['element', 'timestamp'], as_index=False).nth(power_flow_pass)
         frame = power.merge(identity[['element', 'bus', kind_column, 'id_plant', 'id_agent']],
                             on='element', how='left').rename(columns={kind_column: 'kind'})
         frame['draw_w'] = frame['p_mw'] * 1e6 * (-1 if sheet == 'sgen' else 1)
@@ -417,29 +500,44 @@ def test_the_run_used_the_individual_method(individual_results):
 
 
 @pytest.mark.e2e
-def test_both_priority_adjacencies_are_exercised(individual_results):
+def test_the_reachable_priority_adjacencies_are_exercised(individual_results):
     """The premise of the ordering test below, and the reason this fixture lowers the floor.
 
     An ordering can only be observed where two device classes compete: one eligible device is
     curtailed whatever the order says. So this asserts that the run really does reach a bus and
-    timestep where a battery and an EV are both above the floor, *and* one where an EV and a heat
-    pump are -- and that a command was actually issued there, since two idle eligible devices
-    decide nothing either.
+    timestep where two adjacent classes are both above the floor -- and that a command was
+    actually issued there, since two idle eligible devices decide nothing either.
 
-    Stated as its own test, and as an equality against every documented adjacency rather than a
-    count, so that a fixture which quietly stops producing one of the two pairs fails *here*,
-    naming the pair it lost, rather than leaving the test below to pass over the half it can
-    still see. `test_the_feeder_actually_overloads` exists for the same reason one layer up.
+    **Read on the uncontrolled first pass, not on the state the run kept.** "Were these two
+    competing?" is a question about the situation §14a was handed, and answering it from the
+    post-control power flow reports a false negative on exactly the device that participated
+    hardest: one taken to its floor ends with zero headroom. See `controllable_devices`, which
+    carries the measurement.
 
-    **This one is a pinned trajectory and the test below deliberately is not.** Each arm rests on
-    a single bus and timestep -- today (10:00, bus 3) for EV/heat-pump and (10:00, bus 4) for
-    battery/EV -- so a solver or pandapower bump that moves either takes this red. That is the
-    intended trade: a premise guard has to assert the fixture still produces the situation, and
-    the cost of it failing loudly on an unrelated change is smaller than the cost of the ordering
-    test below silently covering half of what it claims. Re-establish the premise before
-    re-baselining it.
+    Stated as its own test, and as an **equality** against `EXERCISED_ADJACENCIES` rather than a
+    count or a subset, so it fails in both directions: a fixture that quietly stops producing a
+    pair fails here naming the pair it lost, and one that starts producing a pair the constant
+    says is unreachable fails here too, which is the signal to widen the constant and reclaim the
+    coverage. `test_the_feeder_actually_overloads` exists for the same reason one layer up.
+
+    **This is a pinned trajectory and the test below deliberately is not.** The one reachable arm
+    rests on a single bus and timestep -- today (04:00, bus 2), a battery at 5500 W against an EV
+    at 7200 W -- so a solver or pandapower bump that moves it takes this red. That is the intended
+    trade: a premise guard has to assert the fixture still produces the situation, and the cost of
+    it failing loudly on an unrelated change is smaller than the cost of the ordering test below
+    silently covering nothing. Re-establish the premise before re-baselining it.
+
+    **The gap this leaves, stated rather than papered over.** This test now reads pass 0 and the
+    ordering test below reads the pass the run kept, so the two look at the same devices in
+    different states. The ordering test recovers the pre-command value for any peer that *was*
+    commanded (`allowed_w`), which covers the case this premise is about; what it does not recover
+    is an uncommanded peer whose measured power moved between passes for some reason other than
+    curtailment. Such a peer could drop out of the ordering test's violation branch while this
+    test still counts the adjacency as exercised. Not observed on this fixture -- the only
+    higher-priority peers at the commanded timestep are the two batteries, both commanded -- but
+    it is the seam between the two tests and worth knowing about before either is changed.
     """
-    devices = controllable_devices(individual_results, LOWERED_THRESHOLD_W)
+    devices = controllable_devices(individual_results, LOWERED_THRESHOLD_W, power_flow_pass=0)
     commands = read_csv(individual_results, 'res_direct_power_control.csv')
     commanded = set(zip(commands['timestamp'], commands['id_plant']))
 
@@ -452,11 +550,14 @@ def test_both_priority_adjacencies_are_exercised(individual_results):
         kinds = set(group['kind'])
         exercised |= {pair for pair in zip(PRIORITY, PRIORITY[1:]) if set(pair) <= kinds}
 
-    expected = set(zip(PRIORITY, PRIORITY[1:]))
-    assert exercised == expected, (
-        f'exercised {sorted(exercised)} of the documented adjacencies {sorted(expected)}. Every '
-        f'missing pair is a piece of the priority order that no assertion in this file can see: '
-        f'reversing it would leave the suite green')
+    unreachable = set(zip(PRIORITY, PRIORITY[1:])) - EXERCISED_ADJACENCIES
+    assert exercised == EXERCISED_ADJACENCIES, (
+        f'exercised {sorted(exercised)}, expected exactly {sorted(EXERCISED_ADJACENCIES)}. '
+        f'A missing pair is a piece of the priority order that no assertion in this file can see: '
+        f'reversing it would leave the suite green. '
+        f'An extra pair is the opposite and is good news -- the fixture now reaches something '
+        f'{sorted(unreachable)} says it cannot. Add it to EXERCISED_ADJACENCIES and re-check the '
+        f'mutation sensitivity claimed by test_devices_are_curtailed_in_priority_order.')
 
 
 @pytest.mark.e2e
@@ -487,16 +588,22 @@ def test_devices_are_curtailed_in_priority_order(individual_results):
     `INDIVIDUAL_EDITS`.
 
     Verified by mutation, each adjacency separately, since a single full reversal can be caught by
-    one arm while the other asserts nothing: swapping only battery with EV fails this on a battery
-    left charging 4500 W above the floor while its owner's EV was curtailed, and swapping only EV
-    with heat pump fails it on a heat pump curtailed while the EV beside it still drew 7200 W.
+    one arm while the other asserts nothing. Re-measured on this fixture after #234, by reordering
+    the three device loops in `enwg_14a.py` in place and running this test:
+
+    * swapping **battery with EV** fails it, on `04:00 bus 2: ev ... was curtailed while the
+      higher-priority battery ... still drew 5500 W, 4500 W above the 1000 W floor`;
+    * swapping **EV with heat pump** leaves it **green**. That sensitivity is gone, and #234 is
+      what took it: with air-source heat pumps no longer simulated on soil inlet temperature they
+      run at midday rather than overnight, and no heat pump is above the floor at the one timestep
+      this feeder overloads. `EXERCISED_ADJACENCIES` carries the full argument and #235 tracks it.
 
     **In the passing direction this makes exactly one comparison**, battery against EV, because
     under the shipped order no heat pump is ever curtailed -- which is the correct outcome, not a
-    gap. An ordering violation only becomes visible when the lower-priority device *is* curtailed,
-    so the EV/heat-pump arm is asserted by being sensitive to the mutation above rather than by
-    comparing anything today. `test_both_priority_adjacencies_are_exercised` is what stops fixture
-    drift from removing that sensitivity silently.
+    gap. An ordering violation only becomes visible when the lower-priority device *is* curtailed.
+    `test_the_reachable_priority_adjacencies_are_exercised` is what stops fixture drift from
+    removing the sensitivity that remains, and what will say so if the EV/heat-pump pair ever
+    becomes reachable again.
     """
     devices = controllable_devices(individual_results, LOWERED_THRESHOLD_W)
     commands = read_csv(individual_results, 'res_direct_power_control.csv')
@@ -523,18 +630,33 @@ def test_devices_are_curtailed_in_priority_order(individual_results):
         higher = devices[(devices['timestamp'] == command['timestamp'])
                          & (devices['bus'] == curtailed['bus'])
                          & (devices['rank'] < curtailed['rank'])]
-        compared += len(higher)
         for _, peer in higher.iterrows():
             key = (peer['timestamp'], peer['id_plant'])
-            peer_w = allowed_w.get(key, peer['draw_w'])
-            if peer_w - LOWERED_THRESHOLD_W > MARGIN_W:
-                source = 'was allowed' if key in allowed_w else 'still drew'
+            # The margin follows the quantity, not the test. A commanded peer is judged by its
+            # command, which no power flow touched, so it takes the tight command margin; an
+            # uncommanded one is judged by measured power and takes the loose one. Using the
+            # loose margin for both would let an ordering violation of a few watts through on the
+            # side where the arithmetic is exact -- and this comparison is the one that *finds*
+            # violations, not a tolerance on a noisy measurement.
+            commanded = key in allowed_w
+            peer_w = allowed_w[key] if commanded else peer['draw_w']
+            margin = COMMAND_MARGIN_W if commanded else POWER_FLOW_MARGIN_W
+            if peer_w - LOWERED_THRESHOLD_W > margin:
+                source = 'was allowed' if commanded else 'still drew'
                 passed_over.append(
                     f'{command["timestamp"]} bus {curtailed["bus"]}: {curtailed["kind"]} '
                     f'{curtailed["id_plant"]} was curtailed while the higher-priority '
                     f'{peer["kind"]} {peer["id_plant"]} {source} {peer_w:.0f} W, '
                     f'{peer_w - LOWERED_THRESHOLD_W:.0f} W above the '
                     f'{LOWERED_THRESHOLD_W} W floor')
+
+            # Counted here and not in the loop header: a peer that was neither commanded nor
+            # anywhere near the floor was never a candidate, and counting it lets `compared > 0`
+            # below be satisfied by devices that could not have produced a verdict either way. At
+            # 04:00 the four heat pumps draw 0, 0, 0 and 4 W and are exactly that -- they would
+            # have inflated the count while the guard claimed the test had looked at something.
+            if commanded or peer_w > LOWERED_THRESHOLD_W:
+                compared += 1
 
     assert not passed_over, (
         'the documented priority order ' + ' -> '.join(PRIORITY) + ' was not followed:\n  '
@@ -544,8 +666,9 @@ def test_devices_are_curtailed_in_priority_order(individual_results):
     # nothing and the assertion it guards is vacuous. The adjacency test states the stronger
     # premise; this makes *this* test unable to pass by never looking.
     assert compared > 0, (
-        'no curtailed device had a higher-priority device beside it, so nothing in this test was '
-        'ever compared and the priority order was not checked')
+        'no curtailed device had a higher-priority *candidate* beside it -- one that was commanded '
+        'or was itself above the floor -- so nothing in this test was ever compared and the '
+        'priority order was not checked')
 
 
 @pytest.mark.e2e
@@ -593,11 +716,11 @@ def test_the_individual_commands_were_respected(individual_results):
         # this file is otherwise about curtailing too little or in the wrong order -- none would
         # notice the method curtailing too hard. The one device taken to its floor lands on it
         # exactly, so this is not slack being asserted against slack.
-        assert allowed_w >= LOWERED_THRESHOLD_W - MARGIN_W, (
+        assert allowed_w >= LOWERED_THRESHOLD_W - COMMAND_MARGIN_W, (
             f'{command["id_plant"]} ({plant["kind"].iloc[0]}) was capped at {allowed_w:.0f} W at '
             f'{command["timestamp"]}, below the {LOWERED_THRESHOLD_W} W §14a guarantees it')
 
-        assert drawn_w <= allowed_w + MARGIN_W, (
+        assert drawn_w <= allowed_w + POWER_FLOW_MARGIN_W, (
             f'{command["id_plant"]} ({plant["kind"].iloc[0]}) was capped at {allowed_w:.0f} W at '
             f'{command["timestamp"]} but drew {drawn_w:.0f} W, so the grid operator\'s per-plant '
             f'command was accepted and then ignored')
