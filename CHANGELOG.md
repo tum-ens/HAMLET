@@ -223,6 +223,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Every air-source heat pump was simulated on soil inlet temperature (#234).**
+  `agents.py:858` read the air/brine discriminator from `specs['type']`, which is the *plant*
+  type and is the literal `'hp'` in all nine shipped spec files. The comparison at `:887` was
+  therefore never true, so `t_in_primary` was always `calc_brine_temp(t_amb)` — soil, which the
+  function exists to model as far warmer than winter air. The discriminator is `specs['hp_type']`,
+  which the same files carry alongside it (`"Outdoor Air/Water"`, `"Brine/Water"`,
+  `"Water/Water"`). Read in exactly two places and consumed nowhere else, so the fix is one line.
+
+  **The error vanishes in mild weather and is largest when a distribution grid is most stressed.**
+  On the shipped Bosch unit at 40 °C flow with a 5 K transfer loss, `hplib` gives COP 1.00 at
+  −15 °C ambient against 4.64 on the brine path — 7.6× the electrical draw. At +7 °C the two agree
+  to within 2 %. Correcting it can only raise winter draw, never lower it.
+
+  Nothing failed, because the COP series is an *input* to every downstream number: the golden
+  master pinned the output of the wrong series. `tests/integration/creator/`
+  `test_heat_pump_inlet_temperature.py` asserts the series itself, two ways — exactly against an
+  hplib call of its own, and physically, on the fact that `calc_brine_temp` has a floor near
+  3 °C over the shipped weather file and so cannot produce a low COP however cold the air gets.
+  The second arm holds even if a future refactor makes the test and the implementation mirror the
+  same wrong idea.
+
+  **Containment, measured.** Of the 49 files `grid_golden`'s Creator writes, three differ, all
+  three the air-unit agents' `timeseries.ft`, and within them only the six heat-pump columns. The
+  one `Brine/Water` agent's file is byte-identical: it took the `else` branch before and after.
+
 - **§14a applied its 11 kW rule to two quantities the regulation does not name, and the heat-pump
   arithmetic that did so had never been asserted (#209).** BK6-22-300 Anlage 1 attaches both the
   11 kW test and the 40 % floor to a heat pump's **Netzanschlussleistung** — Ziffer 4.5.1 Satz 2

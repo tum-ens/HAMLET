@@ -855,7 +855,10 @@ class Agents:
 
         # obtain the model type of the heat pump predefined in agents.xlsx
         hp_model = specs['model']
-        hp_type = specs['type']
+        # `specs['type']` is the plant type ('hp') for every spec file; the air/brine
+        # discriminator is a separate key. Reading the wrong one ran every air-source unit on
+        # soil inlet temperature -- see issue #234.
+        hp_type = specs['hp_type']
         dtemp_transfer_loss = 5  # delta T of inlet and outlet in the secondary side is fixed at 5K
         # TODO: Currently temperature levels are fixed, but should be read from the config file
         supply_temp = {c.P_HEAT: 40, c.P_DHW: 55}
