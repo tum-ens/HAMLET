@@ -42,17 +42,20 @@ whose origin Python records as `sys:1` so it never deduplicates. That is ~16 lin
 or roughly 140,000 over a simulated year. The concern that a bare removal would simply be
 reinstated by the next person is correct, and this module is why it does not have to be.
 
-**What is deliberately left visible**, because it is signal rather than noise. Two live HAMLET
-defects, both in Section 14a, both hidden for as long as the blanket filter existed:
+**What lifting the filter found, and what happened to it.** Two live HAMLET defects, both in
+Section 14a, both hidden for as long as the blanket filter existed, and both since fixed at
+source rather than added to `SUPPRESSED`:
 
-- `enwg_14a.py:517` and `:522` -- 64 per run of pandas' `UserWarning: Boolean Series key will be
-  reindexed to match DataFrame index`, from chained boolean masks. Issue #210.
-- `enwg_14a.py:87` -- 30 per run of `FutureWarning: Non-integer 'periods' in pd.date_range ...`,
-  which pandas will turn into an error. Issue #211.
+- 64 per run of pandas' `UserWarning: Boolean Series key will be reindexed to match DataFrame
+  index`, from twelve chained boolean masks across `EnWG14a`'s two control methods. Issue #210,
+  fixed by combining each pair with `&`.
+- 30 per run of `FutureWarning: Non-integer 'periods' in pd.date_range ...`, from the fee
+  horizon's true division. Issue #211, fixed by refusing a horizon that is not a whole number of
+  timesteps rather than casting the truncation in.
 
-These fire only where Section 14a actually runs, which today is `grid_golden` -- the shipped
-examples configure the restriction but leave the grid inactive. That is a property of the shipped
-configs, not a guarantee. Neither is suppressed here: hiding them again is how they stayed hidden.
+Both fired only where Section 14a actually runs, which today is `grid_golden` -- the shipped
+examples configure the restriction but leave the grid inactive. Neither was ever suppressed here:
+hiding them again is how they stayed hidden, and fixing them is what this list is for.
 
 The list is **not** an exhaustive inventory of what a run prints. A few dependency warnings
 survive too (pandapower's `output_writer` and `run_control` each raise a `FutureWarning` on the

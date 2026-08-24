@@ -227,6 +227,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **§14a handed pandas two constructs it has said it will reject (#210, #211).** Neither is wrong
+  today. Both break on a pandas upgrade rather than on a code change, and because today's
+  behaviour is correct no test would have failed first — the run would simply have started
+  raising. Found by lifting the blanket warning filter (#199); the warnings were 94 per
+  30-timestep run of `grid_golden`.
+
+  **Chained boolean masks (#210).** `frame[mask_a][mask_b]`, with `mask_b` computed against the
+  *unfiltered* frame and handed to the *filtered* one, appears **twelve times** across
+  `__individual_device_control` and `__control_via_ems` — ten statements, both directions, both
+  methods. The issue named six. pandas reindexes the second mask by label, so the surviving rows
+  are those where both are true; each is now written `frame[mask_a & mask_b]`, which is exactly
+  equivalent because the outer frame's index is always a subset of the mask's. The golden master
+  is unmoved and so are `test_grid_restrictions.py`'s per-agent joins, which is what carries the
+  identity claim — the golden fingerprint is permutation-blind (#208) and would not have noticed
+  the same commands going to different agents.
+
+  **A non-integer `periods` on the fee horizon (#211).** `horizon / resolution` is a float by
+  construction, and pandas truncated it. Casting to `int` would have removed the warning and
+  pinned that truncation for every future config — correcting the input to a decision without
+  touching the decision. What the quotient means is a *count* of timesteps, so a horizon that is
+  not a whole number of them has no count: §14a now refuses such a config, naming both values,
+  rather than running a silently shorter horizon. Whether it should round down, round up or
+  refuse is a question about the Festlegung and is not settled here.
+
+  **Every config in the repository divides evenly** — all seven, at 22 or 94 steps — so #211 could
+  not move a number, and `test_variable_grid_fee_horizon.py` asserts that over the tracked
+  `grids.yaml` files rather than leaving it as a claim. Divisibility is a property of the
+  *config pair*, not of the code: any `horizon % timestep != 0` reaches the new guard.
+
+  The regression tests are unit-level and both are pinned by mutation: re-chaining any one of the
+  six rewritten mask families, or disabling the guard, turns the relevant test red. The masks are
+  pinned by promoting pandas' reindex warning to an error, because nothing else can fail while
+  the reindex still produces the right answer; equivalence is pinned separately on element tables
+  with a gappy, non-monotonic index, where a *positional* de-reindexing — the obvious wrong fix —
+  selects different rows.
+
 - **Every air-source heat pump was simulated on soil inlet temperature (#234).**
   `agents.py:858` read the air/brine discriminator from `specs['type']`, which is the *plant*
   type and is the literal `'hp'` in all nine shipped spec files. The comparison at `:887` was

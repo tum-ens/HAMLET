@@ -80,7 +80,23 @@ class EnWG14a(GridRestrictionBase):
         # get data resolution and variable grid fees horizon and base grid fee
         general_config = self.database.get_general_data()[c.K_GENERAL]
         resolution = general_config['time']['timestep']
-        horizon = self.restriction_config['variable_grid_fees']['horizon'] / resolution
+
+        # The fee horizon is a count of timesteps, and every use of it downstream is: `periods` on
+        # the timestamp index below, and the number of power flows to run. A horizon that is not a
+        # whole number of timesteps has no such count -- pandas used to truncate the fraction away
+        # silently, giving a horizon shorter than the config asked for. Casting would only pin that
+        # truncation for every future config; whether §14a's fee horizon should round down, round up
+        # or be forbidden is a modelling question, and until it is answered the honest answer is to
+        # refuse the config rather than quietly shorten it. Every shipped config divides evenly.
+        horizon_seconds = self.restriction_config['variable_grid_fees']['horizon']
+        horizon_steps = horizon_seconds / resolution
+        if horizon_steps != int(horizon_steps):
+            raise ValueError(
+                f'The §14a variable grid fee horizon must be a whole number of timesteps, but '
+                f'horizon {horizon_seconds} s is not divisible by timestep {resolution} s '
+                f'({horizon_steps} steps). Adjust the horizon in the grids config, or the '
+                f"timestep in the setup config, so that horizon % timestep == 0.")
+        horizon = int(horizon_steps)
         grid_fee_base = self.restriction_config['variable_grid_fees']['grid_fee_base'] * c.EUR_KWH_TO_EURe7_WH
 
         # generate a timestep column as index for variable grid fees, from second next timestep to calculation horizon
@@ -89,7 +105,7 @@ class EnWG14a(GridRestrictionBase):
 
         # run the horizon's power flows
         try:
-            results = self.__run_horizon_power_flows(grid, int(horizon))
+            results = self.__run_horizon_power_flows(grid, horizon)
         except pp.powerflow.LoadflowNotConverged:  # avoid stopping the simulation when load flow not converged
             print('Load flow not converged for timestamp: ', str(self.timestamp))
             return 0
@@ -343,8 +359,9 @@ class EnWG14a(GridRestrictionBase):
         # check if sgen or load need to be adjusted
         if trafo_power < 0 < total_p_at_bus:  # too much load, load needs to be reduced
             # count number of relevant 14a devices at bus
-            load_df = deepcopy(grid.load[grid.load['bus'] == bus][(grid.load['load_type'] == c.P_EV) |
-                                                                  (grid.load['load_type'] == c.P_HP)])
+            load_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                         ((grid.load['load_type'] == c.P_EV) |
+                                          (grid.load['load_type'] == c.P_HP))])
 
             # A device is a candidate only if it draws above **its own** Mindestleistung, which is
             # what it is guaranteed and therefore all it can give (Ziffer 4.5). For an EV that is
@@ -362,7 +379,8 @@ class EnWG14a(GridRestrictionBase):
             load_df = load_df[load_df['p_mw'] > load_df['hp_min_control'].clip(lower=threshold)]
 
             # check if battery is charging
-            battery_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][grid.sgen['plant_type'] == c.P_BATTERY])
+            battery_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                            (grid.sgen['plant_type'] == c.P_BATTERY)])
             battery_df = battery_df[battery_df['p_mw'] < - threshold]  # take only batteries which are charging
 
             # perform individual device control
@@ -440,11 +458,13 @@ class EnWG14a(GridRestrictionBase):
         elif trafo_power > 0 > total_p_at_bus:  # too much generation, generation needs to be reduced
             # count number of 14a devices at bus
             # take feed in ev
-            ev_df = deepcopy(grid.load[grid.load['bus'] == bus][grid.load['load_type'] == c.P_EV])
+            ev_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                       (grid.load['load_type'] == c.P_EV)])
             ev_df = ev_df[ev_df['p_mw'] < - threshold]  # check if ev is feeding in to the grid
 
             # take discharging battery
-            sgen_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][(grid.sgen['plant_type'] == c.P_BATTERY)])
+            sgen_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                         (grid.sgen['plant_type'] == c.P_BATTERY)])
             sgen_df = sgen_df[sgen_df['p_mw'] > threshold]  # take only batteries which are discharging
 
             # perform individual device control
@@ -533,12 +553,14 @@ class EnWG14a(GridRestrictionBase):
         # check if sgen or load need to be adjusted
         if trafo_power < 0 < total_p_at_bus:  # too much load, load needs to be reduced
             # count number of 14a devices at bus
-            load_df = deepcopy(grid.load[grid.load['bus'] == bus][(grid.load['load_type'] == c.P_EV) |
-                                                                  (grid.load['load_type'] == c.P_HP)])
+            load_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                         ((grid.load['load_type'] == c.P_EV) |
+                                          (grid.load['load_type'] == c.P_HP))])
             load_df = load_df[load_df['p_mw'] > threshold]
 
             # check if battery is charging
-            battery_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][grid.sgen['plant_type'] == c.P_BATTERY])
+            battery_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                            (grid.sgen['plant_type'] == c.P_BATTERY)])
             battery_df = battery_df[battery_df['p_mw'] < - threshold]  # take only batteries which are charging
 
             # get all agent who has 14a relevant plants at bus
@@ -550,9 +572,8 @@ class EnWG14a(GridRestrictionBase):
                                      len(battery_df[battery_df[c.TC_ID_AGENT] == agent]) * threshold)
 
                 # total reducible ev power
-                ev_reduction = (load_df[load_df[c.TC_ID_AGENT] == agent][load_df['load_type'] == c.P_EV]['p_mw'].sum() -
-                                len(load_df[load_df[c.TC_ID_AGENT] == agent][load_df['load_type'] == c.P_EV]) *
-                                threshold)
+                agent_evs = load_df[(load_df[c.TC_ID_AGENT] == agent) & (load_df['load_type'] == c.P_EV)]
+                ev_reduction = agent_evs['p_mw'].sum() - len(agent_evs) * threshold
 
                 # total reducible hp power: everything the agent's heat pumps hold above their
                 # §14a Mindestleistung. `hp_min_control` carries that floor per device, from
@@ -602,11 +623,13 @@ class EnWG14a(GridRestrictionBase):
         elif trafo_power > 0 > total_p_at_bus:  # too much generation, generation needs to be reduced
             # count number of 14a devices and pv at bus
             # take feed in ev
-            ev_df = deepcopy(grid.load[grid.load['bus'] == bus][grid.load['load_type'] == c.P_EV])
+            ev_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                       (grid.load['load_type'] == c.P_EV)])
             ev_df = ev_df[ev_df['p_mw'] < - threshold]  # check if ev is feeding in to the grid
 
             # take discharging battery and pv
-            sgen_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][(grid.sgen['plant_type'] == c.P_BATTERY)])
+            sgen_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                         (grid.sgen['plant_type'] == c.P_BATTERY)])
             sgen_df = sgen_df[sgen_df['p_mw'] > threshold]  # take only batteries which are discharging
 
             # get all agent who has 14a plants at bus
@@ -614,10 +637,9 @@ class EnWG14a(GridRestrictionBase):
 
             for agent in all_agents:  # get reducible power for each agent
                 # total reducible battery power
-                battery_reduction = (
-                        sgen_df[sgen_df[c.TC_ID_AGENT] == agent][sgen_df['plant_type'] == c.P_BATTERY]['p_mw']
-                        .sum() - len(sgen_df[sgen_df[c.TC_ID_AGENT] == agent][sgen_df['plant_type']
-                                                                              == c.P_BATTERY]) * threshold)
+                agent_batteries = sgen_df[(sgen_df[c.TC_ID_AGENT] == agent) &
+                                          (sgen_df['plant_type'] == c.P_BATTERY)]
+                battery_reduction = agent_batteries['p_mw'].sum() - len(agent_batteries) * threshold
 
                 # total reducible ev power
                 ev_reduction = (abs(ev_df[ev_df[c.TC_ID_AGENT] == agent]['p_mw'].sum()) -
