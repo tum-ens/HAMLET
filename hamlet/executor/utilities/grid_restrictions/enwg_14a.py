@@ -55,6 +55,63 @@ class EnWG14a(GridRestrictionBase):
 
         return update_grid_fees
 
+    #: Steps the fee horizon must have before it describes anything. `__calculate_variable_grid_fees`
+    #: drops the first two -- the agents' controllers cannot act on them -- so a horizon of two steps
+    #: or fewer leaves nothing, and one of three leaves a single step.
+    MIN_FEE_HORIZON_STEPS = 3
+
+    @classmethod
+    def __fee_horizon_steps(cls, horizon_seconds, resolution):
+        """The §14a fee horizon as a count of timesteps, or a refusal.
+
+        Every downstream use of the horizon is a count: `periods` on the fee timestamp index, the
+        number of power flows to run, and the length the profiles are sliced to. A horizon that is
+        not a whole number of timesteps has no such count -- pandas used to truncate the fraction
+        away silently, giving a horizon shorter than the config asked for (#211).
+
+        Casting would only pin that truncation for every future config. Whether §14a's fee horizon
+        should round down, round up or be forbidden is a modelling question about the Festlegung,
+        and until it is answered the honest answer is to refuse the config rather than quietly
+        shorten it. Every shipped config divides evenly, so this cannot fire on one of them.
+
+        **Divisibility on its own is not the decision.** A whole number can still be a number the
+        calculation cannot use, and each of those fails silently rather than loudly: a negative
+        horizon divides evenly (`-3600 % 3600 == 0`) and then slices profiles from the wrong end;
+        `pd.date_range` accepts a zero or negative `periods` and returns an empty index, so a
+        horizon of one or two steps writes empty fees for every bus for the whole run; and a
+        `timestep` of zero divides by zero before any of it. Checking only the fraction would have
+        left a guard that reads as thorough and admits every one of them.
+
+        Tested with `%` on the configured seconds rather than `!=` on the quotient: `%` is exact on
+        the integers YAML gives us, matches what the message tells the user to fix, and is the
+        idiom `__check_if_update_variable_grid_fees` already uses. It is also total -- `inf` and
+        `nan` reach the refusal instead of raising out of an `int()` call inside the condition.
+        """
+        if not resolution or resolution <= 0:
+            raise ValueError(
+                f'The simulation timestep must be a positive number of seconds for §14a to '
+                f'measure its variable grid fee horizon against, but setup.yaml gives '
+                f'time.timestep = {resolution}.')
+
+        if horizon_seconds % resolution != 0:
+            raise ValueError(
+                f'The §14a variable grid fee horizon must be a whole number of timesteps, but '
+                f'grids.yaml gives <energy>.restrictions.enwg_14a.variable_grid_fees.horizon = '
+                f'{horizon_seconds} s against setup.yaml time.timestep = {resolution} s, which '
+                f'is {horizon_seconds / resolution} steps. Adjust either so that '
+                f'horizon % timestep == 0 -- §14a will not shorten the horizon for you.')
+
+        steps = int(horizon_seconds // resolution)
+        if steps < cls.MIN_FEE_HORIZON_STEPS:
+            raise ValueError(
+                f'The §14a variable grid fee horizon must span at least '
+                f'{cls.MIN_FEE_HORIZON_STEPS} timesteps, because the first two are dropped as '
+                f"unreachable by the agents' controllers, but grids.yaml gives "
+                f'<energy>.restrictions.enwg_14a.variable_grid_fees.horizon = {horizon_seconds} s '
+                f'against setup.yaml time.timestep = {resolution} s, which is {steps} steps.')
+
+        return steps
+
     def __calculate_variable_grid_fees(self):
         """
         Calculate variable grid fees for each node.
@@ -81,22 +138,8 @@ class EnWG14a(GridRestrictionBase):
         general_config = self.database.get_general_data()[c.K_GENERAL]
         resolution = general_config['time']['timestep']
 
-        # The fee horizon is a count of timesteps, and every use of it downstream is: `periods` on
-        # the timestamp index below, and the number of power flows to run. A horizon that is not a
-        # whole number of timesteps has no such count -- pandas used to truncate the fraction away
-        # silently, giving a horizon shorter than the config asked for. Casting would only pin that
-        # truncation for every future config; whether §14a's fee horizon should round down, round up
-        # or be forbidden is a modelling question, and until it is answered the honest answer is to
-        # refuse the config rather than quietly shorten it. Every shipped config divides evenly.
         horizon_seconds = self.restriction_config['variable_grid_fees']['horizon']
-        horizon_steps = horizon_seconds / resolution
-        if horizon_steps != int(horizon_steps):
-            raise ValueError(
-                f'The §14a variable grid fee horizon must be a whole number of timesteps, but '
-                f'horizon {horizon_seconds} s is not divisible by timestep {resolution} s '
-                f'({horizon_steps} steps). Adjust the horizon in the grids config, or the '
-                f"timestep in the setup config, so that horizon % timestep == 0.")
-        horizon = int(horizon_steps)
+        horizon = self.__fee_horizon_steps(horizon_seconds, resolution)
         grid_fee_base = self.restriction_config['variable_grid_fees']['grid_fee_base'] * c.EUR_KWH_TO_EURe7_WH
 
         # generate a timestep column as index for variable grid fees, from second next timestep to calculation horizon

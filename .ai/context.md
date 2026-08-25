@@ -353,7 +353,7 @@ suite and the runtime agree by construction rather than by two people rememberin
 records what the blanket filter was hiding, measured, and why enumerating beat deleting.
 
 **Do not add a category to `SUPPRESSED` to quieten a run.** If a warning is worth hiding it is
-worth an issue: lifting the filter is what surfaced #210 and #211, two live §14a defects that had
+worth an issue: lifting the filter is what surfaced #210 and #211, two §14a defects that had
 been invisible for as long as the filter existed.
 
 ## Branches and propagation

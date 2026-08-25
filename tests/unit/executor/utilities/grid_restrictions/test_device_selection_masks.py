@@ -17,9 +17,8 @@ reindex -- gives a different answer:
 * the same control pass is run again with the decoy rows deleted and again with the rows
   shuffled, and must return the identical command dict.
 
-The last test is the one that fails if the chained form comes back: the reindex warning is
-turned into an error for the duration of the call. The other three would still pass, because
-today's reindex produces the right answer -- which is exactly why the warning has to be the pin.
+Which of them is the pin against the chained form coming back is not obvious, and is stated on
+the test that is.
 """
 import warnings
 from copy import deepcopy
@@ -99,10 +98,8 @@ def _control(net, method, trafo_power, loading=1.5):
 
 
 def _control_without_reindex_warning(net, method, trafo_power, loading=1.5):
-    """The same call, with pandas' boolean-key reindex promoted to an error.
-
-    `error` for that one message only: the rest of the run's warnings are not this test's
-    business, and turning them all into errors would make it fail for unrelated reasons.
+    """The same call, with pandas' boolean-key reindex promoted to an error -- that one message
+    only, since the rest of the run's warnings are not this test's business.
     """
     with warnings.catch_warnings():
         warnings.simplefilter('always')
