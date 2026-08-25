@@ -55,10 +55,26 @@ class EnWG14a(GridRestrictionBase):
 
         return update_grid_fees
 
-    #: Steps the fee horizon must have before it describes anything. `__calculate_variable_grid_fees`
-    #: drops the first two -- the agents' controllers cannot act on them -- so a horizon of two steps
-    #: or fewer leaves nothing, and one of three leaves a single step.
-    MIN_FEE_HORIZON_STEPS = 3
+    #: Leading timesteps of the fee horizon no agent can respond to, so the fee series starts
+    #: this far out and the loading series is sliced by the same amount.
+    #:
+    #: Two, for two separate reasons. The fees are written to `restriction_commands` in the grid
+    #: stage and not read until `agent_base.__update_variable_grid_fees` runs, which is the next
+    #: timestep -- that is one. And `markets.yaml` sets `closing: 3600`, so at any timestep the
+    #: delivery period being traded is already the next one; by the time an agent has the fee,
+    #: the first period it can still bid on is the one after that -- that is the second.
+    #:
+    #: **So this is tied to the market's closing lead and does not know it.** A market that closed
+    #: at delivery, or two periods ahead, would want a different number here, and nothing would
+    #: say so. That is a modelling question about how §14a fees reach the agents and is not
+    #: settled here; it is named rather than repeated so there is one place to change.
+    FEE_HORIZON_LEAD_STEPS = 2
+
+    #: Steps the fee horizon must have before it describes anything: the lead is dropped, so a
+    #: horizon of `FEE_HORIZON_LEAD_STEPS` or fewer leaves an empty fee series and one more than
+    #: that leaves a single timestep. Derived rather than written out, because a hardcoded
+    #: minimum would go on passing a lead that had changed underneath it.
+    MIN_FEE_HORIZON_STEPS = FEE_HORIZON_LEAD_STEPS + 1
 
     @classmethod
     def __fee_horizon_steps(cls, horizon_seconds, resolution):
@@ -105,8 +121,9 @@ class EnWG14a(GridRestrictionBase):
         if steps < cls.MIN_FEE_HORIZON_STEPS:
             raise ValueError(
                 f'The §14a variable grid fee horizon must span at least '
-                f'{cls.MIN_FEE_HORIZON_STEPS} timesteps, because the first two are dropped as '
-                f"unreachable by the agents' controllers, but grids.yaml gives "
+                f'{cls.MIN_FEE_HORIZON_STEPS} timesteps, because the first '
+                f'{cls.FEE_HORIZON_LEAD_STEPS} are dropped as unreachable by the agents, but '
+                f'grids.yaml gives '
                 f'<energy>.restrictions.enwg_14a.variable_grid_fees.horizon = {horizon_seconds} s '
                 f'against setup.yaml time.timestep = {resolution} s, which is {steps} steps.')
 
@@ -142,9 +159,11 @@ class EnWG14a(GridRestrictionBase):
         horizon = self.__fee_horizon_steps(horizon_seconds, resolution)
         grid_fee_base = self.restriction_config['variable_grid_fees']['grid_fee_base'] * c.EUR_KWH_TO_EURe7_WH
 
-        # generate a timestep column as index for variable grid fees, from second next timestep to calculation horizon
-        timestep_column = pd.date_range(start=self.timestamp + pd.DateOffset(seconds=2 * resolution),
-                                        periods=horizon - 2, freq=pd.DateOffset(seconds=resolution))
+        # the fee series covers the horizon minus its unreachable lead; see FEE_HORIZON_LEAD_STEPS
+        lead = self.FEE_HORIZON_LEAD_STEPS
+        timestep_column = pd.date_range(
+            start=self.timestamp + pd.DateOffset(seconds=lead * resolution),
+            periods=horizon - lead, freq=pd.DateOffset(seconds=resolution))
 
         # run the horizon's power flows
         try:
@@ -178,11 +197,12 @@ class EnWG14a(GridRestrictionBase):
                 # concat bus and line loading and take the max value per index
                 combined_loading = pd.concat([trafo_loading, line_loading], axis=1).max(axis=1) / 100
 
-                # delete the first two timesteps since they won't be considered in agents' controllers
-                combined_loading = combined_loading.iloc[2:]
+                # drop the same unreachable lead, so this lines up with `timestep_column`
+                combined_loading = combined_loading.iloc[lead:]
 
                 # for over-generation, take the minimal value among the whole horizon to maximize incentive
-                combined_loading[(combined_loading > 1) & (trafo_lv_power.iloc[2:][trafo] > 0)] = combined_loading.min()
+                combined_loading[(combined_loading > 1) &
+                                 (trafo_lv_power.iloc[lead:][trafo] > 0)] = combined_loading.min()
 
                 # assign index
                 combined_loading.index = timestep_column

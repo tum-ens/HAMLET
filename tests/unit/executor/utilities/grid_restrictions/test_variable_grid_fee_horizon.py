@@ -106,6 +106,38 @@ def test_a_timestep_that_cannot_be_divided_by_is_refused_before_the_division(tim
         _calculate(86_400, timestep)
 
 
+@pytest.mark.parametrize('lead', [1, 2, 3, 4])
+def test_the_minimum_horizon_follows_the_unreachable_lead(lead, monkeypatch):
+    """Change how many leading timesteps are dropped and the minimum must move with it.
+
+    `MIN_FEE_HORIZON_STEPS` is `FEE_HORIZON_LEAD_STEPS + 1` because the lead is sliced off and at
+    least one timestep has to survive. Writing the minimum out as a literal would have left a
+    guard that went on accepting a two-step horizon after someone changed the lead to three --
+    silently, since an empty fee series raises nothing. This asserts the relationship rather than
+    either number: at `lead` timesteps the fee series is empty and the horizon is refused; at
+    `lead + 1` exactly one timestep survives and it is accepted.
+    """
+    monkeypatch.setattr(EnWG14a, 'FEE_HORIZON_LEAD_STEPS', lead)
+    monkeypatch.setattr(EnWG14a, 'MIN_FEE_HORIZON_STEPS', lead + 1)
+    timestep = 3600
+
+    with pytest.raises(ValueError, match='at least'):
+        _calculate(lead * timestep, timestep)
+
+    with pytest.raises(_GotPastTheGuard) as raised:
+        _calculate((lead + 1) * timestep, timestep)
+    assert raised.value.args[0] == lead + 1
+
+
+def test_the_minimum_is_derived_from_the_lead_and_not_written_out():
+    """The relationship the test above exercises, asserted on the class itself.
+
+    Without this, someone could satisfy the parametrised test by monkeypatching both constants --
+    which it does -- while the shipped pair had drifted apart.
+    """
+    assert EnWG14a.MIN_FEE_HORIZON_STEPS == EnWG14a.FEE_HORIZON_LEAD_STEPS + 1
+
+
 @pytest.mark.parametrize('horizon, timestep', [(86_400, 3600), (86_400, 900), (10_800, 3600)])
 def test_a_usable_horizon_is_let_through_as_a_whole_step_count(horizon, timestep):
     """The other half of the guard: it must not fire on the configs that are fine.
