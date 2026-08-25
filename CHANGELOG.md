@@ -254,7 +254,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   than against a copy of its arithmetic.
 
   Both fixes are pinned by mutation: re-chaining any one of the six rewritten mask families, or
-  weakening the guard, turns a test red.
+  weakening the guard in any of nine ways, turns a test red.
+
+  **The masks needed pinning by *value*, not by shape.** A first version of the unit test asserted
+  which agents were commanded; a mutation panel defeated it fourteen ways. A filter that names the
+  wrong device class — `c.P_EV` where `c.P_HP` belongs, `plant_type` where `load_type` does — keeps
+  the same agents in the result and changes only what they are told, so one surviving mutation
+  removed heat pumps from §14a individual control altogether while the file stayed green. It now
+  asserts the exact command, device by device and watt by watt.
+
+  Two things that panel found are *not* fixed here, because measurement says they are not defects.
+  Removing the `deepcopy` from either method is behaviour-preserving — every `.loc[...]` on the
+  filtered frames is a read, so nothing is ever written back; eight removal mutations are green,
+  and a test asserting the net is unchanged would pin nothing. And no assertion over
+  `__individual_device_control`'s over-generation branch can constrain its filters: the branch
+  commands nothing for any input, so `&` swapped for `|` there is invisible. Three mutations
+  confirm it, isolated to that method rather than mutated in both at once. Both are recorded
+  where the next reader will look for them rather than papered over with a green test.
 
 - **Every air-source heat pump was simulated on soil inlet temperature (#234).**
   `agents.py:858` read the air/brine discriminator from `specs['type']`, which is the *plant*

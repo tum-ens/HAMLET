@@ -91,6 +91,7 @@ def _restriction(net, method):
 
 
 def _control(net, method, trafo_power, loading=1.5):
+    """One control pass over a copy of `net`, so a caller can reuse the net it built."""
     restriction = _restriction(deepcopy(net), method)
     call = (restriction._EnWG14a__individual_device_control if method == 'individual'
             else restriction._EnWG14a__control_via_ems)
@@ -172,40 +173,72 @@ def _over_generation_net():
 DIRECTIONS = [('over-consumption', _over_consumption_net, -1.0),
               ('over-generation', _over_generation_net, 1.0)]
 
-#: Whether the case produces any command at all. Three of the four do. `individual` +
-#: over-generation does not, and that is not this file's doing: the over-generation budget
-#: `total_p_at_bus * (1 - 1/loading)` is negative, and every device loop is guarded by
-#: `0 < that`, so the branch filters its devices and then commands none of them. Pinned in
-#: `tests/integration/executor/test_enwg_14a_conformance.py`'s
-#: `test_over_generation_control_does_nothing_at_all` as a characterisation of today's code.
+#: Exactly what each case must command, device by device and watt by watt.
 #:
-#: It stays in the sweep because the filters this file is about run either way -- the empty
-#: result *is* the assertion for that case, and the day the branch is fixed this entry goes
-#: wrong and has to be changed deliberately rather than the case quietly weakening.
-COMMANDS = {('individual', 'over-generation'): False}
+#: Asserting the *keys* is not enough, and asserting a shape is not enough: a filter that names
+#: the wrong device class -- `c.P_EV` where `c.P_HP` belongs, `plant_type` where `load_type`
+#: does -- usually leaves the same agents in the result and changes only what they were told.
+#: Four such mutations survived a version of this file that checked keys alone, one of them
+#: removing heat pumps from §14a individual control altogether.
+#:
+#: These are the numbers today's implementation produces; they are here to be *stable*, not to
+#: be independently derived. Ziffer 4.5's floors and the priority order are asserted from the
+#: Festlegung's own text in `tests/integration/executor/test_enwg_14a_conformance.py`, so a
+#: number that moves here without moving there is a selection change -- which is the point.
+#:
+#: The over-consumption budget deliberately does **not** run out part-way through the device
+#: loops; every device lands on its floor. That keeps this file about *which* rows a filter
+#: selects. The order they are curtailed in is
+#: `tests/e2e/test_grid_restrictions.py::test_devices_are_curtailed_in_priority_order`'s job,
+#: and that needs an exhausted budget to say anything at all.
+EXPECTED = {
+    ('individual', 'over-consumption'): {'agent_a': {'bat_a': -4200, 'ev_a': -4200,
+                                                     'hp_a': -5399},
+                                         'agent_b': {'ev_b': -4200}},
+    ('individual', 'over-generation'): {},
+    ('ems', 'over-consumption'): {'agent_a': {'ems': 13562}, 'agent_b': {'ems': 4438}},
+    ('ems', 'over-generation'): {'agent_a': {'ems': -33476}, 'agent_b': {'ems': -13189}},
+}
 
-CASES = [(method, name, build, trafo, COMMANDS.get((method, name), True))
+#: Not asserted here, and deliberately: that §14a leaves `grid.load` / `grid.sgen` untouched.
+#: Both methods `deepcopy` the net and then `deepcopy` each filtered frame again, but every
+#: `.loc[...]` on those frames is a *read* -- neither method ever assigns into one. Dropping any
+#: of the copies is therefore behaviour-preserving today, so a test asserting the net is
+#: unchanged passes with or without them and pins nothing. Measured, not assumed: eight
+#: deepcopy-removal mutations, every one green.
+
+#: `individual` + over-generation commands nothing, and that is not this file's doing: the
+#: over-generation budget `total_p_at_bus * (1 - 1/loading)` is negative whenever the bus
+#: exports, and every device loop is guarded by `0 < that`. The branch filters its devices and
+#: then commands none of them, for any input -- pinned as a characterisation of today's code by
+#: `test_over_generation_control_does_nothing_at_all` in the conformance file.
+#:
+#: **So nothing this file asserts about that case constrains its filters.** An empty result is
+#: the same empty result whether the masks select the right rows, the wrong rows, or every row
+#: in the grid; `&` swapped for `|` there is invisible to every assertion below. It stays in the
+#: sweep for the one thing that still works -- the filters do run, so the reindex test would
+#: catch a re-chain -- and for the day the branch is made reachable, when this note goes wrong.
+UNREACHABLE_BRANCH = {('individual', 'over-generation')}
+
+CASES = [(method, name, build, trafo, EXPECTED[(method, name)])
          for method in ('individual', 'ems') for name, build, trafo in DIRECTIONS]
 IDS = [f'{method} / {name}' for method, name, _, _, _ in CASES]
 
 
-@pytest.mark.parametrize('method, name, build, trafo_power, commands', CASES, ids=IDS)
-def test_no_device_outside_the_filter_is_ever_commanded(method, name, build, trafo_power,
-                                                        commands):
-    """A row at the wrong bus or of the wrong type must not reach the control target."""
-    target = _control(build(), method, trafo_power)
+@pytest.mark.parametrize('method, name, build, trafo_power, expected', CASES, ids=IDS)
+def test_exactly_the_selected_devices_are_commanded_and_by_exactly_this_much(
+        method, name, build, trafo_power, expected):
+    """The filters selected these rows and no others, and gave them these numbers.
 
-    assert bool(target) is commands, (
-        f'{name}: expected {"a command" if commands else "no command"} from {method}, got '
-        f'{target} -- see COMMANDS')
-    assert DECOY not in target, (
-        f'{name}: {DECOY} owns only devices the §14a filters exclude -- one at another bus and '
-        f'two of uncontrollable type -- yet it was commanded: {target[DECOY]}')
-    assert set(target) <= {'agent_a', 'agent_b'}, f'{name}: unexpected agents in {sorted(target)}'
+    `DECOY` owns only rows the filters exclude -- one device at another bus, one uncontrollable
+    load type, one uncontrollable plant type -- so its absence is the selection claim, and the
+    watts are what stops a filter naming the wrong device class from passing anyway.
+    """
+    assert _control(build(), method, trafo_power) == expected
 
 
-@pytest.mark.parametrize('method, name, build, trafo_power, commands', CASES, ids=IDS)
-def test_deleting_the_excluded_rows_changes_nothing(method, name, build, trafo_power, commands):
+@pytest.mark.parametrize('method, name, build, trafo_power, expected', CASES, ids=IDS)
+def test_deleting_the_excluded_rows_changes_nothing(method, name, build, trafo_power, expected):
     """If the filters select what they name, rows they exclude cannot affect the result."""
     net = build()
     assert _control(net, method, trafo_power) == _control(_without_decoys(net), method,
@@ -214,13 +247,23 @@ def test_deleting_the_excluded_rows_changes_nothing(method, name, build, trafo_p
         f'one of them was being selected')
 
 
-@pytest.mark.parametrize('method, name, build, trafo_power, commands', CASES, ids=IDS)
+@pytest.mark.parametrize('method, name, build, trafo_power, expected',
+                         [case for case in CASES if case[0] == 'ems'],
+                         ids=[i for i in IDS if i.startswith('ems')])
 def test_the_row_order_of_the_element_tables_does_not_matter(method, name, build, trafo_power,
-                                                             commands):
+                                                             expected):
     """Label-aligned selection is order-invariant; positional selection is not.
 
-    This is the assertion a naive de-reindexing fails -- `frame[mask_a][mask_b.values]` picks
-    rows by position and silently selects a different set as soon as the order changes.
+    `ems` only, and not because `individual` is uninteresting. `__individual_device_control`
+    walks its devices in table order and gives the remainder of the budget to whichever device
+    it reaches as the budget runs out, so its output is *legitimately* order-dependent as soon
+    as the budget binds. An order-invariance assertion over it would hold only while the fixture
+    happens to leave the budget unexhausted -- true today, and a trap the moment anyone edits a
+    magnitude in `_over_consumption_net`. `__control_via_ems` aggregates per agent before
+    distributing, so it is order-invariant for real.
+
+    For `individual` the same claim is carried by the exact commands above: a positional
+    de-reindexing selects a different set of rows and produces different watts.
     """
     net = build()
     assert _control(net, method, trafo_power) == _control(_shuffled(net), method, trafo_power), (
@@ -228,9 +271,9 @@ def test_the_row_order_of_the_element_tables_does_not_matter(method, name, build
         f'position rather than by label')
 
 
-@pytest.mark.parametrize('method, name, build, trafo_power, commands', CASES, ids=IDS)
+@pytest.mark.parametrize('method, name, build, trafo_power, expected', CASES, ids=IDS)
 def test_no_filter_hands_pandas_a_boolean_key_it_has_to_reindex(method, name, build, trafo_power,
-                                                                commands):
+                                                                expected):
     """The #210 pin: chaining the masks back together makes this raise.
 
     pandas warns on every boolean key whose index differs from the frame's, and has said it will
@@ -238,5 +281,4 @@ def test_no_filter_hands_pandas_a_boolean_key_it_has_to_reindex(method, name, bu
     rewrite hold: without it nothing fails when a filter goes back to `frame[mask_a][mask_b]`,
     because today's reindex still produces the right answer.
     """
-    target = _control_without_reindex_warning(build(), method, trafo_power)
-    assert bool(target) is commands, f'{name}: {target} -- see COMMANDS'
+    assert _control_without_reindex_warning(build(), method, trafo_power) == expected

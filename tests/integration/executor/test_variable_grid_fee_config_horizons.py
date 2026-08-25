@@ -68,10 +68,15 @@ def test_the_config_sweep_found_something_to_check():
 @pytest.mark.parametrize('label, horizon, timestep', CONFIGS,
                          ids=[label for label, _, _ in CONFIGS])
 def test_every_shipped_config_survives_the_fee_horizon_guard(label, horizon, timestep):
-    """Asked of the guard itself, not of a copy of its arithmetic.
+    """The landmine check, and only that: the guard does not refuse a config we ship.
 
-    Re-deriving `horizon % timestep == 0` here would go on passing a guard that had been weakened
-    into something else, which is the case this file exists to notice.
+    It calls the guard rather than re-deriving its rule, but the assertion is still weak by
+    construction -- a guard stripped of every check returns the same step count for these seven
+    inputs and this file stays green. That is the correct division of labour and not an
+    oversight: what the guard *rejects* cannot be asserted from configs that all pass it, and is
+    pinned instead in
+    `tests/unit/executor/utilities/grid_restrictions/test_variable_grid_fee_horizon.py`, where
+    the same stripped guard fails thirteen tests.
     """
     steps = EnWG14a._EnWG14a__fee_horizon_steps(horizon, timestep)
     assert steps == horizon // timestep, f'{label}: {steps} steps from {horizon} s / {timestep} s'
