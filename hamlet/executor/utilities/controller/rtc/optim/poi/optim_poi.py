@@ -6,9 +6,11 @@ __email__ = "markus.doepfert@tum.de"
 
 import logging
 
-# Used by the slack reporting in `run`. It was missing, and the bare `except Exception` around
-# that block turned every call into a silently swallowed NameError -- so a POI run that closed its
-# balance with slack reported nothing while the linopy run warned.
+# Used by the slack reporting in `run`. It was once missing, and the bare `except Exception` that
+# used to wrap that block turned every call into a silently swallowed NameError -- a POI run that
+# closed its balance with slack reported nothing while the linopy run warned. The handler is gone
+# (#231), so a missing import would now fail loudly; keep this explicit anyway, since `mpc_poi`
+# gets its `np` from a star import and that asymmetry is easy to trip over.
 import numpy as np
 
 from hamlet.executor.utilities.controller.poi_solver import (apply_reproducibility_options,
@@ -287,14 +289,20 @@ class POI(OptimBase):
         report only the first agent that shed. Pinned by `tests/.../test_slack_wiring.py`.
         """
 
+        # `get_value` is deliberately unguarded. This runs only after `raise_unless_optimal`, so
+        # a proven optimum exists, and `get_solution` makes the same `get_value` call over the
+        # same handles with no handler a few lines below -- so nothing that call can raise was
+        # ever survivable here. (That argument covers the call, not the reduction around it: an
+        # agent with zero timesteps would reach `np.max` on an empty array. Only Gurobi reports
+        # an empty model OPTIMAL; under HiGHS `raise_unless_optimal` fires first.) The handler
+        # that used to sit here skipped the variable and carried on, which reports nothing and so
+        # makes a shedding agent look healthy: the one outcome this method exists to prevent.
+        # Pinned by `test_a_failing_read_is_not_swallowed`.
         for name, variables in self.variables.items():
             if not name.endswith('_slack'):
                 continue
-            try:
-                peak = float(np.max(np.abs([self.model.get_value(v)
-                                            for v in np.atleast_1d(variables)])))
-            except Exception:
-                continue
+            peak = float(np.max(np.abs([self.model.get_value(v)
+                                        for v in np.atleast_1d(variables)])))
             if peak > self.SLACK_REPORTING_THRESHOLD:
                 LOGGER.warning(
                     'Agent %s: energy balance closed with %.1f W of "%s". The setpoints for '

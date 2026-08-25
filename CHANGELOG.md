@@ -10,6 +10,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Added
+- **The POI slack report is now exercised, and its threshold and suffix filter are pinned
+  (#231).** `_warn_on_slack` runs in all four controllers, but its `LOGGER.warning` had never
+  executed under the default `poi` backend — in any test or any scenario. Instrumented over two
+  full scenarios the scan iterated 864 slack variables and computed 864 values, and
+  `peak > SLACK_REPORTING_THRESHOLD` was never once true, so nothing would have noticed if the
+  report were broken or deleted. The behavioural test
+  `TestSlackIsReported::test_the_report_actually_comes_out_of_the_controller` was parametrised
+  over the two linopy controllers only; in `test_slack_wiring.py` POI appeared solely in
+  `inspect.getsource` substring assertions, which a comment satisfies. (`test_poi_slack.py` does
+  test POI behaviourally, but against a hand-built model — it never touches `_warn_on_slack`.)
+
+  POI is now in that parametrisation. It needed its own probe: linopy reads
+  `model.variables[name].solution.values`, while POI iterates `self.variables` — an attribute on
+  the *controller* — and reads each opaque handle through `self.model.get_value`, as a sequence in
+  the FBC controller and as a bare scalar in the RTC one. The probe covers both shapes.
+
+  **The probe's shape carries the test, and every part of it was put there by a mutation that
+  survived without it.** The review panel defeated the first draft eight ways; the entries are
+  documented one by one in the test's own docstring, and the substantive ones are:
+
+  - the ordinary decoy now comes **first**, because with it last, turning the filter's `continue`
+    into a `break` stopped the scan before any slack and still produced the single message the
+    draft asserted — in the real controllers the non-slack variables come first, so that mutation
+    silenced essentially every report in production;
+  - **two** slacks are above the threshold, in different energy types, because with one a `break`
+    after `LOGGER.warning` reported the first and stayed green;
+  - a decoy that **contains** `_slack` without ending in it pins `endswith` against a widening to
+    `in` — the same mistake the docstring already warned about, from the other side;
+  - the peaks are **absolute watts, not offsets from the threshold**. Deriving them from
+    `SLACK_REPORTING_THRESHOLD` made the constant unfalsifiable: the inputs scaled with it, so
+    raising it to 1e6 W silenced a megawatt of shed energy with the suite green. The values now
+    bracket it, and a new `test_the_threshold_is_a_solver_tolerance` pins the order of magnitude;
+  - the message is matched as an ordered pattern, not three `in` checks. Swapping the agent and
+    the variable in the format arguments — which reports the shed energy against an energy type
+    and names the agent as a variable — passed all three substring assertions. The unit is
+    matched with the number, so `W` → `kW` is caught;
+  - `record.name` and `record.levelno` are asserted, because `caplog.at_level(..., logger=...)`
+    sets a level and does **not** restrict capture: a report moved to another logger, or dropped
+    to a level nobody watches, was invisible.
+
+  Eighteen mutations, applied separately to each of the two POI controllers, give 34 kills out of
+  36, each by that controller's own parametrisation and by no other. The two survivors are known
+  and are not gaps in this change: `np.max` → `np.min` on the RTC controller is an equivalent
+  mutant, since it genuinely holds one handle per variable and the probe is faithful in modelling
+  that; and deleting `self._warn_on_slack()` from `run()` is unasserted in every backend, because
+  the only test of the call site is one of this file's `inspect.getsource` substring checks, which
+  a comment satisfies. Filed separately — replacing those four tests was out of scope here.
+
 - **§14a's `individual` device control is covered, and its priority order is asserted as an
   order (#232).** `EnWG14a` has two direct-power-control methods. `grid_golden` selects `ems`, and
   the other — `__individual_device_control`, 66 statements — was reachable by **no scenario in the
@@ -226,6 +274,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Fixed
+- **A failing slack read in the POI controllers no longer reports silence (#231).**
+  `_warn_on_slack` wrapped `self.model.get_value` in `except Exception: continue`. It has never
+  fired — 864 of 864 iterations computed a value — but the decision it encodes is wrong whichever
+  exception reaches it: skipping the variable reports nothing, which makes an agent that shed
+  energy indistinguishable from a healthy one, the single outcome the method exists to prevent.
+  Narrowing the exception type would have changed which failures reach that decision without
+  touching the decision.
+
+  The read in the two POI controllers is now unguarded and a failure propagates; why that is safe
+  is argued in the source comment on `_warn_on_slack`, which is that fact's one home. The linopy
+  controllers are unchanged and keep their narrow `except (AttributeError, ValueError)`. Pinned by
+  `test_a_failing_read_is_not_swallowed`, which runs on all four so that no backend can grow a
+  *broad* handler — it raises a `RuntimeError`, so it is deliberately blind to linopy's narrow one.
+  Whether those two types are the right ones is a separate question and is not answered here.
+
+  The two `_warn_on_slack` bodies in `mpc_poi.py` and `optim_poi.py` remain byte-identical
+  duplicates. Both were changed together; deduplicating them is deliberately out of scope.
 
 - **§14a handed pandas two constructs it has said it will reject (#210, #211).** Neither is wrong
   today. Both break on a dependency bump rather than on a code change, and because today's
