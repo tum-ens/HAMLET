@@ -47,6 +47,9 @@ electricity:                          # type of grid (needs to match available g
 
         horizon: 86400                # calculation horizon
                                       # unit: s
+                                      # note: must be a whole number of timesteps and at least
+                                      #   three of them, else the run is refused (see
+                                      #   setup.yaml time.timestep)
 
         update: 3600                  # update frequency
                                       # unit: s

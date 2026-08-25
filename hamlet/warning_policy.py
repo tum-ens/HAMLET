@@ -28,7 +28,7 @@ end to end with the filters lifted after import and every warning recorded:
 | scenario | warnings raised | distinct locations | from HAMLET's own code |
 |---|---|---|---|
 | `examples/create_simple_scenario` (24 steps) | 4,688 | 30 | 100 % |
-| `tests/e2e/scenarios/grid_golden` (30 steps) | 7,805 | 36 | 100 % |
+| `tests/e2e/scenarios/grid_golden` (24 steps) | 7,805 | 36 | 100 % |
 
 Not one came from a dependency warning about itself. The volume is HAMLET calling polars 0.20
 APIs that polars 0.20 already deprecates -- the inventory ROADMAP item #12 (Polars 1.x migration)
@@ -37,22 +37,16 @@ exists to clear -- and that is what `SUPPRESSED` covers.
 **Why the blanket filter could not simply be deleted.** Python already ignores
 `DeprecationWarning` outside `__main__`, so most of that count is invisible by default and
 overstates what a user would see. What a bare removal actually prints was measured separately:
-**491 lines for a 30-timestep run**, of which 360 are polars' `MapWithoutReturnDtypeWarning`,
-whose origin Python records as `sys:1` so it never deduplicates. That is ~16 lines per timestep,
-or roughly 140,000 over a simulated year. The concern that a bare removal would simply be
+**491 lines for a 24-timestep run**, of which 360 are polars' `MapWithoutReturnDtypeWarning`,
+whose origin Python records as `sys:1` so it never deduplicates. That is ~20 lines per timestep,
+or roughly 180,000 over a simulated year at this resolution. The concern that a bare removal would simply be
 reinstated by the next person is correct, and this module is why it does not have to be.
 
-**What is deliberately left visible**, because it is signal rather than noise. Two live HAMLET
-defects, both in Section 14a, both hidden for as long as the blanket filter existed:
-
-- `enwg_14a.py:517` and `:522` -- 64 per run of pandas' `UserWarning: Boolean Series key will be
-  reindexed to match DataFrame index`, from chained boolean masks. Issue #210.
-- `enwg_14a.py:87` -- 30 per run of `FutureWarning: Non-integer 'periods' in pd.date_range ...`,
-  which pandas will turn into an error. Issue #211.
-
-These fire only where Section 14a actually runs, which today is `grid_golden` -- the shipped
-examples configure the restriction but leave the grid inactive. That is a property of the shipped
-configs, not a guarantee. Neither is suppressed here: hiding them again is how they stayed hidden.
+**What lifting the filter found.** Two HAMLET defects, both in Section 14a, both hidden for as
+long as the blanket filter existed: a `UserWarning` about reindexed boolean keys (#210) and a
+`FutureWarning` about a non-integer `periods` (#211). Neither was ever added to `SUPPRESSED`;
+both were fixed at source. That is what this list is for -- hiding them again is how they stayed
+hidden.
 
 The list is **not** an exhaustive inventory of what a run prints. A few dependency warnings
 survive too (pandapower's `output_writer` and `run_control` each raise a `FutureWarning` on the

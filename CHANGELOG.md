@@ -227,6 +227,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **§14a handed pandas two constructs it has said it will reject (#210, #211).** Neither is wrong
+  today. Both break on a dependency bump rather than on a code change, and because today's
+  behaviour is correct no test would have failed first — the run would simply have started
+  raising. Found by lifting the blanket warning filter (#199).
+
+  **Chained boolean masks (#210).** `frame[mask_a][mask_b]`, with `mask_b` computed against the
+  *unfiltered* frame and handed to the *filtered* one, appears **twelve times** across
+  `__individual_device_control` and `__control_via_ems` — ten statements, both directions, both
+  methods. pandas reindexes the second mask by label, so the surviving rows are those where both
+  are true; each is now `frame[mask_a & mask_b]`, exactly equivalent because the outer frame's
+  index is always a subset of the mask's.
+
+  **The golden master could not have carried that claim on its own.** `grid_golden` runs
+  `method: ems`, so six of the twelve rewrites — the whole of `__individual_device_control` — are
+  unexercised by it (#232), and the fingerprint is permutation-blind anyway (#208): the same
+  commands going to *different* agents would not move it. What carries the identity claim is
+  `test_grid_restrictions.py`'s per-agent joins on bus + timestamp and plant + timestamp + bus,
+  plus the new unit tests, which parametrise both methods.
+
+  **A non-integer `periods` on the fee horizon (#211).** `horizon / resolution` is a float by
+  construction and pandas truncated it. `EnWG14a.__fee_horizon_steps` now refuses a horizon the
+  fee calculation cannot use, rather than casting the truncation in — its docstring says why, and
+  why divisibility alone would not have been the fix. All seven tracked configs pass it, at 24 or
+  96 steps, so this could not move a number; a test asserts that against the guard itself rather
+  than against a copy of its arithmetic.
+
+  Both fixes are pinned by mutation: re-chaining any one of the six rewritten mask families, or
+  weakening the guard in any of nine ways, turns a test red.
+
+  **The masks needed pinning by *value*, not by shape.** A first version of the unit test asserted
+  which agents were commanded; a mutation panel defeated it fourteen ways. A filter that names the
+  wrong device class — `c.P_EV` where `c.P_HP` belongs, `plant_type` where `load_type` does — keeps
+  the same agents in the result and changes only what they are told, so one surviving mutation
+  removed heat pumps from §14a individual control altogether while the file stayed green. It now
+  asserts the exact command, device by device and watt by watt.
+
+  Two things that panel found are *not* fixed here, because measurement says they are not defects.
+  Removing the `deepcopy` from either method is behaviour-preserving — every `.loc[...]` on the
+  filtered frames is a read, so nothing is ever written back; eight removal mutations are green,
+  and a test asserting the net is unchanged would pin nothing. And no assertion over
+  `__individual_device_control`'s over-generation branch can constrain its filters: the branch
+  commands nothing for any input, so `&` swapped for `|` there is invisible. Three mutations
+  confirm it, isolated to that method rather than mutated in both at once. Both are recorded
+  where the next reader will look for them rather than papered over with a green test.
+
 - **Every air-source heat pump was simulated on soil inlet temperature (#234).**
   `agents.py:858` read the air/brine discriminator from `specs['type']`, which is the *plant*
   type and is the literal `'hp'` in all nine shipped spec files. The comparison at `:887` was

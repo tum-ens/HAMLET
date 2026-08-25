@@ -55,6 +55,80 @@ class EnWG14a(GridRestrictionBase):
 
         return update_grid_fees
 
+    #: Leading timesteps of the fee horizon no agent can respond to, so the fee series starts
+    #: this far out and the loading series is sliced by the same amount.
+    #:
+    #: Two, for two separate reasons. The fees are written to `restriction_commands` in the grid
+    #: stage and not read until `agent_base.__update_variable_grid_fees` runs, which is the next
+    #: timestep -- that is one. And `markets.yaml` sets `closing: 3600`, so at any timestep the
+    #: delivery period being traded is already the next one; by the time an agent has the fee,
+    #: the first period it can still bid on is the one after that -- that is the second.
+    #:
+    #: **So this is tied to the market's closing lead and does not know it.** A market that closed
+    #: at delivery, or two periods ahead, would want a different number here, and nothing would
+    #: say so. That is a modelling question about how §14a fees reach the agents and is not
+    #: settled here; it is named rather than repeated so there is one place to change.
+    FEE_HORIZON_LEAD_STEPS = 2
+
+    #: Steps the fee horizon must have before it describes anything: the lead is dropped, so a
+    #: horizon of `FEE_HORIZON_LEAD_STEPS` or fewer leaves an empty fee series and one more than
+    #: that leaves a single timestep. Derived rather than written out, because a hardcoded
+    #: minimum would go on passing a lead that had changed underneath it.
+    MIN_FEE_HORIZON_STEPS = FEE_HORIZON_LEAD_STEPS + 1
+
+    @classmethod
+    def __fee_horizon_steps(cls, horizon_seconds, resolution):
+        """The §14a fee horizon as a count of timesteps, or a refusal.
+
+        Every downstream use of the horizon is a count: `periods` on the fee timestamp index, the
+        number of power flows to run, and the length the profiles are sliced to. A horizon that is
+        not a whole number of timesteps has no such count -- pandas used to truncate the fraction
+        away silently, giving a horizon shorter than the config asked for (#211).
+
+        Casting would only pin that truncation for every future config. Whether §14a's fee horizon
+        should round down, round up or be forbidden is a modelling question about the Festlegung,
+        and until it is answered the honest answer is to refuse the config rather than quietly
+        shorten it. Every shipped config divides evenly, so this cannot fire on one of them.
+
+        **Divisibility on its own is not the decision.** A whole number can still be a number the
+        calculation cannot use, and each of those fails silently rather than loudly: a negative
+        horizon divides evenly (`-3600 % 3600 == 0`) and then slices profiles from the wrong end;
+        `pd.date_range` accepts a zero or negative `periods` and returns an empty index, so a
+        horizon of one or two steps writes empty fees for every bus for the whole run; and a
+        `timestep` of zero divides by zero before any of it. Checking only the fraction would have
+        left a guard that reads as thorough and admits every one of them.
+
+        Tested with `%` on the configured seconds rather than `!=` on the quotient: `%` is exact on
+        the integers YAML gives us, matches what the message tells the user to fix, and is the
+        idiom `__check_if_update_variable_grid_fees` already uses. It is also total -- `inf` and
+        `nan` reach the refusal instead of raising out of an `int()` call inside the condition.
+        """
+        if not resolution or resolution <= 0:
+            raise ValueError(
+                f'The simulation timestep must be a positive number of seconds for §14a to '
+                f'measure its variable grid fee horizon against, but setup.yaml gives '
+                f'time.timestep = {resolution}.')
+
+        if horizon_seconds % resolution != 0:
+            raise ValueError(
+                f'The §14a variable grid fee horizon must be a whole number of timesteps, but '
+                f'grids.yaml gives <energy>.restrictions.enwg_14a.variable_grid_fees.horizon = '
+                f'{horizon_seconds} s against setup.yaml time.timestep = {resolution} s, which '
+                f'is {horizon_seconds / resolution} steps. Adjust either so that '
+                f'horizon % timestep == 0 -- §14a will not shorten the horizon for you.')
+
+        steps = int(horizon_seconds // resolution)
+        if steps < cls.MIN_FEE_HORIZON_STEPS:
+            raise ValueError(
+                f'The §14a variable grid fee horizon must span at least '
+                f'{cls.MIN_FEE_HORIZON_STEPS} timesteps, because the first '
+                f'{cls.FEE_HORIZON_LEAD_STEPS} are dropped as unreachable by the agents, but '
+                f'grids.yaml gives '
+                f'<energy>.restrictions.enwg_14a.variable_grid_fees.horizon = {horizon_seconds} s '
+                f'against setup.yaml time.timestep = {resolution} s, which is {steps} steps.')
+
+        return steps
+
     def __calculate_variable_grid_fees(self):
         """
         Calculate variable grid fees for each node.
@@ -80,16 +154,20 @@ class EnWG14a(GridRestrictionBase):
         # get data resolution and variable grid fees horizon and base grid fee
         general_config = self.database.get_general_data()[c.K_GENERAL]
         resolution = general_config['time']['timestep']
-        horizon = self.restriction_config['variable_grid_fees']['horizon'] / resolution
+
+        horizon_seconds = self.restriction_config['variable_grid_fees']['horizon']
+        horizon = self.__fee_horizon_steps(horizon_seconds, resolution)
         grid_fee_base = self.restriction_config['variable_grid_fees']['grid_fee_base'] * c.EUR_KWH_TO_EURe7_WH
 
-        # generate a timestep column as index for variable grid fees, from second next timestep to calculation horizon
-        timestep_column = pd.date_range(start=self.timestamp + pd.DateOffset(seconds=2 * resolution),
-                                        periods=horizon - 2, freq=pd.DateOffset(seconds=resolution))
+        # the fee series covers the horizon minus its unreachable lead; see FEE_HORIZON_LEAD_STEPS
+        lead = self.FEE_HORIZON_LEAD_STEPS
+        timestep_column = pd.date_range(
+            start=self.timestamp + pd.DateOffset(seconds=lead * resolution),
+            periods=horizon - lead, freq=pd.DateOffset(seconds=resolution))
 
         # run the horizon's power flows
         try:
-            results = self.__run_horizon_power_flows(grid, int(horizon))
+            results = self.__run_horizon_power_flows(grid, horizon)
         except pp.powerflow.LoadflowNotConverged:  # avoid stopping the simulation when load flow not converged
             print('Load flow not converged for timestamp: ', str(self.timestamp))
             return 0
@@ -119,11 +197,12 @@ class EnWG14a(GridRestrictionBase):
                 # concat bus and line loading and take the max value per index
                 combined_loading = pd.concat([trafo_loading, line_loading], axis=1).max(axis=1) / 100
 
-                # delete the first two timesteps since they won't be considered in agents' controllers
-                combined_loading = combined_loading.iloc[2:]
+                # drop the same unreachable lead, so this lines up with `timestep_column`
+                combined_loading = combined_loading.iloc[lead:]
 
                 # for over-generation, take the minimal value among the whole horizon to maximize incentive
-                combined_loading[(combined_loading > 1) & (trafo_lv_power.iloc[2:][trafo] > 0)] = combined_loading.min()
+                combined_loading[(combined_loading > 1) &
+                                 (trafo_lv_power.iloc[lead:][trafo] > 0)] = combined_loading.min()
 
                 # assign index
                 combined_loading.index = timestep_column
@@ -343,8 +422,9 @@ class EnWG14a(GridRestrictionBase):
         # check if sgen or load need to be adjusted
         if trafo_power < 0 < total_p_at_bus:  # too much load, load needs to be reduced
             # count number of relevant 14a devices at bus
-            load_df = deepcopy(grid.load[grid.load['bus'] == bus][(grid.load['load_type'] == c.P_EV) |
-                                                                  (grid.load['load_type'] == c.P_HP)])
+            load_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                         ((grid.load['load_type'] == c.P_EV) |
+                                          (grid.load['load_type'] == c.P_HP))])
 
             # A device is a candidate only if it draws above **its own** Mindestleistung, which is
             # what it is guaranteed and therefore all it can give (Ziffer 4.5). For an EV that is
@@ -362,7 +442,8 @@ class EnWG14a(GridRestrictionBase):
             load_df = load_df[load_df['p_mw'] > load_df['hp_min_control'].clip(lower=threshold)]
 
             # check if battery is charging
-            battery_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][grid.sgen['plant_type'] == c.P_BATTERY])
+            battery_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                            (grid.sgen['plant_type'] == c.P_BATTERY)])
             battery_df = battery_df[battery_df['p_mw'] < - threshold]  # take only batteries which are charging
 
             # perform individual device control
@@ -440,11 +521,13 @@ class EnWG14a(GridRestrictionBase):
         elif trafo_power > 0 > total_p_at_bus:  # too much generation, generation needs to be reduced
             # count number of 14a devices at bus
             # take feed in ev
-            ev_df = deepcopy(grid.load[grid.load['bus'] == bus][grid.load['load_type'] == c.P_EV])
+            ev_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                       (grid.load['load_type'] == c.P_EV)])
             ev_df = ev_df[ev_df['p_mw'] < - threshold]  # check if ev is feeding in to the grid
 
             # take discharging battery
-            sgen_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][(grid.sgen['plant_type'] == c.P_BATTERY)])
+            sgen_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                         (grid.sgen['plant_type'] == c.P_BATTERY)])
             sgen_df = sgen_df[sgen_df['p_mw'] > threshold]  # take only batteries which are discharging
 
             # perform individual device control
@@ -533,12 +616,14 @@ class EnWG14a(GridRestrictionBase):
         # check if sgen or load need to be adjusted
         if trafo_power < 0 < total_p_at_bus:  # too much load, load needs to be reduced
             # count number of 14a devices at bus
-            load_df = deepcopy(grid.load[grid.load['bus'] == bus][(grid.load['load_type'] == c.P_EV) |
-                                                                  (grid.load['load_type'] == c.P_HP)])
+            load_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                         ((grid.load['load_type'] == c.P_EV) |
+                                          (grid.load['load_type'] == c.P_HP))])
             load_df = load_df[load_df['p_mw'] > threshold]
 
             # check if battery is charging
-            battery_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][grid.sgen['plant_type'] == c.P_BATTERY])
+            battery_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                            (grid.sgen['plant_type'] == c.P_BATTERY)])
             battery_df = battery_df[battery_df['p_mw'] < - threshold]  # take only batteries which are charging
 
             # get all agent who has 14a relevant plants at bus
@@ -550,9 +635,8 @@ class EnWG14a(GridRestrictionBase):
                                      len(battery_df[battery_df[c.TC_ID_AGENT] == agent]) * threshold)
 
                 # total reducible ev power
-                ev_reduction = (load_df[load_df[c.TC_ID_AGENT] == agent][load_df['load_type'] == c.P_EV]['p_mw'].sum() -
-                                len(load_df[load_df[c.TC_ID_AGENT] == agent][load_df['load_type'] == c.P_EV]) *
-                                threshold)
+                agent_evs = load_df[(load_df[c.TC_ID_AGENT] == agent) & (load_df['load_type'] == c.P_EV)]
+                ev_reduction = agent_evs['p_mw'].sum() - len(agent_evs) * threshold
 
                 # total reducible hp power: everything the agent's heat pumps hold above their
                 # §14a Mindestleistung. `hp_min_control` carries that floor per device, from
@@ -602,11 +686,13 @@ class EnWG14a(GridRestrictionBase):
         elif trafo_power > 0 > total_p_at_bus:  # too much generation, generation needs to be reduced
             # count number of 14a devices and pv at bus
             # take feed in ev
-            ev_df = deepcopy(grid.load[grid.load['bus'] == bus][grid.load['load_type'] == c.P_EV])
+            ev_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                       (grid.load['load_type'] == c.P_EV)])
             ev_df = ev_df[ev_df['p_mw'] < - threshold]  # check if ev is feeding in to the grid
 
             # take discharging battery and pv
-            sgen_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][(grid.sgen['plant_type'] == c.P_BATTERY)])
+            sgen_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                         (grid.sgen['plant_type'] == c.P_BATTERY)])
             sgen_df = sgen_df[sgen_df['p_mw'] > threshold]  # take only batteries which are discharging
 
             # get all agent who has 14a plants at bus
@@ -614,10 +700,9 @@ class EnWG14a(GridRestrictionBase):
 
             for agent in all_agents:  # get reducible power for each agent
                 # total reducible battery power
-                battery_reduction = (
-                        sgen_df[sgen_df[c.TC_ID_AGENT] == agent][sgen_df['plant_type'] == c.P_BATTERY]['p_mw']
-                        .sum() - len(sgen_df[sgen_df[c.TC_ID_AGENT] == agent][sgen_df['plant_type']
-                                                                              == c.P_BATTERY]) * threshold)
+                agent_batteries = sgen_df[(sgen_df[c.TC_ID_AGENT] == agent) &
+                                          (sgen_df['plant_type'] == c.P_BATTERY)]
+                battery_reduction = agent_batteries['p_mw'].sum() - len(agent_batteries) * threshold
 
                 # total reducible ev power
                 ev_reduction = (abs(ev_df[ev_df[c.TC_ID_AGENT] == agent]['p_mw'].sum()) -
