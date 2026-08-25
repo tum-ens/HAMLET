@@ -10,6 +10,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Added
+- **Market clearing is now executed and asserted by value (#223).** Every `markets.yaml` any test
+  ran set `method: None`, so the clearing branch of `executor/markets/electricity.py` had never
+  run in the suite, and neither had two of the three trading strategies: `Linear` and `Zi` reached
+  only their `class` and `def` lines. The one shipped example that clears,
+  `examples/create_scenario_with_market`, was executed by nothing -- the two tests that name it
+  read its config *files*.
+
+  Three files close that:
+
+  - `tests/unit/executor/markets/test_clearing_by_hand.py` drives the real `ElectricityMarket`
+    over books written out by hand and asserts the cleared quantities, the clearing price and
+    **who traded with whom**, per agent by name. Every expected number was derived from the
+    algorithm on paper before the code was run, and the derivations are in the file. It covers
+    `pda` and `None`, uniform pricing, partial clearing, the retailer's place in the merit order,
+    tied bids, and the three refusals (`discriminatory`, `community`, `ex-post`).
+  - `tests/unit/executor/utilities/trading/test_strategies.py` prices all three strategies by
+    hand, so `Linear` and `Zi` execute for the first time.
+  - `tests/e2e/test_market_clearing.py` runs `scenario_with_market` end to end (~40 s), which is
+    what settles the questions no unit fixture can: that the executor reaches the clearing at all,
+    that agents trade **with each other** rather than only with the retailer, that every clearing
+    settles at a single price, and that the configured `linear` strategy is the one that quotes.
+
+  Measured against 39 mutations, applied one at a time and each confirmed landed: **38 caught**.
+  The one survivor is an established equivalent mutant -- widening `energy_in > 0` to `>= 0` in
+  `__split_bids_offers` produced identical results on all six books, because a zero-energy row
+  also carries a zero price and so can never clear.
+
+  Two gaps are recorded rather than closed, both pinned by tests that say so:
+  `__method_pda` has no self-trade filter where `__method_none` does (unreachable through the
+  shipped trading strategies, which net an agent into one direction per timestep), and `Zi` draws
+  from Python's unseeded global generator, so a `zi` scenario would not be reproducible across
+  processes -- the same shape as the market half of #216. No shipped scenario selects `zi`.
+
 - **The POI slack report is now exercised, and its threshold and suffix filter are pinned
   (#231).** `_warn_on_slack` runs in all four controllers, but its `LOGGER.warning` had never
   executed under the default `poi` backend — in any test or any scenario. Instrumented over two
@@ -274,6 +307,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Fixed
+- **`method: null` in a `markets.yaml` no longer crashes the agent stage (#223).** The check read
+  `m_method.capitalize() == 'None' or m_method is None`, whose second operand can never run: the
+  attribute lookup on `None` raises first. It was latent only because PyYAML parses the shipped
+  spelling `method: None` into the *string* `'None'`; written as `null`, or left blank, it raised
+  an `AttributeError` instead of selecting the retailer. Both spellings are now accepted, in the
+  named helper `AgentBase.clears_a_market`.
+
 - **A failing slack read in the POI controllers no longer reports silence (#231).**
   `_warn_on_slack` wrapped `self.model.get_value` in `except Exception: continue`. It has never
   fired — 864 of 864 iterations computed a value — but the decision it encodes is wrong whichever
@@ -553,6 +593,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   instead of quietly green.
 
 ### Changed
+- **A market with no clearing now reports that it is discarding the agent's configured trading
+  strategy (#223).** The substitution itself is correct and documented -- with `method: None` the
+  retailer is the only counterparty there is, and `agents.yaml` already names `retailer` as "the
+  default strategy when there is no clearing" -- but nothing said it was happening.
+  `tests/e2e/scenarios/ctsp_industry` declared `strategy: linear` in both its config and its
+  workbook and had only ever run `retailer`, which is how a fixture came to imply coverage of a
+  strategy that had never executed anywhere. That fixture now declares `retailer`; the numbers are
+  unchanged, and the golden master confirms it. The report has its own warning category,
+  `hamlet.executor.agents.agent_base.ConfiguredStrategyUnused`, so it can be silenced on its own.
+
 
 - **Two test modules asking for the identical end-to-end run now share one, through
   `tests/scenario_cache.py`.** Every e2e fixture is module-scoped, so each file paid for its own

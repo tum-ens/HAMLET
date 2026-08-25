@@ -7,6 +7,8 @@ __email__ = "markus.doepfert@tum.de"
 # This file is in charge of handling the agents in the execution of the scenario
 
 # Imports
+import warnings
+
 import pandas as pd
 import polars as pl
 
@@ -14,6 +16,20 @@ from hamlet import constants as c
 from hamlet.executor.utilities.controller.controller import Controller
 from hamlet.executor.utilities.database.agent_db import AgentDB
 from hamlet.executor.utilities.trading.trading import Trading
+
+
+class ConfiguredStrategyUnused(UserWarning):
+    """A market with no clearing discarded an agent's configured trading strategy.
+
+    Its own category rather than a bare `UserWarning` for two reasons. A user who has decided the
+    substitution is fine for their scenario can silence exactly this and nothing else, which a
+    bare category would not allow without silencing every warning HAMLET raises. And a test can
+    assert this warning was or was not raised without a polars deprecation from the same call
+    satisfying it -- which, measured, is what happens: one `create_bids_offers` raises nine of
+    them.
+
+    See `AgentBase.create_bids_offers` for why it is a warning and not an error.
+    """
 
 
 class AgentBase:
@@ -87,11 +103,46 @@ class AgentBase:
 
         return self.agent
 
+    @staticmethod
+    def clears_a_market(clearing_method) -> bool:
+        """Whether this market's `method:` names an actual clearing.
+
+        `markets.yaml` spells "no clearing" as `method: None`, and PyYAML parses that as the
+        **string** `'None'` rather than as `None` -- so the string is what every shipped config
+        produces and what this normally sees. `method: null`, or a blank value, parses as a real
+        `None`, and the check used to be written `m_method.capitalize() == 'None' or
+        m_method is None`, whose second operand can never run: the attribute lookup on `None`
+        raises first. Writing `null` where the shipped configs write `None` therefore crashed the
+        agent stage instead of selecting the retailer. Both spellings are accepted here. #223.
+        """
+        return not (clearing_method is None
+                    or str(clearing_method).capitalize() == c.MCM_NONE)
+
     def create_bids_offers(self):
-        """Create the bids and offers to the market based on the trading strategy"""
+        """Create the bids and offers to the market based on the trading strategy.
+
+        **A market with no clearing overrides the agent's configured strategy, on purpose.** With
+        `method: None` the retailer is the only counterparty there is, so a price ladder aimed at
+        other agents has nothing to aim at, and `agents.yaml` documents `retailer` as "the default
+        strategy when there is no clearing". The substitution is correct; what it was not is
+        *reported*. `tests/e2e/scenarios/ctsp_industry` declared `strategy: linear` in both its
+        config and its workbook and had only ever run `retailer`, and nothing said so -- which is
+        how a fixture came to imply coverage of a strategy that had never executed anywhere in the
+        suite (#223).
+
+        So it warns rather than raising. Raising would be the house answer for a silently ignored
+        setting (#199, #234), but this setting is not ignored by accident: it is documented
+        behaviour that existing configs rely on, and `simple_scenario` and `grid_golden` already
+        spell the coherent combination (`method: None` with `strategy: retailer`), which is what a
+        user should be nudged towards rather than broken over.
+
+        `warnings.warn` deduplicates per call site and message text, so a simulation reports each
+        (market, strategy) pair once rather than once per agent per timestep.
+        """
 
         # Get the required data
         market_info = self.agent.account[c.K_EMS][c.K_MARKET]
+        configured = market_info['strategy']
 
         # Get the markets of the region from the timetable by selecting the unique market types and names
         unique_values = self.timetable.unique(subset=[c.TC_MARKET, c.TC_NAME, c.TC_CLEARING_METHOD])
@@ -103,14 +154,25 @@ class AgentBase:
         for m_type, m_name, m_method in zip(market_types, market_names, market_clearing_methods):
 
             # Check if there is a market clearing, if not do not apply the strategy but use the default strategy
-            if m_method.capitalize() == 'None' or m_method is None:
-                # Get the strategy
-                strategy = (Trading(timetable=self.timetable, market=m_name, market_data=self.market[m_type][m_name],
-                                    agent=self.agent).create_instance())
+            if self.clears_a_market(m_method):
+                chosen = configured
             else:
-                strategy = (Trading(strategy=market_info['strategy'], timetable=self.timetable,
-                                    market=m_name, market_data=self.market[m_type][m_name], agent=self.agent)
-                            .create_instance())
+                chosen = c.MTS_RETAILER
+                if str(configured).lower() != c.MTS_RETAILER:
+                    warnings.warn(
+                        f"Market '{m_name}' has no clearing (method: {m_method}), so the "
+                        f"configured trading strategy '{configured}' cannot be used and "
+                        f"'{c.MTS_RETAILER}' is used instead. Set `strategy: {c.MTS_RETAILER}` "
+                        f"for this agent, or give the market a clearing method, so that the "
+                        f"config says what the simulation does.",
+                        ConfiguredStrategyUnused, stacklevel=2)
+
+            # Get the strategy. Named explicitly in both branches rather than letting the
+            # no-clearing case fall through to `Trading`'s keyword default, so the substitution
+            # above is a decision this method makes rather than one buried two modules away.
+            strategy = (Trading(strategy=chosen, timetable=self.timetable, market=m_name,
+                                market_data=self.market[m_type][m_name], agent=self.agent)
+                        .create_instance())
 
             # Create bids and offers
             self.agent = strategy.create_bids_offers()
