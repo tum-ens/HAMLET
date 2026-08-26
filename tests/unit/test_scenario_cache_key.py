@@ -32,15 +32,19 @@ KEYED_ARGUMENTS = {'example_dir', 'scenario_name', 'framework', 'solver', 'edits
 
 
 def stub_runner(base, example_dir, scenario_name, framework=None, solver=None, edits=(),
-                config_edits=None, record_backends=None,
-                creator_method='new_scenario_from_configs', solved_by=None):
+                config_edits=None, record_backends=None, record_strategies=None,
+                creator_method='new_scenario_from_configs', solved_by=None,
+                quoted_by=('Retailer',)):
     """Stand in for `run_example`: write the artefacts a consumer reads, run nothing.
 
     `solved_by` overrides what the receipt claims solved the run, so a run that *ignores* the
     backend it was handed — #206's failure, which no comparison of requests can see — can be
-    constructed. Everything else mirrors what a real run leaves behind.
+    constructed. `quoted_by` is the same for the trading-strategy receipt. Everything else
+    mirrors what a real run leaves behind.
     """
     (base / 'results' / scenario_name).mkdir(parents=True, exist_ok=True)
+    if record_strategies is not None:
+        record_strategies.write_text(json.dumps(sorted(quoted_by)), encoding='utf-8')
     if record_backends is not None:
         record_backends.write_text(
             json.dumps([list(solved_by or (framework or 'poi', solver or 'highs'))]),

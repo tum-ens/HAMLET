@@ -29,8 +29,8 @@ import pytest
 
 import hamlet.constants as c
 from hamlet.executor.agents.agent_base import AgentBase, ConfiguredStrategyUnused
-from tests.trading_fixtures import (FORECAST_IN, FORECAST_OUT, MARKET, NAME, STEPS, Agent,
-                                    market_data, timetable)
+from tests.trading_fixtures import (FORECAST_IN, FORECAST_OUT, MARKET, NAME, OTHER_NAME,
+                                    STEPS, Agent, market_data, timetable)
 
 #: What each strategy quotes at the **third** timestep of the shared fixture, taken from the
 #: hand-derivations in `test_strategies.py`. Third rather than first on purpose: `Linear`'s ladder
@@ -54,8 +54,8 @@ def substitutions(caught):
             if issubclass(warning.category, ConfiguredStrategyUnused)]
 
 
-def run(clearing_method, strategy):
-    """Drive the real `create_bids_offers` and return the quote at the distinguishing timestep.
+def drive(clearing_method, strategy, second_market=None):
+    """Drive the real `create_bids_offers` and hand back the `AgentBase` it ran on.
 
     No mocking of `Trading`: the point of this file is the whole chain from the market's
     `method:` to the price an agent ends up quoting, and a recorded constructor argument would
@@ -63,10 +63,16 @@ def run(clearing_method, strategy):
     """
     base = object.__new__(AgentBase)
     base.agent = Agent('agent_1', strategy)
-    base.timetable = timetable(clearing_method)
-    base.market = {MARKET: {NAME: market_data()}}
+    base.timetable = timetable(clearing_method, second_market=second_market)
+    base.market = {MARKET: {NAME: market_data(), OTHER_NAME: market_data(name=OTHER_NAME)}}
 
     base.create_bids_offers()
+    return base
+
+
+def run(clearing_method, strategy):
+    """The quote at the distinguishing timestep, for a region with one market."""
+    base = drive(clearing_method, strategy)
 
     by_step = {step: row for step, row in zip(STEPS, base.agent.bids_offers.to_dicts())}
     row = base.agent.bids_offers.filter(
@@ -176,3 +182,80 @@ def test_the_absence_checks_above_are_not_vacuous():
 
     assert len(substitutions(caught)) == 1
     assert len(caught) > 1, 'no unrelated warnings here, so the filtering is untested'
+
+
+# ----------------------------------------------------------------------------------------------
+# More than one market in a region.
+#
+# `create_bids_offers` reads the region's markets out of the timetable and loops over them,
+# branching per market on that market's own clearing method. With a single market the loop body
+# runs once, so **the loop is not tested by any of the cases above**: processing only the first
+# market, or dropping `c.TC_CLEARING_METHOD` from the `unique()` subset that builds the list --
+# which would collapse two markets differing only in their method into one row and give one of
+# them the other's method -- are both invisible. Measured: both survive without the tests below.
+# ----------------------------------------------------------------------------------------------
+def test_each_market_in_a_region_gets_its_own_strategy_decision():
+    """One market clears and one does not, so both branches are taken in a single call.
+
+    The evidence is the report: exactly one market is named, and it is the one without a
+    clearing. A run that processed only the first market would emit no report at all, since the
+    clearing market is first.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        drive(c.MCM_PDA, c.MTS_LINEAR, second_market=c.MCM_NONE)
+
+    reported = substitutions(caught)
+
+    assert len(reported) == 1
+    assert f"Market '{OTHER_NAME}' has no clearing" in reported[0]
+    assert f"Market '{NAME}'" not in reported[0]
+
+
+def test_two_markets_that_differ_only_in_their_clearing_method_are_kept_apart():
+    """Reversed order, so neither position in the loop can be the one that happens to work.
+
+    With the *first* market having no clearing and the second clearing, the report must still
+    name the first and only the first. If the two markets were collapsed into one row -- which is
+    what dropping the clearing method from the `unique()` subset does, since they share a region,
+    type and energy -- one of them would silently run under the other's method.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        base = drive(c.MCM_NONE, c.MTS_LINEAR, second_market=c.MCM_PDA)
+
+    reported = substitutions(caught)
+
+    assert len(reported) == 1
+    assert f"Market '{NAME}' has no clearing" in reported[0]
+    assert f"Market '{OTHER_NAME}'" not in reported[0]
+    assert not base.agent.bids_offers.is_empty(), 'the loop produced no quotes at all'
+
+
+def test_a_second_market_makes_the_agent_quote_its_whole_timetable_twice():
+    """**A stated gap, not an endorsement.** `TradingBase` does not filter the timetable.
+
+    `_preprocess_bids_offers` builds an agent's book from `self.timetable` in full, rather than
+    from the rows belonging to the market it was constructed for. In a region with two markets it
+    therefore sees every timestep twice, which changes `len_table` -- and `Linear` prices its
+    ladder off `len_table`, so an agent in a two-market region quotes a different ladder from the
+    same agent in a one-market region.
+
+    No shipped scenario declares two markets in one region, so this is latent. It is pinned here
+    because it is the reason the tests above assert on the *reports* rather than on the prices:
+    with two markets the prices are not the hand-derived ones, and a reader would otherwise
+    reasonably assume they should be. Not fixed: filtering the timetable changes what every
+    multi-market agent bids, which is a modelling decision. #223.
+    """
+    one_market = drive(c.MCM_PDA, c.MTS_LINEAR)
+    two_markets = drive(c.MCM_PDA, c.MTS_LINEAR, second_market=c.MCM_PDA)
+
+    assert len(two_markets.agent.bids_offers) == 2 * len(one_market.agent.bids_offers)
+
+    def at_step_2(base):
+        row = base.agent.bids_offers.filter(
+            base.agent.bids_offers[c.TC_TIMESTEP] == STEPS[2]).to_dicts()[0]
+        return row[c.TC_PRICE_PU_IN], row[c.TC_PRICE_PU_OUT]
+
+    assert at_step_2(one_market) == LINEAR_AT_STEP_2
+    assert at_step_2(two_markets) != LINEAR_AT_STEP_2

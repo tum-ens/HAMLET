@@ -32,16 +32,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     that agents trade **with each other** rather than only with the retailer, that every clearing
     settles at a single price, and that the configured `linear` strategy is the one that quotes.
 
-  Measured against 39 mutations, applied one at a time and each confirmed landed: **38 caught**.
-  The one survivor is an established equivalent mutant -- widening `energy_in > 0` to `>= 0` in
-  `__split_bids_offers` produced identical results on all six books, because a zero-energy row
-  also carries a zero price and so can never clear.
+  Measured against **64 mutations**, applied one at a time and each confirmed landed: 39 written
+  by the author and 25 more that a three-lens review panel used to defeat the first version of
+  these tests. **56 are caught** -- 39 of 39 and 17 of 25. The eight survivors are statements
+  whose deletion is unobservable through any book (two concatenations with a table that is always
+  empty, a forward fill over a table with no nulls, a defensive `fill_null(0)`, two joins whose
+  narrowing cannot lose a row, a de-duplicating join key, and the trade id, which
+  `__create_market_tables` discards before anything can store it).
 
-  Two gaps are recorded rather than closed, both pinned by tests that say so:
-  `__method_pda` has no self-trade filter where `__method_none` does (unreachable through the
-  shipped trading strategies, which net an agent into one direction per timestep), and `Zi` draws
-  from Python's unseeded global generator, so a `zi` scenario would not be reproducible across
-  processes -- the same shape as the market half of #216. No shipped scenario selects `zi`.
+  The panel's contribution was the larger one, and three of its findings changed the fixtures
+  rather than adding assertions:
+
+  - the hand-written books wrote **0 into the price column an agent was not trading on**, where
+    every real strategy writes a genuine price on both. That zero -- not the code -- was what made
+    widening `__split_bids_offers`' `energy_in > 0` filter to `>= 0` look like an equivalent
+    mutant, which the first version of this changelog claimed it was. With real prices the widened
+    filter puts every seller onto the bid ladder and moves the clearing price.
+  - the strategy fixture used an **hourly** timestep, where the power-to-energy conversion factor
+    is 1.0 and deleting the conversion changes nothing. The shipped default is 900 s, where the
+    same deletion is a fourfold over-bid by every agent at every timestep. It now runs at 15
+    minutes.
+  - the strategy fixture gave the agent **no trading history**, so the subtraction that turns a
+    setpoint into a net position was a subtraction of zero. Reversing its sign survived the entire
+    suite. Measured on a real run, 161 of 192 constructions of a trading strategy see a non-empty
+    history, so the case being tested was the rare one.
+
+  Four gaps are recorded rather than closed, each pinned by a test that says so:
+
+  - `__method_pda` has no self-trade filter where `__method_none` does (unreachable through the
+    shipped strategies, which net an agent into one direction per timestep);
+  - `__method_pda` **can clear more energy than was offered** when the two cumulative ladders do
+    not share their breakpoints, because it takes `min(energy_in, energy_out)` per joined row
+    rather than the difference of successive cumulative sums. The conservation invariant cannot
+    see it -- the duplication is symmetric, so cleared-in still equals cleared-out at an inflated
+    total;
+  - `TradingBase` builds an agent's book from the **whole** timetable rather than the rows for its
+    own market, so an agent in a two-market region quotes a different ladder from the same agent
+    in a one-market region. No shipped scenario declares two markets in one region;
+  - `Zi` draws from Python's unseeded global generator, so a `zi` scenario would not be
+    reproducible across processes -- the same shape as the market half of #216. No shipped
+    scenario selects `zi`.
 
 - **The POI slack report is now exercised, and its threshold and suffix filter are pinned
   (#231).** `_warn_on_slack` runs in all four controllers, but its `LOGGER.warning` had never
@@ -307,12 +337,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Fixed
-- **`method: null` in a `markets.yaml` no longer crashes the agent stage (#223).** The check read
+- **`method: null` in a `markets.yaml` no longer crashes the run (#223).** The check read
   `m_method.capitalize() == 'None' or m_method is None`, whose second operand can never run: the
   attribute lookup on `None` raises first. It was latent only because PyYAML parses the shipped
   spelling `method: None` into the *string* `'None'`; written as `null`, or left blank, it raised
-  an `AttributeError` instead of selecting the retailer. Both spellings are now accepted, in the
-  named helper `AgentBase.clears_a_market`.
+  an `AttributeError` instead of selecting the retailer.
+
+  **Fixed at both stages, because fixing only the first moved the crash rather than removing it.**
+  `AgentBase.clears_a_market` accepts both spellings at the agent stage; `ElectricityMarket`'s
+  method registry now carries `None` alongside `'None'`, without which a `null` config got one
+  stage further and died with `Clearing method "None" not available`. Found by a review lens
+  checking the changelog's own claim that "both spellings are now accepted".
 
 - **A failing slack read in the POI controllers no longer reports silence (#231).**
   `_warn_on_slack` wrapped `self.model.get_value` in `except Exception: continue`. It has never

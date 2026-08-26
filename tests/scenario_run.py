@@ -77,6 +77,61 @@ atexit.register(lambda: open(r"{record}", "w", encoding="utf-8").write(json.dump
 '''
 
 
+# Records every trading-strategy class the run actually instantiated, so a caller can assert which
+# strategy an agent traded with instead of inferring it from prices.
+#
+# **Inference from prices does not work, and that is why this exists.** `Retailer` and `Linear`
+# quote the same pair wherever `Linear`'s ladder is held at its initial value, and the price a
+# *cleared* position carries is the uniform clearing price rather than the submitted one. Measured
+# on `scenario_with_market`: switching the workbook to `strategy: retailer` still produced 50
+# cleared bids priced strictly inside the retail band, so "a price strictly between the two
+# retailer prices proves Linear ran" is false. This is the receipt instead. #223, same shape as
+# the backend receipt above (#206).
+#
+# `Trading.create_instance` is patched on the class, so it catches every construction wherever it
+# is called from. `num_workers=1` is what makes it work: every agent runs in this process.
+STRATEGY_PROBE = '''
+import atexit, json
+from hamlet.executor.utilities.trading.trading import Trading
+
+_strategies = set()
+_original_create_instance = Trading.create_instance
+
+
+def _create_instance(self):
+    instance = _original_create_instance(self)
+    _strategies.add(type(instance).__name__)
+    return instance
+
+
+Trading.create_instance = _create_instance
+
+atexit.register(
+    lambda: open(r"{record}", "w", encoding="utf-8").write(json.dumps(sorted(_strategies))))
+'''
+
+
+def assert_strategies_honoured(record, expected):
+    """Read the receipt a run wrote and check which trading strategies it really used.
+
+    `expected` is the set of class names (`{'Linear'}`, say). Compared as a set and not as a
+    superset: a run that used the configured strategy *and* the retailer default has taken the
+    substitution branch somewhere, which is exactly the thing worth knowing.
+    """
+    record = Path(record)
+    assert record.exists(), (
+        'the run completed but wrote no strategy record, so what quoted into the market is '
+        'unknown')
+    used = set(json.loads(record.read_text(encoding='utf-8')))
+
+    assert used, (
+        'the run completed without constructing a single trading strategy, so no agent submitted '
+        'anything and the receipt cannot speak for the clearing')
+    assert used == set(expected), (
+        f'asked for trading strategies {sorted(expected)}, but the run actually used '
+        f'{sorted(used)}')
+
+
 def switch_in_yaml(text, key, value):
     """Point every `key:` in a YAML config at `value`, or fail saying there was none to point."""
     text, switched = re.subn(rf'^(\s*){key}: *\w+', rf'\g<1>{key}: {value}', text,
@@ -280,7 +335,7 @@ def prepare_config(base, example_dir, scenario_name, framework=None, solver=None
 
 
 def run_example(base, example_dir, scenario_name, framework=None, solver=None, edits=(),
-                config_edits=None, record_backends=None,
+                config_edits=None, record_backends=None, record_strategies=None,
                 creator_method='new_scenario_from_configs'):
     """Run one example end to end under `base`, and return the fingerprint of its results.
 
@@ -308,6 +363,10 @@ def run_example(base, example_dir, scenario_name, framework=None, solver=None, e
     a renamed config key then fails the test loudly, instead of the test quietly running an
     unmodified scenario and passing for the wrong reason.
 
+    `record_strategies` is a path to write the JSON list of trading-strategy class names the run
+    actually constructed. See `assert_strategies_honoured`, and `STRATEGY_PROBE` for why the
+    prices in the results cannot answer that question.
+
     `record_backends` is a path to write the JSON list of (framework, solver) pairs the run
     actually used. **Whenever `framework` or `solver` is passed the record is written and checked
     here regardless**; passing `record_backends` additionally hands it to the caller. See
@@ -324,6 +383,8 @@ def run_example(base, example_dir, scenario_name, framework=None, solver=None, e
     record = Path(record_backends) if record_backends is not None else base / 'backends_used.json'
     wanted = requested or record_backends is not None
     probe = BACKEND_PROBE.format(record=record.as_posix()) if wanted else ''
+    if record_strategies is not None:
+        probe += STRATEGY_PROBE.format(record=Path(record_strategies).as_posix())
 
     script = RUNNER.format(config_dir=config.as_posix(), seed=SEED, scenarios=scenarios,
                            name=scenario_name, probe=probe, creator_method=creator_method)

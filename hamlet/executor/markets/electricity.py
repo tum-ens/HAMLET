@@ -73,8 +73,14 @@ class ElectricityMarket(MarketBase):
         }
 
         # Available clearing methods (see market config)
+        # Note: `None` and the string `'None'` are both "no local clearing". PyYAML parses the
+        #  shipped spelling `method: None` into the string, but `method: null` -- or a blank
+        #  value -- gives the object, and a config written that way used to reach here and be
+        #  refused as an unknown method. `AgentBase.clears_a_market` accepts both spellings one
+        #  stage earlier; this is the same fix at the stage that consumes the value. #223.
         self.methods = {
             c.MCM_NONE: self.__method_none,  # no local clearing, all energy traded with retailer
+            None: self.__method_none,        # the same, written as YAML `null` or left blank
             c.MCM_PDA: self.__method_pda,  # periodic double auction
             c.MCM_COMMUNITY: self.__method_community,  # community-based clearing
         }

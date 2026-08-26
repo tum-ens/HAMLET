@@ -32,6 +32,7 @@ import pytest
 import hamlet.constants as c
 from hamlet.executor.markets.electricity import ElectricityMarket
 from hamlet.executor.utilities.database.market_db import MarketDB
+from tests.trading_fixtures import BOOK_COLUMNS
 
 TIMESTAMP = dt.datetime(2021, 3, 24, 0, 0, tzinfo=dt.timezone.utc)
 TIMESTEP = dt.datetime(2021, 3, 24, 1, 0, tzinfo=dt.timezone.utc)
@@ -46,16 +47,18 @@ RETAILER_SELLS = 1500
 #: The retailer's agent id, as the Creator writes it and `__method_none` hard-codes it.
 RETAILER_ID = 'retailer'
 
-#: The columns the executor actually hands the market, taken from a real `scenario_with_market`
-#: run rather than from `c.TS_BIDS_OFFERS`: the agents' table carries **eleven** columns, not the
-#: schema's thirteen -- `price_in` and `price_out` are dropped by `_postprocess_bids_offers`
-#: before the book ever reaches the market. `__create_bids_offers` does
-#: `retailer.select(self.bids_offers.columns)`, so a fixture carrying the extra two would send the
-#: retailer down a path no run takes. `test_the_book_matches_what_a_run_produces` keeps this
-#: honest.
-BOOK_COLUMNS = [c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NAME,
-                c.TC_TYPE_ENERGY, c.TC_ID_AGENT, c.TC_ENERGY_IN, c.TC_ENERGY_OUT,
-                c.TC_PRICE_PU_IN, c.TC_PRICE_PU_OUT]
+#: The price on the side an agent is *not* trading. A `Retailer`-strategy agent quotes exactly
+#: this pair, so a seller's unused bid price is the supply price and a buyer's unused offer price
+#: is the feed-in tariff. Never 0 -- see `book()`.
+SELLERS_BID = RETAILER_SELLS
+BUYERS_OFFER = RETAILER_BUYS
+
+#: The columns a book carries. Imported from `tests/trading_fixtures.py` rather than restated,
+#: because that is where a *real* strategy's output is checked against it
+#: (`test_the_quoted_columns_are_the_ones_the_market_reads`). A second copy here would let this
+#: fixture and the thing it imitates drift apart with nothing comparing them -- which is what
+#: happened: the first version of this file declared the list locally and asserted its dtypes
+#: against the same expression `book()` casts with, so the check could not fail for any value.
 
 
 def book(rows):
@@ -64,6 +67,15 @@ def book(rows):
     One row per agent, which is what the executor produces: `_preprocess_bids_offers` turns an
     agent's net position at a timestep into *either* an `energy_in` *or* an `energy_out`, never
     both. See `test_pda_does_not_exclude_self_trading` for what that rules out.
+
+    **Both prices are always real numbers, including on the side the agent is not trading**, and
+    that is load-bearing rather than tidiness. Every shipped strategy sets `price_pu_in` and
+    `price_pu_out` on every row unconditionally, so a seller carries a genuine bid price. The
+    first version of this fixture wrote 0 there, and a review panel showed that the zero -- not
+    the code -- was what made widening `__split_bids_offers`' `energy_in > 0` filter to `>= 0`
+    look like an equivalent mutant. With real prices the widened filter puts every seller onto the
+    bid ladder and moves the clearing price; with zeros it cannot, because a zero bid never
+    clears. `SELLERS_BID` and `BUYERS_OFFER` below are those prices.
     """
     if not rows:
         return pl.DataFrame(schema={col: c.SCHEMA[col] for col in BOOK_COLUMNS})
@@ -147,32 +159,70 @@ def make_market(rows, retailer=None, method=c.MCM_PDA, pricing=c.MP_UNIFORM,
                              database=OneMarketDatabase(book(rows)))
 
 
-def cleared(market):
-    """`{agent: (energy, price_pu, price)}` for the two cleared tables, ids as plain strings.
+def rows_of(frame, id_column, columns):
+    """`[(agent, *columns), ...]`, ids as plain strings, in table order.
 
-    Categoricals are cast to `Utf8` before anything compares them: polars compares two
-    Categorical columns by their *encoding* unless they share a string cache, and a comparison
-    that silently answers about encodings once invented 369 file differences in this repository.
+    Categoricals are cast to `Utf8` before anything compares them: polars compares two Categorical
+    columns by their *encoding* unless they share a string cache, and a comparison that silently
+    answers about encodings once invented 369 file differences in this repository.
     """
-    bids = {row[c.TC_ID_AGENT_IN]: (row[c.TC_ENERGY_IN], row[c.TC_PRICE_PU_IN], row[c.TC_PRICE_IN])
-            for row in market.bids_cleared
-            .with_columns(pl.col(c.TC_ID_AGENT_IN).cast(pl.Utf8)).to_dicts()}
-    offers = {row[c.TC_ID_AGENT_OUT]: (row[c.TC_ENERGY_OUT], row[c.TC_PRICE_PU_OUT],
-                                       row[c.TC_PRICE_OUT])
-              for row in market.offers_cleared
-              .with_columns(pl.col(c.TC_ID_AGENT_OUT).cast(pl.Utf8)).to_dicts()}
-    return bids, offers
+    frame = frame.with_columns(pl.col(id_column).cast(pl.Utf8))
+    return [(row[id_column], *(row[column] for column in columns)) for row in frame.to_dicts()]
+
+
+def one_per_agent(rows, what):
+    """`{agent: rest}`, **refusing** to collapse two rows for the same agent into one.
+
+    The obvious dict comprehension keeps the last row and silently drops the rest, and that is not
+    a hypothetical: `__create_market_tables` matches trades back to positions by agent id, so an
+    agent clearing against two counterparties really does occupy two rows -- measured on a
+    `scenario_with_market` run, **31 of its clearings** have a repeated agent in `bids_cleared`
+    and 40 in `offers_cleared`, up to 8 rows for one agent. A helper that hid that would let the
+    market start emitting a second, wrong row for an agent whose last row happened to be right,
+    and every per-agent assertion in this file would keep passing. Tests about a book where an
+    agent clears twice use `rows_of` directly.
+    """
+    counted = {}
+    for agent, *rest in rows:
+        assert agent not in counted, (
+            f'{agent} appears more than once in {what}, which this reduction cannot represent; '
+            f'use rows_of() for that book')
+        counted[agent] = tuple(rest)
+    return counted
+
+
+def cleared_rows(market):
+    """Every cleared row, both sides, as `[(agent, energy, price_pu, price), ...]`."""
+    return (rows_of(market.bids_cleared, c.TC_ID_AGENT_IN,
+                    [c.TC_ENERGY_IN, c.TC_PRICE_PU_IN, c.TC_PRICE_IN]),
+            rows_of(market.offers_cleared, c.TC_ID_AGENT_OUT,
+                    [c.TC_ENERGY_OUT, c.TC_PRICE_PU_OUT, c.TC_PRICE_OUT]))
+
+
+def cleared(market):
+    """`{agent: (energy, price_pu, price)}` for the two cleared tables. One row per agent."""
+    bids, offers = cleared_rows(market)
+    return one_per_agent(bids, 'bids_cleared'), one_per_agent(offers, 'offers_cleared')
+
+
+def cleared_energy(market):
+    """`{agent: total cleared energy}` per side, summed over however many rows an agent has."""
+    bids, offers = cleared_rows(market)
+    totals = ({}, {})
+    for side, rows in zip(totals, (bids, offers)):
+        for agent, energy, _, _ in rows:
+            side[agent] = side.get(agent, 0) + energy
+    return totals
 
 
 def uncleared(market):
     """`{agent: energy}` for the two uncleared tables, ids as plain strings."""
-    bids = {row[c.TC_ID_AGENT_IN]: row[c.TC_ENERGY_IN]
-            for row in market.bids_uncleared
-            .with_columns(pl.col(c.TC_ID_AGENT_IN).cast(pl.Utf8)).to_dicts()}
-    offers = {row[c.TC_ID_AGENT_OUT]: row[c.TC_ENERGY_OUT]
-              for row in market.offers_uncleared
-              .with_columns(pl.col(c.TC_ID_AGENT_OUT).cast(pl.Utf8)).to_dicts()}
-    return bids, offers
+    bids = one_per_agent(rows_of(market.bids_uncleared, c.TC_ID_AGENT_IN, [c.TC_ENERGY_IN]),
+                         'bids_uncleared')
+    offers = one_per_agent(rows_of(market.offers_uncleared, c.TC_ID_AGENT_OUT, [c.TC_ENERGY_OUT]),
+                           'offers_uncleared')
+    return ({agent: energy for agent, (energy,) in bids.items()},
+            {agent: energy for agent, (energy,) in offers.items()})
 
 
 def transactions(market):
@@ -204,12 +254,12 @@ def transactions(market):
 # rather than coinciding. `test_the_textbook_book_brackets_the_clearing_price` asserts that.
 # ----------------------------------------------------------------------------------------------
 TEXTBOOK = [
-    ('buyer_a', 1000, 0, 3000, 0),
-    ('buyer_b', 1000, 0, 2000, 0),
-    ('buyer_c', 1000, 0, 1000, 0),
-    ('seller_x', 0, 1000, 0, 1200),
-    ('seller_y', 0, 1000, 0, 1800),
-    ('seller_z', 0, 1000, 0, 2500),
+    ('buyer_a', 1000, 0, 3000, BUYERS_OFFER),
+    ('buyer_b', 1000, 0, 2000, BUYERS_OFFER),
+    ('buyer_c', 1000, 0, 1000, BUYERS_OFFER),
+    ('seller_x', 0, 1000, SELLERS_BID, 1200),
+    ('seller_y', 0, 1000, SELLERS_BID, 1800),
+    ('seller_z', 0, 1000, SELLERS_BID, 2500),
 ]
 
 #: The clearing price of `TEXTBOOK`, computed by hand above. **An absolute value, never derived
@@ -219,19 +269,43 @@ TEXTBOOK_PRICE = 1900
 TEXTBOOK_QUANTITY = 1000
 
 
-def test_the_book_matches_what_a_run_produces():
-    """The fixture's columns and dtypes are the ones the executor really hands the market.
+def test_the_book_matches_what_a_strategy_produces():
+    """A hand-written book has the same columns, dtypes and shape as one a real strategy emits.
 
-    A hand-written book that has drifted from the real one is a harness testing a shape nothing
-    produces -- and it would drift silently, because every assertion below would keep passing.
-    The reference is `c.TS_BIDS_OFFERS` minus the two price columns `_postprocess_bids_offers`
-    drops, which is what a `scenario_with_market` run was observed to carry.
+    A fixture that has drifted from the real thing is a harness testing a shape nothing produces,
+    and it drifts *silently*, because every assertion in this file would keep passing.
+
+    **The comparison is against a strategy actually run, not against a constant.** An earlier
+    version compared `book()`'s schema with `{col: c.SCHEMA[col] for col in BOOK_COLUMNS}` -- the
+    very expression `book()` casts with -- so it could not fail for any value of either. Here
+    `Retailer` is driven over `tests/trading_fixtures.py` and its output is the reference;
+    `test_the_quoted_columns_are_the_ones_the_market_reads` covers the other two strategies.
     """
+    from hamlet.executor.utilities.trading.trading import Trading
+    from tests import trading_fixtures as fixtures
+
+    agent = fixtures.Agent('agent_1', c.MTS_RETAILER)
+    Trading(strategy=c.MTS_RETAILER, timetable=fixtures.timetable(), market=fixtures.NAME,
+            market_data=fixtures.market_data(), agent=agent).create_instance().create_bids_offers()
+
     produced = book(TEXTBOOK)
 
-    assert dict(produced.schema) == {col: c.SCHEMA[col] for col in BOOK_COLUMNS}
-    assert set(BOOK_COLUMNS) == set(c.TS_BIDS_OFFERS) - {c.TC_PRICE_IN, c.TC_PRICE_OUT}
+    assert produced.columns == agent.bids_offers.columns
+    assert dict(produced.schema) == dict(agent.bids_offers.schema)
     assert len(produced) == len(TEXTBOOK)
+    assert not agent.bids_offers.is_empty(), 'the reference is empty, so it vouches for nothing'
+
+
+def test_the_book_is_the_bids_offers_schema_less_the_two_columns_no_run_carries():
+    """Drift the other way: against the declared schema, with the difference named.
+
+    `c.TS_BIDS_OFFERS` lists thirteen columns and a book carries eleven. `price_in` and
+    `price_out` are not *dropped* from a real book -- they never exist on one:
+    `TradingBase.__init__` makes an empty frame with that schema and `_preprocess_bids_offers`
+    then rebuilds the frame from the timetable, discarding it. The drop list in
+    `_postprocess_bids_offers` names the two *forecast* columns, which is a different pair.
+    """
+    assert set(BOOK_COLUMNS) == set(c.TS_BIDS_OFFERS) - {c.TC_PRICE_IN, c.TC_PRICE_OUT}
 
 
 def test_the_textbook_book_brackets_the_clearing_price():
@@ -241,8 +315,8 @@ def test_the_textbook_book_brackets_the_clearing_price():
     for an implementation that echoed a bid back. Deriving a test input from the value under test
     is what makes that value unfalsifiable.
     """
-    submitted = ({price for _, _, _, price, _ in TEXTBOOK}
-                 | {price for _, _, _, _, price in TEXTBOOK}) - {0}
+    submitted = {price_in if energy_in else price_out
+                 for _, energy_in, _, price_in, price_out in TEXTBOOK}
 
     assert TEXTBOOK_PRICE not in submitted
     assert min(submitted) < TEXTBOOK_PRICE < max(submitted)
@@ -279,10 +353,10 @@ def test_pda_clears_the_textbook_double_auction():
 # because dropping the marginal pair also moves which pair is marginal.
 # ----------------------------------------------------------------------------------------------
 MEETS_EXACTLY = [
-    ('buyer_a', 1000, 0, 3000, 0),
-    ('buyer_b', 1000, 0, 1500, 0),
-    ('seller_x', 0, 1000, 0, 1200),
-    ('seller_y', 0, 1000, 0, 1500),
+    ('buyer_a', 1000, 0, 3000, BUYERS_OFFER),
+    ('buyer_b', 1000, 0, 1500, BUYERS_OFFER),
+    ('seller_x', 0, 1000, SELLERS_BID, 1200),
+    ('seller_y', 0, 1000, SELLERS_BID, 1500),
 ]
 
 
@@ -439,8 +513,8 @@ def test_a_trade_with_the_retailer_is_typed_retail_and_one_without_it_is_not():
 # price. `__method_none` routes both through the retailer and prices them at the retailer's own
 # two prices, so the buyer pays 1500 * 1000 and the seller receives 500 * 600.
 # ----------------------------------------------------------------------------------------------
-RETAIL_ONLY = [('buyer_a', 1000, 0, RETAILER_SELLS, 0),
-               ('seller_x', 0, 600, 0, RETAILER_BUYS)]
+RETAIL_ONLY = [('buyer_a', 1000, 0, RETAILER_SELLS, BUYERS_OFFER),
+               ('seller_x', 0, 600, SELLERS_BID, RETAILER_BUYS)]
 
 
 def retail_market(rows):
@@ -481,7 +555,7 @@ def test_method_none_refuses_a_bid_below_the_retailers_selling_price():
     The bid is one unit below the ask rather than far below it, so the test brackets the
     comparison instead of merely being on the right side of it.
     """
-    market = retail_market([('buyer_a', 1000, 0, RETAILER_SELLS - 1, 0)])
+    market = retail_market([('buyer_a', 1000, 0, RETAILER_SELLS - 1, BUYERS_OFFER)])
     market.execute()
 
     bids, offers = cleared(market)
@@ -497,12 +571,49 @@ def test_method_none_accepts_a_bid_exactly_at_the_retailers_selling_price():
     Paired with the test above so the comparison is bracketed from both directions; either test
     alone leaves one of the two spellings green.
     """
-    market = retail_market([('buyer_a', 1000, 0, RETAILER_SELLS, 0)])
+    market = retail_market([('buyer_a', 1000, 0, RETAILER_SELLS, BUYERS_OFFER)])
     market.execute()
 
     bids, _ = cleared(market)
 
     assert bids['buyer_a'] == (1000, RETAILER_SELLS, RETAILER_SELLS * 1000)
+
+
+# ----------------------------------------------------------------------------------------------
+# Books with an agent on more than one cleared row.
+#
+# `__create_market_tables` matches cleared trades back to positions by **agent id**, not by trade
+# id, so an agent that clears against two counterparties appears twice in `bids_cleared` or
+# `offers_cleared`. Every book above has one row per agent per side, so none of them exercises
+# that -- and the aggregation that subtracts cleared energy from submitted energy
+# (`groupby(...).sum()`) can be replaced by `.first()` with nothing noticing.
+#
+# `PARTIAL` and `ODD_MIDPOINT` are hoisted out of their tests for the same reason `BOOKS` names
+# them: a book used by exactly one test is fine until a second test needs it, and two copies of a
+# book is how two tests come to be about different things while appearing to agree.
+# ----------------------------------------------------------------------------------------------
+PARTIAL = [('buyer_a', 1500, 0, 3000, BUYERS_OFFER),
+           ('seller_x', 0, 1000, SELLERS_BID, 1200)]
+
+ODD_MIDPOINT = [('buyer_a', 1000, 0, 3000, BUYERS_OFFER),
+                ('buyer_b', 1000, 0, 2001, BUYERS_OFFER),
+                ('seller_x', 0, 1000, SELLERS_BID, 1200),
+                ('seller_y', 0, 1000, SELLERS_BID, 1800)]
+
+#: One buyer wanting 2500 Wh against two sellers of 1000 Wh each.
+#:
+#:     bids                  offers                          cumsum join
+#:      buyer_a 2500 @ 3000   seller_x 1000 @ 1200   1000  ->  bid (backfilled) vs seller_x
+#:                            seller_y 1000 @ 1300   2000  ->  bid (backfilled) vs seller_y
+#:                                                   2500  ->  buyer_a vs nothing (dropped)
+#:
+#: Both offers clear, so `buyer_a` occupies **two** rows of `bids_cleared` at 1000 Wh each and
+#: 1500 Wh of its 2500 Wh bid is met. The uncleared remainder is 1000 Wh, and getting that right
+#: is what the `sum()` is for -- with `.first()` only one of the two cleared rows is subtracted
+#: and the agent is reported as still wanting 1500.
+TWO_SELLERS = [('buyer_a', 2500, 0, 3000, BUYERS_OFFER),
+               ('seller_x', 0, 1000, SELLERS_BID, 1200),
+               ('seller_y', 0, 1000, SELLERS_BID, 1300)]
 
 
 # ----------------------------------------------------------------------------------------------
@@ -512,17 +623,19 @@ BOOKS = {
     'textbook_pda': (TEXTBOOK, c.MCM_PDA, 0),
     'pda_with_retailer': (TEXTBOOK, c.MCM_PDA, RETAILER_QUANTITY),
     'retail_only_none': (RETAIL_ONLY, c.MCM_NONE, RETAILER_QUANTITY),
-    'partial_pda': ([('buyer_a', 1500, 0, 3000, 0), ('seller_x', 0, 1000, 0, 1200)],
-                    c.MCM_PDA, 0),
-    'two_buyers_one_retailer': ([('buyer_a', 1000, 0, 3000, 0), ('buyer_b', 1000, 0, 2500, 0)],
+    'partial_pda': (PARTIAL, c.MCM_PDA, 0),
+    'two_buyers_one_retailer': ([('buyer_a', 1000, 0, 3000, BUYERS_OFFER),
+                                 ('buyer_b', 1000, 0, 2500, BUYERS_OFFER)],
                                 c.MCM_PDA, RETAILER_QUANTITY),
+    'two_sellers_one_buyer': (TWO_SELLERS, c.MCM_PDA, 0),
 }
 
 #: What each book above must clear in total, in Wh. Written out rather than computed from the
 #: run, so `test_the_cleared_energy_balances` cannot be satisfied by a market that clears nothing
 #: -- two zeroes balance perfectly.
 CLEARED_TOTALS = {'textbook_pda': 2000, 'pda_with_retailer': 2000, 'retail_only_none': 1600,
-                  'partial_pda': 1000, 'two_buyers_one_retailer': 2000}
+                  'partial_pda': 1000, 'two_buyers_one_retailer': 2000,
+                  'two_sellers_one_buyer': 2000}
 
 assert set(CLEARED_TOTALS) == set(BOOKS), 'a book was added without stating what it clears'
 
@@ -563,15 +676,13 @@ def test_uncleared_is_submitted_minus_cleared(run_book):
 
     submitted_in = {agent: energy_in for agent, energy_in, _, _, _ in rows if energy_in}
     submitted_out = {agent: energy_out for agent, _, energy_out, _, _ in rows if energy_out}
-    cleared_bids, cleared_offers = cleared(market)
+    took, gave = cleared_energy(market)
     unbid, unoffered = uncleared(market)
 
     for agent, submitted in submitted_in.items():
-        taken = cleared_bids.get(agent, (0,))[0]
-        assert unbid.get(agent, 0) == submitted - taken, f'bid side of {agent}'
+        assert unbid.get(agent, 0) == submitted - took.get(agent, 0), f'bid side of {agent}'
     for agent, submitted in submitted_out.items():
-        given = cleared_offers.get(agent, (0,))[0]
-        assert unoffered.get(agent, 0) == submitted - given, f'offer side of {agent}'
+        assert unoffered.get(agent, 0) == submitted - gave.get(agent, 0), f'offer side of {agent}'
 
     assert set(unbid) <= set(submitted_in), 'an agent that submitted no bid has an uncleared one'
     assert set(unoffered) <= set(submitted_out)
@@ -597,8 +708,8 @@ def test_no_cleared_position_is_an_agent_trading_with_itself(run_book):
         f'{two_sided} submit on both sides, so this invariant would be testing the market rather '
         f'than the book; see test_pda_does_not_exclude_self_trading')
 
-    cleared_bids, cleared_offers = cleared(market)
-    both_sides = (set(cleared_bids) & set(cleared_offers)) - {'retailer'}
+    took, gave = cleared_energy(market)
+    both_sides = (set(took) & set(gave)) - {RETAILER_ID}
 
     assert not both_sides
 
@@ -615,7 +726,7 @@ def test_pda_partially_clears_the_larger_bid():
     comparison. Cleared energy is min(1500, 1000) = 1000 and the price is the midpoint of the one
     surviving pair, (3000 + 1200) / 2 = 2100.
     """
-    market = make_market([('buyer_a', 1500, 0, 3000, 0), ('seller_x', 0, 1000, 0, 1200)])
+    market = make_market(PARTIAL)
     market.execute()
 
     bids, offers = cleared(market)
@@ -625,6 +736,112 @@ def test_pda_partially_clears_the_larger_bid():
     assert offers == {'seller_x': (1000, 2100, 2_100_000)}
     assert unbid == {'buyer_a': 500}
     assert unoffered == {}
+
+
+def test_a_buyer_clearing_against_two_sellers_is_credited_with_both_trades():
+    """`buyer_a` bids 2500 Wh, two sellers offer 1000 each, and both trades are its own.
+
+    The first book here where an agent occupies **two** rows of a cleared table, which is what
+    `__create_market_tables`' matching by agent id produces. The uncleared remainder is
+    2500 - 1000 - 1000 = 500, and getting that right needs both rows summed: with only the first
+    subtracted the agent is reported as still wanting 1500 and would re-bid for energy it has
+    already bought.
+
+    Price: the marginal pair is (buyer_a 3000, seller_y 1300), so (3000 + 1300) / 2 = 2150.
+    """
+    market = make_market(TWO_SELLERS)
+    market.execute()
+
+    bids, offers = cleared_rows(market)
+
+    assert bids == [('buyer_a', 1000, 2150, 2_150_000), ('buyer_a', 1000, 2150, 2_150_000)]
+    assert sorted(offers) == [('seller_x', 1000, 2150, 2_150_000),
+                              ('seller_y', 1000, 2150, 2_150_000)]
+    assert uncleared(market) == ({'buyer_a': 500}, {})
+
+
+def test_pda_can_clear_more_energy_than_was_offered():
+    """**A stated defect, not an endorsement.** The ladders can double-count a position.
+
+    `__method_pda` joins the two cumulative ladders on `energy_cumsum`, back-fills the gaps, and
+    then takes `min(energy_in, energy_out)` **per joined row**. When the two ladders do not share
+    their breakpoints, one position is back-filled into several rows and its *whole* quantity is
+    traded in each of them, rather than the difference between successive cumulative sums.
+
+    Here `seller_x` offers 1500 Wh into a 2000 Wh demand and sells **2000** -- one trade of 1000
+    against each buyer. Its residual of -500 is then eaten by
+    `offers_uncleared.filter(energy_out > 0)`, so nothing reports it.
+
+    **`test_the_cleared_energy_balances` cannot see this**, and that is the point of writing it
+    down: the duplication is symmetric, so cleared-in still equals cleared-out -- at an inflated
+    total. Every other book in this file gives the two ladders matching breakpoints, which is
+    exactly the region where the defect cannot appear. Not fixed here: correcting it changes what
+    every clearing produces, which is a modelling decision rather than a coverage one. #223.
+    """
+    market = make_market([('buyer_a', 1000, 0, 3000, BUYERS_OFFER),
+                          ('buyer_b', 1000, 0, 2500, BUYERS_OFFER),
+                          ('seller_x', 0, 1500, SELLERS_BID, 1200)])
+    market.execute()
+
+    bids, offers = cleared_rows(market)
+    offered = 1500
+
+    assert offers == [('seller_x', 1000, 1850, 1_850_000), ('seller_x', 1000, 1850, 1_850_000)]
+    assert sum(energy for _, energy, _, _ in offers) == 2000 > offered
+    assert sorted(bids) == [('buyer_a', 1000, 1850, 1_850_000),
+                            ('buyer_b', 1000, 1850, 1_850_000)]
+    # The over-sold 500 Wh is not reported anywhere: the residual is negative and filtered out.
+    assert uncleared(market) == ({}, {})
+
+
+def test_the_market_database_receives_what_the_market_computed():
+    """The tables the rest of the executor reads, not just the ones this file's helpers read.
+
+    `__update_database` writes each result twice -- onto the `ElectricityMarket` and onto the
+    `MarketDB` that `results/` and every later timestep are built from. Every other assertion here
+    reads the first. Measured: deleting the write-back of `market_transactions`, deleting the
+    write-back of `bids_uncleared`, and writing the *offers* table into `market.bids_cleared` all
+    leave this file green without this test -- and each of those loses or corrupts every trade in
+    a simulation.
+    """
+    market = make_market(TEXTBOOK)
+    market.execute()
+
+    for name in (c.TN_BIDS_CLEARED, c.TN_OFFERS_CLEARED, c.TN_BIDS_UNCLEARED,
+                 c.TN_OFFERS_UNCLEARED):
+        assert getattr(market.market, name).equals(getattr(market, name)), name
+    assert market.market.market_transactions.equals(market.transactions)
+    assert not market.market.market_transactions.is_empty()
+
+
+def test_the_transactions_table_matches_the_schema_the_database_stores():
+    """Column names *and* order, because `__create_market_tables` ends with a positional select.
+
+    Without this the final `select(schema)` can be deleted and the table reaches the database with
+    extra columns in an arbitrary order.
+    """
+    market = make_market(TEXTBOOK)
+    market.execute()
+
+    assert market.transactions.columns == list(c.TS_MARKET_TRANSACTIONS)
+    assert dict(market.transactions.schema) == dict(c.TS_MARKET_TRANSACTIONS)
+
+
+def test_the_trade_id_does_not_reach_the_transactions_table():
+    """**A stated gap.** `__postprocess_trades` mints a unique `id_trade` and nothing keeps it.
+
+    The id is namespaced by `(timestamp, timestep)` and attached to every cleared trade, but
+    `__create_market_tables` ends with `select(c.TS_MARKET_TRANSACTIONS)`, which does not include
+    it -- so it is discarded before anything can store or join on it. Pinned rather than fixed:
+    adding it changes the stored schema and therefore every result file. It is why no test here
+    can assert anything about trade ids, which is worth stating explicitly rather than leaving as
+    an unexplained absence.
+    """
+    market = make_market(TEXTBOOK)
+    market.execute()
+
+    assert c.TC_ID_TRADE not in market.transactions.columns
+    assert c.TC_ID_TRADE not in c.TS_MARKET_TRANSACTIONS
 
 
 def test_pda_does_not_exclude_self_trading():
@@ -681,9 +898,18 @@ def test_method_none_drops_the_retailers_trade_with_itself():
     """The self-trade filter, made observable.
 
     Measured with the filter removed on the bid side: the retailer acquires two extra
-    transactions of **100_000 Wh** -- its whole capacity, bought from and sold to itself -- on top
-    of the four real ones. Nothing else in this file notices, because with a normal price spread
-    those rows cannot clear.
+    transactions of **100_000 Wh** -- its whole capacity, bought from and sold to itself. Nothing
+    else in this file notices, because with a normal price spread the retailer's own bid can never
+    meet its own offer and those rows cannot clear.
+
+    **What is asserted is the absence of the self-trade, not the exact set of transactions.** At a
+    zero spread every position is tied on price, so `__split_bids_offers`' shuffle decides which
+    rows the backward fill pairs, and the *number* of ordinary trades varies with the seed --
+    checked across several seeds: some give four transactions and some two. That number is
+    therefore a recorded value, not a hand-derived one, and asserting it would make this test a
+    reference wearing a disguise. The retailer's 100_000 Wh capacity appearing as a traded
+    quantity is seed-independent: no agent here trades more than 1000 Wh, so any five-figure
+    energy in this table is the retailer trading with itself.
     """
     market = make_market(
         [('both', 1000, 1000, FLAT_RETAILER_PRICE, FLAT_RETAILER_PRICE)], method=c.MCM_NONE,
@@ -691,17 +917,15 @@ def test_method_none_drops_the_retailers_trade_with_itself():
                                 buys=FLAT_RETAILER_PRICE, sells=FLAT_RETAILER_PRICE))
     market.execute()
 
-    assert sorted(transactions(market), key=repr) == sorted([
-        (c.TT_RETAIL, 'both', 1000, None, FLAT_RETAILER_PRICE, None),
-        (c.TT_RETAIL, 'both', None, 1000, None, FLAT_RETAILER_PRICE),
-        (c.TT_RETAIL, RETAILER_ID, 1000, None, FLAT_RETAILER_PRICE, None),
-        (c.TT_RETAIL, RETAILER_ID, None, 1000, None, FLAT_RETAILER_PRICE),
-    ], key=repr)
-
-    energies = {energy for _, _, energy_in, energy_out, _, _ in transactions(market)
+    rows = transactions(market)
+    energies = {energy for _, _, energy_in, energy_out, _, _ in rows
                 for energy in (energy_in, energy_out) if energy is not None}
+
+    assert rows, 'nothing cleared at all, so the absence below is vacuous'
     assert RETAILER_QUANTITY not in energies, (
-        'the retailer traded its whole capacity with itself')
+        f'the retailer traded its whole capacity with itself: {rows}')
+    assert max(energies) <= 1000
+    assert {kind for kind, *_ in rows} == {c.TT_RETAIL}
 
 
 def test_an_empty_book_clears_nothing_and_raises_nothing():
@@ -740,13 +964,17 @@ def test_the_uniform_price_is_rounded_rather_than_truncated():
     error, but it is a systematic one -- it lands on the same side every time -- and it is the
     kind that a fingerprint of sums would absorb.
     """
-    market = make_market([('buyer_a', 1000, 0, 3000, 0), ('buyer_b', 1000, 0, 2001, 0),
-                          ('seller_x', 0, 1000, 0, 1200), ('seller_y', 0, 1000, 0, 1800)])
+    marginal_bid = min(price for _, energy_in, _, price, _ in ODD_MIDPOINT if energy_in)
+    marginal_offer = max(price for _, _, energy_out, _, price in ODD_MIDPOINT if energy_out)
+    assert (marginal_bid + marginal_offer) % 2 == 1, (
+        f'the marginal pair {marginal_bid} / {marginal_offer} has an even sum, so round and floor '
+        f'agree and this test no longer tests rounding')
+
+    market = make_market(ODD_MIDPOINT)
     market.execute()
 
     bids, offers = cleared(market)
 
-    assert (2001 + 1800) % 2 == 1, 'the marginal pair has an even sum, so nothing is rounded'
     assert bids == {'buyer_a': (1000, 1901, 1_901_000), 'buyer_b': (1000, 1901, 1_901_000)}
     assert offers == {'seller_x': (1000, 1901, 1_901_000),
                       'seller_y': (1000, 1901, 1_901_000)}
@@ -763,12 +991,12 @@ def test_the_uniform_price_is_rounded_rather_than_truncated():
 # leaves that file green.
 # ----------------------------------------------------------------------------------------------
 TIED_BIDS = [
-    ('bidder_1', 1000, 0, 2000, 0),
-    ('bidder_2', 1000, 0, 2000, 0),
-    ('bidder_3', 1000, 0, 2000, 0),
-    ('seller_1', 0, 1000, 0, 1000),
-    ('seller_2', 0, 1000, 0, 1000),
-    ('seller_3', 0, 1000, 0, 3000),
+    ('bidder_1', 1000, 0, 2000, BUYERS_OFFER),
+    ('bidder_2', 1000, 0, 2000, BUYERS_OFFER),
+    ('bidder_3', 1000, 0, 2000, BUYERS_OFFER),
+    ('seller_1', 0, 1000, SELLERS_BID, 1000),
+    ('seller_2', 0, 1000, SELLERS_BID, 1000),
+    ('seller_3', 0, 1000, SELLERS_BID, 3000),
 ]
 
 #: How many times `test_tied_bids_clear_the_same_way_every_time` repeats the clearing.
@@ -779,6 +1007,15 @@ TIED_BIDS = [
 #: unseeded run has at most three outcomes to land on and the chance of eight repetitions all
 #: agreeing by luck is below one in a thousand.
 TIE_REPEATS = 8
+
+#: Which two of the three tied bidders clear. **A recorded value, and the only one in this file.**
+#: It is decided by polars' own RNG through `DataFrame.sample(seed=...)`, so it cannot be derived
+#: on paper and it could move under a polars upgrade -- in which case the answer is to re-record
+#: it deliberately, having checked the shuffle is still seeded, rather than to weaken the
+#: assertion back to "some two of the three". It is pinned because the alternative was measured
+#: to be weaker: with only the offer side named, giving both ladders the same permutation -- the
+#: thing `_clearing_seed`'s role key exists to prevent -- passes.
+TIE_WINNERS = {'bidder_2', 'bidder_3'}
 
 
 def test_tied_bids_clear_the_same_way_every_time():
@@ -802,8 +1039,12 @@ def test_tied_bids_clear_the_same_way_every_time():
         f'shuffle in __split_bids_offers is not seeded from the clearing (#216)')
 
     (winners, sellers), = outcomes
-    assert len(winners) == 2 and set(winners) < {'bidder_1', 'bidder_2', 'bidder_3'}
     assert set(sellers) == {'seller_1', 'seller_2'}
+    # Pinned by name on **both** sides. Asserting only "two of the three" on the bid side leaves
+    # any change that permutes bids wrongly invisible -- including giving bids and offers the
+    # *same* permutation, which `_clearing_seed` takes the role into its key specifically to
+    # prevent, and which the offer-side assertion alone cannot see.
+    assert set(winners) == TIE_WINNERS
 
 
 def test_the_tied_book_really_is_tied():
@@ -829,12 +1070,44 @@ def test_discriminatory_pricing_is_refused_rather_than_silently_uniform():
         market.execute()
 
 
-def test_community_clearing_is_refused():
-    """`markets.yaml` offers `community`; it is not implemented either."""
+def test_community_clearing_is_refused_by_a_signature_mismatch():
+    """`markets.yaml` offers `community`; it raises, but **not for the reason it looks like**.
+
+    `__method_community(self)` takes no clearing arguments while the two methods it is registered
+    beside take `(bids, offers, pricing_method)`, so the call fails on arity before the
+    `NotImplementedError` in its body can run. That is a real guard, and a user does get an error
+    rather than a silent wrong answer -- but it is an accident of a signature, not a decision, and
+    a `pytest.raises((NotImplementedError, TypeError))` would be satisfied either way and could
+    not tell if the guard had changed character. Asserted as the `TypeError` it actually is, so
+    giving the method the right signature turns this red and forces the body's refusal to be
+    reached deliberately.
+    """
     market = make_market(TEXTBOOK, method=c.MCM_COMMUNITY)
 
-    with pytest.raises((NotImplementedError, TypeError)):
+    with pytest.raises(TypeError, match='positional argument'):
         market.execute()
+
+
+def test_a_market_written_as_yaml_null_clears_through_the_no_clearing_method():
+    """`method: null` reaches the market as a real `None`, and means what `method: None` means.
+
+    The two spellings have to be accepted at **both** stages. `AgentBase.clears_a_market` handles
+    the agent stage; without the matching entry in this registry the run got one stage further and
+    then died with `Clearing method "None" not available`, which is the same defect one level
+    down. Asserted against the string spelling's result rather than against a fresh derivation, so
+    the two cannot diverge.
+    """
+    written_as_string = retail_market(RETAIL_ONLY)
+    written_as_string.execute()
+
+    written_as_null = make_market(RETAIL_ONLY, method=None,
+                                  retailer=retailer_table(energy_in=RETAILER_QUANTITY,
+                                                          energy_out=RETAILER_QUANTITY))
+    written_as_null.execute()
+
+    assert cleared(written_as_null) == cleared(written_as_string)
+    assert transactions(written_as_null) == transactions(written_as_string)
+    assert cleared(written_as_null)[0], 'both cleared nothing, so this compares two empty tables'
 
 
 def test_an_unknown_clearing_method_is_refused_by_name():
