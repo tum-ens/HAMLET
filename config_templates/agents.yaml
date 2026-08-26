@@ -903,7 +903,7 @@ sfh:
                                                 #   - poi: PyOptInterface, the default. Much faster per
                                                 #          solve than linopy on the same solver
 
-          solver: gurobi                        # solver used for optimization problem
+          solver: highs                         # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
                                                 #   - highs: open source, installed with HAMLET
@@ -930,7 +930,7 @@ sfh:
                                                 #   - poi:    PyOptInterface, the default. Much faster per
                                                 #             solve than linopy on the same solver
 
-          solver: gurobi                        # solver used for optimization
+          solver: highs                         # solver used for optimization
                                                 # options:
                                                 #   - gurobi
                                                 #   - highs: open source, installed with HAMLET
@@ -1579,7 +1579,7 @@ ctsp:
                                                 #   - poi: PyOptInterface, the default. Much faster per
                                                 #          solve than linopy on the same solver
 
-          solver: gurobi                        # solver used for optimization problem
+          solver: highs                         # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
                                                 #   - highs: open source, installed with HAMLET
@@ -1606,7 +1606,7 @@ ctsp:
                                                 #   - poi:    PyOptInterface, the default. Much faster per
                                                 #             solve than linopy on the same solver
 
-          solver: gurobi                        # solver used for optimization
+          solver: highs                         # solver used for optimization
                                                 # options:
                                                 #   - gurobi
                                                 #   - highs: open source, installed with HAMLET
@@ -2260,7 +2260,7 @@ industry:
                                                 #   - poi: PyOptInterface, the default. Much faster per
                                                 #          solve than linopy on the same solver
 
-          solver: gurobi                        # solver used for optimization problem
+          solver: highs                         # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
                                                 #   - highs: open source, installed with HAMLET
@@ -2287,7 +2287,7 @@ industry:
                                                 #   - poi:    PyOptInterface, the default. Much faster per
                                                 #             solve than linopy on the same solver
 
-          solver: gurobi                        # solver used for optimization
+          solver: highs                         # solver used for optimization
                                                 # options:
                                                 #   - gurobi
                                                 #   - highs: open source, installed with HAMLET
@@ -2558,7 +2558,7 @@ producer:
                                                   #   - poi: PyOptInterface, the default. Much faster per
                                                 #          solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization problem
+            solver: highs                         # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET
@@ -2585,7 +2585,7 @@ producer:
                                                   #   - poi:    PyOptInterface, the default. Much faster per
                                                 #             solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization
+            solver: highs                         # solver used for optimization
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET
@@ -2833,7 +2833,7 @@ producer:
                                                   #   - poi: PyOptInterface, the default. Much faster per
                                                 #          solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization problem
+            solver: highs                         # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET
@@ -2860,7 +2860,7 @@ producer:
                                                   #   - poi:    PyOptInterface, the default. Much faster per
                                                 #             solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization
+            solver: highs                         # solver used for optimization
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET
@@ -3105,7 +3105,7 @@ producer:
                                                   #   - poi: PyOptInterface, the default. Much faster per
                                                 #          solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization problem
+            solver: highs                         # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET
@@ -3132,7 +3132,7 @@ producer:
                                                   #   - poi:    PyOptInterface, the default. Much faster per
                                                 #             solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization
+            solver: highs                         # solver used for optimization
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET
@@ -3297,7 +3297,7 @@ storage:
                                                   #   - poi: PyOptInterface, the default. Much faster per
                                                 #          solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization problem
+            solver: highs                         # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET
@@ -3324,7 +3324,7 @@ storage:
                                                   #   - poi:    PyOptInterface, the default. Much faster per
                                                 #             solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization
+            solver: highs                         # solver used for optimization
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET
@@ -3484,7 +3484,7 @@ storage:
                                                   #   - poi: PyOptInterface, the default. Much faster per
                                                 #          solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization problem
+            solver: highs                         # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET
@@ -3511,7 +3511,7 @@ storage:
                                                   #   - poi:    PyOptInterface, the default. Much faster per
                                                 #             solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization
+            solver: highs                         # solver used for optimization
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET
@@ -3671,7 +3671,7 @@ storage:
                                                   #   - poi: PyOptInterface, the default. Much faster per
                                                 #          solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization problem
+            solver: highs                         # solver used for optimization problem
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET
@@ -3698,7 +3698,7 @@ storage:
                                                   #   - poi:    PyOptInterface, the default. Much faster per
                                                 #             solve than linopy on the same solver
 
-            solver: gurobi                        # solver used for optimization
+            solver: highs                         # solver used for optimization
                                                   # options:
                                                   #   - gurobi
                                                   #   - highs: open source, installed with HAMLET

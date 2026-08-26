@@ -10,9 +10,10 @@ shipped backend run anyway.
 Three shipped scenarios were exposed, not one: `grid_golden` and `scenario_with_topology` pin
 `poi`/`highs` in their workbooks, and `scenario_with_market` pinned `linopy`/`gurobi` — so asking
 that last one for HiGHS would have run **Gurobi**, on a machine that needs a licence for it. (That
-workbook now agrees with its own YAML at `poi`/`gurobi`; the disagreement was #214, and
-`test_shipped_configs_agree_with_their_workbooks.py` is what keeps it that way. The exposure this
-paragraph describes was real and is what the switch had to be fixed for.)
+workbook now agrees with its own YAML, and both say `poi`/`highs`: the disagreement was #214, and
+the Gurobi half went with #223, once running that example for the first time showed it needed a
+licence. `test_shipped_configs_agree_with_their_workbooks.py` keeps the two files in step. The
+exposure this paragraph describes was real and is what the switch had to be fixed for.)
 
 **These tests read the config files back, never the arguments they were given.** That distinction
 is the whole point: the defect was a switch that reported success on the strength of what it had

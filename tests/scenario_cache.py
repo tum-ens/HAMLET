@@ -54,7 +54,7 @@ from tests.scenario_run import assert_backend_honoured, run_example
 #: Arguments naming *where* a run puts its output rather than *what* it runs. Everything else in
 #: `run_example`'s signature is part of the key. See the module docstring for why this is an
 #: exclusion list rather than an allowlist.
-NOT_PART_OF_THE_REQUEST = frozenset({'base', 'record_backends'})
+NOT_PART_OF_THE_REQUEST = frozenset({'base', 'record_backends', 'record_strategies'})
 
 _SIGNATURE = inspect.signature(run_example)
 
@@ -102,11 +102,13 @@ class Entry:
     the comparison is between two argument sets, never between two keys.
     """
 
-    def __init__(self, base, request, fingerprint, record):
+    def __init__(self, base, request, fingerprint, record, strategies=None):
         self.base = base
         self.request = request
         self.fingerprint = fingerprint
         self.record = record
+        #: Where the run wrote the trading strategies it constructed, or None if it was not asked.
+        self.strategies = strategies
 
     @property
     def scenario_name(self):
@@ -140,7 +142,7 @@ class ScenarioRuns:
         #: would read an empty log and pass. See the docstring there.
         self.log = []
 
-    def run(self, *args, needs_receipt=False, **kwargs):
+    def run(self, *args, needs_receipt=False, needs_strategies=False, **kwargs):
         """Return the run for this request, running it only if no identical one exists.
 
         Takes exactly `run_example`'s arguments except `base` and `record_backends`, both of which
@@ -163,11 +165,19 @@ class ScenarioRuns:
         assert bound.arguments['record_backends'] is None, (
             'record_backends is owned by the run cache, because a shared entry needs one receipt '
             'every consumer reads; ask for `needs_receipt=True` and take `entry.record` instead')
+        assert bound.arguments['record_strategies'] is None, (
+            'record_strategies is owned by the run cache for the same reason; ask for '
+            '`needs_strategies=True` and take `entry.strategies` instead')
 
         request = dict(bound.arguments)
         request.pop('base')
         request.pop('record_backends')
+        request.pop('record_strategies')
         request['needs_receipt'] = needs_receipt
+        # Part of the key for the same reason `needs_receipt` is: the probe monkeypatches
+        # `Trading.create_instance`, so turning it on changes what the run does, and a probe-free
+        # caller must not be served a probed run or the reverse.
+        request['needs_strategies'] = needs_strategies
 
         # `run_example` writes a receipt whenever a backend was named; this adds the opt-in. The
         # runs that ask for neither stay probe-free, which is what keeps the golden master's run
@@ -175,17 +185,19 @@ class ScenarioRuns:
         wants_record = (needs_receipt or request['framework'] is not None
                         or request['solver'] is not None)
 
-        key = (self._key(*args, **kwargs), needs_receipt)
+        key = (self._key(*args, **kwargs), needs_receipt, needs_strategies)
         entry = self._entries.get(key)
 
         if entry is None:
             base = Path(self._tmp_path_factory.mktemp(f'run_{request["scenario_name"]}_'))
             record = base / 'backends_used.json' if wants_record else None
+            strategies = base / 'strategies_used.json' if needs_strategies else None
             call = dict(bound.arguments)
             call.pop('base')
             call['record_backends'] = record
+            call['record_strategies'] = strategies
             fingerprint = self._runner(base, **call)
-            entry = Entry(base, request, fingerprint, record)
+            entry = Entry(base, request, fingerprint, record, strategies)
             self._entries[key] = entry
             self.log.append((key, request['scenario_name']))
 

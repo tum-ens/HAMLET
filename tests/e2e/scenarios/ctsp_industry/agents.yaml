@@ -598,7 +598,12 @@ ctsp:
                                                 # note: measure to reduce overall simulation time
 
     market:                                     # market parameters
-      strategy: linear                          # market agent trading strategy
+      strategy: retailer                        # market agent trading strategy
+                                                # note: this market sets `method: None`, so there is no
+                                                #   clearing and the retailer is the only counterparty. This
+                                                #   said `linear` until #223 and ran `retailer` regardless.
+                                                #   Keep the two consistent -- and note that changing this
+                                                #   alone changes nothing, since the substitution stands.
                                                 # options:
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range
@@ -1279,7 +1284,12 @@ industry:
                                                 # note: measure to reduce overall simulation time
 
     market:                                     # market parameters
-      strategy: linear                          # market agent trading strategy
+      strategy: retailer                        # market agent trading strategy
+                                                # note: this market sets `method: None`, so there is no
+                                                #   clearing and the retailer is the only counterparty. This
+                                                #   said `linear` until #223 and ran `retailer` regardless.
+                                                #   Keep the two consistent -- and note that changing this
+                                                #   alone changes nothing, since the substitution stands.
                                                 # options:
                                                 #   - zi:         zero intelligence, random bid and offer prices
                                                 #                 in market price range

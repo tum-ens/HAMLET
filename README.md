@@ -44,9 +44,9 @@ defined once, in `pyproject.toml`, and pinned to exact versions in the committed
 
 No solver installation is required to get started: HAMLET installs the open-source solver HiGHS as
 part of its environment, and `examples/create_simple_scenario` — the example used to test your
-installation below — is configured to use it. A commercial solver such as Gurobi* or CPLEX is
-optional and is usually faster on larger scenarios; the remaining examples are configured for
-Gurobi.
+installation below — is configured to use it. **Every shipped example and the config templates use HiGHS**, so all of
+them run without a licence. A commercial solver such as Gurobi* or CPLEX is optional and is
+usually faster on larger scenarios; see below for how to select one.
 
     *Installation explained later in this README
 
@@ -130,7 +130,7 @@ scenario's `agents.yaml`.
 
 ### Test your installation
     - Navigate to ./PycharmProjects/hamlet/examples
-	- Choose `create_simple_scenario`, which needs no solver licence (the other examples are configured for Gurobi)
+	- Choose `create_simple_scenario`, the smallest of the examples (none of them needs a solver licence)
     - Run the jupyter notebook `run.ipynb`
     - If everything is installed correctly, the notebook should run without errors and you should see the results of the example scenario.
 

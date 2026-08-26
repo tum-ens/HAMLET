@@ -73,6 +73,10 @@ class ElectricityMarket(MarketBase):
         }
 
         # Available clearing methods (see market config)
+        # Note: every spelling of "no clearing" is normalised to `c.MCM_NONE` before the lookup
+        #  (see `__clear_bids_offers`), so this registry needs one entry for it rather than one
+        #  per spelling. `f.clears_a_market` is the single rule, shared with the agent stage --
+        #  they disagreed, and `method: none` was accepted there and refused here. #223.
         self.methods = {
             c.MCM_NONE: self.__method_none,  # no local clearing, all energy traded with retailer
             c.MCM_PDA: self.__method_pda,  # periodic double auction
@@ -427,6 +431,11 @@ class ElectricityMarket(MarketBase):
     def __clear_bids_offers(self, bids: pl.DataFrame, offers: pl.DataFrame, clearing_method: str, pricing_method: str,
                             retailer: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
         """Clears the bids and offers"""
+
+        # Normalise before the lookup: `None`, `'None'`, `'none'` and `'NONE'` all mean no local
+        # clearing, and the registry carries the canonical spelling once. #223.
+        if not f.clears_a_market(clearing_method):
+            clearing_method = c.MCM_NONE
 
         if clearing_method in self.methods:
             trades_cleared, trades_uncleared = self.methods[clearing_method](bids, offers, pricing_method)

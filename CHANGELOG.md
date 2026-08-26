@@ -10,6 +10,75 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Added
+- **Market clearing is now executed and asserted by value (#223).** Every `markets.yaml` any test
+  ran set `method: None`, so the clearing branch of `executor/markets/electricity.py` had never
+  run in the suite, and neither had two of the three trading strategies: `Linear` and `Zi` reached
+  only their `class` and `def` lines. The one shipped example that clears,
+  `examples/create_scenario_with_market`, was executed by nothing -- the two tests that name it
+  read its config *files*.
+
+  Three files close that:
+
+  - `tests/unit/executor/markets/test_clearing_by_hand.py` drives the real `ElectricityMarket`
+    over books written out by hand and asserts the cleared quantities, the clearing price and
+    **who traded with whom**, per agent by name. Every expected number was derived from the
+    algorithm on paper before the code was run, and the derivations are in the file. It covers
+    `pda` and `None`, uniform pricing, partial clearing, the retailer's place in the merit order,
+    tied bids, and the three refusals (`discriminatory`, `community`, `ex-post`).
+  - `tests/unit/executor/utilities/trading/test_strategies.py` prices all three strategies by
+    hand, so `Linear` and `Zi` execute for the first time.
+  - `tests/e2e/test_market_clearing.py` runs `scenario_with_market` end to end (~95 s on HiGHS),
+    which is what settles the questions no unit fixture can: that the executor reaches the clearing at all,
+    that agents trade **with each other** rather than only with the retailer, that every clearing
+    settles at a single price, and that the configured `linear` strategy is the one that quotes.
+
+  Measured against **64 mutations**, applied one at a time and each confirmed landed: 39 written
+  by the author and 25 more that a three-lens review panel used to defeat the first version of
+  these tests. **56 are caught** -- 39 of 39 and 17 of 25. The eight survivors are statements
+  whose deletion is unobservable through any book (two concatenations with a table that is always
+  empty, a forward fill over a table with no nulls, a defensive `fill_null(0)`, two joins whose
+  narrowing cannot lose a row, a de-duplicating join key, and the trade id, which
+  `__create_market_tables` discards before anything can store it).
+
+  The panel's contribution was the larger one, and three of its findings changed the fixtures
+  rather than adding assertions:
+
+  - the hand-written books wrote **0 into the price column an agent was not trading on**, where
+    every real strategy writes a genuine price on both. That zero -- not the code -- was what made
+    widening `__split_bids_offers`' `energy_in > 0` filter to `>= 0` look like an equivalent
+    mutant, which the first version of this changelog claimed it was. With real prices the widened
+    filter puts every seller onto the bid ladder and moves the clearing price.
+  - the strategy fixture used an **hourly** timestep, where the power-to-energy conversion factor
+    is 1.0 and deleting the conversion changes nothing. The shipped default is 900 s, where the
+    same deletion is a fourfold over-bid by every agent at every timestep. It now runs at 15
+    minutes.
+  - the strategy fixture gave the agent **no trading history**, so the subtraction that turns a
+    setpoint into a net position was a subtraction of zero. Reversing its sign survived the entire
+    suite. Measured on a real run, 161 of 192 constructions of a trading strategy see a non-empty
+    history, so the case being tested was the rare one.
+
+  **The example shipped `solver: gurobi`, so as shipped it could not run without a commercial
+  licence** -- which is why it had never run in CI, and which the first pipeline for this branch
+  discovered after the arm passed on a development machine that has one. It is on HiGHS now, along
+  with every other shipped scenario and the template; see the Changed entry below. The test runs
+  the config as shipped and reads back what actually solved.
+
+  Four gaps are recorded rather than closed, each pinned by a test that says so:
+
+  - `__method_pda` has no self-trade filter where `__method_none` does (unreachable through the
+    shipped strategies, which net an agent into one direction per timestep);
+  - `__method_pda` **can clear more energy than was offered** when the two cumulative ladders do
+    not share their breakpoints, because it takes `min(energy_in, energy_out)` per joined row
+    rather than the difference of successive cumulative sums. The conservation invariant cannot
+    see it -- the duplication is symmetric, so cleared-in still equals cleared-out at an inflated
+    total;
+  - `TradingBase` builds an agent's book from the **whole** timetable rather than the rows for its
+    own market, so an agent in a two-market region quotes a different ladder from the same agent
+    in a one-market region. No shipped scenario declares two markets in one region;
+  - `Zi` draws from Python's unseeded global generator, so a `zi` scenario would not be
+    reproducible across processes -- the same shape as the market half of #216. No shipped
+    scenario selects `zi`.
+
 - **The POI slack report is now exercised, and its threshold and suffix filter are pinned
   (#231).** `_warn_on_slack` runs in all four controllers, but its `LOGGER.warning` had never
   executed under the default `poi` backend — in any test or any scenario. Instrumented over two
@@ -274,6 +343,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Fixed
+- **A region with more than one market processed them in a random order (#223).**
+  `AgentBase.create_bids_offers` builds its market list with `timetable.unique(...)`, which does
+  not preserve order unless asked. Each iteration overwrites `agent.bids_offers`, so **which
+  market's book survived was decided at random on every call.** No shipped scenario declares two
+  markets in one region, so it was latent — it was found because the new test for that loop caught
+  its own mutation only 9 times in 13 runs.
+
+- **`method: null` in a `markets.yaml` no longer crashes the run (#223).** The check read
+  `m_method.capitalize() == 'None' or m_method is None`, whose second operand can never run: the
+  attribute lookup on `None` raises first. It was latent only because PyYAML parses the shipped
+  spelling `method: None` into the *string* `'None'`; written as `null`, or left blank, it raised
+  an `AttributeError` instead of selecting the retailer.
+
+  **Fixed at both stages, because fixing only the first moved the crash rather than removing it** —
+  and then twice more, because the first two attempts each left a spelling behind. `AgentBase`
+  accepted four spellings (`None`, `'None'`, `'none'`, `'NONE'`) while the market's registry
+  accepted two, so `method: none` was honoured by one stage and refused by the other with
+  `Clearing method "none" not available`. There is now **one rule**,
+  `hamlet.functions.clears_a_market`, which both consult; the market normalises before its
+  registry lookup. Each round was found by a review lens checking the previous round's claim.
+
+  The rule deliberately has **no separate `is None` arm**: `str(None).capitalize()` is already
+  `'None'`, so one would be a dead operand — which is exactly the defect being fixed here.
+
 - **A failing slack read in the POI controllers no longer reports silence (#231).**
   `_warn_on_slack` wrapped `self.model.get_value` in `except Exception: continue`. It has never
   fired — 864 of 864 iterations computed a value — but the decision it encodes is wrong whichever
@@ -553,6 +646,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   instead of quietly green.
 
 ### Changed
+- **Every shipped scenario and the config template now select `solver: highs` (#223).**
+  `examples/create_scenario_with_market` and `config_templates/agents.yaml` were the last two
+  holding `gurobi`; the other three examples and both e2e fixtures were already on HiGHS.
+
+  The market example's choice had been read as deliberate (#214 recorded it as "a real choice, not
+  a defect"), and it was never tested, so nobody had met the consequence: **the only shipped
+  scenario that clears a market could not run without a commercial licence.** The first CI
+  pipeline that ran it died with "The Gurobi shared library could not be loaded". The template
+  mattered for the same reason one layer out — it is what a new user copies.
+
+  Gurobi remains fully supported and entirely opt-in: set `solver: gurobi` under `optimization`,
+  per `README.md`. Nothing about the solver machinery changed.
+
+  **No golden reference moved**, because neither golden scenario was on Gurobi. What did move is
+  `scenario_with_market`, which nothing pinned: 245 cleared bids over 79 clearings and 53_482 Wh
+  of local trading on Gurobi, against 267 / 94 / 62_410 on HiGHS. `tests/e2e/test_market_clearing.py`
+  now runs it **as shipped** and reads back what actually solved, rather than switching the solver
+  itself -- a switch matches the *key* and would go on passing if the config were flipped back.
+
+- **A market with no clearing now reports that it is discarding the agent's configured trading
+  strategy (#223).** The substitution itself is correct and documented -- with `method: None` the
+  retailer is the only counterparty there is, and `agents.yaml` already names `retailer` as "the
+  default strategy when there is no clearing" -- but nothing said it was happening.
+  `tests/e2e/scenarios/ctsp_industry` declared `strategy: linear` in both its config and its
+  workbook and had only ever run `retailer`, which is how a fixture came to imply coverage of a
+  strategy that had never executed anywhere. That fixture now declares `retailer`; the numbers are
+  unchanged, and the golden master confirms it. The report has its own warning category,
+  `hamlet.executor.agents.agent_base.ConfiguredStrategyUnused`, so it can be silenced on its own.
+
 
 - **Two test modules asking for the identical end-to-end run now share one, through
   `tests/scenario_cache.py`.** Every e2e fixture is module-scoped, so each file paid for its own
@@ -1013,7 +1135,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   example's config pair.
 
   Both workbooks now say what their own YAML says — each taking its own YAML's solver, so
-  `scenario_with_grid` lands on `poi`/`highs` and `scenario_with_market` on `poi`/`gurobi`. The
+  `scenario_with_grid` landed on `poi`/`highs` and `scenario_with_market` on `poi`/`gurobi`.
+  (#223 later moved that second one to `highs` as well, once running it showed it needed a
+  licence.) The
   workbook moved rather than the YAML because `poi` is the documented default *framework* and the
   YAML is the file a reader opens; neither example's solver choice is changed by this.
   `tests/integration/test_shipped_configs_agree_with_their_workbooks.py` keeps them that way, in
@@ -1027,8 +1151,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   **`agents.xlsx`**, which nothing regenerates and which the YAML has no part in. So the request
   was accepted, the switch's own `assert switched` was satisfied by the file it edited, and the
   workbook's own backend ran anyway. Three shipped scenarios were exposed — `grid_golden` and
-  `scenario_with_topology` pin `poi`/`highs`, `scenario_with_market` pins `linopy`/`gurobi`, so
-  asking that one for HiGHS would have run Gurobi. Nothing called it that way yet, so no test was
+  `scenario_with_topology` pinned `poi`/`highs`, `scenario_with_market` pinned `linopy`/`gurobi`,
+  so asking that one for HiGHS would have run Gurobi. (Both of that last one's files say
+  `poi`/`highs` since #223.) Nothing called it that way yet, so no test was
   vacuous; the trap was armed rather than sprung.
 
   Two changes, because they close different things. The switch now reaches **every config file
@@ -1411,8 +1536,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Gurobi, and its results change as a result.** HAMLET's own example should not require a
   commercial licence to run: HiGHS is installed with HAMLET, Gurobi is not, and the example is
   what the README names as the installation test. Gurobi remains fully supported — set
-  `solver: gurobi` under `optimization` in `agents.yaml`, as the other examples and the config
-  templates still do.
+  `solver: gurobi` under `optimization` in `agents.yaml`. (At the time this was written the other
+  examples and the config templates still specified Gurobi; #223 moved the last of them to HiGHS.)
 
   The two solvers do not return the same dispatch. The model is degenerate enough that they pick
   different, equally optimal solutions: 84 more bids and offers clear (499 → 583), 168 more
