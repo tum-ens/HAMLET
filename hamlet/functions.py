@@ -20,6 +20,28 @@ from typing import Callable
 
 import hamlet.constants as c
 
+
+def clears_a_market(clearing_method) -> bool:
+    """Whether a market's `method:` names an actual clearing, for every spelling of "no".
+
+    `markets.yaml` writes no-clearing as `method: None`, which PyYAML parses to the **string**
+    `'None'`; `method: null` and a blank value parse to a real `None`; and a hand-edited config
+    can say `none` or `NONE`. All four mean the same thing.
+
+    **It lives here because two stages consume it and they must agree.** `AgentBase` reads it to
+    decide whether to honour the agent's configured trading strategy, and `ElectricityMarket`
+    reads it to look up a clearing method. #223 fixed the agent stage first and left the market
+    stage accepting only two of the four spellings, so `method: none` was accepted by one and
+    refused by the other -- the same defect one layer down, which is how it was found.
+    """
+    # `str(...)` first, and **no separate `is None` arm**: `str(None).capitalize()` is already
+    # `'None'`, so an explicit None check here would be a dead operand -- which is precisely the
+    # defect this function was extracted to fix (`m_method.capitalize() == 'None' or m_method is
+    # None`, whose second operand could never run). One dead operand replaced by another would be
+    # a poor trade. A mutation removing the None arm survived the whole suite, which is how this
+    # was noticed.
+    return str(clearing_method).capitalize() != c.MCM_NONE
+
 # Contains all functions that are shared among the classes and used universally
 
 

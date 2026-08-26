@@ -75,8 +75,10 @@ RETAILER_BUYS = 500
 RETAILER_SELLS = 1500
 
 #: **Measured** on this scenario through `run_example` with `new_scenario_from_files` and seed
-#: 20260804, on HiGHS, on 2026-08-26: 267 cleared bids and 267 cleared offers over
-#: **94 clearings**, totalling 139_876 Wh on each side; **286** agent-to-agent transaction rows
+#: 20260804, on HiGHS, on 2026-08-26: 267 cleared bids over **94 clearings** and 267 cleared
+#: offers over **90** -- the two sides do not clear at the same set of `(timestamp, timestep)`
+#: pairs, and `MIN_CLEARINGS` has to clear the smaller. 139_876 Wh on each side; **286**
+#: agent-to-agent transaction rows
 #: carrying **62_410 Wh**; 55 uncleared bids and 32 uncleared offers. Quote these only for the
 #: HiGHS arm -- the same scenario on Gurobi produced 245 / 79 / 242 / 53_482, so the solver moves
 #: every one of them and the floors have to clear the smaller side.

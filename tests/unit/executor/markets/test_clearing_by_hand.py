@@ -608,9 +608,10 @@ ODD_MIDPOINT = [('buyer_a', 1000, 0, 3000, BUYERS_OFFER),
 #:                                                   2500  ->  buyer_a vs nothing (dropped)
 #:
 #: Both offers clear, so `buyer_a` occupies **two** rows of `bids_cleared` at 1000 Wh each and
-#: 1500 Wh of its 2500 Wh bid is met. The uncleared remainder is 1000 Wh, and getting that right
-#: is what the `sum()` is for -- with `.first()` only one of the two cleared rows is subtracted
-#: and the agent is reported as still wanting 1500.
+#: **2000 Wh** of its 2500 Wh bid is met. The uncleared remainder is **500 Wh**, and getting that
+#: right is what the `sum()` is for -- with `.first()` only one of the two cleared rows is
+#: subtracted and the agent is reported as still wanting 1500, so it would re-bid for energy it
+#: has already bought.
 TWO_SELLERS = [('buyer_a', 2500, 0, 3000, BUYERS_OFFER),
                ('seller_x', 0, 1000, SELLERS_BID, 1200),
                ('seller_y', 0, 1000, SELLERS_BID, 1300)]
@@ -686,6 +687,41 @@ def test_uncleared_is_submitted_minus_cleared(run_book):
 
     assert set(unbid) <= set(submitted_in), 'an agent that submitted no bid has an uncleared one'
     assert set(unoffered) <= set(submitted_out)
+
+
+#: The books in which an agent legitimately occupies more than one cleared row. Everywhere else,
+#: one agent means one row per side, and `cleared()` refuses to reduce anything else.
+#:
+#: Named rather than derived: `test_uncleared_is_submitted_minus_cleared` had to move from
+#: `cleared()` to `cleared_energy()` when `two_sellers_one_buyer` was added, and summing does not
+#: notice a spurious extra row the way `one_per_agent` does. This puts that guard back for the
+#: books that never needed to lose it.
+#:
+#: `two_buyers_one_retailer` is here because the guard put it here: both buyers clear against the
+#: retailer's single 100 kWh offer, so the *retailer* holds two rows of `offers_cleared`. That was
+#: not obvious from the book and this list was wrong until the assertion said so -- which is the
+#: argument for having it.
+BOOKS_WITH_A_REPEATED_AGENT = {'two_sellers_one_buyer', 'two_buyers_one_retailer'}
+
+assert BOOKS_WITH_A_REPEATED_AGENT <= set(BOOKS)
+
+
+def test_each_agent_holds_one_cleared_row_per_side(run_book):
+    """One position in, one row out -- except where the book puts an agent on two trades.
+
+    `one_per_agent` raises on a duplicate, so this is the assertion: a market that started
+    emitting a second, wrong row for an agent whose first row happened to be right would be
+    invisible to every total in this file.
+    """
+    name, _, market = run_book
+
+    if name in BOOKS_WITH_A_REPEATED_AGENT:
+        with pytest.raises(AssertionError, match='appears more than once'):
+            cleared(market)
+        return
+
+    cleared(market)  # raises if any agent holds two rows
+    uncleared(market)
 
 
 def test_no_cleared_position_is_an_agent_trading_with_itself(run_book):
@@ -1021,11 +1057,10 @@ TIE_WINNERS = {'bidder_2', 'bidder_3'}
 def test_tied_bids_clear_the_same_way_every_time():
     """The same book, cleared eight times, gives the same two winners.
 
-    This is what an unseeded shuffle breaks, and it is deliberately **not** an assertion about
-    *which* two win: that depends on polars' own RNG and would couple this file to a library
-    version. What must hold is that the answer does not move, and that the shuffle is doing
-    something -- the second assertion checks the tie is real, so a book that accidentally cleared
-    all three would not pass this by having nothing to decide.
+    This is what an unseeded shuffle breaks. It asserts **both** that the answer does not move
+    across repeats and *which* two win, by name -- see `TIE_WINNERS` for why naming them is worth
+    the coupling to polars' RNG, and what asserting only the offer side let through. An earlier
+    version of this docstring said the opposite; the code below is what to believe.
     """
     outcomes = set()
     for _ in range(TIE_REPEATS):
@@ -1088,26 +1123,30 @@ def test_community_clearing_is_refused_by_a_signature_mismatch():
         market.execute()
 
 
-def test_a_market_written_as_yaml_null_clears_through_the_no_clearing_method():
-    """`method: null` reaches the market as a real `None`, and means what `method: None` means.
+@pytest.mark.parametrize('spelling', [None, 'None', 'none', 'NONE'])
+def test_every_spelling_of_no_clearing_reaches_the_no_clearing_method(spelling):
+    """`method: null`, `None`, `none` and `NONE` all mean the same thing at *this* stage too.
 
-    The two spellings have to be accepted at **both** stages. `AgentBase.clears_a_market` handles
-    the agent stage; without the matching entry in this registry the run got one stage further and
-    then died with `Clearing method "None" not available`, which is the same defect one level
-    down. Asserted against the string spelling's result rather than against a fresh derivation, so
-    the two cannot diverge.
+    The two stages have to agree, and they did not. `AgentBase` accepted all four from the start;
+    the market's registry accepted only `'None'`, then only `'None'` and `None`, so a config
+    written `method: none` was honoured by the agent stage and then refused here with
+    `Clearing method "none" not available` -- the same defect one level down, twice over.
+    `hamlet.functions.clears_a_market` is now the single rule both consult.
+
+    Each spelling is compared against the shipped one's result rather than against a fresh
+    derivation, so the four cannot drift apart.
     """
-    written_as_string = retail_market(RETAIL_ONLY)
-    written_as_string.execute()
+    shipped = retail_market(RETAIL_ONLY)
+    shipped.execute()
 
-    written_as_null = make_market(RETAIL_ONLY, method=None,
-                                  retailer=retailer_table(energy_in=RETAILER_QUANTITY,
-                                                          energy_out=RETAILER_QUANTITY))
-    written_as_null.execute()
+    written = make_market(RETAIL_ONLY, method=spelling,
+                          retailer=retailer_table(energy_in=RETAILER_QUANTITY,
+                                                  energy_out=RETAILER_QUANTITY))
+    written.execute()
 
-    assert cleared(written_as_null) == cleared(written_as_string)
-    assert transactions(written_as_null) == transactions(written_as_string)
-    assert cleared(written_as_null)[0], 'both cleared nothing, so this compares two empty tables'
+    assert cleared(written) == cleared(shipped)
+    assert transactions(written) == transactions(shipped)
+    assert cleared(written)[0], 'both cleared nothing, so this compares two empty tables'
 
 
 def test_an_unknown_clearing_method_is_refused_by_name():

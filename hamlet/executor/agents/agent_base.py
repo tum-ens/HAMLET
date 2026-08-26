@@ -13,6 +13,7 @@ import pandas as pd
 import polars as pl
 
 from hamlet import constants as c
+import hamlet.functions as f
 from hamlet.executor.utilities.controller.controller import Controller
 from hamlet.executor.utilities.database.agent_db import AgentDB
 from hamlet.executor.utilities.trading.trading import Trading
@@ -103,20 +104,11 @@ class AgentBase:
 
         return self.agent
 
-    @staticmethod
-    def clears_a_market(clearing_method) -> bool:
-        """Whether this market's `method:` names an actual clearing.
-
-        `markets.yaml` spells "no clearing" as `method: None`, and PyYAML parses that as the
-        **string** `'None'` rather than as `None` -- so the string is what every shipped config
-        produces and what this normally sees. `method: null`, or a blank value, parses as a real
-        `None`, and the check used to be written `m_method.capitalize() == 'None' or
-        m_method is None`, whose second operand can never run: the attribute lookup on `None`
-        raises first. Writing `null` where the shipped configs write `None` therefore crashed the
-        agent stage instead of selecting the retailer. Both spellings are accepted here. #223.
-        """
-        return not (clearing_method is None
-                    or str(clearing_method).capitalize() == c.MCM_NONE)
+    #: Whether a market's `method:` names an actual clearing. Delegated to `hamlet.functions` so
+    #: that this stage and `ElectricityMarket`'s method registry cannot disagree about what
+    #: "no clearing" is spelled like -- they did, and `method: none` was accepted here and refused
+    #: there. Kept as a name on the class because that is how the tests and the loop below read.
+    clears_a_market = staticmethod(f.clears_a_market)
 
     def create_bids_offers(self):
         """Create the bids and offers to the market based on the trading strategy.
@@ -145,7 +137,14 @@ class AgentBase:
         configured = market_info['strategy']
 
         # Get the markets of the region from the timetable by selecting the unique market types and names
-        unique_values = self.timetable.unique(subset=[c.TC_MARKET, c.TC_NAME, c.TC_CLEARING_METHOD])
+        # Note: `maintain_order=True` is load-bearing rather than tidiness. polars' `unique`
+        #  defaults to an unspecified order, so a region with more than one market handed them to
+        #  the loop below in a **different order on every call** -- and each iteration overwrites
+        #  `self.agent.bids_offers`, so which market's book survived was random. No shipped
+        #  scenario declares two markets in one region, so this was latent; it was found because
+        #  the test for the loop caught its own mutation only 9 times in 13. #223.
+        unique_values = self.timetable.unique(subset=[c.TC_MARKET, c.TC_NAME, c.TC_CLEARING_METHOD],
+                                              maintain_order=True)
         market_types = unique_values.select(c.TC_MARKET).to_series().to_list()
         market_names = unique_values.select(c.TC_NAME).to_series().to_list()
         market_clearing_methods = unique_values.select(c.TC_CLEARING_METHOD).to_series().to_list()

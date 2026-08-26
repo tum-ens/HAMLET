@@ -198,8 +198,14 @@ def test_each_market_in_a_region_gets_its_own_strategy_decision():
     """One market clears and one does not, so both branches are taken in a single call.
 
     The evidence is the report: exactly one market is named, and it is the one without a
-    clearing. A run that processed only the first market would emit no report at all, since the
+    clearing. A run that processed only the first market would emit no report at all, because the
     clearing market is first.
+
+    **That last sentence is only true because `create_bids_offers` passes `maintain_order=True`.**
+    polars' `unique` is otherwise free to return the two markets in either order, and it does --
+    measured, this test caught a truncated loop only 9 times in 13 runs before that was fixed, and
+    the docstring asserting "the clearing market is first" was a coin flip. The order now follows
+    the timetable, which `timetable()` builds clearing-market-first.
     """
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
@@ -212,13 +218,20 @@ def test_each_market_in_a_region_gets_its_own_strategy_decision():
     assert f"Market '{NAME}'" not in reported[0]
 
 
-def test_two_markets_that_differ_only_in_their_clearing_method_are_kept_apart():
+def test_the_market_without_a_clearing_is_named_whichever_position_it_holds():
     """Reversed order, so neither position in the loop can be the one that happens to work.
 
-    With the *first* market having no clearing and the second clearing, the report must still
-    name the first and only the first. If the two markets were collapsed into one row -- which is
-    what dropping the clearing method from the `unique()` subset does, since they share a region,
-    type and energy -- one of them would silently run under the other's method.
+    With the *first* market having no clearing and the second clearing, the report must still name
+    the first and only the first.
+
+    **This test used to be called `..._that_differ_only_in_their_clearing_method_are_kept_apart`
+    and claimed to guard the `unique()` subset. It cannot, and neither can anything else.**
+    The subset is `[market, name, method]` and the two fixture markets differ in *name*, so
+    dropping `method` from it cannot collapse them. Killing that mutation would need one
+    `(market, name)` carrying two different clearing methods across its rows -- a market whose
+    method changes mid-horizon, which the Creator cannot emit. It is an **equivalent mutation for
+    any well-formed timetable**, recorded here as equivalent rather than carried as a survivor
+    with a test pretending to aim at it.
     """
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
@@ -259,3 +272,36 @@ def test_a_second_market_makes_the_agent_quote_its_whole_timetable_twice():
 
     assert at_step_2(one_market) == LINEAR_AT_STEP_2
     assert at_step_2(two_markets) != LINEAR_AT_STEP_2
+
+
+#: How many times `test_the_markets_are_processed_in_timetable_order` repeats the call.
+#:
+#: **Sized against the failure it detects.** Without `maintain_order=True` polars returns the two
+#: markets in an arbitrary order, so each run picks one of two outcomes and the chance of twenty
+#: runs agreeing by luck is under one in half a million. Measured before the fix: a loop-truncating
+#: mutation was caught in only 9 of 13 runs, which is what exposed the nondeterminism.
+ORDER_REPEATS = 20
+
+
+def test_the_markets_are_processed_in_timetable_order():
+    """The last market in the timetable is the last one processed, every time.
+
+    Each iteration of the loop overwrites `self.agent.bids_offers`, so **which market's book
+    survives is decided by the order** -- and polars' `unique` does not preserve one unless asked.
+    That made the surviving book random in any region with two markets. No shipped scenario has
+    one, so it was latent.
+
+    Observable because the two markets here choose different strategies: the first clears (so
+    `Linear` quotes) and the second does not (so `Retailer` does), and their prices differ at
+    step 2. The surviving book must therefore be the retailer's, on every run.
+    """
+    outcomes = set()
+    for _ in range(ORDER_REPEATS):
+        base = drive(c.MCM_PDA, c.MTS_LINEAR, second_market=c.MCM_NONE)
+        row = base.agent.bids_offers.filter(
+            base.agent.bids_offers[c.TC_TIMESTEP] == STEPS[2]).to_dicts()[0]
+        outcomes.add((row[c.TC_PRICE_PU_IN], row[c.TC_PRICE_PU_OUT]))
+
+    assert outcomes == {RETAILER_AT_STEP_2}, (
+        f'the surviving book varied across {ORDER_REPEATS} identical runs ({outcomes}), so the '
+        f'markets are not processed in a fixed order')

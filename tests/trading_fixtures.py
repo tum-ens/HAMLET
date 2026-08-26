@@ -53,11 +53,12 @@ FORECAST_OUT = 1500
 #: final zero is there on purpose: `_postprocess_bids_offers` drops rows with no position, and a
 #: fixture without one would let that filter be deleted unnoticed.
 SETPOINTS = [1000, -500, 2000, 0]
-
-#: The same positions as energies in **Wh**, which is what the strategies quote. This is
-#: `SETPOINTS` scaled by `dt_hours`, written out rather than computed, so that the conversion
-#: `TradingBase` performs is checked against an independent number instead of against itself.
-SETPOINT_ENERGIES = [250, -125, 500, 0]
+#:
+#: The energies these become at `STEP_MINUTES` are written out as literals in
+#: `test_strategies.py` (`BID_0`, `OFFER_1`, `BID_2`), which is the only place they are used. They
+#: deliberately do **not** live here as a second constant derived from `SETPOINTS` by the same
+#: arithmetic the conversion under test performs -- that would be one fact with two homes, and
+#: the derived one would check the code against itself.
 
 #: The trading horizon, in seconds. Four steps of `STEP_MINUTES`, so one hour admits all of them.
 HORIZON = 4 * STEP_MINUTES * 60
@@ -80,9 +81,6 @@ BOOK_COLUMNS = [c.TC_TIMESTAMP, c.TC_TIMESTEP, c.TC_REGION, c.TC_MARKET, c.TC_NA
 #: `Linear`'s two shipped shape parameters, from `config_templates/agents.yaml`.
 STEPS_TO_FINAL = 1
 STEPS_FROM_INIT = 0
-
-assert SETPOINT_ENERGIES == [int(power * STEP_MINUTES / 60) for power in SETPOINTS], (
-    'SETPOINT_ENERGIES no longer matches SETPOINTS at this timestep length')
 
 
 class Agent:

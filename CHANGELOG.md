@@ -57,11 +57,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     suite. Measured on a real run, 161 of 192 constructions of a trading strategy see a non-empty
     history, so the case being tested was the rare one.
 
-  **The example ships `solver: gurobi`, so as shipped it cannot run without a commercial
+  **The example shipped `solver: gurobi`, so as shipped it could not run without a commercial
   licence** -- which is why it had never run in CI, and which the first pipeline for this branch
-  discovered after the arm passed on a development machine that has one. The test forces HiGHS and
-  reads back what actually solved; the shipped example is left alone, since changing it is a
-  decision about the example rather than about this test.
+  discovered after the arm passed on a development machine that has one. It is on HiGHS now, along
+  with every other shipped scenario and the template; see the Changed entry below. The test runs
+  the config as shipped and reads back what actually solved.
 
   Four gaps are recorded rather than closed, each pinned by a test that says so:
 
@@ -343,17 +343,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Fixed
+- **A region with more than one market processed them in a random order (#223).**
+  `AgentBase.create_bids_offers` builds its market list with `timetable.unique(...)`, which does
+  not preserve order unless asked. Each iteration overwrites `agent.bids_offers`, so **which
+  market's book survived was decided at random on every call.** No shipped scenario declares two
+  markets in one region, so it was latent — it was found because the new test for that loop caught
+  its own mutation only 9 times in 13 runs.
+
 - **`method: null` in a `markets.yaml` no longer crashes the run (#223).** The check read
   `m_method.capitalize() == 'None' or m_method is None`, whose second operand can never run: the
   attribute lookup on `None` raises first. It was latent only because PyYAML parses the shipped
   spelling `method: None` into the *string* `'None'`; written as `null`, or left blank, it raised
   an `AttributeError` instead of selecting the retailer.
 
-  **Fixed at both stages, because fixing only the first moved the crash rather than removing it.**
-  `AgentBase.clears_a_market` accepts both spellings at the agent stage; `ElectricityMarket`'s
-  method registry now carries `None` alongside `'None'`, without which a `null` config got one
-  stage further and died with `Clearing method "None" not available`. Found by a review lens
-  checking the changelog's own claim that "both spellings are now accepted".
+  **Fixed at both stages, because fixing only the first moved the crash rather than removing it** —
+  and then twice more, because the first two attempts each left a spelling behind. `AgentBase`
+  accepted four spellings (`None`, `'None'`, `'none'`, `'NONE'`) while the market's registry
+  accepted two, so `method: none` was honoured by one stage and refused by the other with
+  `Clearing method "none" not available`. There is now **one rule**,
+  `hamlet.functions.clears_a_market`, which both consult; the market normalises before its
+  registry lookup. Each round was found by a review lens checking the previous round's claim.
+
+  The rule deliberately has **no separate `is None` arm**: `str(None).capitalize()` is already
+  `'None'`, so one would be a dead operand — which is exactly the defect being fixed here.
 
 - **A failing slack read in the POI controllers no longer reports silence (#231).**
   `_warn_on_slack` wrapped `self.model.get_value` in `except Exception: continue`. It has never
@@ -1123,7 +1135,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   example's config pair.
 
   Both workbooks now say what their own YAML says — each taking its own YAML's solver, so
-  `scenario_with_grid` lands on `poi`/`highs` and `scenario_with_market` on `poi`/`gurobi`. The
+  `scenario_with_grid` landed on `poi`/`highs` and `scenario_with_market` on `poi`/`gurobi`.
+  (#223 later moved that second one to `highs` as well, once running it showed it needed a
+  licence.) The
   workbook moved rather than the YAML because `poi` is the documented default *framework* and the
   YAML is the file a reader opens; neither example's solver choice is changed by this.
   `tests/integration/test_shipped_configs_agree_with_their_workbooks.py` keeps them that way, in
@@ -1137,8 +1151,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   **`agents.xlsx`**, which nothing regenerates and which the YAML has no part in. So the request
   was accepted, the switch's own `assert switched` was satisfied by the file it edited, and the
   workbook's own backend ran anyway. Three shipped scenarios were exposed — `grid_golden` and
-  `scenario_with_topology` pin `poi`/`highs`, `scenario_with_market` pins `linopy`/`gurobi`, so
-  asking that one for HiGHS would have run Gurobi. Nothing called it that way yet, so no test was
+  `scenario_with_topology` pinned `poi`/`highs`, `scenario_with_market` pinned `linopy`/`gurobi`,
+  so asking that one for HiGHS would have run Gurobi. (Both of that last one's files say
+  `poi`/`highs` since #223.) Nothing called it that way yet, so no test was
   vacuous; the trap was armed rather than sprung.
 
   Two changes, because they close different things. The switch now reaches **every config file
@@ -1521,8 +1536,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Gurobi, and its results change as a result.** HAMLET's own example should not require a
   commercial licence to run: HiGHS is installed with HAMLET, Gurobi is not, and the example is
   what the README names as the installation test. Gurobi remains fully supported — set
-  `solver: gurobi` under `optimization` in `agents.yaml`, as the other examples and the config
-  templates still do.
+  `solver: gurobi` under `optimization` in `agents.yaml`. (At the time this was written the other
+  examples and the config templates still specified Gurobi; #223 moved the last of them to HiGHS.)
 
   The two solvers do not return the same dispatch. The model is degenerate enough that they pick
   different, equally optimal solutions: 84 more bids and offers clear (499 → 583), 168 more

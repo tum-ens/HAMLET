@@ -83,10 +83,16 @@ A `venv/` directory in your working tree is not this project's environment — `
 
 ## Solver
 
-HiGHS is installed with HAMLET and is what `examples/create_simple_scenario` uses
-(`simple_scenario/agents.yaml:904,930`). No licence is needed for the example, the test suite, or
-CI. Gurobi is optional and fully supported — set `solver: gurobi` under `optimization`; the other
-three examples and `config_templates/` still specify it.
+HiGHS is installed with HAMLET and is what **every shipped scenario and `config_templates/`**
+select (`simple_scenario/agents.yaml:905,932` and the same two keys in each of the others). No
+licence is needed for any example, the test suite, or CI. Gurobi is optional and fully supported —
+set `solver: gurobi` under `optimization`.
+
+`examples/create_scenario_with_market` and `config_templates/` specified Gurobi until #223. That
+example is the only shipped scenario that clears a market, nothing ran it, and so nobody had met
+the consequence: it could not run in CI or on any unlicensed machine. `test_market_clearing.py`
+and `test_grid_examples.py` now read the backend receipt back, so a revert fails on a *licensed*
+machine too rather than passing quietly.
 
 **`framework` and `solver` are independent, so there are four supported combinations, and all four
 are tested.** The matrix and its rules are documented once, in `tests/README.md`. The one thing

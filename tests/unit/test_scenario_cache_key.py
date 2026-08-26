@@ -17,7 +17,7 @@ import json
 import pytest
 
 from tests.scenario_cache import NOT_PART_OF_THE_REQUEST, ScenarioRuns, request_key
-from tests.scenario_run import run_example
+from tests.scenario_run import assert_strategies_honoured, run_example
 
 EXAMPLE = 'examples/create_simple_scenario'
 SCENARIO = 'simple_scenario'
@@ -211,6 +211,77 @@ class TestTheReceiptIsWrittenOnlyWhenItIsNeeded:
         runs.run(EXAMPLE, SCENARIO, needs_receipt=True)
 
         assert len(runs.log) == 2
+
+
+class TestTheStrategyReceipt:
+    """The second receipt, and the flag that turns it on.
+
+    `STRATEGY_PROBE` monkeypatches `Trading.create_instance`, so it changes what a run does in
+    exactly the way `BACKEND_PROBE` does -- which is why `needs_strategies` has to be part of the
+    key. None of this was covered when it was added: `stub_runner`'s `quoted_by` parameter could
+    be given any value at all and the whole suite stayed green.
+    """
+
+    def test_a_request_that_does_not_ask_gets_no_strategy_receipt(self, tmp_path_factory):
+        runs = ScenarioRuns(tmp_path_factory, runner=stub_runner)
+
+        assert runs.run(EXAMPLE, SCENARIO).strategies is None
+
+    def test_asking_for_one_produces_it(self, tmp_path_factory):
+        runs = ScenarioRuns(tmp_path_factory, runner=stub_runner)
+
+        entry = runs.run(EXAMPLE, SCENARIO, needs_strategies=True)
+
+        assert entry.strategies is not None and entry.strategies.exists()
+        assert json.loads(entry.strategies.read_text(encoding='utf-8')) == ['Retailer']
+
+    def test_the_strategy_receipt_is_part_of_the_key(self, tmp_path_factory):
+        """A probe-on run must not be served to a caller that asked for a probe-free one."""
+        runs = ScenarioRuns(tmp_path_factory, runner=stub_runner)
+
+        runs.run(EXAMPLE, SCENARIO)
+        runs.run(EXAMPLE, SCENARIO, needs_strategies=True)
+
+        assert len(runs.log) == 2
+
+    def test_the_two_receipts_are_keyed_independently(self, tmp_path_factory):
+        """Asking for the backend receipt is not asking for the strategy one, or the reverse."""
+        runs = ScenarioRuns(tmp_path_factory, runner=stub_runner)
+
+        runs.run(EXAMPLE, SCENARIO, needs_receipt=True)
+        runs.run(EXAMPLE, SCENARIO, needs_strategies=True)
+        runs.run(EXAMPLE, SCENARIO, needs_receipt=True, needs_strategies=True)
+
+        assert len(runs.log) == 3
+
+    def test_a_run_that_used_the_wrong_strategy_is_refused(self, tmp_path_factory):
+        """The receipt is only worth writing if reading it can fail. `quoted_by` is what makes a
+        run that ignored the configured strategy constructible -- the #206 shape, one axis over."""
+        runs = ScenarioRuns(tmp_path_factory, runner=stub_runner)
+
+        entry = runs.run(EXAMPLE, SCENARIO, needs_strategies=True,
+                         edits=(('strategy: retailer', 'strategy: linear'),))
+
+        assert_strategies_honoured(entry.strategies, {'Retailer'})
+        with pytest.raises(AssertionError, match='actually used'):
+            assert_strategies_honoured(entry.strategies, {'Linear'})
+
+    def test_a_run_that_built_no_strategy_at_all_is_refused(self, tmp_path):
+        """An empty receipt means no agent submitted anything, which must not read as success.
+
+        Written directly rather than through the cache: `ScenarioRuns.run` binds its arguments
+        against `run_example`'s signature, so `stub_runner`'s own `quoted_by` knob is not
+        reachable from there -- which is also why that knob had no coverage.
+        """
+        record = tmp_path / 'strategies_used.json'
+        record.write_text(json.dumps([]), encoding='utf-8')
+
+        with pytest.raises(AssertionError, match='without constructing a single'):
+            assert_strategies_honoured(record, {'Retailer'})
+
+    def test_a_missing_receipt_is_refused(self, tmp_path):
+        with pytest.raises(AssertionError, match='wrote no strategy record'):
+            assert_strategies_honoured(tmp_path / 'absent.json', {'Retailer'})
 
 
 def test_the_one_duplicated_pair_in_the_suite_still_shares_its_run():
