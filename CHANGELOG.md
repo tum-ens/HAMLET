@@ -27,8 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     tied bids, and the three refusals (`discriminatory`, `community`, `ex-post`).
   - `tests/unit/executor/utilities/trading/test_strategies.py` prices all three strategies by
     hand, so `Linear` and `Zi` execute for the first time.
-  - `tests/e2e/test_market_clearing.py` runs `scenario_with_market` end to end (~40 s), which is
-    what settles the questions no unit fixture can: that the executor reaches the clearing at all,
+  - `tests/e2e/test_market_clearing.py` runs `scenario_with_market` end to end (~95 s on HiGHS),
+    which is what settles the questions no unit fixture can: that the executor reaches the clearing at all,
     that agents trade **with each other** rather than only with the retailer, that every clearing
     settles at a single price, and that the configured `linear` strategy is the one that quotes.
 
@@ -56,6 +56,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     setpoint into a net position was a subtraction of zero. Reversing its sign survived the entire
     suite. Measured on a real run, 161 of 192 constructions of a trading strategy see a non-empty
     history, so the case being tested was the rare one.
+
+  **The example ships `solver: gurobi`, so as shipped it cannot run without a commercial
+  licence** -- which is why it had never run in CI, and which the first pipeline for this branch
+  discovered after the arm passed on a development machine that has one. The test forces HiGHS and
+  reads back what actually solved; the shipped example is left alone, since changing it is a
+  decision about the example rather than about this test.
 
   Four gaps are recorded rather than closed, each pinned by a test that says so:
 

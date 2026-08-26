@@ -24,6 +24,10 @@ produced them. Those are integration properties and this is where they are settl
 * the two conservation invariants, over a real run of hundreds of clearings rather than a handful
   of hand-written books.
 
+**It runs on HiGHS, not on the solver the example ships.** See `SOLVER`: the example ships
+`solver: gurobi`, so as shipped it cannot run without a commercial licence -- which is why it had
+never run in CI, and which the first pipeline for this branch discovered.
+
 **It is a run, so it is marked `e2e`.** `pytest tests/e2e/test_market_clearing.py` on its own
 selects *nothing*: `pytest.ini` sets `addopts = -m "not e2e and not golden and not benchmark"`
 and the deselection applies even when the file is named. Pass `-m e2e`.
@@ -69,10 +73,12 @@ RETAILER = 'retailer'
 RETAILER_BUYS = 500
 RETAILER_SELLS = 1500
 
-#: **Measured** on this scenario through `run_example` with `new_scenario_from_files` and seed
-#: 20260804, on 2026-08-25: 245 cleared bids and 245 cleared offers over **79 clearings**,
-#: totalling 138_059 Wh on each side; **242** agent-to-agent transaction rows carrying
-#: **53_482 Wh**; 52 uncleared bids and 34 uncleared offers.
+#: **Measured** on this scenario through `run_example` with `new_scenario_from_files`,
+#: `solver='highs'` and seed 20260804, on 2026-08-26: 267 cleared bids and 267 cleared offers over
+#: **94 clearings**, totalling 139_876 Wh on each side; **286** agent-to-agent transaction rows
+#: carrying **62_410 Wh**; 55 uncleared bids and 32 uncleared offers. Quote these only for the
+#: HiGHS arm -- the same scenario on Gurobi produced 245 / 79 / 242 / 53_482, so the solver moves
+#: every one of them and the floors have to clear the smaller side.
 #:
 #: **Floors only catch a collapse downwards, and that is a real limit rather than a quibble.**
 #: Measured: deleting the subtraction of already-traded energy in `_preprocess_bids_offers`
@@ -91,10 +97,27 @@ MIN_LOCAL_TRANSACTIONS = 80
 MIN_LOCAL_ENERGY_WH = 17_000
 
 
+#: The solver this arm forces, **overriding what the example ships**.
+#:
+#: `scenario_with_market` ships `solver: gurobi` in both its YAML and its workbook, and #214
+#: settled that as a deliberate choice rather than a defect. The consequence had never surfaced,
+#: because no test ran this example: **the only shipped scenario that clears a market cannot run
+#: without a commercial licence.** Discovered by the first CI pipeline for this branch -- the job
+#: died with "The Gurobi shared library could not be loaded", having passed on a development
+#: machine that has one.
+#:
+#: Forcing HiGHS is what makes this arm run in CI, which is where the coverage is worth having.
+#: `run_example` switches every `solver:` key in both files and `assert_backend_honoured` reads
+#: back what actually solved, so this is a checked substitution rather than a hopeful one. The
+#: scenario's own choice is left alone: changing it is a decision about the shipped example, not
+#: about this test.
+SOLVER = 'highs'
+
+
 @pytest.fixture(scope='module')
 def run(scenario_runs):
     """The example, run once, with a receipt of which trading strategies it constructed."""
-    return scenario_runs.run(EXAMPLE, SCENARIO, creator_method=CREATOR_METHOD,
+    return scenario_runs.run(EXAMPLE, SCENARIO, creator_method=CREATOR_METHOD, solver=SOLVER,
                              needs_strategies=True)
 
 
