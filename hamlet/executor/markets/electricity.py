@@ -979,7 +979,26 @@ class ElectricityMarket(MarketBase):
         bids_offers = bids_offers.drop(double_cols)
 
         # Fill the NaN values with the last value
+        # Note: backward, so a breakpoint the other ladder does not share takes the position whose
+        #  cumulative sum first reaches it -- the marginal bid and offer at that quantity.
         bids_offers = bids_offers.fill_null(strategy='backward')
+
+        # The energy a segment of the merged ladder trades: the difference between successive
+        # cumulative sums.
+        # Note: NOT min(energy_in, energy_out) of the two positions spanning the segment. Where the
+        #  two ladders do not share a breakpoint the backward fill spreads one position over
+        #  several segments, and its whole quantity would then be traded in each of them -- so an
+        #  agent could sell more than it offered. Measured on `scenario_with_market`: every
+        #  clearing that clears has misaligned ladders and 7% of all cleared energy was duplicated.
+        #  #241.
+        # Note: cast to the dtype of a *position* (UInt64), which is what `min(axis=1)` used to
+        #  return here and what every consumer reads this column back as -- `c.SCHEMA[c.TC_ENERGY]`
+        #  says Int64 and nothing enforces it on this path. The sort above is what makes the
+        #  difference non-negative, so the unsigned cast cannot wrap.
+        bids_offers = bids_offers.with_columns(
+            (pl.col(C_ENERGY_CUMSUM) - pl.col(C_ENERGY_CUMSUM).shift(1).fill_null(0))
+            .cast(c.SCHEMA[c.TC_ENERGY_IN]).alias(c.TC_ENERGY),
+        )
 
         # Create new dataframe with the cleared bids and offers
         trades_cleared = bids_offers.filter(pl.col(c.TC_PRICE_PU_IN) >= pl.col(c.TC_PRICE_PU_OUT))
@@ -987,10 +1006,7 @@ class ElectricityMarket(MarketBase):
         # Calculate the pu price of the trades
         trades_cleared = self.pricing[pricing_method](trades_cleared)
 
-        # Calculate the price and energy of the trades
-        trades_cleared = trades_cleared.with_columns(
-            (trades_cleared.select([c.TC_ENERGY_IN, c.TC_ENERGY_OUT]).min(axis=1).alias(c.TC_ENERGY)),
-        )
+        # Calculate the price of the trades
         trades_cleared = trades_cleared.with_columns(
             (pl.col(c.TC_PRICE_PU) * pl.col(c.TC_ENERGY)).alias(c.TC_PRICE).cast(pl.Int64),
         )

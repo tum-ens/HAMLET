@@ -71,7 +71,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     not share their breakpoints, because it takes `min(energy_in, energy_out)` per joined row
     rather than the difference of successive cumulative sums. The conservation invariant cannot
     see it -- the duplication is symmetric, so cleared-in still equals cleared-out at an inflated
-    total;
+    total. **Fixed since, in #241** -- see the Fixed entry above, including the measurement that
+    settled how often it fires;
   - `TradingBase` builds an agent's book from the **whole** timetable rather than the rows for its
     own market, so an agent in a two-market region quotes a different ladder from the same agent
     in a one-market region. No shipped scenario declares two markets in one region;
@@ -343,6 +344,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Fixed
+- **`pda` cleared more energy than was submitted whenever the two ladders misaligned (#241).**
+  `__method_pda` joins the bid and offer ladders on their *cumulative* energy, back-fills the
+  gaps, and then traded `min(energy_in, energy_out)` of the two **positions** in every joined row.
+  Where the ladders do not share a breakpoint the back-fill spreads one position across several
+  rows, and its whole quantity was traded in each of them. It now trades the difference between
+  successive cumulative sums, which is the width of the ladder segment that row represents.
+
+  **Misalignment is the normal path, not an edge case, and that had never been measured.**
+  Instrumented over a `scenario_with_market` run: `__method_pda` is called **530** times, **89**
+  of which clear anything, and **all 89 have misaligned ladders — not one has matching ones**. The
+  region every other hand-written book in `test_clearing_by_hand.py` covers is a region a real run
+  never visits. The volume moves in **31** of the 89 (the other 58 clear a single segment, where
+  the width and the per-row minimum coincide), **7.1%** of all cleared energy was duplicated
+  (139_876 -> 130_005 Wh on identical books), **21** clearings credited a seller with more energy
+  than it had offered and **19** credited a buyer with more than it had bid — worst case 4004 Wh
+  against a 2818 Wh offer.
+
+  Re-run end to end the numbers move further, because less cleared energy changes what every agent
+  does next: 139_876 -> **126_762 Wh** cleared, 267 -> 257 cleared bids, and 62_410 -> **53_278 Wh**
+  of agent-to-agent trading. All still well clear of the floors in
+  `tests/e2e/test_market_clearing.py`.
+
+  **The three instruments that should have caught it could not, by construction.** The
+  conservation invariant is blind because the duplication is symmetric — cleared-in still equals
+  cleared-out, at an inflated total. The over-sold residual is negative and
+  `offers_uncleared.filter(energy_out > 0)` drops it, so nothing reported it. And the e2e
+  assertions are floors, which are one-sided. What catches it is
+  `test_uncleared_is_submitted_minus_cleared` **by value** on a misaligned book (`0 == 1500 - 2000`
+  pre-fix) together with the hand-written entry in `CLEARED_TOTALS`.
+
+  **Prices did not move for a given book, and the reason is worth stating**: the fix changes
+  quantities only. `__pricing_uniform` takes the marginal pair from the *last cleared row*, and
+  the filter that decides which rows clear (`price_pu_in >= price_pu_out`) is untouched, so the
+  cleared row set is identical. Measured on all 89 clearings of the pre-fix run: the marginal pair
+  moves in **none** of them. Clearing prices in an end-to-end run do differ, but only through the
+  changed trajectory, and the band (500-1500 EURe-7/Wh) is unchanged.
+
+  Three misaligned books were added to `test_clearing_by_hand.py`, each derived on paper, and all
+  three are in the `BOOKS` fixture so the conservation invariants run over them:
+  `misaligned_ladders` (a seller spanning two buyers — the book #241 was filed on, and the rewrite
+  of the characterisation test that stated the defect), `mirrored_ladders` (the same shape with
+  the *bid* spanning, which the over-sale assertion alone cannot see) and `staircase_ladders`
+  (five cleared segments of three different widths, which is what separates *successive*
+  differences from `cumsum - first cumsum` or a constant segment size — on a two-row book all
+  three agree). `test_the_misaligned_books_really_do_misalign` asserts both halves of the
+  precondition: disjoint breakpoints **and** more than one cleared segment. Neither implies the
+  other, which is why `partial_pda` and `two_sellers_one_buyer` are misaligned and were
+  nonetheless unmoved by the fix.
+
+  No golden reference moved. Both golden scenarios set `method: None`, so none of them covers a
+  clearing market at all — the guard here is the by-hand books, and the golden master staying put
+  is the containment check that the change did not reach beyond clearing.
+
+  Incidentally removes one of the three remaining `polars` `axis=1` calls (`min(axis=1)`), which
+  polars 1.x has dropped; `__method_none` and `__pricing_uniform` still carry one each.
+
 - **A region with more than one market processed them in a random order (#223).**
   `AgentBase.create_bids_offers` builds its market list with `timetable.unique(...)`, which does
   not preserve order unless asked. Each iteration overwrites `agent.bids_offers`, so **which
