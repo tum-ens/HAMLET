@@ -1015,6 +1015,41 @@ def test_the_misaligned_books_really_do_misalign(book, bid_breaks, offer_breaks)
         'book cannot distinguish them')
 
 
+def test_an_unsorted_ladder_fails_loudly_instead_of_wrapping(monkeypatch):
+    """The segment width's precondition, made observable: the merged ladder must ascend.
+
+    `__method_pda` takes the width of a ladder segment as the difference between successive
+    cumulative sums, which is only the width if the frame is sorted ascending -- and
+    `energy_cumsum` is `UInt64`, where a negative difference does not go negative, it **wraps** to
+    1.8e19 Wh. A clearing that quietly traded eighteen quintillion Wh would satisfy every
+    conservation invariant in this file, because the duplication would be symmetric.
+
+    So the subtraction is done in `Int64` and only then cast back, and this is what says the guard
+    works: with the ladder sort neutralised the market raises `ComputeError` naming the negative
+    value, rather than returning a result.
+
+    **Nothing reachable through the public surface can violate the precondition** -- the sort is
+    unconditional and a cumulative sum of positive quantities ascends -- which is why the sort has
+    to be neutralised to test this at all, and why removing either `.cast(pl.Int64)` is an
+    equivalent mutant (both still raise, because `fill_null(0)` demotes the operand to `Int64`
+    anyway). What this pins is the combination that does **not** raise: dropping the casts *and*
+    writing the fill literal as `pl.lit(0, pl.UInt64)` -- the tidy-up the dtype comment above the
+    statement invites -- silently produces `[1000, 1000, 18446744073709551116]`.
+    """
+    unsorted_sort = pl.DataFrame.sort
+
+    def skip_the_ladder_sort(self, by, *args, **kwargs):
+        if by == 'energy_cumsum':
+            return self
+        return unsorted_sort(self, by, *args, **kwargs)
+
+    monkeypatch.setattr(pl.DataFrame, 'sort', skip_the_ladder_sort)
+    market = make_market(MISALIGNED)
+
+    with pytest.raises(pl.exceptions.ComputeError, match=r'-500'):
+        market.execute()
+
+
 def test_the_market_database_receives_what_the_market_computed():
     """The tables the rest of the executor reads, not just the ones this file's helpers read.
 

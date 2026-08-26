@@ -412,6 +412,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   earns its place concretely: the "cumulative sum minus the *first* one" rule is killed by exactly
   three tests, all of them staircase, and survives everything else.
 
+  The segment width is taken in `Int64` and cast back, rather than subtracting two `UInt64`
+  cumulative sums directly, and `test_an_unsorted_ladder_fails_loudly_instead_of_wrapping` pins
+  what that buys. A negative difference in `UInt64` does not go negative — it wraps to 1.8e19 Wh,
+  and a clearing that quietly traded eighteen quintillion Wh satisfies every conservation
+  invariant in the file, because the duplication would be symmetric. The precondition cannot be
+  violated through the public surface (the sort is unconditional, and a cumulative sum of positive
+  quantities ascends), so the test neutralises the ladder sort to reach it. Dropping either cast
+  is an equivalent mutant — both still raise, because `fill_null(0)` demotes the operand to
+  `Int64` anyway — but dropping them *and* writing the fill literal as `pl.lit(0, pl.UInt64)`, the
+  tidy-up the dtype comment invites, is silent. Measured: under that edit this is the **only**
+  failing test in the repository; the other 108 pass.
+
   Two adjacent pieces of dead work turned up while measuring that, and both are recorded rather
   than removed. `trades_uncleared` is computed, returned, threaded through two call sites and
   **never read** — `__create_market_tables` takes it as a parameter its body does not mention — so
