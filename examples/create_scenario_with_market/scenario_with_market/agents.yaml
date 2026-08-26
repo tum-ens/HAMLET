@@ -902,7 +902,7 @@ sfh:
                                                 #   - poi: PyOptInterface, the default. Much faster per
                                                 #          solve than linopy on the same solver
 
-          solver: gurobi                        # solver used for optimization problem
+          solver: highs                        # solver used for optimization problem
                                                 # options:
                                                 #   - gurobi
 
@@ -928,7 +928,7 @@ sfh:
                                                 #   - poi:    PyOptInterface, the default. Much faster per
                                                 #             solve than linopy on the same solver
 
-          solver: gurobi                        # solver used for optimization
+          solver: highs                        # solver used for optimization
                                                 # options:
                                                 #   - gurobi
 

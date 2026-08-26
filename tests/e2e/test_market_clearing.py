@@ -24,9 +24,10 @@ produced them. Those are integration properties and this is where they are settl
 * the two conservation invariants, over a real run of hundreds of clearings rather than a handful
   of hand-written books.
 
-**It runs on HiGHS, not on the solver the example ships.** See `SOLVER`: the example ships
-`solver: gurobi`, so as shipped it cannot run without a commercial licence -- which is why it had
-never run in CI, and which the first pipeline for this branch discovered.
+**The example used to ship `solver: gurobi`**, so as shipped it could not run without a
+commercial licence -- which is why it had never run in CI, and which the first pipeline for this
+branch discovered. It is on HiGHS now, and `test_the_clearing_example_needs_no_commercial_licence`
+below is what keeps it there.
 
 **It is a run, so it is marked `e2e`.** `pytest tests/e2e/test_market_clearing.py` on its own
 selects *nothing*: `pytest.ini` sets `addopts = -m "not e2e and not golden and not benchmark"`
@@ -73,8 +74,8 @@ RETAILER = 'retailer'
 RETAILER_BUYS = 500
 RETAILER_SELLS = 1500
 
-#: **Measured** on this scenario through `run_example` with `new_scenario_from_files`,
-#: `solver='highs'` and seed 20260804, on 2026-08-26: 267 cleared bids and 267 cleared offers over
+#: **Measured** on this scenario through `run_example` with `new_scenario_from_files` and seed
+#: 20260804, on HiGHS, on 2026-08-26: 267 cleared bids and 267 cleared offers over
 #: **94 clearings**, totalling 139_876 Wh on each side; **286** agent-to-agent transaction rows
 #: carrying **62_410 Wh**; 55 uncleared bids and 32 uncleared offers. Quote these only for the
 #: HiGHS arm -- the same scenario on Gurobi produced 245 / 79 / 242 / 53_482, so the solver moves
@@ -97,28 +98,28 @@ MIN_LOCAL_TRANSACTIONS = 80
 MIN_LOCAL_ENERGY_WH = 17_000
 
 
-#: The solver this arm forces, **overriding what the example ships**.
+#: What this example ships, and what the run must therefore be solved by.
 #:
-#: `scenario_with_market` ships `solver: gurobi` in both its YAML and its workbook, and #214
-#: settled that as a deliberate choice rather than a defect. The consequence had never surfaced,
-#: because no test ran this example: **the only shipped scenario that clears a market cannot run
-#: without a commercial licence.** Discovered by the first CI pipeline for this branch -- the job
-#: died with "The Gurobi shared library could not be loaded", having passed on a development
-#: machine that has one.
+#: It shipped `solver: gurobi` until this branch, and the consequence had never surfaced because
+#: no test ran it: **the only shipped scenario that clears a market could not run without a
+#: commercial licence.** The first CI pipeline here died with "The Gurobi shared library could not
+#: be loaded", having passed on a development machine that has one. The example is now on HiGHS
+#: like every other shipped scenario, and `test_the_clearing_example_needs_no_commercial_licence`
+#: is what keeps it there.
 #:
-#: Forcing HiGHS is what makes this arm run in CI, which is where the coverage is worth having.
-#: `run_example` switches every `solver:` key in both files and `assert_backend_honoured` reads
-#: back what actually solved, so this is a checked substitution rather than a hopeful one. The
-#: scenario's own choice is left alone: changing it is a decision about the shipped example, not
-#: about this test.
-SOLVER = 'highs'
+#: The arm runs the config **as shipped** rather than switching the solver, which is the stronger
+#: arrangement: a switch would keep passing if the example were flipped back to Gurobi, because it
+#: matches the *key* rather than the value. Reading the receipt back fails instead. Same shape as
+#: `tests/e2e/test_grid_examples.py::test_the_grid_example_needs_no_commercial_licence`, which
+#: exists because a reviewer reverted two configs to Gurobi and that file still passed.
+SHIPPED_BACKEND = {('poi', 'highs')}
 
 
 @pytest.fixture(scope='module')
 def run(scenario_runs):
-    """The example, run once, with a receipt of which trading strategies it constructed."""
-    return scenario_runs.run(EXAMPLE, SCENARIO, creator_method=CREATOR_METHOD, solver=SOLVER,
-                             needs_strategies=True)
+    """The example, run once, with receipts of what solved it and which strategies it built."""
+    return scenario_runs.run(EXAMPLE, SCENARIO, creator_method=CREATOR_METHOD,
+                             needs_receipt=True, needs_strategies=True)
 
 
 @pytest.fixture(scope='module')
@@ -295,6 +296,26 @@ def test_the_cleared_energy_balances_at_every_timestep(results):
     assert len(paired) == len(bought) == len(sold), 'a timestep cleared on one side only'
     assert paired.filter(pl.col(c.TC_ENERGY_IN) != pl.col(c.TC_ENERGY_OUT)).is_empty()
     assert bought[c.TC_ENERGY_IN].sum() > 0
+
+
+@pytest.mark.e2e
+def test_the_clearing_example_needs_no_commercial_licence(run):
+    """The one scenario that clears a market runs on the solver that ships with HAMLET.
+
+    Read off the receipt the run wrote, not off the config: the config is a request, and this is
+    the only thing that reports what actually solved. It is also the test that would have caught
+    the state this example was in for its whole life -- `solver: gurobi` in both its files, on the
+    only shipped scenario with a clearing method, unnoticed because nothing ran it.
+    """
+    import json
+
+    assert run.record is not None and run.record.exists(), (
+        'the run completed but wrote no backend record, so what solved it is unknown')
+    used = {tuple(pair) for pair in json.loads(run.record.read_text(encoding='utf-8'))}
+
+    assert used == SHIPPED_BACKEND, (
+        f'{SCENARIO} was solved by {sorted(used)} rather than {sorted(SHIPPED_BACKEND)} as its '
+        f'config specifies, so the example would need a commercial licence')
 
 
 @pytest.mark.e2e

@@ -19,8 +19,12 @@ load-bearing information a reader has to know before trusting what they are look
 the cheap half: it needs no run, so it lives in the fast tier and fails in milliseconds where the
 consequence would otherwise surface only in a job costing minutes.
 
-Deliberately *not* an assertion about which backend is correct. `scenario_with_market` ships
-`solver: gurobi` in both files and that is a real choice, not a defect. Only disagreement is one.
+Deliberately *not* an assertion about which backend is correct -- only disagreement is a defect
+here. `scenario_with_market` used to ship `solver: gurobi` in both files, and that was read as a
+real choice until it turned out to mean the only shipped scenario that clears a market could not
+run without a commercial licence; every shipped config is on `highs` now.
+`tests/e2e/test_grid_examples.py` and `tests/e2e/test_market_clearing.py` are what assert *which*
+backend, by reading back what actually solved.
 """
 import re
 from pathlib import Path

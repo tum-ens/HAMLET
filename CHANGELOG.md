@@ -634,6 +634,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   instead of quietly green.
 
 ### Changed
+- **Every shipped scenario and the config template now select `solver: highs` (#223).**
+  `examples/create_scenario_with_market` and `config_templates/agents.yaml` were the last two
+  holding `gurobi`; the other three examples and both e2e fixtures were already on HiGHS.
+
+  The market example's choice had been read as deliberate (#214 recorded it as "a real choice, not
+  a defect"), and it was never tested, so nobody had met the consequence: **the only shipped
+  scenario that clears a market could not run without a commercial licence.** The first CI
+  pipeline that ran it died with "The Gurobi shared library could not be loaded". The template
+  mattered for the same reason one layer out — it is what a new user copies.
+
+  Gurobi remains fully supported and entirely opt-in: set `solver: gurobi` under `optimization`,
+  per `README.md`. Nothing about the solver machinery changed.
+
+  **No golden reference moved**, because neither golden scenario was on Gurobi. What did move is
+  `scenario_with_market`, which nothing pinned: 245 cleared bids over 79 clearings and 53_482 Wh
+  of local trading on Gurobi, against 267 / 94 / 62_410 on HiGHS. `tests/e2e/test_market_clearing.py`
+  now runs it **as shipped** and reads back what actually solved, rather than switching the solver
+  itself -- a switch matches the *key* and would go on passing if the config were flipped back.
+
 - **A market with no clearing now reports that it is discarding the agent's configured trading
   strategy (#223).** The substitution itself is correct and documented -- with `method: None` the
   retailer is the only counterparty there is, and `agents.yaml` already names `retailer` as "the
