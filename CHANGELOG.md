@@ -373,20 +373,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
   **The three instruments that should have caught it could not, by construction.** The
   conservation invariant is blind because the duplication is symmetric — cleared-in still equals
-  cleared-out, at an inflated total. The over-sold residual never reaches a report, and **not for
-  the reason #241 and the test it was filed from both give**: `energy_out - energy` is
-  `UInt64 - UInt64`, so 1500 - 2000 does not go negative, it **wraps to 18446744073709551116**.
-  What drops it is that polars 0.20.31's *expression* path evaluates `pl.col(...) > 0` on the
-  wrapped value to **null** — the eager Series path on the same version returns `True` — and
-  `filter` drops nulls. And the e2e assertions are floors, which are one-sided.
-
-  That leaves a hazard this change removes the trigger for but not the shape of: the guard against
-  an underflowed residual in `__create_market_tables` is an undocumented overflow-to-null in one of
-  two polars code paths that disagree with each other. Post-fix nothing underflows (measured: zero
-  over-credited agents over the whole run), so it cannot fire today, but a polars upgrade that
-  aligned the two paths would put a 1.8e19 Wh row into `offers_uncleared` and thence into the
-  balancing settlement. Subtracting in a signed dtype and asserting non-negativity is the real
-  guard; it is not made here. What catches it is
+  cleared-out, at an inflated total. The over-sold residual is negative — `offers_uncleared`
+  reaches the subtraction as `Int64`, because the `fill_null(0)` two lines above it supertypes
+  every `UInt64` column against a bare Python `0` — and `offers_uncleared.filter(energy_out > 0)`
+  drops it, so nothing reported it. Measured in situ on the pre-fix code with the misaligned book:
+  `residual dtype Int64 values [-500]`. And the e2e assertions are floors, which are one-sided. What catches it is
   `test_uncleared_is_submitted_minus_cleared` **by value** on a misaligned book (`0 == 1500 - 2000`
   pre-fix) together with the hand-written entry in `CLEARED_TOTALS`.
 
@@ -438,13 +429,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   agent row it spans and taken whole in each. With a cheaper seller ahead of it in the offer
   ladder the retailer sells 2000 Wh having offered 1000. **Agents cannot over-trade this way** —
   each agent row carries its own quantity, so the minimum is bounded by the agent's own position,
-  and only the retailer's side can exceed. It is latent in every shipped scenario, whose retailer
-  offers 1e5 Wh per direction per timestep against positions of a few kWh, so the whole book fits
-  inside the capacity. Not fixed here: a different algorithm, a different blast radius, and it is
-  what every shipped scenario except `create_scenario_with_market` selects.
-  `test_method_none_can_credit_the_retailer_with_more_than_its_capacity` states it, with both the
-  violating capacity and the shipped one, because the second is what makes "latent" a measurement
-  rather than an assumption.
+  and only the retailer's side can exceed. **What makes it latent is the size of the book, not the
+  size of the capacity**: the credit is the demand behind the retailer and does not vary with
+  capacity once capacity exceeds it (2000 Wh at 1000, at 100_000 and at 1e9 alike), so the
+  violation is exactly `demand > capacity`, and at the shipped 1e5 Wh it takes 101 buyers of 1 kWh
+  to cross — against the four to eight agents a shipped scenario runs. Not fixed here: a different
+  algorithm, a different blast radius, and it is what every shipped scenario except
+  `create_scenario_with_market` selects.
+  `test_method_none_can_credit_the_retailer_with_more_than_its_capacity` states all of it.
 
 - **A region with more than one market processed them in a random order (#223).**
   `AgentBase.create_bids_offers` builds its market list with `timetable.unique(...)`, which does

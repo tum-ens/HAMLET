@@ -995,17 +995,16 @@ class ElectricityMarket(MarketBase):
         #  agent could sell more than it offered. Measured on `scenario_with_market`: every
         #  clearing that clears has misaligned ladders and 7% of all cleared energy was duplicated.
         #  #241.
-        # Note: cast to the dtype of a *position* (UInt64), which is what `min(axis=1)` used to
-        #  return here and what every consumer reads this column back as -- `c.SCHEMA[c.TC_ENERGY]`
-        #  says Int64 and nothing enforces it on this path.
-        # Note: the cast cannot silently wrap, and **not because the sort above guarantees a
-        #  non-negative difference** -- do not read it that way when editing this. polars 0.20.31
-        #  upcasts `UInt64 - UInt64` to Float64 and this cast is strict, so a frame that reached
-        #  here out of order raises `ComputeError` naming the negative values rather than
-        #  producing 1.8e19 Wh. That is a property of the polars version, not of the sort. (The
-        #  Float64 intermediate is exact below 2^53, which no Wh quantity approaches.)
+        # Note: the subtraction is done in Int64 and only then cast back to the dtype of a
+        #  *position* (UInt64, which is what `min(axis=1)` returned here before and what every
+        #  consumer reads this column back as -- `c.SCHEMA[c.TC_ENERGY]` says Int64 and nothing
+        #  enforces it on this path). The explicit signed step is load-bearing: `energy_cumsum` is
+        #  UInt64 and `UInt64 - UInt64` **wraps**, so a frame that reached here out of order would
+        #  otherwise produce a segment of 1.8e19 Wh silently. In Int64 it goes negative and the
+        #  strict cast raises `ComputeError` naming the value instead.
         bids_offers = bids_offers.with_columns(
-            (pl.col(C_ENERGY_CUMSUM) - pl.col(C_ENERGY_CUMSUM).shift(1).fill_null(0))
+            (pl.col(C_ENERGY_CUMSUM).cast(pl.Int64)
+             - pl.col(C_ENERGY_CUMSUM).cast(pl.Int64).shift(1).fill_null(0))
             .cast(c.SCHEMA[c.TC_ENERGY_IN]).alias(c.TC_ENERGY),
         )
 
