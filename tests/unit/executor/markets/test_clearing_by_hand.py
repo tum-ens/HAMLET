@@ -878,8 +878,16 @@ def test_pda_clears_no_more_than_a_position_holds_when_the_ladders_misalign():
     `min(energy_in, energy_out)` of the two *positions* in every joined row. Where the ladders do
     not share their breakpoints one position is back-filled into several rows, so its whole
     quantity was traded in each of them -- `seller_x` below sold **2000 Wh** having offered 1500,
-    and the residual of -500 was eaten by `offers_uncleared.filter(energy_out > 0)`, so nothing
-    reported it. The fix takes the difference between successive cumulative sums instead.
+    and nothing reported the shortfall. The fix takes the difference between successive cumulative
+    sums instead.
+
+    **Why nothing reported it is not what #241 says**, and the correction matters because the same
+    shape is still in the code. `__create_market_tables` computes the residual as
+    `energy_out - energy` in `UInt64`, so 1500 - 2000 does not go negative -- it wraps to
+    18446744073709551116. `offers_uncleared.filter(energy_out > 0)` then drops the row because
+    polars 0.20.31 evaluates `pl.col(...) > 0` on the wrapped value to **null** in the expression
+    path (the eager Series path returns `True`) and `filter` drops nulls. The guard against an
+    underflowed residual is therefore an undocumented disagreement between two polars code paths.
 
     Derived on paper, as everything else in this file is::
 
@@ -1141,6 +1149,58 @@ def test_method_none_drops_the_retailers_trade_with_itself():
         f'the retailer traded its whole capacity with itself: {rows}')
     assert max(energies) <= 1000
     assert {kind for kind, *_ in rows} == {c.TT_RETAIL}
+
+
+def test_method_none_can_credit_the_retailer_with_more_than_its_capacity():
+    """**A stated defect, not an endorsement.** #241's shape survives in `__method_none`.
+
+    Not fixed with #241 and deliberately so: `__method_none` is a different algorithm with a
+    different blast radius -- it is what every shipped scenario *except*
+    `create_scenario_with_market` selects -- and the fix there is not the same edit.
+
+    Same mechanism, different consequence. `__method_none` concatenates the two ladders, sorts by
+    cumulative energy, back-fills to find each agent's counterparty and then takes
+    `min(energy_in, energy_out)` per row. The retailer's capacity is back-filled onto every agent
+    row it spans and taken **whole** in each, so here two buyers of 1000 Wh each are both served
+    in full from a retailer that offered 1000 Wh, and it is credited with selling 2000.
+
+    **Agents cannot over-trade this way and that is the real difference.** Each agent row carries
+    its own quantity, so `min()` is bounded by the agent's own position; only the counterparty
+    side -- always the retailer -- can exceed what it offered. And the retailer's capacity is not
+    tracked anywhere in this method by design: `__update_database` carries an explicit
+    `TODO: Reduce/Increase the available energy of the retailer`.
+
+    **The seller in the book is load-bearing**, and finding that out is the reason this test
+    states its book rather than the shortest one that looks equivalent. `seller_x` is cheaper than
+    the retailer, so it takes the front of the offer ladder and pushes the retailer's cumulative
+    breakpoint out to 2000 -- and both buyers then back-fill onto the retailer's single row. With
+    the two buyers alone the retailer's breakpoint is 1000, the second buyer back-fills to nothing
+    and is left uncleared, and the retailer sells exactly the 1000 it offered. A book without a
+    seller does not exhibit this at all.
+
+    **It is latent in every shipped scenario**, because the shipped capacity is 1e5 Wh per
+    direction per timestep against agent positions of a few kWh, so the whole book fits inside it.
+    The second arm below is what says that rather than leaving it to be assumed: at 100 kWh the
+    same book credits the retailer with 2000 Wh of a 100_000 Wh offer, which is no violation.
+    """
+    rows = [('buyer_a', 1000, 0, 3000, BUYERS_OFFER),
+            ('buyer_b', 1000, 0, 2500, BUYERS_OFFER),
+            ('seller_x', 0, 1000, SELLERS_BID, 400)]
+
+    credited = {}
+    for capacity in (1000, 100_000):
+        market = make_market(rows, method=c.MCM_NONE,
+                             retailer=retailer_table(energy_in=capacity, energy_out=capacity))
+        market.execute()
+        _, offers = cleared_rows(market)
+        credited[capacity] = sum(energy for agent, energy, _, _ in offers
+                                 if agent == RETAILER_ID)
+
+    assert credited == {1000: 2000, 100_000: 2000}
+    assert credited[1000] > 1000, 'the retailer sold twice the capacity it offered'
+    assert credited[100_000] <= 100_000, (
+        'the shipped capacity is large enough that the whole book fits inside it, which is why '
+        'no shipped scenario is affected')
 
 
 def test_an_empty_book_clears_nothing_and_raises_nothing():

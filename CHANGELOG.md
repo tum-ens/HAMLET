@@ -355,8 +355,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Instrumented over a `scenario_with_market` run: `__method_pda` is called **530** times, **89**
   of which clear anything, and **all 89 have misaligned ladders — not one has matching ones**. The
   region every other hand-written book in `test_clearing_by_hand.py` covers is a region a real run
-  never visits. The volume moves in **31** of the 89 (the other 58 clear a single segment, where
-  the width and the per-row minimum coincide), **7.1%** of all cleared energy was duplicated
+  never visits. The volume moves in **31** of the 89. Misaligned ladders are necessary for the
+  defect but not sufficient, and the reason is worth stating because a first draft of this entry
+  got it wrong: of the 58 unmoved clearings only **28** clear a single segment (where the segment
+  width and the per-row minimum are the same number by construction). The other **30** clear two
+  to eight segments and are unmoved anyway, because on every cleared row one ladder's position
+  spans the other's, so the minimum happens to equal the width. **7.1%** of all cleared energy was
+  duplicated
   (139_876 -> 130_005 Wh on identical books), **21** clearings credited a seller with more energy
   than it had offered and **19** credited a buyer with more than it had bid — worst case 4004 Wh
   against a 2818 Wh offer.
@@ -368,9 +373,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
   **The three instruments that should have caught it could not, by construction.** The
   conservation invariant is blind because the duplication is symmetric — cleared-in still equals
-  cleared-out, at an inflated total. The over-sold residual is negative and
-  `offers_uncleared.filter(energy_out > 0)` drops it, so nothing reported it. And the e2e
-  assertions are floors, which are one-sided. What catches it is
+  cleared-out, at an inflated total. The over-sold residual never reaches a report, and **not for
+  the reason #241 and the test it was filed from both give**: `energy_out - energy` is
+  `UInt64 - UInt64`, so 1500 - 2000 does not go negative, it **wraps to 18446744073709551116**.
+  What drops it is that polars 0.20.31's *expression* path evaluates `pl.col(...) > 0` on the
+  wrapped value to **null** — the eager Series path on the same version returns `True` — and
+  `filter` drops nulls. And the e2e assertions are floors, which are one-sided.
+
+  That leaves a hazard this change removes the trigger for but not the shape of: the guard against
+  an underflowed residual in `__create_market_tables` is an undocumented overflow-to-null in one of
+  two polars code paths that disagree with each other. Post-fix nothing underflows (measured: zero
+  over-credited agents over the whole run), so it cannot fire today, but a polars upgrade that
+  aligned the two paths would put a 1.8e19 Wh row into `offers_uncleared` and thence into the
+  balancing settlement. Subtracting in a signed dtype and asserting non-negativity is the real
+  guard; it is not made here. What catches it is
   `test_uncleared_is_submitted_minus_cleared` **by value** on a misaligned book (`0 == 1500 - 2000`
   pre-fix) together with the hand-written entry in `CLEARED_TOTALS`.
 
@@ -397,8 +413,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   clearing market at all — the guard here is the by-hand books, and the golden master staying put
   is the containment check that the change did not reach beyond clearing.
 
+  Measured against **46 mutations**, applied one at a time, each binary-confirmed to have landed
+  and each run against the whole default suite: **41 caught, 5 survivors**, and all five were then
+  shown output-equivalent by dumping every result table for all nine books and finding them
+  byte-identical. Reverting `electricity.py` to its pre-fix state byte-for-byte is caught by **9
+  tests, every one of them a new-book test** — and by nothing else in the repository. `STAIRCASE`
+  earns its place concretely: the "cumulative sum minus the *first* one" rule is killed by exactly
+  three tests, all of them staircase, and survives everything else.
+
+  Two adjacent pieces of dead work turned up while measuring that, and both are recorded rather
+  than removed. `trades_uncleared` is computed, returned, threaded through two call sites and
+  **never read** — `__create_market_tables` takes it as a parameter its body does not mention — so
+  no fixture can ever kill a mutation on the line that builds it. And the `_right` coalescing loop
+  is redundant while it stays above the `fill_null(strategy='backward')` two lines below, which
+  refills exactly the nulls it coalesces; deleting it passes the whole suite. Neither is a defect;
+  the second is a latent coupling and now carries a comment saying so.
+
   Incidentally removes one of the three remaining `polars` `axis=1` calls (`min(axis=1)`), which
   polars 1.x has dropped; `__method_none` and `__pricing_uniform` still carry one each.
+
+- **A stated gap, pinned rather than closed: `__method_none` carries #241's shape for the
+  retailer.** It concatenates the two ladders, back-fills to find each agent's counterparty and
+  takes `min(energy_in, energy_out)` per row, so the retailer's capacity is back-filled onto every
+  agent row it spans and taken whole in each. With a cheaper seller ahead of it in the offer
+  ladder the retailer sells 2000 Wh having offered 1000. **Agents cannot over-trade this way** —
+  each agent row carries its own quantity, so the minimum is bounded by the agent's own position,
+  and only the retailer's side can exceed. It is latent in every shipped scenario, whose retailer
+  offers 1e5 Wh per direction per timestep against positions of a few kWh, so the whole book fits
+  inside the capacity. Not fixed here: a different algorithm, a different blast radius, and it is
+  what every shipped scenario except `create_scenario_with_market` selects.
+  `test_method_none_can_credit_the_retailer_with_more_than_its_capacity` states it, with both the
+  violating capacity and the shipped one, because the second is what makes "latent" a measurement
+  rather than an assumption.
 
 - **A region with more than one market processed them in a random order (#223).**
   `AgentBase.create_bids_offers` builds its market list with `timetable.unique(...)`, which does

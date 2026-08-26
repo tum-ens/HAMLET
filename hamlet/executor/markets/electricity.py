@@ -972,6 +972,10 @@ class ElectricityMarket(MarketBase):
         bids_offers = bids_offers.sort(C_ENERGY_CUMSUM, descending=False)  # .fill_null(strategy='backward')
 
         # Remove all columns that end on _right
+        # Note: redundant while it stays above the backward fill, which refills exactly the nulls
+        #  it coalesces -- deleting the loop passes the whole suite. Moving the fill (or the
+        #  segment-width `with_columns` below it) above this loop makes it load-bearing again and
+        #  nothing would notice.
         double_cols = [col for col in bids_offers.columns if col.endswith('_right')]
         for col in double_cols:
             orig_col = col.rsplit('_', 1)[0]
@@ -993,8 +997,13 @@ class ElectricityMarket(MarketBase):
         #  #241.
         # Note: cast to the dtype of a *position* (UInt64), which is what `min(axis=1)` used to
         #  return here and what every consumer reads this column back as -- `c.SCHEMA[c.TC_ENERGY]`
-        #  says Int64 and nothing enforces it on this path. The sort above is what makes the
-        #  difference non-negative, so the unsigned cast cannot wrap.
+        #  says Int64 and nothing enforces it on this path.
+        # Note: the cast cannot silently wrap, and **not because the sort above guarantees a
+        #  non-negative difference** -- do not read it that way when editing this. polars 0.20.31
+        #  upcasts `UInt64 - UInt64` to Float64 and this cast is strict, so a frame that reached
+        #  here out of order raises `ComputeError` naming the negative values rather than
+        #  producing 1.8e19 Wh. That is a property of the polars version, not of the sort. (The
+        #  Float64 intermediate is exact below 2^53, which no Wh quantity approaches.)
         bids_offers = bids_offers.with_columns(
             (pl.col(C_ENERGY_CUMSUM) - pl.col(C_ENERGY_CUMSUM).shift(1).fill_null(0))
             .cast(c.SCHEMA[c.TC_ENERGY_IN]).alias(c.TC_ENERGY),
