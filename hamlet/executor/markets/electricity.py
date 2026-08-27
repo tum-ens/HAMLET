@@ -972,6 +972,10 @@ class ElectricityMarket(MarketBase):
         bids_offers = bids_offers.sort(C_ENERGY_CUMSUM, descending=False)  # .fill_null(strategy='backward')
 
         # Remove all columns that end on _right
+        # Note: redundant while it stays above the backward fill, which refills exactly the nulls
+        #  it coalesces -- deleting the loop passes the whole suite. Moving the fill (or the
+        #  segment-width `with_columns` below it) above this loop makes it load-bearing again and
+        #  nothing would notice.
         double_cols = [col for col in bids_offers.columns if col.endswith('_right')]
         for col in double_cols:
             orig_col = col.rsplit('_', 1)[0]
@@ -979,7 +983,30 @@ class ElectricityMarket(MarketBase):
         bids_offers = bids_offers.drop(double_cols)
 
         # Fill the NaN values with the last value
+        # Note: backward, so a breakpoint the other ladder does not share takes the position whose
+        #  cumulative sum first reaches it -- the marginal bid and offer at that quantity.
         bids_offers = bids_offers.fill_null(strategy='backward')
+
+        # The energy a segment of the merged ladder trades: the difference between successive
+        # cumulative sums.
+        # Note: NOT min(energy_in, energy_out) of the two positions spanning the segment. Where the
+        #  two ladders do not share a breakpoint the backward fill spreads one position over
+        #  several segments, and its whole quantity would then be traded in each of them -- so an
+        #  agent could sell more than it offered. Measured on `scenario_with_market`: every
+        #  clearing that clears has misaligned ladders and 7% of all cleared energy was duplicated.
+        #  #241.
+        # Note: the subtraction is done in Int64 and only then cast back to the dtype of a
+        #  *position* (UInt64, which is what `min(axis=1)` returned here before and what every
+        #  consumer reads this column back as -- `c.SCHEMA[c.TC_ENERGY]` says Int64 and nothing
+        #  enforces it on this path). The explicit signed step is load-bearing: `energy_cumsum` is
+        #  UInt64 and `UInt64 - UInt64` **wraps**, so a frame that reached here out of order would
+        #  otherwise produce a segment of 1.8e19 Wh silently. In Int64 it goes negative and the
+        #  strict cast raises `ComputeError` naming the value instead.
+        bids_offers = bids_offers.with_columns(
+            (pl.col(C_ENERGY_CUMSUM).cast(pl.Int64)
+             - pl.col(C_ENERGY_CUMSUM).cast(pl.Int64).shift(1).fill_null(0))
+            .cast(c.SCHEMA[c.TC_ENERGY_IN]).alias(c.TC_ENERGY),
+        )
 
         # Create new dataframe with the cleared bids and offers
         trades_cleared = bids_offers.filter(pl.col(c.TC_PRICE_PU_IN) >= pl.col(c.TC_PRICE_PU_OUT))
@@ -987,10 +1014,7 @@ class ElectricityMarket(MarketBase):
         # Calculate the pu price of the trades
         trades_cleared = self.pricing[pricing_method](trades_cleared)
 
-        # Calculate the price and energy of the trades
-        trades_cleared = trades_cleared.with_columns(
-            (trades_cleared.select([c.TC_ENERGY_IN, c.TC_ENERGY_OUT]).min(axis=1).alias(c.TC_ENERGY)),
-        )
+        # Calculate the price of the trades
         trades_cleared = trades_cleared.with_columns(
             (pl.col(c.TC_PRICE_PU) * pl.col(c.TC_ENERGY)).alias(c.TC_PRICE).cast(pl.Int64),
         )

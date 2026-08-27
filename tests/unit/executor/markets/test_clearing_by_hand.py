@@ -14,12 +14,18 @@ the code was then found to agree. `tests/e2e/test_market_clearing.py` is the com
 the one shipped example that clears, which is what settles the questions no unit fixture can
 (that the executor reaches this code at all, and which trading strategy it reaches it with).
 
-**The books deliberately use equal quantities on both sides.** `__method_pda` joins the bid and
-offer ladders on their *cumulative* energy (`energy_cumsum`), so a book whose two ladders share
-their cumulative breakpoints produces one clean bid-versus-offer row per breakpoint, and the
-result is the textbook double auction that can be checked on paper. Unequal quantities are
-covered separately by `test_pda_partially_clears_the_larger_bid`, which is where the backward
-fill -- the part of the algorithm that is *not* textbook -- becomes observable.
+**The first books here deliberately use equal quantities on both sides.** `__method_pda` joins
+the bid and offer ladders on their *cumulative* energy (`energy_cumsum`), so a book whose two
+ladders share their cumulative breakpoints produces one clean bid-versus-offer row per breakpoint,
+and the result is the textbook double auction that can be checked on paper.
+
+**That shape is the special case, though, and a real run never produces it.** Measured over a
+`scenario_with_market` run, all 89 clearings that cleared anything had ladders sharing no
+breakpoint at all. `MISALIGNED`, `MIRRORED` and `STAIRCASE` further down cover that -- they are
+where the backward fill, the part of the algorithm that is *not* textbook, becomes observable, and
+where #241 lived: the market used to trade one position's *whole* quantity in every segment it
+spanned. `test_the_misaligned_books_really_do_misalign` states their precondition, and
+`test_pda_partially_clears_the_larger_bid` covers the milder case of one cleared segment.
 
 **Prices are in EURe-7/Wh**, the unit the retailer table and the whole executor use, and the two
 retailer values here (500 / 1500) are the ones the shipped configs emit. Quantities are Wh.
@@ -616,6 +622,67 @@ TWO_SELLERS = [('buyer_a', 2500, 0, 3000, BUYERS_OFFER),
                ('seller_x', 0, 1000, SELLERS_BID, 1200),
                ('seller_y', 0, 1000, SELLERS_BID, 1300)]
 
+#: The book #241 was filed on: **the two ladders share no breakpoint at all**, so one seller is
+#: back-filled into two segments of the merged ladder. Derived in full in
+#: `test_pda_clears_no_more_than_a_position_holds_when_the_ladders_misalign`, which is also the
+#: record of what the code used to do with it (`seller_x` sold 2000 Wh having offered 1500).
+#:
+#: In `BOOKS` deliberately. Misalignment is not the exotic case it reads as -- measured over the
+#: 530 `__method_pda` calls of a `scenario_with_market` run, **every one of the 89 that cleared
+#: anything had misaligned ladders and not one had matching ones**, so the rest of this file's
+#: books cover a region that a real run never visits. The conservation invariant alone would not
+#: have noticed the old behaviour here (the duplication was symmetric); the hand-written entry in
+#: `CLEARED_TOTALS` is what makes it noticeable.
+MISALIGNED = [('buyer_a', 1000, 0, 3000, BUYERS_OFFER),
+              ('buyer_b', 1000, 0, 2500, BUYERS_OFFER),
+              ('seller_x', 0, 1500, SELLERS_BID, 1200)]
+
+#: `MISALIGNED` mirrored: the **bid** is the position that spans two segments, so the old rule
+#: over-*bought* instead of over-selling. A book that clears the same total from the other side
+#: is not redundant with the one above -- a fix that took the smaller position on one side only,
+#: or that read the width off the wrong ladder, is right for `MISALIGNED` and wrong here::
+#:
+#:     merged ladder   bid            offer           in >= out ?   traded
+#:       1000          buyer_a 3000   seller_x 1200   yes           1000 -    0 = 1000
+#:       1500          buyer_a 3000   seller_y 1300   yes           1500 - 1000 =  500
+#:       2000          -- none --     seller_y 1300   dropped
+#:
+#: `buyer_a`'s 1500 Wh bid is filled exactly; `seller_y` sells 500 of its 1000 and keeps 500.
+#: Marginal pair (buyer_a 3000, seller_y 1300) -> (3000 + 1300) / 2 = 2150. Under the old rule
+#: both rows traded min(1500, 1000) = 1000 and `buyer_a` bought **2000 Wh** having bid 1500.
+MIRRORED = [('buyer_a', 1500, 0, 3000, BUYERS_OFFER),
+            ('seller_x', 0, 1000, SELLERS_BID, 1200),
+            ('seller_y', 0, 1000, SELLERS_BID, 1300)]
+
+#: Five cleared segments of **three different widths**, which is what separates "the difference
+#: between successive cumulative sums" from any rule that happens to agree with it on a two-row
+#: book -- `cumsum - first cumsum`, or a constant segment size, both reproduce `MISALIGNED`::
+#:
+#:     bids                        offers
+#:       buyer_a 1200 @ 3000  1200   seller_1 500 @ 1000   500
+#:       buyer_b 1200 @ 2800  2400   seller_2 500 @ 1100  1000
+#:                                   seller_3 500 @ 1200  1500
+#:                                   seller_4 500 @ 1300  2000
+#:
+#:     merged   bid            offer            in >= out ?   traded
+#:       500    buyer_a 3000   seller_1 1000    yes            500 -    0 = 500
+#:      1000    buyer_a 3000   seller_2 1100    yes           1000 -  500 = 500
+#:      1200    buyer_a 3000   seller_3 1200    yes           1200 - 1000 = 200
+#:      1500    buyer_b 2800   seller_3 1200    yes           1500 - 1200 = 300
+#:      2000    buyer_b 2800   seller_4 1300    yes           2000 - 1500 = 500
+#:      2400    buyer_b 2800   -- none --       dropped
+#:
+#: 2000 Wh trades, exactly the four offers. `buyer_a` is filled (500 + 500 + 200), `buyer_b` takes
+#: 300 + 500 and keeps 400, and `seller_3` is split across two buyers (200 + 300). Marginal pair
+#: (buyer_b 2800, seller_4 1300) -> 2050. Under the old rule this cleared 2500 Wh: `buyer_a` would
+#: have bought 1500 on a 1200 bid and `seller_3` sold 1000 on a 500 offer.
+STAIRCASE = [('buyer_a', 1200, 0, 3000, BUYERS_OFFER),
+             ('buyer_b', 1200, 0, 2800, BUYERS_OFFER),
+             ('seller_1', 0, 500, SELLERS_BID, 1000),
+             ('seller_2', 0, 500, SELLERS_BID, 1100),
+             ('seller_3', 0, 500, SELLERS_BID, 1200),
+             ('seller_4', 0, 500, SELLERS_BID, 1300)]
+
 
 # ----------------------------------------------------------------------------------------------
 # Conservation invariants -- §2's three, asserted over every book above.
@@ -629,6 +696,9 @@ BOOKS = {
                                  ('buyer_b', 1000, 0, 2500, BUYERS_OFFER)],
                                 c.MCM_PDA, RETAILER_QUANTITY),
     'two_sellers_one_buyer': (TWO_SELLERS, c.MCM_PDA, 0),
+    'misaligned_ladders': (MISALIGNED, c.MCM_PDA, 0),
+    'mirrored_ladders': (MIRRORED, c.MCM_PDA, 0),
+    'staircase_ladders': (STAIRCASE, c.MCM_PDA, 0),
 }
 
 #: What each book above must clear in total, in Wh. Written out rather than computed from the
@@ -636,7 +706,8 @@ BOOKS = {
 #: -- two zeroes balance perfectly.
 CLEARED_TOTALS = {'textbook_pda': 2000, 'pda_with_retailer': 2000, 'retail_only_none': 1600,
                   'partial_pda': 1000, 'two_buyers_one_retailer': 2000,
-                  'two_sellers_one_buyer': 2000}
+                  'two_sellers_one_buyer': 2000, 'misaligned_ladders': 1500,
+                  'mirrored_ladders': 1500, 'staircase_ladders': 2000}
 
 assert set(CLEARED_TOTALS) == set(BOOKS), 'a book was added without stating what it clears'
 
@@ -701,7 +772,8 @@ def test_uncleared_is_submitted_minus_cleared(run_book):
 #: retailer's single 100 kWh offer, so the *retailer* holds two rows of `offers_cleared`. That was
 #: not obvious from the book and this list was wrong until the assertion said so -- which is the
 #: argument for having it.
-BOOKS_WITH_A_REPEATED_AGENT = {'two_sellers_one_buyer', 'two_buyers_one_retailer'}
+BOOKS_WITH_A_REPEATED_AGENT = {'two_sellers_one_buyer', 'two_buyers_one_retailer',
+                               'misaligned_ladders', 'mirrored_ladders', 'staircase_ladders'}
 
 assert BOOKS_WITH_A_REPEATED_AGENT <= set(BOOKS)
 
@@ -796,38 +868,186 @@ def test_a_buyer_clearing_against_two_sellers_is_credited_with_both_trades():
     assert uncleared(market) == ({'buyer_a': 500}, {})
 
 
-def test_pda_can_clear_more_energy_than_was_offered():
-    """**A stated defect, not an endorsement.** The ladders can double-count a position.
+def test_pda_clears_no_more_than_a_position_holds_when_the_ladders_misalign():
+    """A seller spanning two segments of the merged ladder sells its position **once**.
 
-    `__method_pda` joins the two cumulative ladders on `energy_cumsum`, back-fills the gaps, and
-    then takes `min(energy_in, energy_out)` **per joined row**. When the two ladders do not share
-    their breakpoints, one position is back-filled into several rows and its *whole* quantity is
-    traded in each of them, rather than the difference between successive cumulative sums.
+    **This test used to assert the opposite.** It was written as a characterisation of a defect
+    (#241, then named `test_pda_can_clear_more_energy_than_was_offered`) and is rewritten here now
+    that the defect is fixed. The record of why it existed: `__method_pda` joins the two
+    cumulative ladders on `energy_cumsum` and back-fills the gaps, and it used to trade
+    `min(energy_in, energy_out)` of the two *positions* in every joined row. Where the ladders do
+    not share their breakpoints one position is back-filled into several rows, so its whole
+    quantity was traded in each of them -- `seller_x` below sold **2000 Wh** having offered 1500,
+    and its residual of -500 was eaten by `offers_uncleared.filter(energy_out > 0)`, so nothing
+    reported it. The fix takes the difference between successive cumulative sums instead.
 
-    Here `seller_x` offers 1500 Wh into a 2000 Wh demand and sells **2000** -- one trade of 1000
-    against each buyer. Its residual of -500 is then eaten by
-    `offers_uncleared.filter(energy_out > 0)`, so nothing reports it.
+    The residual really is negative rather than an unsigned wrap, which is worth one line because
+    `energy_out` is `UInt64` and the arithmetic looks as though it should wrap: the `fill_null(0)`
+    two lines above the subtraction supertypes every integer column against a bare Python `0` and
+    lands it in `Int64` first. Measured in situ on the pre-fix code with this book:
+    `residual dtype Int64 values [-500]`.
 
-    **`test_the_cleared_energy_balances` cannot see this**, and that is the point of writing it
-    down: the duplication is symmetric, so cleared-in still equals cleared-out -- at an inflated
-    total. Every other book in this file gives the two ladders matching breakpoints, which is
-    exactly the region where the defect cannot appear. Not fixed here: correcting it changes what
-    every clearing produces, which is a modelling decision rather than a coverage one. #223.
+    Derived on paper, as everything else in this file is::
+
+        bids, by price descending           offers, by price ascending
+          buyer_a  1000 @ 3000  cumsum 1000   seller_x  1500 @ 1200  cumsum 1500
+          buyer_b  1000 @ 2500  cumsum 2000
+
+        merged ladder   bid            offer           in >= out?   traded
+          1000          buyer_a 3000   seller_x 1200   yes          1000 -    0 = 1000
+          1500          buyer_b 2500   seller_x 1200   yes          1500 - 1000 =  500
+          2000          buyer_b 2500   -- none --      dropped
+
+    So 1500 Wh trades, which is exactly what was offered. `seller_x` occupies two rows of
+    `offers_cleared`, 1000 and 500; `buyer_a` is filled entirely and `buyer_b` keeps 500 Wh
+    outstanding. The marginal pair is the last cleared row, (buyer_b 2500, seller_x 1200), so
+    uniform pricing gives (2500 + 1200) / 2 = **1850** -- unchanged by the fix, because the fix
+    moves quantities and not which rows clear.
+
+    **`test_the_cleared_energy_balances` could not have caught the old behaviour** and that is
+    worth keeping in view: the duplication was symmetric, so cleared-in equalled cleared-out at an
+    inflated total. What catches it is the per-agent value below, and the hand-written entry for
+    this book in `CLEARED_TOTALS`.
     """
-    market = make_market([('buyer_a', 1000, 0, 3000, BUYERS_OFFER),
-                          ('buyer_b', 1000, 0, 2500, BUYERS_OFFER),
-                          ('seller_x', 0, 1500, SELLERS_BID, 1200)])
+    market = make_market(MISALIGNED)
     market.execute()
 
     bids, offers = cleared_rows(market)
-    offered = 1500
+    unbid, unoffered = uncleared(market)
 
-    assert offers == [('seller_x', 1000, 1850, 1_850_000), ('seller_x', 1000, 1850, 1_850_000)]
-    assert sum(energy for _, energy, _, _ in offers) == 2000 > offered
+    assert offers == [('seller_x', 1000, 1850, 1_850_000), ('seller_x', 500, 1850, 925_000)]
+    assert sum(energy for _, energy, _, _ in offers) == 1500
     assert sorted(bids) == [('buyer_a', 1000, 1850, 1_850_000),
-                            ('buyer_b', 1000, 1850, 1_850_000)]
-    # The over-sold 500 Wh is not reported anywhere: the residual is negative and filtered out.
-    assert uncleared(market) == ({}, {})
+                            ('buyer_b', 500, 1850, 925_000)]
+    # uncleared = submitted - cleared, by value on the side the old behaviour drove negative.
+    assert unbid == {'buyer_b': 500}
+    assert unoffered == {}
+
+
+def test_pda_credits_the_spanning_bid_with_one_position_not_two():
+    """`MISALIGNED` from the other side: the *bid* spans two segments and is filled exactly once.
+
+    The over-purchase is the same defect as the over-sale and a fix can miss it -- taking the
+    smaller of the two positions on one side, or reading the segment width off one ladder rather
+    than off the merged one, gets `MISALIGNED` right and this wrong. Derivation above `MIRRORED`.
+    """
+    market = make_market(MIRRORED)
+    market.execute()
+
+    bids, offers = cleared_rows(market)
+    unbid, unoffered = uncleared(market)
+
+    assert sorted(bids) == [('buyer_a', 500, 2150, 1_075_000),
+                            ('buyer_a', 1000, 2150, 2_150_000)]
+    assert sum(energy for _, energy, _, _ in bids) == 1500
+    assert sorted(offers) == [('seller_x', 1000, 2150, 2_150_000),
+                              ('seller_y', 500, 2150, 1_075_000)]
+    assert unbid == {}
+    assert unoffered == {'seller_y': 500}
+
+
+def test_pda_takes_each_segments_own_width_across_a_staircase():
+    """Five cleared segments, three distinct widths, and one seller split between two buyers.
+
+    A two-row book cannot tell "the difference between *successive* cumulative sums" from
+    "cumulative sum minus the first one", nor from a constant segment size: on `MISALIGNED` all
+    three agree. Here they do not. Derivation above `STAIRCASE`.
+    """
+    market = make_market(STAIRCASE)
+    market.execute()
+
+    bids, offers = cleared_rows(market)
+    unbid, unoffered = uncleared(market)
+
+    assert sorted(bids) == [('buyer_a', 200, 2050, 410_000),
+                            ('buyer_a', 500, 2050, 1_025_000),
+                            ('buyer_a', 500, 2050, 1_025_000),
+                            ('buyer_b', 300, 2050, 615_000),
+                            ('buyer_b', 500, 2050, 1_025_000)]
+    assert sorted(offers) == [('seller_1', 500, 2050, 1_025_000),
+                              ('seller_2', 500, 2050, 1_025_000),
+                              ('seller_3', 200, 2050, 410_000),
+                              ('seller_3', 300, 2050, 615_000),
+                              ('seller_4', 500, 2050, 1_025_000)]
+    assert unbid == {'buyer_b': 400}
+    assert unoffered == {}
+
+
+@pytest.mark.parametrize('book, bid_breaks, offer_breaks', [
+    (MISALIGNED, [1000, 2000], [1500]),
+    (MIRRORED, [1500], [1000, 2000]),
+    (STAIRCASE, [1200, 2400], [500, 1000, 1500, 2000]),
+], ids=['misaligned', 'mirrored', 'staircase'])
+def test_the_misaligned_books_really_do_misalign(book, bid_breaks, offer_breaks):
+    """The premise of the three tests above: the ladders share **no** breakpoint, and more than
+    one segment clears.
+
+    Both halves are needed and neither implies the other. Without disjoint breakpoints the join
+    produces one clean row per breakpoint and the defect cannot appear at all; with them but only
+    one cleared segment it still cannot, because the first segment's width is the smaller of the
+    two leading positions either way -- which is why `PARTIAL` and `TWO_SELLERS` are misaligned
+    and were nonetheless unmoved by the fix. Edit any of these books into the textbook shape and
+    this fails rather than leaving three tests passing over nothing.
+
+    The expected breakpoints are written out, not recomputed from the book by the same expression
+    the market uses: a cumulative sum derived here would agree with a broken one there.
+    """
+    running_in, running_out = 0, 0
+    seen_in, seen_out = [], []
+    for _, energy_in, energy_out, _, _ in book:
+        if energy_in:
+            running_in += energy_in
+            seen_in.append(running_in)
+        if energy_out:
+            running_out += energy_out
+            seen_out.append(running_out)
+
+    assert seen_in == bid_breaks
+    assert seen_out == offer_breaks
+    assert not set(bid_breaks) & set(offer_breaks)
+
+    market = make_market(book)
+    market.execute()
+    bids, offers = cleared_rows(market)
+
+    assert len(bids) > 1 and len(offers) > 1, (
+        'only one segment clears, so the per-row minimum and the segment width coincide and this '
+        'book cannot distinguish them')
+
+
+def test_an_unsorted_ladder_fails_loudly_instead_of_wrapping(monkeypatch):
+    """The segment width's precondition, made observable: the merged ladder must ascend.
+
+    `__method_pda` takes the width of a ladder segment as the difference between successive
+    cumulative sums, which is only the width if the frame is sorted ascending -- and
+    `energy_cumsum` is `UInt64`, where a negative difference does not go negative, it **wraps** to
+    1.8e19 Wh. A clearing that quietly traded eighteen quintillion Wh would satisfy every
+    conservation invariant in this file, because the duplication would be symmetric.
+
+    So the subtraction is done in `Int64` and only then cast back, and this is what says the guard
+    works: with the ladder sort neutralised the market raises `ComputeError` naming the negative
+    value, rather than returning a result.
+
+    **Nothing reachable through the public surface can violate the precondition** -- the sort is
+    unconditional and a cumulative sum of positive quantities ascends -- which is why the sort has
+    to be neutralised to test this at all, and why removing either `.cast(pl.Int64)` is an
+    equivalent mutant (both still raise, because `fill_null(0)` demotes the operand to `Int64`
+    anyway). What this pins is the combination that does **not** raise: dropping the casts *and*
+    writing the fill literal as `pl.lit(0, pl.UInt64)` -- the tidy-up the dtype comment above the
+    statement invites -- silently produces `[1000, 1000, 18446744073709551116]`.
+    """
+    unsorted_sort = pl.DataFrame.sort
+
+    def skip_the_ladder_sort(self, by, *args, **kwargs):
+        if by == 'energy_cumsum':
+            return self
+        return unsorted_sort(self, by, *args, **kwargs)
+
+    monkeypatch.setattr(pl.DataFrame, 'sort', skip_the_ladder_sort)
+    market = make_market(MISALIGNED)
+
+    with pytest.raises(pl.exceptions.ComputeError, match=r'-500'):
+        market.execute()
 
 
 def test_the_market_database_receives_what_the_market_computed():
@@ -962,6 +1182,65 @@ def test_method_none_drops_the_retailers_trade_with_itself():
         f'the retailer traded its whole capacity with itself: {rows}')
     assert max(energies) <= 1000
     assert {kind for kind, *_ in rows} == {c.TT_RETAIL}
+
+
+def test_method_none_can_credit_the_retailer_with_more_than_its_capacity():
+    """**A stated defect, not an endorsement.** #241's shape survives in `__method_none`.
+
+    Not fixed with #241 and deliberately so: `__method_none` is a different algorithm with a
+    different blast radius -- it is what every shipped scenario *except*
+    `create_scenario_with_market` selects -- and the fix there is not the same edit.
+
+    Same mechanism, different consequence. `__method_none` concatenates the two ladders, sorts by
+    cumulative energy, back-fills to find each agent's counterparty and then takes
+    `min(energy_in, energy_out)` per row. The retailer's capacity is back-filled onto every agent
+    row it spans and taken **whole** in each, so the retailer is credited with the total demand
+    behind it however large that is.
+
+    **Agents cannot over-trade this way and that is the real difference.** Each agent row carries
+    its own quantity, so `min()` is bounded by the agent's own position; only the counterparty
+    side -- always the retailer -- can exceed what it offered. And the retailer's capacity is not
+    tracked anywhere in this method by design: `__update_database` carries an explicit
+    `TODO: Reduce/Increase the available energy of the retailer`.
+
+    **The seller row is load-bearing**, which is why this book has three rows rather than two.
+    `seller_x` is cheaper than the retailer, so it takes the front of the offer ladder and pushes
+    the retailer's cumulative breakpoint out to 2000 -- and both buyers then back-fill onto the
+    retailer's single row. With the two buyers alone the retailer's breakpoint is 1000, the second
+    buyer back-fills to nothing and is left uncleared, and the retailer sells exactly what it
+    offered.
+
+    **What makes it latent is the size of the book, not the size of the capacity**, and the third
+    arm below is what says so. The credit is the demand behind the retailer and does not vary with
+    capacity once the capacity exceeds it -- 2000 Wh at 1000, at 100_000 and at 1e9 alike -- so the
+    violation is exactly `demand > capacity`. At the shipped 1e5 Wh it takes **101** buyers of
+    1 kWh to cross, and shipped scenarios run four to eight agents holding a few kWh each. An
+    earlier version of this test asserted `credited[100_000] <= 100_000` and called that the
+    latency evidence; given the equality on the line above it, that was `2000 <= 100_000` --
+    arithmetic that could not fail.
+    """
+    book = [('buyer_a', 1000, 0, 3000, BUYERS_OFFER),
+            ('buyer_b', 1000, 0, 2500, BUYERS_OFFER),
+            ('seller_x', 0, 1000, SELLERS_BID, 400)]
+    #: 101 kWh of demand against the shipped 100 kWh capacity, which is what it takes to cross.
+    crowded = ([(f'buyer_{n}', 1000, 0, 3000, BUYERS_OFFER) for n in range(101)]
+               + [('seller_x', 0, 1000, SELLERS_BID, 400)])
+
+    def retailer_sold(rows, capacity):
+        market = make_market(rows, method=c.MCM_NONE,
+                             retailer=retailer_table(energy_in=capacity, energy_out=capacity))
+        market.execute()
+        _, offers = cleared_rows(market)
+        return sum(energy for agent, energy, _, _ in offers if agent == RETAILER_ID)
+
+    # The credit is the demand behind the retailer, not a function of the capacity.
+    assert retailer_sold(book, 1_000) == 2000 > 1_000, 'sold twice the capacity it offered'
+    assert retailer_sold(book, 100_000) == 2000
+    assert retailer_sold(book, 10 ** 9) == 2000
+
+    # ... so the shipped capacity is a large number, not a guard. 101 kWh of demand crosses it.
+    assert retailer_sold(crowded, 100_000) == 101_000 > 100_000
+    assert sum(energy_in for _, energy_in, _, _, _ in crowded) == 101_000
 
 
 def test_an_empty_book_clears_nothing_and_raises_nothing():
