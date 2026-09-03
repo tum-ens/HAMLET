@@ -8,6 +8,7 @@ the golden reference exactly.
 Reproducibility rests on seeding `random` and `numpy.random` and pinning `PYTHONHASHSEED`: the
 Creator draws agent ids, plant ownership and sizings from all three.
 """
+import datetime as dt
 import json
 import os
 import re
@@ -239,6 +240,24 @@ def fingerprint(results_root):
     silently pinned nothing the grid produces -- which for a scenario added specifically to cover
     the grid stage would have been a golden master that passed while every number in it moved.
     Scenarios with `electricity.active: False` write no CSV at all and are unaffected.
+
+    **Datetime columns are recorded too, as their earliest and latest value.** They were skipped
+    for as long as this function tested `dtype.is_numeric()`, and that is not a small omission in
+    a receding-horizon simulation: `timestamp` and `timestep` are what say *when* a row is for,
+    and every other statistic here is order-invariant, so a row filed at the wrong time moves
+    nothing the reference records. Measured on `simple_scenario` when the retailer's ladder row
+    was stamped with its delivery step instead of the clearing: **266 of 616 rows** of
+    `bids_cleared` and **350 of 616** of `offers_cleared` carried a wrong timestamp and
+    `-m golden` reported green.
+
+    Min and max only -- a sum of timestamps means nothing -- and as ISO-8601 strings rather than
+    epoch numbers, so the reference is readable and `compare` matches them exactly. A numeric
+    encoding would be compared under `RELATIVE_TOLERANCE`, which at epoch scale is about half an
+    hour of slack: enough to miss a shift of one timestep in a 15-minute scenario.
+
+    **Datetimes inside a CSV are still not covered**: `pl.read_csv` does not infer them, so the
+    grid stage's columns arrive as `Utf8` and are skipped. Left alone deliberately -- turning
+    inference on would change how every other CSV column is read.
     """
     import polars as pl
 
@@ -251,14 +270,32 @@ def fingerprint(results_root):
         entry['files'] += 1
         entry['rows'] += len(frame)
         for column, dtype in zip(frame.columns, frame.dtypes):
-            if not dtype.is_numeric() or frame[column].null_count() == len(frame):
+            if frame[column].null_count() == len(frame):
                 continue
-            stats = entry['columns'].setdefault(column, {'sum': 0.0, 'min': None, 'max': None})
-            stats['sum'] += float(frame[column].sum() or 0)
-            low, high = frame[column].min(), frame[column].max()
-            if low is not None:
-                stats['min'] = float(low) if stats['min'] is None else min(stats['min'], float(low))
-                stats['max'] = float(high) if stats['max'] is None else max(stats['max'], float(high))
+            if dtype.is_numeric():
+                stats = entry['columns'].setdefault(column, {'sum': 0.0, 'min': None, 'max': None})
+                stats['sum'] += float(frame[column].sum() or 0)
+                low, high = frame[column].min(), frame[column].max()
+                if low is not None:
+                    stats['min'] = (float(low) if stats['min'] is None
+                                    else min(stats['min'], float(low)))
+                    stats['max'] = (float(high) if stats['max'] is None
+                                    else max(stats['max'], float(high)))
+            elif dtype in (pl.Date, pl.Datetime) or isinstance(dtype, pl.Datetime):
+                stats = entry['columns'].setdefault(column, {'min': None, 'max': None})
+                low, high = frame[column].min(), frame[column].max()
+                if low is not None:
+                    # Compared as datetimes, stored as text: `min()` on two ISO strings would be
+                    # lexicographic, which only coincides with chronological while every value
+                    # shares one format and one offset. Comparing the objects does not care.
+                    stats['min'] = low if stats['min'] is None else min(stats['min'], low)
+                    stats['max'] = high if stats['max'] is None else max(stats['max'], high)
+
+    for entry in grouped.values():
+        for stats in entry['columns'].values():
+            for statistic, value in stats.items():
+                if isinstance(value, (dt.datetime, dt.date)):
+                    stats[statistic] = value.isoformat()
 
     return {kind: entry for kind, entry in sorted(grouped.items())}
 
@@ -427,6 +464,15 @@ def compare(a, b, label_a, label_b, tolerance):
                 continue
             for statistic, value in stats.items():
                 other = reference.get(statistic)
+                if isinstance(value, str) or isinstance(other, str):
+                    # A datetime bound, recorded as text. Matched exactly, and a missing
+                    # counterpart is a difference rather than something to skip past: a reference
+                    # predating this statistic would otherwise compare as agreeing.
+                    if value != other:
+                        differences.append(
+                            f'{kind}:{column}.{statistic}  {value} ({label_a}) '
+                            f'vs {other} ({label_b})')
+                    continue
                 if value is None or other is None:
                     continue
                 scale = max(abs(value), abs(other))
