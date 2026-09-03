@@ -53,6 +53,7 @@ import pytest
 from ruamel.yaml import YAML
 
 import hamlet.constants as c
+from hamlet.executor.utilities.database.market_db import MarketDB
 from tests.scenario_run import REPO_ROOT, assert_strategies_honoured
 
 EXAMPLE = REPO_ROOT / 'examples' / 'create_scenario_with_market'
@@ -75,13 +76,23 @@ RETAILER_BUYS = 500
 RETAILER_SELLS = 1500
 
 #: **Measured** on this scenario through `run_example` with `new_scenario_from_files` and seed
-#: 20260804, on HiGHS, on 2026-08-26: 267 cleared bids over **94 clearings** and 267 cleared
-#: offers over **90** -- the two sides do not clear at the same set of `(timestamp, timestep)`
-#: pairs, and `MIN_CLEARINGS` has to clear the smaller. 139_876 Wh on each side; **286**
-#: agent-to-agent transaction rows
-#: carrying **62_410 Wh**; 55 uncleared bids and 32 uncleared offers. Quote these only for the
-#: HiGHS arm -- the same scenario on Gurobi produced 245 / 79 / 242 / 53_482, so the solver moves
-#: every one of them and the floors have to clear the smaller side.
+#: 20260804, on HiGHS, on 2026-09-03: 257 cleared bids and 257 cleared offers, both over
+#: **88 clearings**, carrying 126_762 Wh on each side; **274** agent-to-agent transaction rows
+#: carrying **53_278 Wh**; 53 uncleared bids and 27 uncleared offers; 868 transactions in all,
+#: of which 240 `retail`, 36 `balancing` and 159 each of `grid` and `levies`. Quote these only
+#: for the HiGHS arm -- the same scenario on Gurobi produced different figures for every one of
+#: them, so the floors have to clear the smaller side.
+#:
+#: **Both earlier records of these numbers were stale, for two separate reasons.** The figures
+#: this block used to carry (267 / 267, 94 and 90 clearings, 139_876 Wh, 286 rows, 62_410 Wh)
+#: were measured on 2026-08-26, before #241 stopped `__method_pda` trading one position's whole
+#: quantity in every ladder segment it spanned -- which is why the cleared quantities came down.
+#: And the two clearing counts differed because the retailer's ladder row was stamped
+#: `(delivery, delivery)` rather than `(clearing, delivery)`, so it formed groups of its own: 93
+#: pairs in `bids_cleared` against 89 in `offers_cleared` on this branch's parent, of which 88
+#: were clearings. With the stamp fixed the two sides agree, and
+#: `test_both_sides_clear_at_the_same_set_of_clearings` is what keeps them agreeing.
+#: `MIN_CLEARINGS` therefore now counts clearings rather than groups.
 #:
 #: **Floors only catch a collapse downwards, and that is a real limit rather than a quibble.**
 #: Measured: deleting the subtraction of already-traded energy in `_preprocess_bids_offers`
@@ -365,3 +376,264 @@ def test_the_settlement_stage_ran_and_charged_fees(results):
     kinds = set(table(results, c.TN_MARKET_TRANSACTIONS)[c.TC_TYPE_TRANSACTION])
 
     assert {c.TT_MARKET, c.TT_RETAIL, c.TT_BALANCING, c.TT_GRID, c.TT_LEVIES} <= kinds
+
+
+# ----------------------------------------------------------------------------------------------
+# L4 -- the accounting invariants, over a real run.
+#
+# The unit layer (`tests/unit/executor/markets/test_settlement_by_hand.py`) settles what the
+# arithmetic computes from a given book, exactly, against hand-derived money. What it cannot say
+# is whether a run of hundreds of clearings ever produces a book where the netting matters, or
+# whether the numbers stay consistent once they have been through the schema, the horizon
+# truncation and the Feather round-trip. That is what these read: the tables **as written to
+# disk**, reconciled against each other and against the retailer table the run priced from.
+#
+# **Nothing here is a bare sum-in-equals-sum-out.** #241 found a market selling energy nobody had
+# offered while exactly that invariant passed, because the duplication was symmetric. Each
+# assertion below either recomputes a money column from a rate and a quantity, or compares one
+# table against a different one.
+# ----------------------------------------------------------------------------------------------
+@pytest.fixture(scope='module')
+def retailer_prices(results):
+    """The retailer table the market priced from, as `{column: value}` for its first row.
+
+    Read off the run's own output rather than off `markets.yaml`: the file is what the executor
+    reads, and whether the two agree is a separate question that
+    `tests/unit/creator/markets/test_retailer_convention.py` settles. Constant across the run for
+    this scenario, which `test_the_shipped_tariff_is_flat` states rather than assumes.
+    """
+    frame = pl.read_ipc(results / 'retailer.ft', memory_map=False)
+    return frame.row(0, named=True)
+
+
+def net_by_agent(transactions, kinds):
+    """Per `(timestep, id_agent)`, the energy netted over `kinds`, taken from the file."""
+    return (transactions
+            .filter(pl.col(c.TC_TYPE_TRANSACTION).is_in(list(kinds)))
+            .group_by([c.TC_TIMESTEP, c.TC_ID_AGENT])
+            .agg([pl.col(c.TC_ENERGY_IN).fill_null(0).sum().alias(c.TC_ENERGY_IN),
+                  pl.col(c.TC_ENERGY_OUT).fill_null(0).sum().alias(c.TC_ENERGY_OUT)])
+            .with_columns([
+                (pl.col(c.TC_ENERGY_IN) - pl.col(c.TC_ENERGY_OUT)).clip(lower_bound=0)
+                .alias('net_in'),
+                (pl.col(c.TC_ENERGY_OUT) - pl.col(c.TC_ENERGY_IN)).clip(lower_bound=0)
+                .alias('net_out')]))
+
+
+def charged_by_agent(transactions, kind):
+    """Per `(timestep, id_agent)`, the energy one kind of fee row was charged on."""
+    return (transactions
+            .filter(pl.col(c.TC_TYPE_TRANSACTION) == kind)
+            .group_by([c.TC_TIMESTEP, c.TC_ID_AGENT])
+            .agg([pl.col(c.TC_ENERGY_IN).fill_null(0).sum().alias(c.TC_ENERGY_IN),
+                  pl.col(c.TC_ENERGY_OUT).fill_null(0).sum().alias(c.TC_ENERGY_OUT)]))
+
+
+@pytest.mark.e2e
+def test_the_shipped_tariff_is_flat_and_prices_feed_in_at_zero(retailer_prices, results):
+    """The premise the fee assertions read against, taken off the run's retailer table.
+
+    Both charges are levied on consumption only in this scenario, so a swapped mapping does not
+    reorder two numbers -- it moves every euro of grid fee and levy onto the exporting side,
+    which is what `eec60f0` fixed. Stated here so that a scenario which started pricing feed-in
+    fails loudly rather than making the assertions below vacuous.
+    """
+    frame = pl.read_ipc(results / 'retailer.ft', memory_map=False)
+
+    for column in (f'{c.TT_GRID}_{c.TT_MARKET}', f'{c.TT_GRID}_{c.TT_RETAIL}',
+                   f'{c.TT_LEVIES}_{c.TC_PRICE}'):
+        assert retailer_prices[f'{column}_{c.PF_IN}'] == 0, f'{column} now prices feed-in'
+        assert retailer_prices[f'{column}_{c.PF_OUT}'] > 0, f'{column} is not charged at all'
+        assert frame[f'{column}_{c.PF_OUT}'].n_unique() == 1, f'{column} is no longer flat'
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize('kind', [c.TT_GRID, c.TT_LEVIES])
+def test_the_charged_energy_is_the_net_of_the_transactions_actually_written(results, kind):
+    """Invariant 1, anchored on the transactions file rather than on another derived total.
+
+    A `grid` or `levies` row records the energy an agent is billed for at a delivery timestep.
+    That figure has to be the netted sum of the agent's own trades at that timestep -- and those
+    trades are in the same file, so the check does not rest on the market agreeing with itself:
+    the fee rows are compared against the trade rows, per agent, per timestep, by value.
+
+    This is the run-scale form of both `a860ca6` (the current clearing left out of the netting)
+    and the first half of `eec60f0` (fees on gross rather than net). Either makes the two sides
+    disagree on hundreds of rows.
+    """
+    transactions = table(results, c.TN_MARKET_TRANSACTIONS)
+    traded = net_by_agent(transactions, MarketDB.NET_TRANSACTION_TYPES)
+    charged = charged_by_agent(transactions, kind)
+    paired = charged.join(traded, on=[c.TC_TIMESTEP, c.TC_ID_AGENT], how='left')
+
+    assert len(paired) == len(charged) > 0, 'a fee row names an agent that never traded'
+    mismatched = paired.filter((pl.col(c.TC_ENERGY_IN) != pl.col('net_in'))
+                               | (pl.col(c.TC_ENERGY_OUT) != pl.col('net_out')))
+    assert mismatched.is_empty(), (
+        f'{len(mismatched)} of {len(paired)} {kind} rows are charged on something other than '
+        f'the net of that agent\'s own transactions')
+
+
+@pytest.mark.e2e
+def test_the_two_fee_kinds_are_charged_on_the_same_energy(results):
+    """Grid fee and levy bill the same quantity, per agent per timestep.
+
+    They are two clones of one netted frame, so a divergence means one of them was recomputed
+    from something else. Cheap, and it fails on a defect that leaves each of them individually
+    self-consistent.
+    """
+    transactions = table(results, c.TN_MARKET_TRANSACTIONS)
+    grid = charged_by_agent(transactions, c.TT_GRID)
+    levies = charged_by_agent(transactions, c.TT_LEVIES)
+    paired = grid.join(levies, on=[c.TC_TIMESTEP, c.TC_ID_AGENT], how='inner', suffix='_levies')
+
+    assert len(paired) == len(grid) == len(levies) > 0
+    assert paired.filter(
+        (pl.col(c.TC_ENERGY_IN) != pl.col(f'{c.TC_ENERGY_IN}_levies'))
+        | (pl.col(c.TC_ENERGY_OUT) != pl.col(f'{c.TC_ENERGY_OUT}_levies'))).is_empty()
+
+
+@pytest.mark.e2e
+def test_the_netting_is_not_a_no_op_in_this_run(results):
+    """The premise the reconciliation needs: some agent really does trade both ways in a timestep.
+
+    Without it, gross and net coincide on every row and the reconciliation is satisfied by an
+    implementation that does no netting at all -- the same shape as a "don't-care" fixture value.
+    Asserted as a count, so a scenario change that flattened the run fails here rather than
+    quietly emptying the check above.
+    """
+    traded = net_by_agent(table(results, c.TN_MARKET_TRANSACTIONS),
+                          MarketDB.NET_TRANSACTION_TYPES)
+    both_ways = traded.filter((pl.col(c.TC_ENERGY_IN) > 0) & (pl.col(c.TC_ENERGY_OUT) > 0))
+
+    assert len(both_ways) > 0, 'no agent bought and sold in one timestep; netting is vacuous here'
+
+
+@pytest.mark.e2e
+def test_every_money_column_is_its_rate_times_its_quantity(results):
+    """Invariant 3's reconciliation half, on every row of every kind the run wrote.
+
+    Money is compared against a product of two other columns, not against another money total, so
+    a table that is internally consistent at the wrong figure fails. Integer arithmetic
+    throughout -- EURe-7 per Wh times Wh -- so the tolerance is zero rather than a float epsilon.
+    """
+    transactions = table(results, c.TN_MARKET_TRANSACTIONS).with_columns(
+        [pl.col(column).fill_null(0) for column in
+         (c.TC_ENERGY_IN, c.TC_ENERGY_OUT, c.TC_PRICE_IN, c.TC_PRICE_OUT,
+          c.TC_PRICE_PU_IN, c.TC_PRICE_PU_OUT)])
+
+    unexplained = transactions.filter(
+        (pl.col(c.TC_PRICE_IN) != pl.col(c.TC_PRICE_PU_IN) * pl.col(c.TC_ENERGY_IN))
+        | (pl.col(c.TC_PRICE_OUT) != pl.col(c.TC_PRICE_PU_OUT) * pl.col(c.TC_ENERGY_OUT)))
+
+    assert len(transactions) > 0
+    assert unexplained.is_empty(), (
+        f'{len(unexplained)} of {len(transactions)} rows carry money that is not their per-unit '
+        f'price times their energy')
+
+
+@pytest.mark.e2e
+def test_the_local_trades_move_money_between_agents_without_creating_any(results):
+    """Invariant 3's closure half: a local trade writes a debit and a credit of the same size.
+
+    Per clearing rather than over the run -- a run total can hide an excess at one clearing
+    cancelling a shortfall at another -- and paired with the reconciliation above, which is what
+    keeps it from being a bare symmetric check: each total it compares is already pinned to a
+    rate times a quantity.
+    """
+    local = (table(results, c.TN_MARKET_TRANSACTIONS)
+             .filter(pl.col(c.TC_TYPE_TRANSACTION) == c.TT_MARKET)
+             .group_by([c.TC_TIMESTAMP, c.TC_TIMESTEP])
+             .agg([pl.col(c.TC_PRICE_IN).fill_null(0).sum().alias('paid'),
+                   pl.col(c.TC_PRICE_OUT).fill_null(0).sum().alias('received')]))
+
+    assert len(local) >= MIN_CLEARINGS
+    assert local.filter(pl.col('paid') != pl.col('received')).is_empty()
+    assert local['paid'].sum() > 0
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize('kind, column', [(c.TT_GRID, f'{c.TT_GRID}_{c.TT_RETAIL}'),
+                                          (c.TT_LEVIES, f'{c.TT_LEVIES}_{c.TC_PRICE}')])
+def test_the_run_charges_fees_on_consumption_and_not_on_feed_in(results, retailer_prices,
+                                                                kind, column):
+    """Invariant 2 at run scale, anchored on the retailer table the run priced from.
+
+    `tests/README.md` calls the in/out crossing the single most error-prone thing in this
+    codebase, and this is its consequence in money: the retailer's `_out` rate -- the retailer
+    selling, the agent buying -- has to land on the agent's `price_pu_in`, and its `_in` rate,
+    which is zero here, on `price_pu_out`.
+
+    The grid rate is asserted only where the agent drew all of its energy from the retailer,
+    because otherwise it is blended with the market rate by that agent's local share. The levy is
+    flat and is asserted on every row.
+    """
+    charged = (table(results, c.TN_MARKET_TRANSACTIONS)
+               .filter(pl.col(c.TC_TYPE_TRANSACTION) == kind)
+               .with_columns([pl.col(c.TC_PRICE_IN).fill_null(0),
+                              pl.col(c.TC_PRICE_OUT).fill_null(0)]))
+    consumption_rate = retailer_prices[f'{column}_{c.PF_OUT}']
+
+    assert len(charged) > 0
+    assert charged[c.TC_PRICE_OUT].sum() == 0, f'{kind} was charged on feed-in'
+    assert charged[c.TC_PRICE_IN].sum() > 0, f'{kind} was never charged on consumption'
+    assert charged[c.TC_PRICE_PU_IN].max() <= consumption_rate, (
+        f'{kind} charged more per Wh than the retailer tariff it is blended from')
+    if kind == c.TT_LEVIES:
+        assert set(charged[c.TC_PRICE_PU_IN]) == {consumption_rate}
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize('kind', [c.TT_GRID, c.TT_LEVIES])
+def test_the_retailer_pays_no_grid_fee_or_levy(results, kind):
+    """The retailer trades in this run and is not a grid connection, so it is excluded.
+
+    Stated against a retailer that is genuinely present in the transactions table, so the
+    exclusion is exercised rather than satisfied by its absence.
+    """
+    transactions = table(results, c.TN_MARKET_TRANSACTIONS)
+
+    assert RETAILER in set(transactions.filter(
+        pl.col(c.TC_TYPE_TRANSACTION) == c.TT_RETAIL)[c.TC_ID_AGENT])
+    assert RETAILER not in set(transactions.filter(
+        pl.col(c.TC_TYPE_TRANSACTION) == kind)[c.TC_ID_AGENT])
+
+
+# ----------------------------------------------------------------------------------------------
+# The retailer's ladder row, and what its timestamp was doing to the count above.
+# ----------------------------------------------------------------------------------------------
+@pytest.mark.e2e
+def test_both_sides_clear_at_the_same_set_of_clearings(results):
+    """A clearing writes bids and offers together, so the two tables agree on which pairs exist.
+
+    They did not, until the retailer's ladder row was stamped with the clearing rather than with
+    the delivery step: 94 `(timestamp, timestep)` pairs in `bids_cleared` against 90 in
+    `offers_cleared`, of which 89 were clearings and the rest were the retailer's own row sitting
+    at `(delivery, delivery)`. `MIN_CLEARINGS` counted those pairs, so the floor it enforces was
+    counting groups that were not clearings -- which is why the stamp was fixed rather than the
+    counting: the pair is the clearing key everywhere, not only in this file.
+    """
+    pairs = {name: set(map(tuple, table(results, name)
+                           .select([c.TC_TIMESTAMP, c.TC_TIMESTEP]).unique().rows()))
+             for name in (c.TN_BIDS_CLEARED, c.TN_OFFERS_CLEARED)}
+
+    assert pairs[c.TN_BIDS_CLEARED] == pairs[c.TN_OFFERS_CLEARED]
+    assert len(pairs[c.TN_BIDS_CLEARED]) >= MIN_CLEARINGS
+
+
+@pytest.mark.e2e
+def test_no_position_is_stamped_at_its_own_delivery_step(results):
+    """A position is quoted before the step it delivers into, never at it.
+
+    This is the tell the retailer's row used to fail: `timestamp` is when the clearing happens
+    and `timestep` the step it delivers into. A row where the two are equal was stamped from the
+    wrong column, and it is invisible to every assertion about quantities and prices.
+    """
+    for name in (c.TN_BIDS_CLEARED, c.TN_OFFERS_CLEARED, c.TN_BIDS_UNCLEARED,
+                 c.TN_OFFERS_UNCLEARED):
+        frame = table(results, name)
+        late = frame.filter(pl.col(c.TC_TIMESTAMP) >= pl.col(c.TC_TIMESTEP))
+
+        assert len(frame) > 0, f'{name} is empty, so this asserts about nothing'
+        assert late.is_empty(), f'{name}: {len(late)} rows are stamped at or after their delivery'
+
