@@ -463,7 +463,8 @@ def test_a_charge_is_dearer_on_consumption_than_on_feed_in(settled, kind, import
     somewhere between the retailer file and the transactions table.
 
     **Across two agents rather than across one agent's two columns**, and that is forced rather
-    than stylistic: see `test_the_unused_direction_of_a_fee_row_is_priced_at_zero`.
+    than stylistic: see
+    `test_a_grid_rate_collapses_to_zero_where_the_agent_moved_no_energy_that_way`.
     """
     charged = rates(settled, kind)[importer][0]
     paid = rates(settled, kind)[exporter][1]
@@ -664,9 +665,10 @@ def test_the_balancing_energy_is_the_submitted_position_less_what_cleared(book):
 # timetable holds 552 `clear` tasks and 24 `settle` tasks and not one of both, and on all 24
 # calls `self.transactions` was empty. It is unreachable rather than merely absent: with
 # `settling: continuous`, `_create_timetable_ex_ante` appends `,settle` to the rows whose
-# timestep has already arrived and then overwrites exactly those rows with `settle`, because
-# `timestep - timestamp <= 0` is below any positive `closing`. Every shipped config sets
-# `closing` to the market duration.
+# timestep has already arrived (`timestep <= timestamp`) and then overwrites every row with
+# `timestep - timestamp < closing` -- a superset of them, for any positive `closing`, since
+# `timestep <= timestamp` means the difference is at most zero. So the combination cannot
+# survive, whatever `closing` is set to.
 #
 # Two consequences, both worth stating rather than leaving to be rediscovered:
 #
@@ -725,10 +727,11 @@ def test_the_settle_only_task_really_had_no_clearing_in_flight(settled_only):
 # ----------------------------------------------------------------------------------------------
 # The same accounting under `method: None`, which is what every other shipped scenario runs.
 #
-# `scenario_with_market` is the only shipped scenario with a clearing method. The other four, both
-# golden-master scenarios and `config_templates/markets.yaml`'s first market all set
-# `method: None`, so the settlement above covers the clearing the suite runs *once* and this
-# section covers the one it runs everywhere else.
+# `scenario_with_market` is the only shipped scenario with a clearing method. Five set
+# `method: None` -- the three other examples and both e2e fixtures -- so the settlement above
+# covers the clearing the suite runs *once* and this section covers the one it runs everywhere
+# else. (`config_templates/markets.yaml` sets `pda` on both of its markets, so a new user starts
+# with a clearing; it is the shipped *scenarios* that do not.)
 #
 # The difference reaches the bill. `__method_none` types every trade `retail`, so no agent has a
 # local-market share and the grid fee is the retail rate for everyone -- 850 rather than the 513
@@ -801,10 +804,11 @@ def test_the_retailers_own_row_is_stamped_with_the_clearing_not_the_delivery(ret
     clearing in `test_market_clearing.py` and namespaces the trade id in `__postprocess_trades`.
 
     **This is the fast-tier half of that regression, and it exists because the e2e half is not
-    enough.** Reverting the fix leaves the entire default-marker suite green -- measured, 1096
-    passed either way -- and only two `e2e` tests catch it, which `pytest.ini` deselects by
-    default. It also covers `method: None`, which the e2e test never reaches and which is what
-    every shipped scenario but one runs.
+    enough.** Before this test, reverting the fix left the whole default tier green -- 1104 of
+    the current 1106 pass under the revert, and the two that do not are this test's two
+    parameters. Only two `e2e` tests caught it, and `pytest.ini` deselects them by default. It
+    also covers `method: None`, which the e2e test never reaches and which is what every shipped
+    scenario but one runs.
 
     `method: None` is what puts the retailer into the cleared tables at all: it is the
     counterparty to every trade, so it holds a row on both sides. Under `pda` with the book above

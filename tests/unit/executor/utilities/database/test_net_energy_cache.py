@@ -20,13 +20,13 @@ So every test below compares the cache against the same definition computed from
 **The comparison is not the evidence, and it is worth being explicit about which half is.** Both
 routes call `_net_energy_from`, so a widened *filter* is applied identically to both and they go
 on agreeing -- at the wrong number. Measured: admitting `grid` and `levies` into
-`NET_TRANSACTION_TYPES` fails three tests in this file and
-`TestCachedEqualsUncached` is not among them. What catches it is the handful of assertions that
-state an absolute figure -- `test_fees_are_not_counted_as_traded_energy`,
-`test_the_uncached_path_filters_identically`,
-`test_repeated_rows_for_one_timestep_are_summed_not_replaced`,
-`test_another_market_in_the_same_table_is_excluded`. The differential tests cover the one thing
-those cannot: a fold that has gone wrong only on the incremental path.
+`NET_TRANSACTION_TYPES` fails exactly three tests in this file, and not one of them is in
+`TestCachedEqualsUncached`. They are `test_fees_are_not_counted_as_traded_energy`,
+`test_the_uncached_path_filters_identically` and
+`test_fee_rows_are_excluded_here_as_they_are_everywhere_else` -- the three that state an absolute
+figure on this constant, the last of them reaching it through `_rtc_energy_from`. The
+differential tests cover the one thing those cannot: a fold that has gone wrong only on the
+incremental path.
 
 This is L4's first invariant -- *net energy is the sum of the transactions* -- at the database
 layer. The settlement layer's half of it is

@@ -20,8 +20,10 @@ ladders share their cumulative breakpoints produces one clean bid-versus-offer r
 and the result is the textbook double auction that can be checked on paper.
 
 **That shape is the special case, though, and a real run never produces it.** Measured over a
-`scenario_with_market` run, all 89 clearings that cleared anything had ladders sharing no
-breakpoint at all. `MISALIGNED`, `MIRRORED` and `STAIRCASE` further down cover that -- they are
+`scenario_with_market` run, all 88 clearings that cleared anything had ladders sharing no
+breakpoint at all. (88, not the 89 this said before the retailer's ladder row was stamped with
+the clearing rather than the delivery step; the figures are in
+`tests/e2e/test_market_clearing.py` beside `MIN_CLEARINGS`.) `MISALIGNED`, `MIRRORED` and `STAIRCASE` further down cover that -- they are
 where the backward fill, the part of the algorithm that is *not* textbook, becomes observable, and
 where #241 lived: the market used to trade one position's *whole* quantity in every segment it
 spanned. `test_the_misaligned_books_really_do_misalign` states their precondition, and
@@ -182,8 +184,8 @@ def one_per_agent(rows, what):
     The obvious dict comprehension keeps the last row and silently drops the rest, and that is not
     a hypothetical: `__create_market_tables` matches trades back to positions by agent id, so an
     agent clearing against two counterparties really does occupy two rows -- measured on a
-    `scenario_with_market` run, **31 of its clearings** have a repeated agent in `bids_cleared`
-    and 40 in `offers_cleared`, up to 8 rows for one agent. A helper that hid that would let the
+    `scenario_with_market` run, **26 of its 88 clearings** have a repeated agent in
+    `bids_cleared` and 47 in `offers_cleared`, up to 8 rows for one agent. A helper that hid that would let the
     market start emitting a second, wrong row for an agent whose last row happened to be right,
     and every per-agent assertion in this file would keep passing. Tests about a book where an
     agent clears twice use `rows_of` directly.
@@ -628,7 +630,7 @@ TWO_SELLERS = [('buyer_a', 2500, 0, 3000, BUYERS_OFFER),
 #: record of what the code used to do with it (`seller_x` sold 2000 Wh having offered 1500).
 #:
 #: In `BOOKS` deliberately. Misalignment is not the exotic case it reads as -- measured over the
-#: 530 `__method_pda` calls of a `scenario_with_market` run, **every one of the 89 that cleared
+#: 530 `__method_pda` calls of a `scenario_with_market` run, **every one of the 88 that cleared
 #: anything had misaligned ladders and not one had matching ones**, so the rest of this file's
 #: books cover a region that a real run never visits. The conservation invariant alone would not
 #: have noticed the old behaviour here (the duplication was symmetric); the hand-written entry in

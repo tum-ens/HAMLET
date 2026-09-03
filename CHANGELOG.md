@@ -38,12 +38,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     **not** among them — both routes call `_net_energy_from`, so a widened filter is applied to
     both and they agree at the wrong number.
 
-  Measured against **18 mutations**, applied one at a time and each confirmed landed by byte
-  count: **16 caught**. The two survivors are stated rather than hidden. One is an equivalent
-  mutant — the four `pl.lit(retailer[grid_*])` lines in `__apply_grid_levies` are a dead
-  placeholder, overwritten for every agent by that agent's own variable-fee forecast, so crossing
-  or un-crossing them is unobservable in any scenario. The other is `a860ca6` itself at e2e
-  scale, for the reason below.
+  Measured against **23 mutations**, applied one at a time and each confirmed landed by byte
+  count: **22 caught**. Eighteen are mutations of the accounting itself; five are the behaviour
+  changes a review panel constructed that got past the first version of this layer — an
+  uncleared offer priced from the wrong retailer column, uncleared offers dropped from balancing
+  energy altogether, a fee row stamped with the clearing step, a fee row written into another
+  market, and a blended grid rate truncated rather than rounded. Each is closed by a degree of
+  freedom the fixture book now carries, named in `test_settlement_by_hand.py`'s own docstring.
+
+  The single survivor is an equivalent mutant: the four `pl.lit(retailer[grid_*])` lines in
+  `__apply_grid_levies` are a dead placeholder, overwritten for every agent by that agent's own
+  variable-fee forecast, so crossing or un-crossing them is unobservable in any scenario.
+  Measured at both scales — replacing all four with garbage leaves 564 unit and integration
+  tests and the 28 e2e assertions green.
 
   **`a860ca6` cannot be observed on any shipped scenario**, measured by instrumenting
   `_transactions_for_netting` through a real run: `scenario_with_market`'s timetable holds 552

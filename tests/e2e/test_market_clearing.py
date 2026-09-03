@@ -95,9 +95,9 @@ RETAILER_SELLS = 1500
 #: `test_both_sides_clear_at_the_same_set_of_clearings` is what keeps them agreeing.
 #: `MIN_CLEARINGS` therefore now counts clearings rather than groups.
 #:
-#: **These are the only copies of these figures.** `electricity.py` and the tests below point
-#: here rather than restating them: three records of one measurement, two of them stale, is what
-#: this block replaced.
+#: **This is the only copy of these figures outside `CHANGELOG.md`**, which records them once
+#: as a release note. `electricity.py` and the tests below point here rather than restating
+#: them: three records of one measurement, two of them stale, is what this block replaced.
 #:
 #: **Floors only catch a collapse downwards, and that is a real limit rather than a quibble.**
 #: Measured: deleting the subtraction of already-traded energy in `_preprocess_bids_offers`
@@ -406,7 +406,8 @@ def retailer_prices(results):
     Read off the run's own output rather than off `markets.yaml`: the file is what the executor
     reads, and whether the two agree is a separate question that
     `tests/unit/creator/markets/test_retailer_convention.py` settles. Constant across the run for
-    this scenario, which `test_the_shipped_tariff_is_flat` states rather than assumes.
+    this scenario, which `test_the_shipped_tariff_is_flat_and_prices_feed_in_at_zero` states
+    rather than assumes.
     """
     frame = pl.read_ipc(results / 'retailer.ft', memory_map=False)
     return frame.row(0, named=True)
@@ -415,14 +416,18 @@ def retailer_prices(results):
 def net_by_agent(transactions, kinds):
     """Per `(timestep, id_agent)`, the energy netted over `kinds`, taken from the file.
 
-    The subtraction is guarded the way `ElectricityMarket._to_net_energy` guards its own: on an
-    **unsigned** column `energy_in - energy_out` does not go negative, it wraps to ~1.8e19, and
-    `clip(lower_bound=0)` then leaves that astronomical figure in place rather than zeroing it.
-    Two accidents currently keep this correct without the guard -- `market_transactions.ft` comes
-    back as `Float64` rather than the declared `UInt64` (see
-    `test_the_written_table_has_the_dtypes_this_file_reconciles_in`), and `fill_null(0)` demotes
-    an unsigned column to `Int64` anyway -- and neither is stated at the site, so it is stated
-    here.
+    On an **unsigned** column `energy_in - energy_out` does not go negative, it wraps to ~1.8e19,
+    and `clip(lower_bound=0)` then leaves that astronomical figure in place rather than zeroing
+    it. `ElectricityMarket._to_net_energy` guards its own subtraction against that, on its raw
+    input.
+
+    The assertion below **states that precondition rather than guarding it**: it sits after the
+    aggregation, and `fill_null(0)` demotes an unsigned column to `Int64` before the sum, so it
+    holds by construction on every path that reaches it and cannot currently fail. It is here so
+    that a rewrite dropping the fill -- or writing it as `pl.lit(0, pl.UInt64)`, the tidy-up the
+    dtype invites -- fails loudly instead of wrapping. Guarding the raw input instead would fire
+    on a `UInt64` column that the fill would have made safe, which is a false alarm rather than a
+    check.
     """
     netted = (transactions
             .filter(pl.col(c.TC_TYPE_TRANSACTION).is_in(list(kinds)))
@@ -432,7 +437,7 @@ def net_by_agent(transactions, kinds):
               )
     for column in (c.TC_ENERGY_IN, c.TC_ENERGY_OUT):
         dtype = netted.schema[column]
-        assert not (dtype.is_integer() and not dtype.is_signed_integer()), (
+        assert dtype.is_signed_integer() or dtype.is_float(), (
             f'{column} is {dtype}; the difference below would wrap instead of going negative')
 
     return netted.with_columns([
@@ -583,15 +588,20 @@ def test_the_written_table_has_the_dtypes_this_file_reconciles_in(results):
 
     `c.TS_MARKET_TRANSACTIONS` declares `energy_in` as `UInt64`, `price_pu_in` as `Int32` and
     `price_in` as `Int64`, and `bids_cleared.ft` from the same run does come back that way. This
-    table does not: it is written through `concat_past_data`'s pandas round-trip, which floats
-    every numeric column and adds an undeclared `index`. So the reconciliations here are
-    **float** equalities, exact only because the largest figure in the run is ~1.3e7, twenty-two
-    binary orders below where `Float64` stops being exact on integers.
+    table does not, and **the difference is nullability, not the write path**: both go through
+    `concat_past_data`'s `to_pandas()` round-trip, both come back carrying its undeclared
+    `index`, and that round-trip floats a numeric column exactly when it contains a null.
+    `market_transactions` has 267 nulls in `energy_in` alone -- every row records one direction
+    -- while `bids_cleared` has none.
 
-    Stated rather than fixed -- the round-trip is not this branch's to change -- but stated,
-    because two tables from one run disagreeing on the dtype of the same logical column is the
-    kind of thing that is discovered twice otherwise. The bound is asserted below so a run whose
-    figures grew towards 2**53 fails here rather than losing euros quietly.
+    So the reconciliations here are **float** equalities, exact only because the largest figure
+    in the run is ~1.3e7, twenty-two binary orders below where `Float64` stops being exact on
+    integers. Worth saying precisely, because the naive reading -- that `bids_cleared` is on a
+    different path -- would let a change that made it nullable float it too, silently.
+
+    Stated rather than fixed; the round-trip is not this branch's to change. The bound is
+    asserted below so a run whose figures grew towards 2**53 fails here rather than losing euros
+    quietly.
     """
     transactions = table(results, c.TN_MARKET_TRANSACTIONS)
     cleared = table(results, c.TN_BIDS_CLEARED)
@@ -599,6 +609,9 @@ def test_the_written_table_has_the_dtypes_this_file_reconciles_in(results):
     assert transactions.schema[c.TC_PRICE_IN] == pl.Float64
     assert cleared.schema[c.TC_PRICE_IN] == c.TS_BIDS_CLEARED[c.TC_PRICE_IN], (
         'the two tables now agree on dtype, so this note is stale')
+    # The stated cause, so a future reader can tell which half moved if this ever changes
+    assert transactions[c.TC_ENERGY_IN].null_count() > 0
+    assert cleared[c.TC_ENERGY_IN].null_count() == 0
     for column in (c.TC_PRICE_IN, c.TC_PRICE_OUT, c.TC_ENERGY_IN, c.TC_ENERGY_OUT):
         largest = transactions[column].fill_null(0).abs().max()
         assert largest < 2 ** 53, f'{column} reaches {largest}, where Float64 stops being exact'
