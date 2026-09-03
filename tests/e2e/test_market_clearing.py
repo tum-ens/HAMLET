@@ -116,6 +116,14 @@ MIN_CLEARINGS = 25
 MIN_LOCAL_TRANSACTIONS = 80
 MIN_LOCAL_ENERGY_WH = 17_000
 
+#: Agent-timesteps that must carry a fee row, of the 178 that trade. **Measured at 159**, and an
+#: absolute floor rather than a relative one for a specific reason: the natural formulation --
+#: "every unbilled timestep is after the last billed one" -- derives its bound from the result it
+#: is checking, so settlement that stopped billing early moves the bound with it and passes.
+#: Measured on this run: billing nothing after the twentieth-from-last delivery step leaves 28 of
+#: 178 billed and satisfies it. This floor is what makes that fail.
+MIN_BILLED_AGENT_TIMESTEPS = 150
+
 
 #: What this example ships, and what the run must therefore be solved by.
 #:
@@ -498,11 +506,14 @@ def test_the_charged_energy_is_the_net_of_the_transactions_actually_written(resu
     transactions = table(results, c.TN_MARKET_TRANSACTIONS)
     traded = net_by_agent(transactions, MarketDB.NET_TRANSACTION_TYPES)
     charged = charged_by_agent(transactions, kind)
-    # **Inner, not left.** A left join writes nulls where it found no partner; `x != null` is
-    # null, which `filter` drops, so an unmatched fee row would be reported as agreeing. With an
-    # inner join the row disappears instead and the length check below is what notices -- and
-    # that check is only meaningful because the join is inner: `traded` comes out of a `group_by`,
-    # so its keys are unique and a *left* join is always 1:1 and the length can never differ.
+    # **Inner, not left**, and this is a simplification rather than a fix. A left join writes
+    # nulls where it found no partner, `x != null` is null, and `filter` drops it -- so a left
+    # join needs an explicit `null_count() == 0` beside it, which is what this carried before.
+    # Either arrangement catches an unmatched fee row; measured, both fail on one injected ghost
+    # row. The inner join needs no second assertion, because `traded` comes out of a `group_by`
+    # and its keys are unique, so `len(paired) != len(charged)` *is* the unmatched-row signal --
+    # whereas under a left join the same length check can never fail and reads as a guard when it
+    # is not one.
     paired = charged.join(traded, on=[c.TC_TIMESTEP, c.TC_ID_AGENT], how='inner')
 
     assert len(paired) == len(charged) > 0, 'a fee row names an agent that never traded'
@@ -545,6 +556,11 @@ def test_every_settled_timestep_is_billed(results, kind):
     of last resort, not a grid connection -- and it trades at almost every timestep, so leaving
     it in would make this assertion unsatisfiable. **Delivery steps past the last settlement**
     were traded into but never settled: the run ends first. Everything else must be billed.
+
+    **Two bounds, and the absolute one is the load-bearing half.** The shape check below -- that
+    the unbilled pairs form a clean tail -- catches a hole in the middle of the run and a single
+    agent never billed, but it is blind to the tail growing, because `latest_billed` comes out of
+    the very frame it is judging. `MIN_BILLED_AGENT_TIMESTEPS` is the floor that closes that.
     """
     transactions = table(results, c.TN_MARKET_TRANSACTIONS)
     traded = (net_by_agent(transactions, MarketDB.NET_TRANSACTION_TYPES)
@@ -556,9 +572,11 @@ def test_every_settled_timestep_is_billed(results, kind):
     unbilled = traded.join(charged, on=[c.TC_TIMESTEP, c.TC_ID_AGENT], how='anti')
     billed = traded.join(charged, on=[c.TC_TIMESTEP, c.TC_ID_AGENT], how='semi')
 
-    assert len(billed) > 0 and len(unbilled) > 0, (
-        'this run no longer has both billed and unbilled timesteps, so the boundary below is '
-        'not where this test assumes it is')
+    assert len(billed) >= MIN_BILLED_AGENT_TIMESTEPS, (
+        f'only {len(billed)} of {len(traded)} traded agent-timesteps were billed; settlement has '
+        f'stopped billing part of the run')
+    if unbilled.is_empty():
+        return  # everything was settled, which is stronger than the shape check below
     latest_billed = billed[c.TC_TIMESTEP].max()
     stranded = unbilled.filter(pl.col(c.TC_TIMESTEP) <= latest_billed)
     assert stranded.is_empty(), (

@@ -242,17 +242,27 @@ def test_the_book_clears_the_way_this_file_assumes(book):
     assert CLEARED_MONEY == CLEARING_PRICE * CLEARED_ENERGY
 
 
-def test_settlement_has_a_position_on_each_side():
+def test_settlement_has_a_position_on_each_side(book):
     """An uncleared bid **and** an uncleared offer, or half the balancing market is untested.
 
     A book with buyers only leaves every feed-in assertion multiplying by zero: the rate on that
     side can be read off the wrong retailer column, or the offer side can be dropped from the
     concatenation that builds balancing energy at all, and nothing notices. A review panel
     defeated the first version of this file both ways.
+
+    **Read off the settled result, not off the book.** The first version of this premise asserted
+    `any(energy_out > 0 for ... in BOOK)` and `UNCLEARED_OFFER > 0`, and a second panel showed
+    that deleting `hoarder` -- the only uncleared offer, and the whole point of the fixture --
+    left it green: `seller`'s offer satisfies the first (it *clears*) and the second reads a
+    module literal. A premise derived from the constant it is meant to certify certifies nothing.
     """
-    assert any(energy_in > 0 for _, energy_in, _, _, _ in BOOK)
-    assert any(energy_out > 0 for _, _, energy_out, _, _ in BOOK)
-    assert UNCLEARED_BID > 0 and UNCLEARED_OFFER > 0 and UNCLEARED_BID != UNCLEARED_OFFER
+    balanced = {agent: values[:2] for (kind, agent), values in book.items()
+                if kind == c.TT_BALANCING}
+
+    assert any(values[0] > 0 for values in balanced.values()), 'no bid became balancing energy'
+    assert any(values[1] > 0 for values in balanced.values()), 'no offer became balancing energy'
+    assert len({values for values in balanced.values()}) == len(balanced), (
+        'two agents balance the same quantities, so one could be credited to the other')
 
 
 def test_two_market_shares_are_fractional_and_round_opposite_ways():
@@ -264,7 +274,15 @@ def test_two_market_shares_are_fractional_and_round_opposite_ways():
     differs) and `blender` to 681.25 (rounds down, so `ceil` differs). Both survived earlier
     versions of this file, one at a time.
     """
-    assert 0 < BUYER_MARKET_SHARE_IN < 1 and 0 < BLENDER_MARKET_SHARE_IN < 1
+    # Derived from `HISTORY` rather than from the module constants, so that removing an agent's
+    # retail purchase -- which is what makes its share fractional -- fails here.
+    for agent, cleared, share in (('buyer', CLEARED_ENERGY, BUYER_MARKET_SHARE_IN),
+                                  ('blender', BLENDER_MARKET_IN, BLENDER_MARKET_SHARE_IN)):
+        gross_in = sum(energy_in for who, _, energy_in, _, _, _ in HISTORY if who == agent)
+        gross_in += cleared if agent == 'buyer' else 0
+        assert 0 < cleared / gross_in < 1, f"{agent}'s market share is at an endpoint"
+        assert cleared / gross_in == share, f"{agent}'s share constant disagrees with HISTORY"
+
     for rate in (BUYER_GRID_RATE, BLENDER_GRID_RATE):
         assert rate not in (GRID_MARKET_OUT, GRID_RETAIL_OUT)
         assert min(GRID_MARKET_OUT, GRID_RETAIL_OUT) < rate < max(GRID_MARKET_OUT,
@@ -339,8 +357,11 @@ def test_every_emitted_row_carries_this_clearings_identity(settled, cleared_only
     and `_net_energy_from` filters on market and name, so either misfiling puts an agent's fees
     where nothing will find them again.
 
-`TIMESTAMP != TIMESTEP` in the fixture, so a row stamped from the wrong column fails here
-    rather than coinciding.
+    `TIMESTAMP != TIMESTEP` in the fixture, so a row stamped from the wrong column fails here
+    rather than coinciding -- and that is the only place it can be seen. In the shipped run every
+    fee and balancing row already carries `timestamp == timestep` (measured: all 159 grid, 159
+    levies and 36 balancing rows, against 0 of 550 trade rows), so stamping a fee row with the
+    clearing step is an **equivalent mutation at run scale** and the e2e passes 28 of 28 under it.
 
     **All five tables the market writes**, not only the transactions: the cleared and uncleared
     tables carry the same six columns and nothing else in this file reads one of them, so a
