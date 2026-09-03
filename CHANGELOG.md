@@ -396,6 +396,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Fixed
+- **The golden fingerprint records datetime bounds.** `scenario_run.fingerprint` recorded row
+  counts and, for every *numeric* column, the sum, minimum and maximum. Datetimes were skipped,
+  and in a receding-horizon simulation that is not a small omission: `timestamp` and `timestep`
+  are what say when a row is *for*, and every other statistic it records is order-invariant, so a
+  row filed at the wrong time moved nothing the reference held.
+
+  Not hypothetical — it is why the stamp fix below could report "golden references untouched"
+  without that meaning anything. Under the defect, 266 of 616 rows of `simple_scenario`'s pinned
+  `bids_cleared` and 350 of 616 of its `offers_cleared` carried a wrong timestamp and
+  `-m golden` was green.
+
+  Datetime columns now contribute `min` and `max`, as ISO-8601 strings matched exactly by both
+  comparison paths. No sum — a total of timestamps means nothing — and not as epoch numbers,
+  because those would fall under `RELATIVE_TOLERANCE`: 1e-6 of 1.6e18 ns is about half an hour,
+  enough to tolerate a row filed a whole timestep away in a 15-minute scenario.
+
+  **The re-baseline is purely additive**, which is what made it safe to commit: 24 columns gained
+  bounds in each scenario, **zero existing values changed** and none were dropped, checked key by
+  key against the committed references rather than by reading the test's green.
+
+  Both comparison paths needed changing, and the second is the cautionary half.
+  `scenario_run.compare` serves the backend-equivalence tests;
+  `test_golden_master.test_column_statistics_match` carries its own loop. Patching only the first
+  left the golden master raising `TypeError: unsupported operand type(s) for -: 'str' and 'str'`
+  — two scenarios red, which looked exactly like a detection and was not one. Both now treat a
+  *missing* counterpart as a difference too, so a reference predating this statistic cannot
+  compare as agreeing.
+
+  Datetimes inside CSV results remain uncovered: `pl.read_csv` does not infer them, so the grid
+  stage's temporal columns arrive as `Utf8` and are skipped. Left alone deliberately — enabling
+  inference would change how every other CSV column is read.
+
 - **The retailer's ladder row is stamped with the clearing, not with the delivery step.**
   `self.retailer` is filtered on `timestamp == the delivery step`, the retailer table being
   indexed by delivery time under that name, and `__create_bids_offers` aliased that one column
