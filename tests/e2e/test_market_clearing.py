@@ -467,6 +467,14 @@ def test_the_charged_energy_is_the_net_of_the_transactions_actually_written(resu
     paired = charged.join(traded, on=[c.TC_TIMESTEP, c.TC_ID_AGENT], how='left')
 
     assert len(paired) == len(charged) > 0, 'a fee row names an agent that never traded'
+    # A left join writes nulls where it found no partner, and `x != null` is null, which `filter`
+    # drops -- so an unmatched fee row would be reported as agreeing. Refused explicitly rather
+    # than left to fail open, which is the shape this repository keeps rediscovering one level
+    # down from wherever it was last fixed.
+    assert paired.select(pl.col(['net_in', 'net_out']).null_count()).to_numpy().sum() == 0, (
+        'a fee row has no transactions to reconcile against, and the comparison below would '
+        'have passed it silently')
+
     mismatched = paired.filter((pl.col(c.TC_ENERGY_IN) != pl.col('net_in'))
                                | (pl.col(c.TC_ENERGY_OUT) != pl.col('net_out')))
     assert mismatched.is_empty(), (

@@ -26,6 +26,11 @@ named rate columns, or a quantity multiplied out by hand.
    and must match to the euro, and the residual left after the agent-to-agent trades cancel must
    equal the named charges exactly -- no unexplained euro anywhere.
 
+**Three task shapes are covered**, because the accounting differs between them and only one of
+them appears in a shipped run: `clear,settle` in one task, settlement as a task of its own, and
+`method: None`. The section headed "the task shape every shipped run actually uses" records
+which is which, and why `a860ca6` cannot be observed on any shipped scenario.
+
 **Prices are in EURe-7/Wh**, quantities in Wh, which is what the executor uses throughout.
 """
 import polars as pl
@@ -35,7 +40,7 @@ import hamlet.constants as c
 from tests.settlement_fixtures import (BALANCING_BUYS, BALANCING_SELLS, GRID_MARKET_IN,
                                        GRID_MARKET_OUT, GRID_RETAIL_IN, GRID_RETAIL_OUT,
                                        LEVIES_IN, LEVIES_OUT, RETAILER_BUYS, RETAILER_SELLS,
-                                       RETAILER_ID, forecast_table, ledger, make_market, rows,
+                                       RETAILER_ID, forecast_table, ledger, retailer_table, rows,
                                        settle)
 
 # ----------------------------------------------------------------------------------------------
@@ -508,6 +513,169 @@ def test_the_balancing_energy_is_the_submitted_position_less_what_cleared(book):
     for agent in submitted:
         assert balanced.get(agent, 0) == submitted[agent] - cleared.get(agent, 0), agent
     assert sum(balanced.values()) > 0, 'nothing was balanced, so this asserts about nothing'
+
+
+# ----------------------------------------------------------------------------------------------
+# The same ledger, reached by the task shape every shipped run actually uses.
+#
+# **`clear,settle` in one task -- the shape above -- occurs in no shipped scenario.** Measured on
+# `scenario_with_market` by instrumenting `_transactions_for_netting` through a real run: its
+# timetable holds 552 `clear` tasks and 24 `settle` tasks and not one of both, and on all 24
+# calls `self.transactions` was empty. It is unreachable rather than merely absent: with
+# `settling: continuous`, `_create_timetable_ex_ante` appends `,settle` to the rows whose
+# timestep has already arrived and then overwrites exactly those rows with `settle`, because
+# `timestep - timestamp <= 0` is below any positive `closing`. Every shipped config sets
+# `closing` to the market duration.
+#
+# Two consequences, both worth stating rather than leaving to be rediscovered:
+#
+# * `a860ca6` -- the current clearing missing from the netting -- **cannot be observed on any
+#   shipped scenario**, because there is no clearing in flight when settlement runs; the trades
+#   are already in `transactions_prev`, put there by an earlier task. Measured: reverting that
+#   fix leaves the whole `tests/e2e/test_market_clearing.py` suite green, and only the unit test
+#   above fails. The fix is still right, and this file is the only thing that holds it.
+# * The arm above is therefore the *rare* shape. This section runs the common one: settlement
+#   with the clearing already settled into history and only the uncleared remainder in the book.
+#
+# The two must produce the same fees, because they describe the same timestep. Asserted as
+# equality against the other arm's hand-computed figures, not against the other arm's output.
+# ----------------------------------------------------------------------------------------------
+SETTLED_BOOK = [('spare', UNCLEARED_ENERGY, 0, 1000, RETAILER_BUYS)]
+SETTLED_HISTORY = HISTORY + [('buyer', c.TT_MARKET, CLEARED_ENERGY, 0, CLEARED_MONEY, 0),
+                             ('seller', c.TT_MARKET, 0, CLEARED_ENERGY, 0, CLEARED_MONEY)]
+
+
+@pytest.fixture(scope='module')
+def settled_only():
+    """Settlement as a task of its own, the clearing already in the table."""
+    return settle(SETTLED_BOOK, history=SETTLED_HISTORY, actions=c.MA_SETTLE)
+
+
+@pytest.mark.parametrize('agent', AGENTS)
+@pytest.mark.parametrize('kind', [c.TT_GRID, c.TT_LEVIES])
+def test_a_settle_only_task_charges_the_same_fees(settled_only, kind, agent):
+    """The common task shape bills exactly what the `clear,settle` shape bills.
+
+    Same timestep, same trades, the only difference being which task carried the clearing -- so
+    every figure has to match, per agent by name. This is the arm that covers what the shipped
+    scenarios run; the one above covers the arm where `a860ca6` is live.
+    """
+    charged = {(kind_, agent_): tuple(values) for kind_, agent_, *values in rows(settled_only)}
+    energy_in, energy_out, price_in, price_out = charged[(kind, agent)]
+    rate = GRID_RATE[agent] if kind == c.TT_GRID else LEVY_RATE[agent]
+
+    assert (energy_in, energy_out) == NET[agent]
+    assert (price_in, price_out) == (rate * energy_in, rate * energy_out)
+
+
+def test_the_settle_only_task_really_had_no_clearing_in_flight(settled_only):
+    """The premise: this arm is the one where `self.transactions` is empty at netting time.
+
+    Without it the two arms would be the same test twice. The clearing's own rows are in the
+    history here, and settlement writes only the fee and balancing rows.
+    """
+    written = {kind for kind, *_ in rows(settled_only)}
+
+    assert written == {c.TT_GRID, c.TT_LEVIES, c.TT_BALANCING}
+    assert c.TT_MARKET not in written, 'this arm cleared, so it is not the settle-only shape'
+
+
+# ----------------------------------------------------------------------------------------------
+# The same accounting under `method: None`, which is what every other shipped scenario runs.
+#
+# `scenario_with_market` is the only shipped scenario with a clearing method. The other four, both
+# golden-master scenarios and `config_templates/markets.yaml`'s first market all set
+# `method: None`, so the settlement above covers the clearing the suite runs *once* and this
+# section covers the one it runs everywhere else.
+#
+# The difference reaches the bill. `__method_none` types every trade `retail`, so no agent has a
+# local-market share and the grid fee is the retail rate for everyone -- 800 rather than the 400
+# `buyer` pays above, on the same 2000 Wh. The retailer needs a quantity here, or
+# `__split_bids_offers` drops it out of the book and nothing has a counterparty.
+#
+#   buyer  buys 3000 Wh at the retailer's selling price, 1500  -> 4_500_000
+#   seller sells 2000 Wh at the retailer's buying price, 500   -> 1_000_000
+#   buyer  nets 3000 - 1000 (its earlier sale) = 2000 Wh in
+#   seller nets 2000 Wh out
+# ----------------------------------------------------------------------------------------------
+RETAIL_BOOK = [('buyer', 3000, 0, RETAILER_SELLS, RETAILER_BUYS),
+               ('seller', 0, 2000, RETAILER_SELLS, RETAILER_BUYS)]
+
+RETAIL_BOUGHT = RETAILER_SELLS * 3000  # 4_500_000
+RETAIL_SOLD = RETAILER_BUYS * 2000     # 1_000_000
+RETAIL_NET = {'buyer': (BUYER_NET_IN, 0), 'seller': (0, 2000)}
+
+
+@pytest.fixture(scope='module')
+def retail_only():
+    """The same shape of timestep with no local clearing: everything goes to the retailer."""
+    return settle(RETAIL_BOOK, history=HISTORY, method=c.MCM_NONE,
+                  retailer=retailer_table(energy_in=100_000, energy_out=100_000))
+
+
+def test_method_none_routes_both_sides_through_the_retailer_and_prices_them_apart(retail_only):
+    """Buying costs 1500 and selling pays 500, on the same timestep, in the same table.
+
+    `tests/README.md`'s tell, on the clearing method every shipped scenario but one uses: if the
+    two ever came out the other way round the in/out crossing has gone wrong, and it would be an
+    arbitrage rather than a market.
+    """
+    ledger_ = {(kind, agent): tuple(values) for kind, agent, *values in rows(retail_only)
+               if kind == c.TT_RETAIL and agent != RETAILER_ID}
+
+    assert ledger_[(c.TT_RETAIL, 'buyer')] == (3000, None, RETAIL_BOUGHT, None)
+    assert ledger_[(c.TT_RETAIL, 'seller')] == (None, 2000, None, RETAIL_SOLD)
+    assert RETAIL_BOUGHT / 3000 > RETAIL_SOLD / 2000
+
+
+@pytest.mark.parametrize('agent', ['buyer', 'seller'])
+def test_method_none_charges_the_retail_grid_rate_because_nothing_is_local(retail_only, agent):
+    """With no local market there is no market share, so the blend is the retail rate outright.
+
+    `buyer` draws the same 2000 Wh as in the clearing arm and pays 800 per Wh here against 400
+    there -- the one number that distinguishes the two clearing methods' accounting, asserted as
+    an absolute value rather than as "different".
+    """
+    charged = {(kind, agent_): tuple(values) for kind, agent_, *values in rows(retail_only)}
+    expected_rate = GRID_RETAIL_OUT if agent == 'buyer' else GRID_RETAIL_IN
+    energy_in, energy_out, price_in, price_out = charged[(c.TT_GRID, agent)]
+
+    assert (energy_in, energy_out) == RETAIL_NET[agent]
+    assert (price_in, price_out) == (expected_rate * energy_in, expected_rate * energy_out)
+    if agent == 'buyer':
+        assert expected_rate != GRID_MARKET_OUT, 'the two clearing methods now bill alike'
+
+
+def test_method_none_closes_its_money_ledger(retail_only):
+    """Every euro an agent pays the retailer, the retailer receives, and vice versa.
+
+    The retailer holds the other side of both trades here, so the `retail` rows cancel exactly
+    and the residual is the fees -- recomputed from rates and quantities rather than read back
+    out of the same sum.
+    """
+    trades = [values for kind, _, *values in rows(retail_only) if kind == c.TT_RETAIL]
+    paid = sum(row[2] or 0 for row in trades)
+    received = sum(row[3] or 0 for row in trades)
+
+    assert paid == received == RETAIL_BOUGHT + RETAIL_SOLD
+
+    fees = {(kind, agent): tuple(values) for kind, agent, *values in rows(retail_only)
+            if kind in (c.TT_GRID, c.TT_LEVIES)}
+    assert sum(values[2] for values in fees.values()) == (
+        (GRID_RETAIL_OUT + LEVIES_OUT) * BUYER_NET_IN)
+    assert sum(values[3] for values in fees.values()) == (GRID_RETAIL_IN + LEVIES_IN) * 2000
+
+
+def test_an_empty_timestep_settles_without_raising_and_writes_nothing():
+    """No positions at all: `__apply_grid_levies` returns its two empty frames and nothing breaks.
+
+    The branch exists because a timestep can have nothing to settle, and an exception there would
+    stop a run rather than mis-bill it. Nothing else reaches it -- every other book in this file
+    and in `test_clearing_by_hand.py` has positions.
+    """
+    result = settle([], history=[])
+
+    assert rows(result) == []
 
 
 def rates(market, kind):
