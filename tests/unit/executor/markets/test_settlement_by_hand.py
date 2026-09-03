@@ -111,6 +111,14 @@ BALANCING_SOLD = BALANCING_BUYS * UNCLEARED_OFFER    # 400 * 2500 = 1_000_000
 # market: a share of 0.75, the only fractional ratio in the fixture and the only thing that
 # exercises the grid-fee blend anywhere other than at its endpoints.
 #
+# **`blender` exists only in the history**, and only to put a second fractional share on the
+# other side of a half. It bought 3000 Wh on the market and 5000 from the retailer at earlier
+# clearings of this delivery step and has nothing left uncleared, so it holds no book position and
+# gets no `market` or `balancing` row -- just the two fee rows every agent in the netting gets.
+# Its share is 3000/8000 = 0.375, blending to 681.25, which rounds *down*. `buyer`'s 0.75 blends
+# to 512.5, which rounds *up*. One of each is needed: with only the .5 case, replacing `round()`
+# with `ceil()` is an equivalent mutation, and with only a case below .5, `floor()` is.
+#
 # The retailer's matching row is included because a real retail trade writes both sides -- but
 # note what it does and does not do here. Its money never enters the ledger the tests read: a
 # seeded row reaches the market through `transactions_prev` only, and `__update_database`
@@ -121,7 +129,12 @@ BALANCING_SOLD = BALANCING_BUYS * UNCLEARED_OFFER    # 400 * 2500 = 1_000_000
 HISTORY = [('buyer', c.TT_RETAIL, 0, 1000, 0, 500_000),
            ('buyer', c.TT_RETAIL, 1000, 0, 1_500_000, 0),
            (RETAILER_ID, c.TT_RETAIL, 1000, 0, 500_000, 0),
-           (RETAILER_ID, c.TT_RETAIL, 0, 1000, 0, 1_500_000)]
+           (RETAILER_ID, c.TT_RETAIL, 0, 1000, 0, 1_500_000),
+           ('blender', c.TT_MARKET, 3000, 0, 0, 0),
+           ('blender', c.TT_RETAIL, 5000, 0, 0, 0)]
+
+BLENDER_MARKET_IN = 3000
+BLENDER_GROSS_IN = 8000
 
 SOLD_EARLIER = 1000
 BOUGHT_EARLIER = 1000
@@ -130,7 +143,8 @@ BUYER_NET_IN = BUYER_GROSS_IN - SOLD_EARLIER          # 3000
 
 #: Per-agent net energy at this delivery timestep, computed by hand from the book and the history.
 NET = {'buyer': (BUYER_NET_IN, 0), 'spare': (UNCLEARED_BID, 0),
-       'seller': (0, CLEARED_ENERGY), 'hoarder': (0, UNCLEARED_OFFER)}
+       'seller': (0, CLEARED_ENERGY), 'hoarder': (0, UNCLEARED_OFFER),
+       'blender': (BLENDER_GROSS_IN, 0)}
 
 # ----------------------------------------------------------------------------------------------
 # The grid fee each agent pays, derived.
@@ -139,7 +153,8 @@ NET = {'buyer': (BUYER_NET_IN, 0), 'spare': (UNCLEARED_BID, 0),
 # from the local market: `market_rate * ratio + retail_rate * (1 - ratio)`.
 #
 #   buyer   -- 4000 Wh in, 3000 of it `market`: share 0.75, so 400*0.75 + 850*0.25 = 512.5,
-#              rounded to **513**.
+#              rounded **up** to 513.
+#   blender -- 8000 Wh in, 3000 of it `market`: share 0.375, so 681.25, rounded **down** to 681.
 #   spare   -- 2000 Wh in, all `balancing`: share 0, so the retail rate, 850.
 #   seller  -- 3000 Wh out, all `market`: share 1, so the *feed-in* market rate, 40.
 #   hoarder -- 2500 Wh out, all `balancing`: share 0, so the feed-in retail rate, 80.
@@ -150,15 +165,17 @@ NET = {'buyer': (BUYER_NET_IN, 0), 'spare': (UNCLEARED_BID, 0),
 # coinciding. The blend lands on a **half**, so truncating instead of rounding fails too; see
 # the note on the rates in `settlement_fixtures`.
 # ----------------------------------------------------------------------------------------------
-BUYER_MARKET_SHARE_IN = CLEARED_ENERGY / BUYER_GROSS_IN   # 0.75, from the fixture's quantities
+BUYER_MARKET_SHARE_IN = CLEARED_ENERGY / BUYER_GROSS_IN         # 0.75
+BLENDER_MARKET_SHARE_IN = BLENDER_MARKET_IN / BLENDER_GROSS_IN  # 0.375
 BUYER_GRID_RATE = 513
+BLENDER_GRID_RATE = 681
 
-GRID_RATE = {'buyer': BUYER_GRID_RATE, 'spare': GRID_RETAIL_OUT,
-             'seller': GRID_MARKET_IN, 'hoarder': GRID_RETAIL_IN}
-LEVY_RATE = {'buyer': LEVIES_OUT, 'spare': LEVIES_OUT,
+GRID_RATE = {'buyer': BUYER_GRID_RATE, 'blender': BLENDER_GRID_RATE,
+             'spare': GRID_RETAIL_OUT, 'seller': GRID_MARKET_IN, 'hoarder': GRID_RETAIL_IN}
+LEVY_RATE = {'buyer': LEVIES_OUT, 'blender': LEVIES_OUT, 'spare': LEVIES_OUT,
              'seller': LEVIES_IN, 'hoarder': LEVIES_IN}
 
-AGENTS = ('buyer', 'spare', 'seller', 'hoarder')
+AGENTS = ('buyer', 'blender', 'spare', 'seller', 'hoarder')
 
 #: Each agent's grid bill and levy, in EURe-7: its rate times its net quantity. The two factors
 #: are independent -- the rate comes from the retailer file, the quantity from the book and the
@@ -170,7 +187,7 @@ LEVY_BILL = {agent: LEVY_RATE[agent] * sum(NET[agent]) for agent in AGENTS}
 #: The two exporters' charges land in `price_out`. In a real tariff they would be zero -- the
 #: shipped retailer files price feed-in at nothing -- and they are non-zero here only so the
 #: column mapping is observable. See `settlement_fixtures`.
-IMPORTERS = ('buyer', 'spare')
+IMPORTERS = ('buyer', 'blender', 'spare')
 EXPORTERS = ('seller', 'hoarder')
 
 #: The identity every row this settlement writes must carry. `TIMESTAMP != TIMESTEP` by
@@ -183,6 +200,19 @@ IDENTITY = {c.TC_TIMESTAMP: TIMESTAMP, c.TC_TIMESTEP: TIMESTEP, c.TC_REGION: REG
 def settled():
     """`BOOK` and `HISTORY` run through the real `execute()`, once for the whole module."""
     return settle(BOOK, history=HISTORY)
+
+
+@pytest.fixture(scope='module')
+def cleared_only():
+    """The same book with `clear` and no `settle`, so the uncleared tables still have rows.
+
+    `__determine_balancing_energy` ends with `bids_uncleared.clear()` -- once an uncleared
+    position has become balancing energy it is not also an unmet order -- so after a
+    `clear,settle` task both uncleared tables are empty. A clear-only task is the only shape in
+    which they carry anything, and a `clear` task really does happen on its own: 552 of the 576
+    tasks in `scenario_with_market`'s timetable are exactly that.
+    """
+    return settle(BOOK, history=HISTORY, actions=c.MA_CLEAR)
 
 
 @pytest.fixture(scope='module')
@@ -225,16 +255,26 @@ def test_settlement_has_a_position_on_each_side():
     assert UNCLEARED_BID > 0 and UNCLEARED_OFFER > 0 and UNCLEARED_BID != UNCLEARED_OFFER
 
 
-def test_one_agents_market_share_is_neither_zero_nor_one():
-    """The grid blend has to be evaluated somewhere other than at its endpoints.
+def test_two_market_shares_are_fractional_and_round_opposite_ways():
+    """The grid blend is evaluated off its endpoints, and on both sides of a half.
 
-    With every share at 0 or 1 the interpolation never runs: rounding it away, or weighting it
-    the other way round, changes nothing. `buyer` is the agent that makes it observable.
+    With every share at 0 or 1 the interpolation never runs at all. With one fractional share it
+    runs, but only one of `floor` and `ceil` differs from `round` at any single value -- so a
+    fixture with one is blind to the other. `buyer` blends to 512.5 (rounds up, so `floor`
+    differs) and `blender` to 681.25 (rounds down, so `ceil` differs). Both survived earlier
+    versions of this file, one at a time.
     """
-    assert 0 < BUYER_MARKET_SHARE_IN < 1
-    assert BUYER_GRID_RATE not in (GRID_MARKET_OUT, GRID_RETAIL_OUT)
-    assert min(GRID_MARKET_OUT, GRID_RETAIL_OUT) < BUYER_GRID_RATE < max(GRID_MARKET_OUT,
-                                                                         GRID_RETAIL_OUT)
+    assert 0 < BUYER_MARKET_SHARE_IN < 1 and 0 < BLENDER_MARKET_SHARE_IN < 1
+    for rate in (BUYER_GRID_RATE, BLENDER_GRID_RATE):
+        assert rate not in (GRID_MARKET_OUT, GRID_RETAIL_OUT)
+        assert min(GRID_MARKET_OUT, GRID_RETAIL_OUT) < rate < max(GRID_MARKET_OUT,
+                                                                  GRID_RETAIL_OUT)
+    # One blend sits above its floor and the other below its ceiling, which is what makes the
+    # pair sensitive to the rounding mode rather than only to the interpolation.
+    unrounded = {BUYER_GRID_RATE: GRID_RETAIL_OUT - 450 * BUYER_MARKET_SHARE_IN,
+                 BLENDER_GRID_RATE: GRID_RETAIL_OUT - 450 * BLENDER_MARKET_SHARE_IN}
+    assert any(rate > value for rate, value in unrounded.items()), 'no blend rounds up'
+    assert any(rate < value for rate, value in unrounded.items()), 'no blend rounds down'
 
 
 def test_no_two_agents_are_billed_the_same_amount():
@@ -288,7 +328,7 @@ def test_the_retailer_prices_buying_above_selling():
 # ----------------------------------------------------------------------------------------------
 # Every row's identity. Nothing else in this file reads one, and two mutations lived there.
 # ----------------------------------------------------------------------------------------------
-def test_every_emitted_row_carries_this_clearings_identity(settled):
+def test_every_emitted_row_carries_this_clearings_identity(settled, cleared_only):
     """Timestamp, timestep, region, market, name and energy type, on every row of every kind.
 
     The rest of the file projects a row down to `(kind, agent, energies, money)`, which is what
@@ -299,16 +339,29 @@ def test_every_emitted_row_carries_this_clearings_identity(settled):
     and `_net_energy_from` filters on market and name, so either misfiling puts an agent's fees
     where nothing will find them again.
 
-    `TIMESTAMP != TIMESTEP` in the fixture, so a row stamped from the wrong column fails here
+`TIMESTAMP != TIMESTEP` in the fixture, so a row stamped from the wrong column fails here
     rather than coinciding.
-    """
-    frame = settled.market_transactions
-    frame = frame.with_columns([pl.col(column).cast(pl.Utf8) for column, dtype
-                                in frame.schema.items() if dtype == pl.Categorical])
 
-    assert len(frame) > 0
-    for column, expected in IDENTITY.items():
-        assert set(frame[column]) == {expected}, f"{column} is not this clearing's"
+    **All five tables the market writes**, not only the transactions: the cleared and uncleared
+    tables carry the same six columns and nothing else in this file reads one of them, so a
+    region or market misfiled onto a *position* was invisible until this covered them. Every
+    table asserted here is non-empty -- stated below, because four of the five would otherwise
+    pass by being absent.
+
+    The uncleared pair is read off the **clear-only** arm: settlement empties them, so on the
+    `clear,settle` fixture they hold nothing. See `cleared_only`.
+    """
+    tables = {name: getattr(settled, name) for name in
+              (c.TN_MARKET_TRANSACTIONS, c.TN_BIDS_CLEARED, c.TN_OFFERS_CLEARED)}
+    tables.update({name: getattr(cleared_only, name) for name in
+                   (c.TN_BIDS_UNCLEARED, c.TN_OFFERS_UNCLEARED)})
+
+    for name, frame in tables.items():
+        frame = frame.with_columns([pl.col(column).cast(pl.Utf8) for column, dtype
+                                    in frame.schema.items() if dtype == pl.Categorical])
+        assert len(frame) > 0, f'{name} is empty, so its identity is unasserted'
+        for column, expected in IDENTITY.items():
+            assert set(frame[column]) == {expected}, f"{name}.{column} is not this clearing's"
 
 
 # ----------------------------------------------------------------------------------------------
@@ -434,22 +487,24 @@ def test_the_grid_rate_is_the_forecasts_crossed_column(settled, agent, rate):
     assert (charged_in if agent in IMPORTERS else charged_out) == rate
 
 
-def test_the_grid_rate_blends_the_two_rates_at_a_fractional_share(settled):
-    """`buyer` draws 3 Wh in 4 from the local market, so it pays neither rate but a blend.
+@pytest.mark.parametrize('agent, rate', [('buyer', BUYER_GRID_RATE),
+                                         ('blender', BLENDER_GRID_RATE)])
+def test_the_grid_rate_blends_the_two_rates_at_a_fractional_share(settled, agent, rate):
+    """Two agents pay neither rate but a blend of them, rounding opposite ways.
 
-    512.5 = 400 * 0.75 + 850 * 0.25, rounded to 513 -- hand-computed and written as a literal
-    rather than as that expression, which is the formula under test. It is strictly between the
-    two endpoints, so an implementation that collapsed the blend to either side fails; and it
-    lands on a half, so truncating instead of rounding fails too. Both survived the first version
-    of this file, the first because every share in the book was 0 or 1 and the second because the
-    two rates were round numbers.
+    512.5 = 400 * 0.75 + 850 * 0.25 -> 513, and 681.25 = 400 * 0.375 + 850 * 0.625 -> 681. Both
+    hand-computed and written as literals rather than as those expressions, which are the formula
+    under test. Each is strictly between the endpoints, so collapsing the blend to either side
+    fails; and having one on each side of a half is what makes **every** rounding mode
+    observable -- `floor` moves 512.5 and leaves 681.25, `ceil` the reverse. All three survived
+    earlier versions of this file.
     """
-    charged_in, _ = rates(settled, c.TT_GRID)['buyer']
+    charged_in, _ = rates(settled, c.TT_GRID)[agent]
 
-    assert charged_in == BUYER_GRID_RATE
+    assert charged_in == rate
     assert charged_in not in (GRID_MARKET_OUT, GRID_RETAIL_OUT)
     assert rates(settled, c.TT_GRID)['spare'][0] == GRID_RETAIL_OUT, (
-        'the two importers now pay the same rate, so the blend is not observable')
+        'the endpoint importer now pays a blend too, so the contrast is gone')
 
 
 @pytest.mark.parametrize('kind', [c.TT_GRID, c.TT_LEVIES])
@@ -724,6 +779,17 @@ def test_the_settle_only_task_really_had_no_clearing_in_flight(settled_only):
     assert c.TT_MARKET not in written, 'this arm cleared, so it is not the settle-only shape'
 
 
+def test_settlement_empties_the_uncleared_tables(settled, cleared_only):
+    """An uncleared position becomes balancing energy and stops being an unmet order.
+
+    Pinned because `test_every_emitted_row_carries_this_clearings_identity` reads the uncleared
+    pair off the clear-only arm and would silently cover nothing if that stopped being true.
+    """
+    for name in (c.TN_BIDS_UNCLEARED, c.TN_OFFERS_UNCLEARED):
+        assert len(getattr(cleared_only, name)) > 0, f'{name} is empty before settlement'
+        assert len(getattr(settled, name)) == 0, f'{name} survived settlement'
+
+
 # ----------------------------------------------------------------------------------------------
 # The same accounting under `method: None`, which is what every other shipped scenario runs.
 #
@@ -841,9 +907,15 @@ def test_method_none_closes_its_money_ledger(retail_only):
 
     fees = {(kind, agent): tuple(values) for kind, agent, *values in rows(retail_only)
             if kind in (c.TT_GRID, c.TT_LEVIES)}
-    assert sum(values[2] for values in fees.values()) == (
-        (GRID_RETAIL_OUT + LEVIES_OUT) * BUYER_NET_IN)
-    assert sum(values[3] for values in fees.values()) == (GRID_RETAIL_IN + LEVIES_IN) * 2000
+    # Per agent rather than as a lump: `blender`'s market history survives into this arm, so it
+    # is the one agent here that still pays a blended rate, and a total would hide which is which.
+    expected = {('grid', 'buyer'): GRID_RETAIL_OUT * BUYER_NET_IN,
+                ('levies', 'buyer'): LEVIES_OUT * BUYER_NET_IN,
+                ('grid', 'blender'): BLENDER_GRID_RATE * BLENDER_GROSS_IN,
+                ('levies', 'blender'): LEVIES_OUT * BLENDER_GROSS_IN}
+    assert {key: values[2] for key, values in fees.items() if key[1] != 'seller'} == expected
+    assert fees[('grid', 'seller')][3] == GRID_RETAIL_IN * 2000
+    assert fees[('levies', 'seller')][3] == LEVIES_IN * 2000
 
 
 def test_an_empty_timestep_settles_without_raising_and_writes_nothing():
