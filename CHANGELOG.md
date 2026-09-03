@@ -10,6 +10,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Added
+- **The accounting invariants are asserted by value (L4, ROADMAP §2).** Net energy is the sum of
+  a timestep's transactions, fees and levies are charged on **net** and to the right column, and
+  the money balance closes with no unexplained euro. The layer exists because two real defects on
+  the paper branch — `eec60f0` (fees on gross, and the grid and levy columns swapped) and
+  `a860ca6` (the current clearing left out of the netting) — were found by hand rather than by a
+  test, and both now have one.
+
+  **Every invariant carries an absolute anchor rather than only a symmetric one**, because #241
+  showed that is not optional: a market that sold energy nobody had offered — 7.1 % of all
+  locally cleared energy — satisfied `sum(cleared in) == sum(cleared out)` throughout, and under
+  one mutation a clearing of 1.8e19 Wh satisfied it too. So each total is also compared against
+  something outside the pair: the submitted book, the retailer's named rate columns, the
+  transactions file itself, or a quantity multiplied out by hand.
+
+  - `tests/settlement_fixtures.py` and `tests/unit/executor/markets/test_settlement_by_hand.py`
+    drive the real `execute()` over three task shapes and assert every figure per agent by name.
+    The fixture gives the delivery timestep a history running the *other way* from the clearing,
+    without which gross and net coincide and `eec60f0` is unfalsifiable, and it prices all six
+    charge directions distinctly and non-zero, which the shipped tariff does not.
+  - `tests/e2e/test_market_clearing.py` reconciles the written tables against each other over a
+    real run: fee rows against the trades they are charged on, money against rate times quantity,
+    local trades against their counterparties.
+  - `tests/unit/executor/utilities/database/test_net_energy_cache.py` records which of its
+    assertions actually carry the anchor. Measured: admitting `grid` and `levies` into
+    `NET_TRANSACTION_TYPES` fails three tests there and the cached-equals-uncached comparison is
+    **not** among them — both routes call `_net_energy_from`, so a widened filter is applied to
+    both and they agree at the wrong number.
+
+  Measured against **18 mutations**, applied one at a time and each confirmed landed by byte
+  count: **16 caught**. The two survivors are stated rather than hidden. One is an equivalent
+  mutant — the four `pl.lit(retailer[grid_*])` lines in `__apply_grid_levies` are a dead
+  placeholder, overwritten for every agent by that agent's own variable-fee forecast, so crossing
+  or un-crossing them is unobservable in any scenario. The other is `a860ca6` itself at e2e
+  scale, for the reason below.
+
+  **`a860ca6` cannot be observed on any shipped scenario**, measured by instrumenting
+  `_transactions_for_netting` through a real run: `scenario_with_market`'s timetable holds 552
+  `clear` tasks and 24 `settle` tasks and not one carrying both, and on all 24 calls
+  `self.transactions` was empty. It is unreachable rather than absent — with
+  `settling: continuous`, `_create_timetable_ex_ante` appends `,settle` to the rows whose
+  timestep has arrived and then overwrites exactly those rows with `settle`, because
+  `timestep - timestamp <= 0` is below any positive `closing`, and every shipped config sets
+  `closing` to the market duration. The fix is still right; the unit test is the only thing that
+  holds it.
+
 - **Market clearing is now executed and asserted by value (#223).** Every `markets.yaml` any test
   ran set `method: None`, so the clearing branch of `executor/markets/electricity.py` had never
   run in the suite, and neither had two of the three trading strategies: `Linear` and `Zi` reached
@@ -344,6 +389,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Fixed
+- **The retailer's ladder row is stamped with the clearing, not with the delivery step.**
+  `self.retailer` is filtered on `timestamp == the delivery step`, the retailer table being
+  indexed by delivery time under that name, and `__create_bids_offers` aliased that one column
+  into both — so the retailer's row was the only row in each cleared table whose
+  `(timestamp, timestep)` pair was not a clearing. That pair is the clearing key: it groups a
+  clearing and namespaces the trade id. `forecaster.py` already does the same two-step correctly,
+  so this brings the market into line with existing practice.
+
+  Measured on `scenario_with_market`: 93 `(timestamp, timestep)` pairs in `bids_cleared` against
+  89 in `offers_cleared`, of which 88 were clearings; 25 rows of 257 in `bids_cleared` and 95 of
+  257 in `offers_cleared` carried the bad stamp. With the fix both sides agree at 88 and nothing
+  else in the run moves — the two result trees are identical as multisets once row order is
+  ignored, and only the retailer's `timestamp` differs.
+
+  **The golden master could not see this, and that is worth saying rather than citing its green
+  as evidence.** `scenario_run.fingerprint` records `rows` plus per-column `sum`/`min`/`max` for
+  *numeric* columns only, so datetimes are excluded and the statistics are order-invariant. On
+  `simple_scenario`, 266 of 616 rows of the pinned `bids_cleared` and 350 of 616 of
+  `offers_cleared` carried a wrong timestamp and `-m golden` reported green. Recording `min`/`max`
+  for datetime columns would close that; it is a reference re-baseline and is left for the change
+  that wants it.
+
+- **`trades_uncleared` is removed.** Both clearing methods computed it, `__clear_bids_offers`
+  returned it and `__create_market_tables` took it as a parameter its body never mentioned.
+  Removed rather than consumed: the uncleared quantity `__create_market_tables` computes is the
+  submitted position less what cleared, per agent, which is a different — and the correct —
+  number. Verified dead across the whole repository, and the arity guard that
+  `test_community_clearing_is_refused_by_a_signature_mismatch` relies on is unaffected.
+
 - **`pda` cleared more energy than was submitted whenever the two ladders misaligned (#241).**
   `__method_pda` joins the bid and offer ladders on their *cumulative* energy, back-fills the
   gaps, and then traded `min(energy_in, energy_out)` of the two **positions** in every joined row.
@@ -424,10 +498,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   tidy-up the dtype comment invites, is silent. Measured: under that edit this is the **only**
   failing test in the repository; the other 108 pass.
 
-  Two adjacent pieces of dead work turned up while measuring that, and both are recorded rather
-  than removed. `trades_uncleared` is computed, returned, threaded through two call sites and
-  **never read** — `__create_market_tables` takes it as a parameter its body does not mention — so
-  no fixture can ever kill a mutation on the line that builds it. And the `_right` coalescing loop
+  Two adjacent pieces of dead work turned up while measuring that, and both were recorded rather
+  than removed. `trades_uncleared` was computed, returned, threaded through two call sites and
+  **never read** — `__create_market_tables` took it as a parameter its body did not mention — so
+  no fixture could ever kill a mutation on the line that built it. **It is gone now**, removed by
+  the L4 entry below. And the `_right` coalescing loop
   is redundant while it stays above the `fill_null(strategy='backward')` two lines below, which
   refills exactly the nulls it coalesces; deleting it passes the whole suite. Neither is a defect;
   the second is a latent coupling and now carries a comment saying so.

@@ -16,15 +16,33 @@ named rate columns, or a quantity multiplied out by hand.
 **The three invariants, and what anchors each.**
 
 1. *Net energy is the sum of the timestep's transactions.* Anchored on the delivery timestep's
-   history, which is written into the fixture rather than derived: `buyer` bought 3000 Wh at this
-   clearing and had sold 1000 Wh at an earlier one, so its net is 2000 Wh and nothing but the
-   arithmetic can make it so. See `test_the_fee_energy_is_the_timesteps_net_not_this_clearings`.
+   history, which is written into the fixture rather than derived: `buyer` bought 4000 Wh across
+   this clearing and an earlier one and sold 1000 Wh at a third, so its net is 3000 Wh and
+   nothing but the arithmetic can make it so.
 2. *Fees and levies are charged on net, to the right column.* Anchored on the six retailer rate
    columns, all distinct and all non-zero (`settlement_fixtures`), so every mapping is a
    different number rather than a different name for zero.
-3. *The balance closes.* Anchored twice: every money column is recomputed as rate times quantity
-   and must match to the euro, and the residual left after the agent-to-agent trades cancel must
-   equal the named charges exactly -- no unexplained euro anywhere.
+3. *The balance closes.* Anchored on `test_what_each_agent_pays_is_the_hand_computed_total` and
+   its two siblings, which recompute each agent's whole bill from a rate and a hand-derived
+   quantity. **Not** on `test_every_charge_is_its_rate_times_its_quantity`: production computes
+   `price_in` as `price_pu_in * energy_in` in so many words, so that assertion restates the code
+   and can only fail on a cast or a schema slip. It is a smoke test, and its docstring says so.
+
+**Four degrees of freedom in the book are load-bearing**, and a review panel defeated the first
+version of this file through the absence of each:
+
+* **An uncleared *offer*** (`hoarder`), not only an uncleared bid. Without one, every assertion
+  touching the feed-in side of balancing multiplies by zero, and both the rate mapping and the
+  concatenation that builds balancing energy can be broken silently.
+* **A fractional market share, blending to a half.** `buyer` draws 3000 Wh from the local
+  market and 1000 Wh from the retailer, so its grid fee is the blend evaluated at 0.75 rather
+  than at an endpoint, and the two rates are chosen so that the result is 512.5 rather than a
+  whole number. With every share at 0 or 1 the interpolation is never exercised; with a blend
+  that lands on an integer, truncating it instead of rounding is invisible.
+* **A history running the other way from the clearing.** Without it gross and net coincide and
+  `eec60f0` is unfalsifiable.
+* **Distinct quantities per agent**, so no two agents' bills collide -- a total credited to the
+  wrong agent is what a sum cannot see.
 
 **Three task shapes are covered**, because the accounting differs between them and only one of
 them appears in a shipped run: `clear,settle` in one task, settlement as a task of its own, and
@@ -37,64 +55,82 @@ import polars as pl
 import pytest
 
 import hamlet.constants as c
-from tests.settlement_fixtures import (BALANCING_BUYS, BALANCING_SELLS, GRID_MARKET_IN,
+from tests.settlement_fixtures import (BALANCING_BUYS, BALANCING_SELLS, ENERGY, GRID_MARKET_IN,
                                        GRID_MARKET_OUT, GRID_RETAIL_IN, GRID_RETAIL_OUT,
-                                       LEVIES_IN, LEVIES_OUT, RETAILER_BUYS, RETAILER_SELLS,
-                                       RETAILER_ID, forecast_table, ledger, retailer_table, rows,
+                                       LEVIES_IN, LEVIES_OUT, MARKET, NAME, REGION,
+                                       RETAILER_BUYS, RETAILER_SELLS, RETAILER_ID, TIMESTAMP,
+                                       TIMESTEP, forecast_table, ledger, retailer_table, rows,
                                        settle)
 
 # ----------------------------------------------------------------------------------------------
 # The book every number below is derived from, and the derivation.
 #
 # Bid ladder, sorted by price descending, with its cumulative energy:
-#     buyer  3000 Wh @ 3000   cumsum 3000
-#     spare  2000 Wh @ 1000   cumsum 5000
+#     buyer   3000 Wh @ 3000   cumsum 3000
+#     spare   2000 Wh @ 1000   cumsum 5000
 # Offer ladder, ascending:
-#     seller 3000 Wh @ 1200   cumsum 3000
+#     seller  3000 Wh @ 1200   cumsum 3000
+#     hoarder 2500 Wh @ 4000   cumsum 5500
 #
-# The two ladders meet at 3000 Wh and nowhere else. At that breakpoint 3000 >= 1200, so the
-# segment clears: 3000 Wh. At 5000 the offer side has run out, so `spare` clears nothing and its
-# whole 2000 Wh bid stays uncleared. Uniform pricing takes the midpoint of the marginal pair,
-# (3000 + 1200) / 2 = 2100, so the trade is worth 2100 * 3000 = 6_300_000.
+# Merged on the cumulative sums and back-filled, the ladders meet at 3000, 5000 and 5500.
+#   3000 -- buyer @ 3000 against seller @ 1200: 3000 >= 1200, so 3000 Wh clears.
+#   5000 -- spare @ 1000 against hoarder @ 4000 (back-filled): 1000 < 4000, uncleared.
+#   5500 -- no bid beyond it at all, uncleared.
+# So `spare`'s whole 2000 Wh bid and `hoarder`'s whole 2500 Wh offer go to settlement, one on
+# each side, and uniform pricing takes the midpoint of the single cleared pair:
+# (3000 + 1200) / 2 = 2100, worth 2100 * 3000 = 6_300_000.
 #
-# None of the four submitted prices is 2100, so an implementation echoing a submitted price back
+# None of the submitted prices is 2100, so an implementation echoing a submitted price back
 # instead of computing a clearing price fails rather than coinciding.
 # ----------------------------------------------------------------------------------------------
 BOOK = [('buyer', 3000, 0, 3000, RETAILER_BUYS),
         ('spare', 2000, 0, 1000, RETAILER_BUYS),
-        ('seller', 0, 3000, RETAILER_SELLS, 1200)]
+        ('seller', 0, 3000, RETAILER_SELLS, 1200),
+        ('hoarder', 0, 2500, RETAILER_SELLS, 4000)]
 
 CLEARING_PRICE = 2100
 CLEARED_ENERGY = 3000
 CLEARED_MONEY = 6_300_000
 
-#: `spare`'s bid clears nothing, so settlement buys the whole 2000 Wh as balancing energy, at the
-#: retailer's *selling* price -- the agent is buying.
-UNCLEARED_ENERGY = 2000
-BALANCING_MONEY = BALANCING_SELLS * UNCLEARED_ENERGY  # 1600 * 2000 = 3_200_000
+#: What settlement has to buy and sell as balancing energy: the two uncleared positions, one on
+#: each side. An agent short of energy pays the retailer's *selling* price; one long is paid its
+#: *buying* price. Both quantities are distinct from every other quantity in the book, so no two
+#: agents' bills collide.
+UNCLEARED_BID = 2000     # spare
+UNCLEARED_OFFER = 2500   # hoarder
+BALANCING_BOUGHT = BALANCING_SELLS * UNCLEARED_BID   # 1600 * 2000 = 3_200_000
+BALANCING_SOLD = BALANCING_BUYS * UNCLEARED_OFFER    # 400 * 2500 = 1_000_000
 
 # ----------------------------------------------------------------------------------------------
 # What this delivery timestep already carries when it settles.
 #
-# **The direction is the point.** `buyer` *sold* 1000 Wh at an earlier clearing of the same
-# delivery timestep and buys 3000 Wh at this one, so its gross flow is 3000 in and 1000 out while
-# its net is 2000 in. With a one-directional history the two would be the same number and
-# `eec60f0` -- fees charged on gross -- would be unfalsifiable here.
+# **`buyer`'s history does two jobs.** It sold 1000 Wh at an earlier clearing of the same
+# delivery step, so its gross flow is 4000 in and 1000 out while its net is 3000 in -- with a
+# one-directional history the two would be the same number and `eec60f0` would be unfalsifiable.
+# And it *bought* 1000 Wh from the retailer, so only 3000 of its 4000 Wh in came from the local
+# market: a share of 0.75, the only fractional ratio in the fixture and the only thing that
+# exercises the grid-fee blend anywhere other than at its endpoints.
 #
-# The retailer's matching row is included because a real retail trade writes both sides. It is
-# what makes the money ledger closable, and the retailer is excluded from fees, so it also checks
-# that exclusion against a row that actually exists.
+# The retailer's matching row is included because a real retail trade writes both sides -- but
+# note what it does and does not do here. Its money never enters the ledger the tests read: a
+# seeded row reaches the market through `transactions_prev` only, and `__update_database`
+# replaces `market_transactions` with this call's rows. It is there so that the fee exclusion has
+# a retailer to exclude, and `test_the_retailer_is_not_charged_grid_fees_or_levies` is what that
+# buys -- measured, removing the row from the filter fails two tests.
 # ----------------------------------------------------------------------------------------------
 HISTORY = [('buyer', c.TT_RETAIL, 0, 1000, 0, 500_000),
-           (RETAILER_ID, c.TT_RETAIL, 1000, 0, 500_000, 0)]
+           ('buyer', c.TT_RETAIL, 1000, 0, 1_500_000, 0),
+           (RETAILER_ID, c.TT_RETAIL, 1000, 0, 500_000, 0),
+           (RETAILER_ID, c.TT_RETAIL, 0, 1000, 0, 1_500_000)]
 
 SOLD_EARLIER = 1000
-BUYER_NET_IN = CLEARED_ENERGY - SOLD_EARLIER  # 3000 - 1000 = 2000
+BOUGHT_EARLIER = 1000
+BUYER_GROSS_IN = CLEARED_ENERGY + BOUGHT_EARLIER      # 4000
+BUYER_NET_IN = BUYER_GROSS_IN - SOLD_EARLIER          # 3000
 
-#: Per-agent net energy at this delivery timestep, computed by hand from the book and the history
-#: above. `seller` has no history, so its net is its cleared offer; `spare` nets its balancing
-#: purchase and nothing else.
-NET = {'buyer': (BUYER_NET_IN, 0), 'spare': (UNCLEARED_ENERGY, 0), 'seller': (0, CLEARED_ENERGY)}
+#: Per-agent net energy at this delivery timestep, computed by hand from the book and the history.
+NET = {'buyer': (BUYER_NET_IN, 0), 'spare': (UNCLEARED_BID, 0),
+       'seller': (0, CLEARED_ENERGY), 'hoarder': (0, UNCLEARED_OFFER)}
 
 # ----------------------------------------------------------------------------------------------
 # The grid fee each agent pays, derived.
@@ -102,19 +138,27 @@ NET = {'buyer': (BUYER_NET_IN, 0), 'spare': (UNCLEARED_ENERGY, 0), 'seller': (0,
 # `__apply_grid_levies` blends the two grid rates by the share of an agent's energy that came
 # from the local market: `market_rate * ratio + retail_rate * (1 - ratio)`.
 #
-#   buyer  -- 3000 Wh in, all of it `market`; the 1000 Wh `retail` row is on the *out* side, so
-#             the in-ratio is 3000/3000 = 1 and the rate is the market one, 400.
-#   spare  -- 2000 Wh in, all of it `balancing`; no `market` energy in, so the ratio is 0 and the
-#             rate is the retail one, 800.
-#   seller -- 3000 Wh out, all `market`; out-ratio 1, so the *feed-in* market rate, 40.
+#   buyer   -- 4000 Wh in, 3000 of it `market`: share 0.75, so 400*0.75 + 850*0.25 = 512.5,
+#              rounded to **513**.
+#   spare   -- 2000 Wh in, all `balancing`: share 0, so the retail rate, 850.
+#   seller  -- 3000 Wh out, all `market`: share 1, so the *feed-in* market rate, 40.
+#   hoarder -- 2500 Wh out, all `balancing`: share 0, so the feed-in retail rate, 80.
 #
-# The two buyers therefore pay different rates for the same 2000 Wh, which is what makes the
-# blend observable at all: a mapping that ignored the ratio would give them the same number.
+# 513 is a hand-computed literal rather than the expression above, and
+# `test_the_grid_rate_blends_the_two_rates_at_a_fractional_share` states that it is neither
+# endpoint -- so an implementation that collapsed the blend to one side fails rather than
+# coinciding. The blend lands on a **half**, so truncating instead of rounding fails too; see
+# the note on the rates in `settlement_fixtures`.
 # ----------------------------------------------------------------------------------------------
-GRID_RATE = {'buyer': GRID_MARKET_OUT, 'spare': GRID_RETAIL_OUT, 'seller': GRID_MARKET_IN}
-LEVY_RATE = {'buyer': LEVIES_OUT, 'spare': LEVIES_OUT, 'seller': LEVIES_IN}
+BUYER_MARKET_SHARE_IN = CLEARED_ENERGY / BUYER_GROSS_IN   # 0.75, from the fixture's quantities
+BUYER_GRID_RATE = 513
 
-AGENTS = ('buyer', 'spare', 'seller')
+GRID_RATE = {'buyer': BUYER_GRID_RATE, 'spare': GRID_RETAIL_OUT,
+             'seller': GRID_MARKET_IN, 'hoarder': GRID_RETAIL_IN}
+LEVY_RATE = {'buyer': LEVIES_OUT, 'spare': LEVIES_OUT,
+             'seller': LEVIES_IN, 'hoarder': LEVIES_IN}
+
+AGENTS = ('buyer', 'spare', 'seller', 'hoarder')
 
 #: Each agent's grid bill and levy, in EURe-7: its rate times its net quantity. The two factors
 #: are independent -- the rate comes from the retailer file, the quantity from the book and the
@@ -123,11 +167,16 @@ AGENTS = ('buyer', 'spare', 'seller')
 GRID_BILL = {agent: GRID_RATE[agent] * sum(NET[agent]) for agent in AGENTS}
 LEVY_BILL = {agent: LEVY_RATE[agent] * sum(NET[agent]) for agent in AGENTS}
 
-#: `seller` is a net exporter, so its two charges land in `price_out`. In a real tariff they
-#: would be zero -- the shipped retailer files price feed-in at nothing -- and they are non-zero
-#: here only so the column mapping is observable. See `settlement_fixtures`.
+#: The two exporters' charges land in `price_out`. In a real tariff they would be zero -- the
+#: shipped retailer files price feed-in at nothing -- and they are non-zero here only so the
+#: column mapping is observable. See `settlement_fixtures`.
 IMPORTERS = ('buyer', 'spare')
-EXPORTERS = ('seller',)
+EXPORTERS = ('seller', 'hoarder')
+
+#: The identity every row this settlement writes must carry. `TIMESTAMP != TIMESTEP` by
+#: construction, so a row stamped from the wrong one of the two is visible.
+IDENTITY = {c.TC_TIMESTAMP: TIMESTAMP, c.TC_TIMESTEP: TIMESTEP, c.TC_REGION: REGION,
+            c.TC_MARKET: MARKET, c.TC_NAME: NAME, c.TC_TYPE_ENERGY: ENERGY}
 
 
 @pytest.fixture(scope='module')
@@ -159,8 +208,40 @@ def test_the_book_clears_the_way_this_file_assumes(book):
     """
     assert book[(c.TT_MARKET, 'buyer')] == (CLEARED_ENERGY, 0, CLEARED_MONEY, 0)
     assert book[(c.TT_MARKET, 'seller')] == (0, CLEARED_ENERGY, 0, CLEARED_MONEY)
-    assert (c.TT_MARKET, 'spare') not in book
+    assert (c.TT_MARKET, 'spare') not in book and (c.TT_MARKET, 'hoarder') not in book
     assert CLEARED_MONEY == CLEARING_PRICE * CLEARED_ENERGY
+
+
+def test_settlement_has_a_position_on_each_side():
+    """An uncleared bid **and** an uncleared offer, or half the balancing market is untested.
+
+    A book with buyers only leaves every feed-in assertion multiplying by zero: the rate on that
+    side can be read off the wrong retailer column, or the offer side can be dropped from the
+    concatenation that builds balancing energy at all, and nothing notices. A review panel
+    defeated the first version of this file both ways.
+    """
+    assert any(energy_in > 0 for _, energy_in, _, _, _ in BOOK)
+    assert any(energy_out > 0 for _, _, energy_out, _, _ in BOOK)
+    assert UNCLEARED_BID > 0 and UNCLEARED_OFFER > 0 and UNCLEARED_BID != UNCLEARED_OFFER
+
+
+def test_one_agents_market_share_is_neither_zero_nor_one():
+    """The grid blend has to be evaluated somewhere other than at its endpoints.
+
+    With every share at 0 or 1 the interpolation never runs: rounding it away, or weighting it
+    the other way round, changes nothing. `buyer` is the agent that makes it observable.
+    """
+    assert 0 < BUYER_MARKET_SHARE_IN < 1
+    assert BUYER_GRID_RATE not in (GRID_MARKET_OUT, GRID_RETAIL_OUT)
+    assert min(GRID_MARKET_OUT, GRID_RETAIL_OUT) < BUYER_GRID_RATE < max(GRID_MARKET_OUT,
+                                                                         GRID_RETAIL_OUT)
+
+
+def test_no_two_agents_are_billed_the_same_amount():
+    """Distinct bills, so a total credited to the wrong agent is visible rather than absorbed."""
+    bills = [GRID_BILL[agent] + LEVY_BILL[agent] for agent in AGENTS]
+
+    assert len(set(bills)) == len(bills)
 
 
 def test_the_history_runs_the_other_way_from_this_clearing():
@@ -170,26 +251,25 @@ def test_the_history_runs_the_other_way_from_this_clearing():
     then charging fees on gross -- `eec60f0` -- would be an equivalent mutation in this file. The
     same shape defeated an earlier fixture in this repository through a "don't-care" zero.
     """
-    bought_now = {agent: energy_in for agent, energy_in, _, _, _ in BOOK}
-    sold_earlier = sum(energy_out for agent, kind, _, energy_out, _, _ in HISTORY
-                       if agent == 'buyer')
+    sold_earlier = sum(energy_out for agent, _, _, energy_out, _, _ in HISTORY if agent == 'buyer')
+    bought_earlier = sum(energy_in for agent, _, energy_in, _, _, _ in HISTORY if agent == 'buyer')
 
-    assert bought_now['buyer'] > 0 and sold_earlier > 0
-    assert bought_now['buyer'] != sold_earlier, 'gross and net would coincide'
+    assert sold_earlier == SOLD_EARLIER > 0 and bought_earlier == BOUGHT_EARLIER > 0
+    assert BUYER_GROSS_IN != BUYER_NET_IN, 'gross and net would coincide'
 
 
-@pytest.mark.parametrize('rates', [
-    (GRID_MARKET_IN, GRID_MARKET_OUT, GRID_RETAIL_IN, GRID_RETAIL_OUT, LEVIES_IN, LEVIES_OUT),
-])
-def test_every_charge_rate_in_the_fixture_is_distinct_and_non_zero(rates):
+def test_every_charge_rate_in_the_fixture_is_distinct_and_non_zero():
     """Six rates, six different non-zero values, so every column mapping is falsifiable.
 
     The shipped retailer files charge 0 on feed-in. A fixture that copied them could not tell
     `grid_retail_in` from `grid_market_in`, both being zero, and a swap between the two would be
     an equivalent mutant -- which is exactly how a placeholder value faked equivalence on !250.
     """
-    assert len(set(rates)) == len(rates)
-    assert all(rate > 0 for rate in rates)
+    rates_ = (GRID_MARKET_IN, GRID_MARKET_OUT, GRID_RETAIL_IN, GRID_RETAIL_OUT,
+              LEVIES_IN, LEVIES_OUT)
+
+    assert len(set(rates_)) == len(rates_)
+    assert all(rate > 0 for rate in rates_)
 
 
 def test_the_retailer_prices_buying_above_selling():
@@ -203,6 +283,32 @@ def test_the_retailer_prices_buying_above_selling():
     assert BALANCING_SELLS > BALANCING_BUYS
     assert GRID_MARKET_OUT > GRID_MARKET_IN and GRID_RETAIL_OUT > GRID_RETAIL_IN
     assert LEVIES_OUT > LEVIES_IN
+
+
+# ----------------------------------------------------------------------------------------------
+# Every row's identity. Nothing else in this file reads one, and two mutations lived there.
+# ----------------------------------------------------------------------------------------------
+def test_every_emitted_row_carries_this_clearings_identity(settled):
+    """Timestamp, timestep, region, market, name and energy type, on every row of every kind.
+
+    The rest of the file projects a row down to `(kind, agent, energies, money)`, which is what
+    the accounting is about -- and that projection is exactly where a review panel got two
+    mutations through. A fee row stamped with the clearing step instead of the delivery step, and
+    a fee row written into a different market, both leave every quantity and every price correct
+    and are invisible to a per-agent ledger. `get_net_energy` is keyed on `(timestep, id_agent)`
+    and `_net_energy_from` filters on market and name, so either misfiling puts an agent's fees
+    where nothing will find them again.
+
+    `TIMESTAMP != TIMESTEP` in the fixture, so a row stamped from the wrong column fails here
+    rather than coinciding.
+    """
+    frame = settled.market_transactions
+    frame = frame.with_columns([pl.col(column).cast(pl.Utf8) for column, dtype
+                                in frame.schema.items() if dtype == pl.Categorical])
+
+    assert len(frame) > 0
+    for column, expected in IDENTITY.items():
+        assert set(frame[column]) == {expected}, f"{column} is not this clearing's"
 
 
 # ----------------------------------------------------------------------------------------------
@@ -229,32 +335,26 @@ def test_the_fee_energy_is_the_timesteps_net_not_this_clearings(book):
     of this delivery timestep, what cleared at this one, and the balancing energy. The middle one
     was missing, so an agent's fees were computed as though it had not traded this timestep.
 
-    Here `buyer` sold 1000 Wh earlier and bought 3000 Wh now. With the current clearing included
-    it nets 2000 Wh **in**; without it, 1000 Wh **out** -- a different direction, not merely a
-    different number, so the fee lands in the other column at the other rate.
+    Here `buyer` bought 3000 Wh at this clearing. Without it its net is the history alone: 1000
+    in and 1000 out, which nets to nothing, so it would be billed for no energy at all.
     """
     energy_in, energy_out, price_in, price_out = book[(c.TT_GRID, 'buyer')]
 
     assert (energy_in, energy_out) == (BUYER_NET_IN, 0)
-    assert (price_in, price_out) == (GRID_MARKET_OUT * BUYER_NET_IN, 0)
-    # What the defect produced instead, stated so the two cannot be confused
-    assert (energy_in, energy_out) != (0, SOLD_EARLIER)
+    assert (price_in, price_out) == (GRID_BILL['buyer'], 0)
 
 
 def test_the_fee_energy_is_net_and_not_gross(book):
     """Regression, `eec60f0` part 1: fees were charged on gross energy, overcharging both sides.
 
-    `buyer`'s gross flow at this timestep is 3000 Wh in *and* 1000 Wh out -- 4000 Wh of billable
-    energy if both are charged, against the 2000 Wh it actually drew from the grid. The
-    difference is a factor of two on its grid bill and its levy.
+    `buyer`'s gross flow at this timestep is 4000 Wh in *and* 1000 Wh out -- 5000 Wh of billable
+    energy if both are charged, against the 3000 Wh it actually drew from the grid.
     """
-    gross_in, gross_out = CLEARED_ENERGY, SOLD_EARLIER
     energy_in, energy_out, price_in, _ = book[(c.TT_GRID, 'buyer')]
 
     assert energy_in + energy_out == BUYER_NET_IN
-    assert energy_in + energy_out < gross_in + gross_out
-    assert price_in == GRID_MARKET_OUT * BUYER_NET_IN
-    assert price_in != GRID_MARKET_OUT * gross_in
+    assert energy_in + energy_out < BUYER_GROSS_IN + SOLD_EARLIER
+    assert price_in == GRID_RATE['buyer'] * BUYER_NET_IN
 
 
 def test_only_one_direction_of_a_fee_row_is_ever_charged(book):
@@ -269,8 +369,12 @@ def test_the_retailer_is_not_charged_grid_fees_or_levies(book):
     """The retailer trades on this timestep -- `HISTORY` gives it a row -- and pays no fees.
 
     Its position is the market's supply of last resort, not a grid connection, and charging it
-    would bill the tariff back to the tariff. Stated against a retailer that is genuinely
-    present, so the exclusion is exercised rather than vacuous.
+    would bill the tariff back to the tariff. `HISTORY` gives it rows on both sides.
+
+    The exclusion is genuinely exercised -- the retailer is in `transactions_prev`, which is what
+    `__apply_grid_levies` filters -- but note that the premise below reads the fixture constant,
+    not the result: `settle()` returns only this call's rows, so the retailer's own `retail` row
+    is not in the frame this asserts over. See `settlement_fixtures.settle`.
     """
     assert any(agent == RETAILER_ID for agent, *_ in HISTORY)
     assert not [key for key in book if key[0] in (c.TT_GRID, c.TT_LEVIES)
@@ -297,35 +401,61 @@ def test_the_levy_rate_is_the_retailers_selling_column(settled, agent):
     assert charged == (LEVIES_OUT, LEVIES_IN)
 
 
-@pytest.mark.parametrize('agent, rate', [('buyer', GRID_MARKET_OUT), ('spare', GRID_RETAIL_OUT)])
-def test_the_grid_rate_on_consumption_is_the_forecasts_selling_column(settled, agent, rate):
-    """The same crossing for grid fees, on the path that is live.
+@pytest.mark.parametrize('agent', ['spare', 'hoarder'])
+def test_the_balancing_rate_is_the_retailers_column_crossed(settled, agent):
+    """The same crossing on balancing energy, on the two agents that carry a balancing row.
+
+    An agent short of energy buys it at the retailer's selling price and one long is paid its
+    buying price -- 1600 against 400 here. A swap makes being long of energy pay the retail rate,
+    which is a risk-free arbitrage rather than a market.
+
+    Asserted as the *pair*, not as the direction the agent happens to have traded: the unused
+    column is multiplied by a zero quantity, so a test that only reads the used one cannot see a
+    swap at all. That is precisely how this mutation survived the first version of this file.
+    """
+    assert rates(settled, c.TT_BALANCING)[agent] == (BALANCING_SELLS, BALANCING_BUYS)
+
+
+@pytest.mark.parametrize('agent, rate', [('spare', GRID_RETAIL_OUT), ('hoarder', GRID_RETAIL_IN),
+                                         ('seller', GRID_MARKET_IN)])
+def test_the_grid_rate_is_the_forecasts_crossed_column(settled, agent, rate):
+    """The same crossing for grid fees, on the path that is live, at the two endpoints.
 
     `__apply_grid_levies` seeds the four grid-rate columns from the retailer and then overwrites
     every one of them, for every agent, from that agent's own forecast of the variable grid fee.
     So the direction that decides an agent's bill is the `forecast_dir` in that loop, and it is
-    the one asserted here. See `test_the_retailer_grid_rates_never_reach_the_output` for what
-    that makes of the seed.
+    the one asserted here. See `test_the_retailer_grid_rates_never_reach_the_output`.
 
-    The two agents draw the same 2000 Wh and pay different rates, because `buyer` drew it from
-    the local market and `spare` from the retailer; a mapping that lost the blend would give them
-    the same number.
+    These three agents draw all of their energy from one side, so each reads one rate outright.
+    `buyer` is the fractional case and has its own test.
     """
-    charged_in, _ = rates(settled, c.TT_GRID)[agent]
+    charged_in, charged_out = rates(settled, c.TT_GRID)[agent]
 
-    assert charged_in == rate
+    assert (charged_in if agent in IMPORTERS else charged_out) == rate
 
 
-def test_the_grid_rate_on_feed_in_is_the_forecasts_buying_column(settled):
-    """The mirror direction, on the one agent that feeds in."""
-    _, charged_out = rates(settled, c.TT_GRID)['seller']
+def test_the_grid_rate_blends_the_two_rates_at_a_fractional_share(settled):
+    """`buyer` draws 3 Wh in 4 from the local market, so it pays neither rate but a blend.
 
-    assert charged_out == GRID_MARKET_IN
+    512.5 = 400 * 0.75 + 850 * 0.25, rounded to 513 -- hand-computed and written as a literal
+    rather than as that expression, which is the formula under test. It is strictly between the
+    two endpoints, so an implementation that collapsed the blend to either side fails; and it
+    lands on a half, so truncating instead of rounding fails too. Both survived the first version
+    of this file, the first because every share in the book was 0 or 1 and the second because the
+    two rates were round numbers.
+    """
+    charged_in, _ = rates(settled, c.TT_GRID)['buyer']
+
+    assert charged_in == BUYER_GRID_RATE
+    assert charged_in not in (GRID_MARKET_OUT, GRID_RETAIL_OUT)
+    assert rates(settled, c.TT_GRID)['spare'][0] == GRID_RETAIL_OUT, (
+        'the two importers now pay the same rate, so the blend is not observable')
 
 
 @pytest.mark.parametrize('kind', [c.TT_GRID, c.TT_LEVIES])
-@pytest.mark.parametrize('importer', ['buyer', 'spare'])
-def test_a_charge_is_dearer_on_consumption_than_on_feed_in(settled, kind, importer):
+@pytest.mark.parametrize('exporter', EXPORTERS)
+@pytest.mark.parametrize('importer', IMPORTERS)
+def test_a_charge_is_dearer_on_consumption_than_on_feed_in(settled, kind, importer, exporter):
     """`tests/README.md`'s tell, asserted on what the executor emitted rather than on the config.
 
     Grid fees and levies are both charged on consumption. If the rate charged to an agent drawing
@@ -336,7 +466,7 @@ def test_a_charge_is_dearer_on_consumption_than_on_feed_in(settled, kind, import
     than stylistic: see `test_the_unused_direction_of_a_fee_row_is_priced_at_zero`.
     """
     charged = rates(settled, kind)[importer][0]
-    paid = rates(settled, kind)['seller'][1]
+    paid = rates(settled, kind)[exporter][1]
 
     assert charged > paid > 0
 
@@ -361,15 +491,15 @@ def test_a_grid_rate_collapses_to_zero_where_the_agent_moved_no_energy_that_way(
 
     assert charged['seller'] == (0, GRID_MARKET_IN), 'the exporter has no gross import'
     assert charged['spare'] == (GRID_RETAIL_OUT, 0), 'the importer has no gross export'
-    assert charged['buyer'] == (GRID_MARKET_OUT, GRID_RETAIL_IN), 'gross, not net, on both sides'
+    assert charged['buyer'] == (BUYER_GRID_RATE, GRID_RETAIL_IN), 'gross, not net, on both sides'
 
 
 def test_the_levy_is_a_flat_rate_and_is_not_blended(settled):
     """Every agent gets the same levy pair, whatever its market share.
 
-    Unlike the grid fee, levies carry no market-versus-retail split. Stated as "all three agree"
-    rather than by restating the two values, which `test_the_levy_rate_is_the_retailers_selling_
-    column` already pins: this is about the absence of a blend, not about the rate.
+    Unlike the grid fee, levies carry no market-versus-retail split. Stated as "all four agree"
+    rather than by restating the two values, which
+    `test_the_levy_rate_is_the_retailers_selling_column` already pins.
     """
     charged = rates(settled, c.TT_LEVIES)
 
@@ -387,32 +517,41 @@ def test_the_retailer_grid_rates_never_reach_the_output(settled):
     four `pl.lit(retailer[...])` lines put there are never read; only the columns they create
     are.
 
-    Measured here by giving one agent a forecast that disagrees with the retailer in both
-    directions: the forecast wins on both. The consequence is that crossing or un-crossing the
+    Measured here by giving two agents a forecast that disagrees with the retailer in every
+    direction: the forecast wins on all of them, including through the blend --
+    4000 * 0.75 + 8000 * 0.25 = 5000. The consequence is that crossing or un-crossing the
     retailer-to-grid mapping in those four lines is an equivalent mutation in any scenario, which
     is worth knowing before trusting a mutation score for that function.
     """
-    disagreeing = forecast_table(**{f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}': 4321,
+    disagreeing = forecast_table(**{f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_OUT}': 4000,
+                                    f'{c.TT_GRID}_{c.TT_RETAIL}_{c.PF_OUT}': 8000,
                                     f'{c.TT_GRID}_{c.TT_MARKET}_{c.PF_IN}': 1234})
-    result = settle(BOOK, history=HISTORY, forecasts={'buyer': disagreeing, 'seller': disagreeing})
+    result = settle(BOOK, history=HISTORY,
+                    forecasts={'buyer': disagreeing, 'seller': disagreeing})
 
-    assert rates(result, c.TT_GRID)['buyer'][0] == 4321
+    assert rates(result, c.TT_GRID)['buyer'][0] == 5000
     assert rates(result, c.TT_GRID)['seller'][1] == 1234
-    # ... and the untouched agent still gets the shared default, so this is the forecast winning
+    # ... and the untouched agents still get the shared default, so this is the forecast winning
     # rather than the retailer column being ignored for everyone.
     assert rates(result, c.TT_GRID)['spare'][0] == GRID_RETAIL_OUT
+    assert rates(result, c.TT_GRID)['hoarder'][1] == GRID_RETAIL_IN
 
 
 # ----------------------------------------------------------------------------------------------
 # Invariant 3 -- the balance closes.
 # ----------------------------------------------------------------------------------------------
 def test_every_charge_is_its_rate_times_its_quantity(settled):
-    """No unexplained euro anywhere: each money column is its per-unit column times its energy.
+    """A schema smoke test, **not** an anchor. Read this before counting it as one.
 
-    This is the reconciliation half of "the balance closes" -- an agent's ledger has to be
-    derivable from rates and quantities with a zero residual, on every row of every kind. It is
-    not a symmetric check: the money column is compared against a product computed from two other
-    columns, so a total that is internally consistent but wrong fails it.
+    Production computes `price_in` as `pl.col(price_pu_in) * pl.col(energy_in)` in so many words,
+    so this assertion restates the code rather than checking it: it cannot see a wrong rate or a
+    wrong quantity, only a cast or a schema slip that breaks the identity. Measured -- under a
+    mutation that gave one agent the wrong blended rate, six tests failed and this was not among
+    them.
+
+    It earns its place because the identity is the one thing every kind of row shares, and a
+    dtype change on this path would otherwise be silent. The anchor for invariant 3 is
+    `test_what_each_agent_pays_is_the_hand_computed_total` and its two siblings.
     """
     frame = settled.market_transactions.with_columns(
         [pl.col(column).fill_null(0) for column in
@@ -429,24 +568,29 @@ def test_every_charge_is_its_rate_times_its_quantity(settled):
 
 @pytest.mark.parametrize('agent, expected', [
     ('buyer', CLEARED_MONEY + GRID_BILL['buyer'] + LEVY_BILL['buyer']),
-    ('spare', BALANCING_MONEY + GRID_BILL['spare'] + LEVY_BILL['spare']),
+    ('spare', BALANCING_BOUGHT + GRID_BILL['spare'] + LEVY_BILL['spare']),
 ])
 def test_what_each_agent_pays_is_the_hand_computed_total(book, agent, expected):
     """Each buyer's whole bill for the timestep, to the euro, from the derivations above.
 
     Per agent by name and as an absolute figure -- the one form of this assertion that a defect
-    crediting the right total to the wrong agent cannot satisfy.
+    crediting the right total to the wrong agent cannot satisfy. Measured: reversing the agent
+    column of the per-agent sums leaves the closure test below green and fails this one.
     """
     paid = sum(book[key][2] for key in book if key[1] == agent)
 
     assert paid == expected
 
 
-def test_what_the_seller_receives_is_the_hand_computed_total(book):
-    """The mirror, including the fee it is charged on feed-in in this fixture's tariff."""
-    received = sum(book[key][3] for key in book if key[1] == 'seller')
+@pytest.mark.parametrize('agent, expected', [
+    ('seller', CLEARED_MONEY + GRID_BILL['seller'] + LEVY_BILL['seller']),
+    ('hoarder', BALANCING_SOLD + GRID_BILL['hoarder'] + LEVY_BILL['hoarder']),
+])
+def test_what_each_seller_receives_is_the_hand_computed_total(book, agent, expected):
+    """The mirror, including the fee each is charged on feed-in in this fixture's tariff."""
+    received = sum(book[key][3] for key in book if key[1] == agent)
 
-    assert received == CLEARED_MONEY + GRID_BILL['seller'] + LEVY_BILL['seller']
+    assert received == expected
 
 
 def test_the_agent_to_agent_trades_cancel_and_the_residual_is_exactly_the_charges(book):
@@ -458,61 +602,58 @@ def test_the_agent_to_agent_trades_cancel_and_the_residual_is_exactly_the_charge
     destroyed without saying so.
 
     **The anchor is that the charges are recomputed from rates and quantities**, not read back
-    out of the same sum: `sum(in) - sum(out)` on its own would be satisfied by any pair of totals
-    that happened to differ by the right amount.
+    out of the same sum. And it is not on its own evidence: it stays green under a defect that
+    credits every agent's total to a different agent, which is what the per-agent tests catch.
     """
     paid = sum(values[2] for values in book.values())
     received = sum(values[3] for values in book.values())
 
-    leaves = BALANCING_MONEY + sum(GRID_BILL[a] + LEVY_BILL[a] for a in IMPORTERS)
-    enters = sum(GRID_BILL[a] + LEVY_BILL[a] for a in EXPORTERS)
+    leaves = BALANCING_BOUGHT + sum(GRID_BILL[a] + LEVY_BILL[a] for a in IMPORTERS)
+    enters = BALANCING_SOLD + sum(GRID_BILL[a] + LEVY_BILL[a] for a in EXPORTERS)
 
     assert paid - received == leaves - enters
     assert book[(c.TT_MARKET, 'buyer')][2] == book[(c.TT_MARKET, 'seller')][3] == CLEARED_MONEY
 
 
-def test_the_local_trade_credits_the_seller_and_debits_the_buyer_and_not_the_reverse(book):
-    """Direction, not just magnitude: the money moved the way the trade did.
+def test_balancing_energy_is_bought_dear_and_sold_cheap(book):
+    """The two uncleared positions become trades with the retailer, priced the expensive way.
 
-    A sum over the table cannot tell a payment from a receipt, and the two rows of one trade
-    carry the same figure -- so this is the assertion that the figure is on the right side of
-    each of them.
-    """
-    assert book[(c.TT_MARKET, 'buyer')] == (CLEARED_ENERGY, 0, CLEARED_MONEY, 0)
-    assert book[(c.TT_MARKET, 'seller')] == (0, CLEARED_ENERGY, 0, CLEARED_MONEY)
-
-
-def test_balancing_energy_is_bought_at_the_retailers_selling_price(book):
-    """The uncleared bid becomes a purchase from the retailer, priced the expensive way round.
-
-    `BALANCING_SELLS` against `BALANCING_BUYS` is 1600 against 400, so a crossed mapping here
+    `spare` is short and pays 1600 per Wh; `hoarder` is long and is paid 400. A crossed mapping
     would pay an agent to be short of energy.
     """
-    energy_in, energy_out, price_in, price_out = book[(c.TT_BALANCING, 'spare')]
-
-    assert (energy_in, energy_out) == (UNCLEARED_ENERGY, 0)
-    assert (price_in, price_out) == (BALANCING_MONEY, 0)
-    assert price_in > BALANCING_BUYS * UNCLEARED_ENERGY
+    assert book[(c.TT_BALANCING, 'spare')] == (UNCLEARED_BID, 0, BALANCING_BOUGHT, 0)
+    assert book[(c.TT_BALANCING, 'hoarder')] == (0, UNCLEARED_OFFER, 0, BALANCING_SOLD)
+    assert BALANCING_BOUGHT / UNCLEARED_BID > BALANCING_SOLD / UNCLEARED_OFFER
 
 
 def test_the_balancing_energy_is_the_submitted_position_less_what_cleared(book):
     """Anchored on the book, which is outside the settlement entirely.
 
     Settlement takes the uncleared remainder from the clearing and the clearing takes it from
-    the submitted positions, so the quantity finally bought as balancing energy has to be what
-    each agent asked for less what it got. Comparing it to the book rather than to the clearing's
-    own uncleared table is what makes this an absolute check: an error shared by the clearing and
-    the settlement -- the shape that let #241's duplication pass a conservation invariant -- is
-    visible against the submitted quantity and invisible against anything derived from it.
+    the submitted positions, so the quantity finally balanced has to be what each agent asked for
+    less what it got. Comparing it to the book rather than to the clearing's own uncleared table
+    is what makes this an absolute check: an error shared by the clearing and the settlement --
+    the shape that let #241's duplication pass a conservation invariant -- is visible against the
+    submitted quantity and invisible against anything derived from it.
+
+    **Both directions**, because the first version compared only `energy_in` and the offer book
+    was therefore anchored on nothing: dropping the uncleared offers from balancing energy
+    altogether left it green.
     """
-    submitted = {agent: energy_in for agent, energy_in, _, _, _ in BOOK}
-    cleared = {agent: values[0] for (kind, agent), values in book.items() if kind == c.TT_MARKET}
-    balanced = {agent: values[0] for (kind, agent), values in book.items()
+    submitted_in = {agent: energy_in for agent, energy_in, _, _, _ in BOOK if energy_in}
+    submitted_out = {agent: energy_out for agent, _, energy_out, _, _ in BOOK if energy_out}
+    cleared_in = {agent: values[0] for (kind, agent), values in book.items()
+                  if kind == c.TT_MARKET}
+    cleared_out = {agent: values[1] for (kind, agent), values in book.items()
+                   if kind == c.TT_MARKET}
+    balanced = {agent: values[:2] for (kind, agent), values in book.items()
                 if kind == c.TT_BALANCING}
 
-    for agent in submitted:
-        assert balanced.get(agent, 0) == submitted[agent] - cleared.get(agent, 0), agent
-    assert sum(balanced.values()) > 0, 'nothing was balanced, so this asserts about nothing'
+    for agent, submitted in submitted_in.items():
+        assert balanced.get(agent, (0, 0))[0] == submitted - cleared_in.get(agent, 0), agent
+    for agent, submitted in submitted_out.items():
+        assert balanced.get(agent, (0, 0))[1] == submitted - cleared_out.get(agent, 0), agent
+    assert sum(sum(values) for values in balanced.values()) > 0, 'nothing was balanced'
 
 
 # ----------------------------------------------------------------------------------------------
@@ -540,7 +681,8 @@ def test_the_balancing_energy_is_the_submitted_position_less_what_cleared(book):
 # The two must produce the same fees, because they describe the same timestep. Asserted as
 # equality against the other arm's hand-computed figures, not against the other arm's output.
 # ----------------------------------------------------------------------------------------------
-SETTLED_BOOK = [('spare', UNCLEARED_ENERGY, 0, 1000, RETAILER_BUYS)]
+SETTLED_BOOK = [('spare', UNCLEARED_BID, 0, 1000, RETAILER_BUYS),
+                ('hoarder', 0, UNCLEARED_OFFER, RETAILER_SELLS, 4000)]
 SETTLED_HISTORY = HISTORY + [('buyer', c.TT_MARKET, CLEARED_ENERGY, 0, CLEARED_MONEY, 0),
                              ('seller', c.TT_MARKET, 0, CLEARED_ENERGY, 0, CLEARED_MONEY)]
 
@@ -589,13 +731,13 @@ def test_the_settle_only_task_really_had_no_clearing_in_flight(settled_only):
 # section covers the one it runs everywhere else.
 #
 # The difference reaches the bill. `__method_none` types every trade `retail`, so no agent has a
-# local-market share and the grid fee is the retail rate for everyone -- 800 rather than the 400
-# `buyer` pays above, on the same 2000 Wh. The retailer needs a quantity here, or
+# local-market share and the grid fee is the retail rate for everyone -- 850 rather than the 513
+# `buyer` pays above, on the same 3000 Wh. The retailer needs a quantity here, or
 # `__split_bids_offers` drops it out of the book and nothing has a counterparty.
 #
 #   buyer  buys 3000 Wh at the retailer's selling price, 1500  -> 4_500_000
 #   seller sells 2000 Wh at the retailer's buying price, 500   -> 1_000_000
-#   buyer  nets 3000 - 1000 (its earlier sale) = 2000 Wh in
+#   buyer  nets 3000 + 1000 bought - 1000 sold = 3000 Wh in
 #   seller nets 2000 Wh out
 # ----------------------------------------------------------------------------------------------
 RETAIL_BOOK = [('buyer', 3000, 0, RETAILER_SELLS, RETAILER_BUYS),
@@ -632,7 +774,7 @@ def test_method_none_routes_both_sides_through_the_retailer_and_prices_them_apar
 def test_method_none_charges_the_retail_grid_rate_because_nothing_is_local(retail_only, agent):
     """With no local market there is no market share, so the blend is the retail rate outright.
 
-    `buyer` draws the same 2000 Wh as in the clearing arm and pays 800 per Wh here against 400
+    `buyer` draws the same 3000 Wh as in the clearing arm and pays 850 per Wh here against 513
     there -- the one number that distinguishes the two clearing methods' accounting, asserted as
     an absolute value rather than as "different".
     """
@@ -643,7 +785,41 @@ def test_method_none_charges_the_retail_grid_rate_because_nothing_is_local(retai
     assert (energy_in, energy_out) == RETAIL_NET[agent]
     assert (price_in, price_out) == (expected_rate * energy_in, expected_rate * energy_out)
     if agent == 'buyer':
-        assert expected_rate != GRID_MARKET_OUT, 'the two clearing methods now bill alike'
+        assert expected_rate != BUYER_GRID_RATE, 'the two clearing methods now bill alike'
+
+
+@pytest.mark.parametrize('name, id_column', [('bids_cleared', c.TC_ID_AGENT_IN),
+                                             ('offers_cleared', c.TC_ID_AGENT_OUT)])
+def test_the_retailers_own_row_is_stamped_with_the_clearing_not_the_delivery(retail_only, name,
+                                                                            id_column):
+    """The retailer's ladder row carries `(clearing time, delivery step)` like everyone else.
+
+    `self.retailer` is filtered on `timestamp == the delivery step`, the retailer table being
+    indexed by delivery time under that name, and `__create_bids_offers` used to alias that one
+    column into both -- so the retailer's row was the only row in each table whose
+    `(timestamp, timestep)` pair was not a clearing. The pair is the clearing key: it groups a
+    clearing in `test_market_clearing.py` and namespaces the trade id in `__postprocess_trades`.
+
+    **This is the fast-tier half of that regression, and it exists because the e2e half is not
+    enough.** Reverting the fix leaves the entire default-marker suite green -- measured, 1096
+    passed either way -- and only two `e2e` tests catch it, which `pytest.ini` deselects by
+    default. It also covers `method: None`, which the e2e test never reaches and which is what
+    every shipped scenario but one runs.
+
+    `method: None` is what puts the retailer into the cleared tables at all: it is the
+    counterparty to every trade, so it holds a row on both sides. Under `pda` with the book above
+    it clears nothing and the defect is unobservable, which is why this test lives here.
+    """
+    frame = getattr(retail_only, name).with_columns(pl.col(id_column).cast(pl.Utf8))
+    retailer_rows = frame.filter(pl.col(id_column) == RETAILER_ID)
+
+    assert len(retailer_rows) > 0, f'the retailer holds no row in {name}, so this checks nothing'
+    assert set(retailer_rows[c.TC_TIMESTAMP]) == {TIMESTAMP}
+    assert set(retailer_rows[c.TC_TIMESTEP]) == {TIMESTEP}
+    # Both halves by value, because a mutation that swapped the two would keep every row's pair
+    # inside the set of times this fixture uses.
+    assert TIMESTAMP != TIMESTEP and frame.filter(
+        pl.col(c.TC_TIMESTAMP) >= pl.col(c.TC_TIMESTEP)).is_empty()
 
 
 def test_method_none_closes_its_money_ledger(retail_only):

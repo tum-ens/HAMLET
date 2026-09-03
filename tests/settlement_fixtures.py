@@ -33,7 +33,10 @@ REGION, MARKET, NAME, ENERGY = 'r1', 'electricity', 'lem', 'electricity'
 RETAILER_ID = 'retailer'
 
 #: When the clearing happens, and which delivery timestep it is for. **Different values**, so a
-#: row stamped with one where the other belongs is visible rather than coincidentally right.
+#: row stamped with one where the other belongs is visible rather than coincidentally right --
+#: which is load-bearing for exactly one test,
+#: `test_the_retailers_own_row_is_stamped_with_the_clearing_not_the_delivery`. It was decoration
+#: until that test existed: measured, setting the two equal changed no assertion in this suite.
 TIMESTAMP = dt.datetime(2021, 3, 24, 0, 0, tzinfo=dt.timezone.utc)
 TIMESTEP = dt.datetime(2021, 3, 24, 1, 0, tzinfo=dt.timezone.utc)
 
@@ -49,8 +52,14 @@ BALANCING_SELLS = 1600
 
 #: Grid fees and levies, per direction, all six distinct and none zero -- see the module
 #: docstring. `_OUT` is the rate the agent pays when it draws from the grid.
+#:
+#: **850 rather than a round 800**, so that a blend of the two consumption rates lands on a half
+#: rather than on an integer: `400 * 0.75 + 850 * 0.25` is 512.5, which rounds to 513 and
+#: truncates to 512. With a round number the two agree and truncating the blend instead of
+#: rounding it is an equivalent mutation -- one a review panel got past the first version of
+#: `test_settlement_by_hand.py`.
 GRID_MARKET_OUT, GRID_MARKET_IN = 400, 40
-GRID_RETAIL_OUT, GRID_RETAIL_IN = 800, 80
+GRID_RETAIL_OUT, GRID_RETAIL_IN = 850, 80
 LEVIES_OUT, LEVIES_IN = 1800, 180
 
 #: The columns of `market_transactions`, in schema order.
@@ -125,9 +134,15 @@ def forecast_table(**overrides):
 def transactions(rows_, timestep=TIMESTEP):
     """A `market_transactions` frame from `(agent, kind, energy_in, energy_out, price_in, price_out)`.
 
-    Used to seed the history a delivery timestep already carries when it settles. Per-unit prices
-    are left at zero: nothing in the settlement path reads them back, and the totals are what the
-    money assertions are about.
+    Used to seed the history a delivery timestep already carries when it settles.
+
+    **None of the four price columns is read.** A seeded row reaches the market only through
+    `transactions_prev`, which `__apply_grid_levies` uses for its per-agent energy sums and
+    nothing else, and `__update_database` then replaces `market_transactions` with this call's
+    rows alone -- so a history row never reaches the output either. Only `id_agent`, `timestep`,
+    `type_transaction` and the two energy columns do any work. Measured: replacing the zeros with
+    777/888, and the totals with 999_999_999, changes no assertion in the suite. They are written
+    because the frame has to satisfy the schema, not because anything consumes them.
     """
     if not rows_:
         return pl.DataFrame(schema=c.TS_MARKET_TRANSACTIONS)
@@ -195,9 +210,17 @@ def make_market(rows_, history=None, retailer=None, forecasts=None, method=c.MCM
 def settle(rows_, **kwargs):
     """Run a book through the real `execute()` and return the `MarketDB` it wrote.
 
-    The market database rather than the market object, because that is what the executor keeps
-    and what the result files are written from -- asserting on the market's own attributes would
-    pass even if `__update_database` stopped writing them through.
+    The market database rather than the market object, so `__update_database` is on the path:
+    asserting on the market's own attributes would pass even if it stopped writing them through.
+
+    **What comes back is this call's rows and only this call's rows.** `__update_database`
+    *replaces* `market_transactions` with `self.transactions`, which starts as `.clear()`, so the
+    `history` seeded above is gone from the returned frame -- it did its work through
+    `transactions_prev` and is not in the result. Production keeps the history because
+    `markets/market.py` copies the database before handing it over and `database.py` concatenates
+    the returned delta onto the persisted table; this harness constructs `ElectricityMarket`
+    directly and so sees the delta raw. Every assertion in this file is about the delta, and one
+    that expected the seeded rows back would be asserting about the wrapper, not the market.
     """
     return make_market(rows_, **kwargs).execute()
 
@@ -222,7 +245,8 @@ def ledger(market):
 
     **Refuses to collapse two rows for the same (kind, agent) into one.** An agent clearing
     against two counterparties really does occupy two `market` rows -- measured on a
-    `scenario_with_market` run, 31 clearings have a repeated agent in `bids_cleared` -- and a
+    `scenario_with_market` run at this branch, 26 of its 88 clearings have a repeated agent in
+    `bids_cleared` and 47 do in `offers_cleared` -- and a
     reduction that hid that would let the market emit a second, wrong row for an agent whose last
     row happened to be right. Tests about such a book read `rows()` instead.
     """

@@ -329,9 +329,9 @@ class ElectricityMarket(MarketBase):
             # holding the delivery step. Every agent row carries `(clearing time, delivery step)`
             # -- `TradingBase` takes the pair straight off the timetable -- so the retailer's was
             # the one row in each table whose pair was not a clearing at all. That pair is the
-            # key a clearing is grouped by, so the retailer contributed spurious groups:
-            # measured on `scenario_with_market`, 28 rows in `bids_cleared` and 96 in
-            # `offers_cleared`, reporting 94 clearings where there were 89.
+            # key a clearing is grouped by, so the retailer's rows formed groups of their own.
+            # `tests/e2e/test_market_clearing.py` carries the measurement and is the only place
+            # it is written down.
             retailer = retailer.with_columns(
                 [
                     pl.lit(self.tasks[c.TC_TIMESTAMP]).alias(c.TC_TIMESTAMP),

@@ -16,6 +16,22 @@ cached and uncached agree.
 
 So every test below compares the cache against the same definition computed from scratch, and
 `test_fees_are_not_counted_as_traded_energy` is the one that fails if the filter is dropped.
+
+**The comparison is not the evidence, and it is worth being explicit about which half is.** Both
+routes call `_net_energy_from`, so a widened *filter* is applied identically to both and they go
+on agreeing -- at the wrong number. Measured: admitting `grid` and `levies` into
+`NET_TRANSACTION_TYPES` fails three tests in this file and
+`TestCachedEqualsUncached` is not among them. What catches it is the handful of assertions that
+state an absolute figure -- `test_fees_are_not_counted_as_traded_energy`,
+`test_the_uncached_path_filters_identically`,
+`test_repeated_rows_for_one_timestep_are_summed_not_replaced`,
+`test_another_market_in_the_same_table_is_excluded`. The differential tests cover the one thing
+those cannot: a fold that has gone wrong only on the incremental path.
+
+This is L4's first invariant -- *net energy is the sum of the transactions* -- at the database
+layer. The settlement layer's half of it is
+`tests/unit/executor/markets/test_settlement_by_hand.py`, which anchors on the transactions of one
+delivery timestep rather than on the running cache.
 """
 import datetime
 
