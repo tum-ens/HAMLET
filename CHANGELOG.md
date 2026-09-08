@@ -9,6 +9,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ---
 
 ## [Unreleased]
+### Fixed
+- **Two runs of one scenario no longer overwrite each other's results (#243).** `Database` keyed a
+  run's results directory on a **region** rather than on the name `Executor` was given: the grid
+  half on the first region, the region half on each region's own name. For every shipped scenario
+  the root region is named after the scenario folder, which is also the default run name, so the
+  two keys were the same string and the bug could not appear until an experiment ran one scenario
+  twice under two names. Both runs then resolved to a single directory and the second overwrote the
+  first.
+
+  It failed **silently**, which is what made it expensive. `copy_folder` puts the scenario under the
+  run's own name and the market drain writes there too, so a collided run still had a populated,
+  plausible-looking results folder — just one missing the two things it was for. Its `agents/` and
+  `grids/` held the scenario's *copied inputs*, while the simulated results sat in a third directory
+  shared with the other run. This cost a completed 2 h 22 m baseline arm of a two-arm §14a
+  experiment, whose transformer loading was replaced by the other arm's crashed 8 % run, with
+  nothing reporting a problem.
+
+  The run directory is now keyed on the run name, through one construction shared by the region and
+  grid halves so they cannot drift apart. Nothing moves: the root region's output is the run's
+  output, which is where it already went, and regions after the first keep exactly the location they
+  had. Relocating those would need the market drain to become region-aware first — it writes dropped
+  rows with no region in the path, so moving a region separates them from the `concat_past_data`
+  that reads them back — so sub-regions still collide across runs, and no shipped scenario has any.
+
 ### Added
 - **The accounting invariants are asserted by value (L4, ROADMAP §2).** Net energy is the sum of
   a timestep's transactions, fees and levies are charged on **net** and to the right column, and
