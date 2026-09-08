@@ -66,7 +66,7 @@ class Executor:
         self.type = None  # set in self.__prepare_scenario()
 
         # Database containing all information
-        self.database = Database(self.path_scenario)
+        self.database = Database(self.path_scenario, name=self.name)
 
         # Scenario structure
         self.structure = {}
