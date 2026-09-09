@@ -10,6 +10,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Fixed
+- **§14a direct power control no longer curtails below the minimum power it guarantees (#242).**
+  `EnWG14a.__control_via_ems` issues an absolute cap, `total_p_agent + reduced_p_agent`, and the
+  executor's `while not grid_ok` loop calls it again for the same timestep. `total_p_agent` is
+  re-read from the grid each pass, so by the second pass it already carries the first pass's
+  curtailment and a share is subtracted from it again. `threshold` bounds what each *device* may
+  give up; nothing bounded what the connection as a whole was left with.
+
+  Measured on design 6a: the loop took **53 % more than §14a permits** (3259 kW against 2127 kW) on
+  **68.8 %** of the agent-timesteps it controlled, and drove one connection to **339 W** — below
+  that agent's own inflexible load of 349 W, so its optimisation had no feasible point and the run
+  died with `TerminationStatusCode.INFEASIBLE` at 8 % of the window.
+
+  The command is now bounded by `total_p_agent` less everything §14a lets the operator take,
+  remembered from the first pass of the timestep that controlled the agent. Anchoring is what makes
+  it bind: recomputing the bound each pass is inert, because `power_reduction_at_bus` is capped at
+  `sum(reducible)` and each share divides by that same sum, so every pass already satisfies it and
+  both sides shrink together. The bound is keyed on the timestamp rather than cleared on the way
+  out, because several paths end a timestep — `execute`'s no-overload branch, and the executor
+  forcing `grid_ok` once `num_iteration` passes `max_iteration` — and only one of them ever cleared
+  anything.
+
+  **This changes §14a results, and leaves the feeder more overloaded.** On `grid_golden`, the only
+  shipped scenario reaching this code, the transformer settles at 102.03 % rather than 100.05 % —
+  a residual overload of roughly 304 W instead of 8 W. That is the intended consequence: §14a caps
+  what the operator may take, so an overload it cannot legally clear is meant to remain. The golden
+  fingerprint and the analyzer reference move accordingly and have to be regenerated.
+
+  The over-generation branch is bounded from the other side but is reached by no shipped scenario
+  and carries a sign error of its own, tracked as #244; it is documented as uncovered rather than
+  pinned.
+
 - **Two runs of one scenario no longer overwrite each other's results (#243).** `Database` keyed a
   run's results directory on a **region** rather than on the name `Executor` was given: the grid
   half on the first region, the region half on each region's own name. For every shipped scenario
