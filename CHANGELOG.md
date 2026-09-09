@@ -37,6 +37,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   what the operator may take, so an overload it cannot legally clear is meant to remain. The golden
   fingerprint and the analyzer reference move accordingly and have to be regenerated.
 
+  The golden reference and the analyzer oracle for `grid_golden` are regenerated in this change, so
+  the review sees the numbers move: the direct-control command's sum goes 13269 → 13480 W and the
+  transformer's summed loading 1263.91 → 1266.63 %, i.e. the restriction now relieves less because
+  the relief it used to provide came from curtailment §14a does not permit.
+
+  `test_the_curtailment_command_was_respected` bounds an agent's draw by the overload the kept pass
+  did not clear, measured per timestep, instead of by a constant estimated from one run's residual.
+  The constant's own comment warned against widening it; the residual it approximated is now
+  measured directly, which keeps the assertion tight wherever the sequence converges and is still
+  thousands of watts away from a cap that was accepted and ignored.
+
   The over-generation branch is bounded from the other side but is reached by no shipped scenario
   and carries a sign error of its own, tracked as #244; it is documented as uncovered rather than
   pinned.
