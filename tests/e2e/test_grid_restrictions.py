@@ -741,6 +741,7 @@ def test_the_individual_commands_were_respected(individual_results):
     """
     devices = controllable_devices(individual_results, LOWERED_THRESHOLD_W)
     commands = read_csv(individual_results, 'res_direct_power_control.csv')
+    trafo = read_csv(individual_results, 'res_trafo.csv')
 
     assert (commands['control_result'] < 0).all(), (
         f'this method writes a per-plant target that is negative for a consuming device, and '
@@ -767,10 +768,23 @@ def test_the_individual_commands_were_respected(individual_results):
             f'{command["id_plant"]} ({plant["kind"].iloc[0]}) was capped at {allowed_w:.0f} W at '
             f'{command["timestamp"]}, below the {LOWERED_THRESHOLD_W} W §14a guarantees it')
 
-        assert drawn_w <= allowed_w + POWER_FLOW_MARGIN_W, (
-            f'{command["id_plant"]} ({plant["kind"].iloc[0]}) was capped at {allowed_w:.0f} W at '
-            f'{command["timestamp"]} but drew {drawn_w:.0f} W, so the grid operator\'s per-plant '
-            f'command was accepted and then ignored')
+        # Same bound as the `ems` test, for the same reason: a cap is recomputed from each
+        # pass's power flow, so where the sequence converges it sits on the power drawn, and
+        # where it does not the gap is bounded by the overload the kept pass failed to clear.
+        # The feeder residual upper-bounds any single plant's share of it. #247 changed which
+        # trajectory the run takes -- a command no longer survives into the timestep after it
+        # -- so a constant calibrated against the old one no longer describes this.
+        #
+        # Measured on this fixture: the margin is 10 W (the floor, wherever the sequence
+        # converged) or 43 W (the residual at the one timestep that did not), against actual
+        # gaps of 0, 2, 4, 21 and 22 W. So the bound sits about twice the largest real gap --
+        # it is the physics, not slack -- while a cap accepted and then ignored would leave the
+        # plant hundreds of watts out, which no residual absorbs.
+        margin_w = unrelieved_overload_w(trafo, command['timestamp'])
+        assert drawn_w <= allowed_w + margin_w, (
+            f'{command["id_plant"]} ({plant["kind"].iloc[0]}) was capped at {allowed_w:.0f} W '
+            f'at {command["timestamp"]} but drew {drawn_w:.0f} W, more than the {margin_w:.0f} W '
+            f'the feeder was still overloaded by, so the per-plant command was ignored')
         checked += 1
 
     assert checked > 0, 'no command was checked'

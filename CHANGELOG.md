@@ -30,6 +30,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `grid_ok` stays true, and that first pass is the one kept. So `Database.end_timestep` is driven
   from the executor's loop, where a timestep is known to be over however it ended.
 
+  The golden reference and analyzer oracle are regenerated with the change. `grid_golden`'s
+  `res_direct_power_control` goes from 2 rows to 4: more timesteps now issue a command of their own,
+  because agents no longer arrive already curtailed by the previous hour's leaked cap.
+
+  `test_the_individual_commands_were_respected` bounds a plant's draw by the overload the kept pass
+  did not clear, as its `ems` sibling already did. Measured here, the margin is 10 W where the
+  sequence converged and 43 W where it did not, against actual gaps of 0–22 W — the bound is the
+  physics rather than slack, and a cap accepted then ignored would still be hundreds of watts out.
+
 ### Fixed
 - **§14a direct power control no longer curtails below the minimum power it guarantees (#242).**
   `EnWG14a.__control_via_ems` issues an absolute cap, `total_p_agent + reduced_p_agent`, and the
