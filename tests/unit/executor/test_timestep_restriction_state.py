@@ -21,7 +21,7 @@ import pytest
 from hamlet import constants as c
 from hamlet.executor.setup import Executor
 from hamlet.executor.utilities.database.database import Database
-from hamlet.executor.utilities.database.grid_db import ElectricityGridDB
+from hamlet.executor.utilities.database.grid_db import ElectricityGridDB, HeatGridDB
 
 MAX_ITERATION = 3
 
@@ -52,16 +52,20 @@ def test_clearing_drops_the_command_and_the_guarantee():
 
 
 def test_clearing_leaves_the_variable_grid_fee_alone():
-    """The fee has its own cadence (`horizon`, `update`) that `EnWG14a.execute` manages.
+    """The fee is the one piece of restriction state that *must* cross the boundary.
 
-    Dropping it here would silently reset that schedule, which is a different mechanism from the
-    per-timestep command and is not what #247 is about.
+    It is computed in a timestep's grid stage and read in the **next** timestep's agent stage,
+    before the grid runs, so surviving the boundary is the only way it reaches an agent at all.
+    Clearing it here makes variable grid fees a near-total no-op: measured, a fee reached 16 of 112
+    agent executions instead of 116 of 120.
     """
     grid_db = grid_db_with_state()
 
     grid_db.clear_timestep_restriction_state()
 
-    assert grid_db.restriction_commands[FEE_KEY] == {'agent_one': 0.31}
+    assert grid_db.restriction_commands.get(FEE_KEY) == {'agent_one': 0.31}, (
+        'the variable grid fee was dropped with the per-timestep state; it has to survive the '
+        'boundary or it never reaches an agent')
 
 
 def test_clearing_is_safe_when_a_restriction_left_nothing():
@@ -73,10 +77,28 @@ def test_clearing_is_safe_when_a_restriction_left_nothing():
     assert grid_db.restriction_commands == {}
 
 
+def test_a_guarantee_is_dropped_even_with_no_command_beside_it():
+    """Clearing must not be conditional on there being a command to clear.
+
+    A timestep can leave an anchored guarantee behind without a surviving command, and a guard that
+    returned early on an empty command would strand it.
+    """
+    grid_db = ElectricityGridDB.__new__(ElectricityGridDB)
+    grid_db.restriction_commands = {GUARANTEE_KEY: {'timestamp': 'x', 'agents': {'a': 1}}}
+
+    grid_db.clear_timestep_restriction_state()
+
+    assert GUARANTEE_KEY not in grid_db.restriction_commands
+
+
 def test_ending_a_timestep_reaches_every_grid():
     """A scenario can carry more than one grid, and a command left on any of them is imposed."""
     database = Database.__new__(Database)
-    grids = {'electricity': grid_db_with_state(), 'heat': grid_db_with_state()}
+    # A second *kind* of grid, not a second electricity one: defining the method on a subclass
+    # rather than on `GridDB` would otherwise go unnoticed.
+    heat = HeatGridDB.__new__(HeatGridDB)
+    heat.restriction_commands = dict(grid_db_with_state().restriction_commands)
+    grids = {'electricity': grid_db_with_state(), 'heat': heat}
     database._Database__grids = grids
 
     database.end_timestep()
@@ -125,7 +147,9 @@ def executor_over(timestamps, grid_ok_after_cap=True):
 
     def execute_grids(tasklist, initial_db, num_iteration):
         log.append(f'grids:{num_iteration}')
-        return num_iteration > MAX_ITERATION if grid_ok_after_cap else True
+        # Read the executor's own cap rather than a module constant, so this cannot drift from the
+        # value under test -- a stub carrying its own copy asserts only about itself.
+        return num_iteration > executor.max_iteration if grid_ok_after_cap else True
 
     executor._Executor__execute_grids = execute_grids
     return executor, log

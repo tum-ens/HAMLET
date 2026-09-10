@@ -54,9 +54,14 @@ class GridDB:
 
         self.relevant_plant_type = {}  # relevant plant type for the grid
 
-    #: Keys in `restriction_commands` that belong to one timestep and must not outlive it. The
-    #: variable grid fee is deliberately absent: it has its own update cadence (`horizon`, `update`)
-    #: that `EnWG14a.execute` manages, so dropping it here would break that schedule.
+    #: Keys in `restriction_commands` that belong to one timestep and must not outlive it.
+    #:
+    #: `current_variable_grid_fees` is deliberately absent, and the reason is the opposite of this
+    #: one: it *has* to survive the boundary. The fee is computed in a timestep's grid stage and read
+    #: in the **next** timestep's agent stage (`agent_base.py`, before the grid runs), so
+    #: cross-timestep survival is the only way it ever reaches an agent. Dropping it here makes
+    #: variable grid fees a near-total no-op -- measured, a fee reached 16 of 112 agent executions
+    #: instead of 116 of 120.
     TIMESTEP_RESTRICTION_KEYS = ('current_direct_power_control', 'direct_power_control_guarantee')
 
     def clear_timestep_restriction_state(self):

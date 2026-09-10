@@ -31,15 +31,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   from the executor's loop, where a timestep is known to be over however it ended.
 
   The golden reference and analyzer oracle are regenerated with the change. `grid_golden`'s
-  `res_direct_power_control` goes from 2 rows to 4: more timesteps now issue a command of their own,
-  because agents no longer arrive already curtailed by the previous hour's leaked cap.
+  `res_direct_power_control` goes from 2 rows to 4: 05:00 previously had its overload suppressed by
+  04:00's leaked cap, so the restriction never assessed it and wrote no row. It now does, and ends
+  that hour at exactly 100.000 % instead of leaving it unexamined at 82 %.
 
-  `test_the_individual_commands_were_respected` bounds a plant's draw by the overload the kept pass
-  did not clear, as its `ems` sibling already did. Measured here, the margin is 10 W where the
-  sequence converged and 43 W where it did not, against actual gaps of 0–22 W — the bound is the
-  physics rather than slack, and a cap accepted then ignored would still be hundreds of watts out.
+  **Read the reference diff with care.** Its grid sums count every power-flow pass, including
+  rolled-back ones, so `res_trafo.loading_percent` appears to rise 20 %. Over the passes actually
+  kept it *falls* 5.4 %, and imported energy with it — 05:00 simply now runs four passes where it ran
+  one. Ten tables change row count for that reason.
 
-### Fixed
+  Applying `test_golden_master`'s own criterion honestly: structure **does** move, and the first
+  divergence is at 05:00 rather than at the first controlled timestep — 00:00 through 04:00 are
+  byte-identical, all four of 04:00's passes included. So this is neither of the docstring's two
+  signatures cleanly; the re-baseline is justified by the mechanism above, not by either premise.
+
+  `POWER_FLOW_MARGIN_W` goes from 10 W to 100 W, and stays a **constant**. Deriving it from the
+  measured residual was tried and reverted: when a cap is accepted and then ignored the kept pass
+  *is* the uncontrolled pass, so the residual balloons into the thousands and absorbs the violation
+  the assertion exists to catch — verified by restoring the pre-!209 no-op in
+  `POI.apply_grid_commands`, which left both cap-respected tests green. The 100 W covers a 0–22 W
+  power-flow residual plus a 92 W artefact: on a capped exit the published command comes from a pass
+  that was never applied, tracked as its own defect.
+
 - **§14a direct power control no longer curtails below the minimum power it guarantees (#242).**
   `EnWG14a.__control_via_ems` issues an absolute cap, `total_p_agent + reduced_p_agent`, and the
   executor's `while not grid_ok` loop calls it again for the same timestep. `total_p_agent` is
