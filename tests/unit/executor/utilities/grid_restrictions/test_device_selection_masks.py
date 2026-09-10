@@ -84,6 +84,9 @@ def _sgen(bus, plant_type, p_w, agent, plant):
 def _restriction(net, method):
     restriction = object.__new__(EnWG14a)
     restriction.grid = net
+    # `__init__` sets this from the task list; the EMS path keys its per-timestep
+    # §14a bound on it.
+    restriction.timestamp = '2023-01-01 00:00:00+00:00'
     restriction.grid_db = _GridDBStub()
     restriction.restriction_config = {
         'direct_power_control': {'active': True, 'method': method, 'threshold': THRESHOLD_W}}

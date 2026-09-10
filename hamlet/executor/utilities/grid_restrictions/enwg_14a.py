@@ -368,6 +368,27 @@ class EnWG14a(GridRestrictionBase):
 
         return grid_ok
 
+    def __timestep_guarantees(self) -> dict:
+        """The per-agent §14a bound for the timestep being simulated, empty on a new one.
+
+        Keyed on the timestamp rather than cleared by whoever finishes a timestep, because several
+        paths finish one and only a single one of them used to clear anything. `execute` empties the
+        commands when a later pass finds no overload left -- the *success* case, which is exactly
+        when an anchor would otherwise survive -- and `executor/setup.py` forces `grid_ok` once
+        `num_iteration` passes `max_iteration`, which the restriction never learns about at all.
+
+        A stale anchor is worse than none: it is a bound taken against a different dispatch, so it
+        both authorises curtailment below the next timestep's real floor and blocks curtailment that
+        timestep needs. Deriving the reset from the timestamp makes every exit path safe without
+        having to find them all.
+        """
+        store = self.grid_db.restriction_commands.setdefault('direct_power_control_guarantee', {})
+        if store.get('timestamp') != self.timestamp:
+            store.clear()
+            store['timestamp'] = self.timestamp
+            store['agents'] = {}
+        return store['agents']
+
     def __individual_device_control(self, bus, trafo_power, combined_loading) -> dict:
         """
         Apply individual device control to the given bus under the given transformer power and combined loading.
@@ -601,6 +622,8 @@ class EnWG14a(GridRestrictionBase):
         # deepcopy current direct power control results as target to write
         control_target = self.grid_db.restriction_commands['current_direct_power_control']
 
+        anchored_guarantee = self.__timestep_guarantees()
+
         # get minimal power to be guaranteed
         threshold = self.restriction_config['direct_power_control']['threshold'] * c.WH_TO_MWH
 
@@ -614,7 +637,13 @@ class EnWG14a(GridRestrictionBase):
         p_mw_to_be_reduced = total_p_at_bus * (1 - 1 / combined_loading)
 
         # check if sgen or load need to be adjusted
+        # +1 where curtailing means consuming less, -1 where it means generating less: the
+        # guarantee binds from opposite sides in the two cases.
+        direction = 0
+
         if trafo_power < 0 < total_p_at_bus:  # too much load, load needs to be reduced
+            direction = 1
+
             # count number of 14a devices at bus
             load_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
                                          ((grid.load['load_type'] == c.P_EV) |
@@ -684,6 +713,8 @@ class EnWG14a(GridRestrictionBase):
             power_reduction_at_bus = - min(sum(reducible_power_for_agent.values()), p_mw_to_be_reduced)
 
         elif trafo_power > 0 > total_p_at_bus:  # too much generation, generation needs to be reduced
+            direction = -1
+
             # count number of 14a devices and pv at bus
             # take feed in ev
             ev_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
@@ -740,7 +771,40 @@ class EnWG14a(GridRestrictionBase):
             reduced_p_agent = int(reducible_power_for_agent[agent] / total_reducible *
                                   power_reduction_at_bus * c.MWH_TO_WH) if total_reducible > 0 else 0
 
-            control_target[agent]['ems'] = total_p_agent + reduced_p_agent
+            # **The command may not take the agent below what §14a leaves it**, and that bound has
+            # to be anchored to this timestep's first controlling pass to mean anything.
+            #
+            # `total_p_agent` is re-read from the grid every pass, so on the second pass it already
+            # carries the first pass's curtailment and `reduced_p_agent` comes off it again. Nothing
+            # stopped that compounding: `threshold` bounds what each *device* may give up, never
+            # what the connection as a whole is left with. Measured on design 6a, the loop took 53 %
+            # more than §14a permits on 68.8 % of the agent-timesteps it controlled and drove one
+            # connection to 339 W -- below its own inflexible load, so the agent's optimisation had
+            # no feasible point and the run died.
+            #
+            # The bound is the deepest command a correct pass can produce, `total_p_agent` less
+            # everything §14a lets the operator take. Recomputing it each pass is inert, and looks
+            # like a fix: `power_reduction_at_bus` is capped at `sum(reducible)` and each share
+            # divides by that same sum, so every pass already satisfies it and both sides shrink
+            # together. Only the remembered value binds.
+            #
+            # Taking it from `reducible_power_for_agent` rather than re-deriving it from device
+            # floors keeps it identical to what pass 1 computed. A floors-based version disagrees
+            # wherever `hp_reduction`'s `max(0.0, ...)` clamps -- it would bound the agent above its
+            # own pass-1 command and block curtailment §14a allows -- and it would have to be capped
+            # at the agent's own draw to stay a floor rather than an instruction to consume more.
+            # `reducible` is non-negative, so this form needs neither.
+            #
+            # Termination follows: once the command stops moving,
+            # `__calculate_direct_power_control` finds it equal to the previous pass's and settles
+            # the timestep. Every controlled timestep used to exhaust `max_iteration`.
+            if agent not in anchored_guarantee:
+                anchored_guarantee[agent] = total_p_agent - int(
+                    direction * reducible_power_for_agent[agent] * c.MWH_TO_WH)
+
+            target = total_p_agent + reduced_p_agent
+            control_target[agent]['ems'] = (max(target, anchored_guarantee[agent]) if direction > 0
+                                            else min(target, anchored_guarantee[agent]))
 
         return control_target
 

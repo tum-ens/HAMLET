@@ -198,6 +198,11 @@ EXERCISED_ADJACENCIES = {('battery', 'ev')}
 #: Was 1 W until #234, when it applied to both kinds of quantity. Correcting air-source heat pumps
 #: raised winter draw and made the overload far more severe (132.0 % -> 149.6 % at the first
 #: pass), which is what left 3 W on the table instead of 0.
+#:
+#: Since #242 this is a **floor** on the tolerance rather than the tolerance itself:
+#: `unrelieved_overload_w` measures the residual the kept pass left, and this is what remains when
+#: the sequence converges and that residual is zero. Raising this number is still the wrong answer
+#: to a test that starts failing -- the question is why the residual grew.
 POWER_FLOW_MARGIN_W = 10
 
 #: Slack, in watts, on a quantity a §14a **command** carries. Deliberately an order of magnitude
@@ -312,6 +317,42 @@ def test_direct_power_control_issued_a_command(grid_results):
         f'a command capped an agent at zero or below: {commands["control_result"].tolist()}')
 
 
+def unrelieved_overload_w(trafo, timestamp):
+    """How much of the overload the kept pass did not clear, in watts, at this timestamp.
+
+    This is the quantity `POWER_FLOW_MARGIN_W` was an estimate of. An agent's cap is recomputed
+    from each pass's power flow, so where the sequence converges the cap sits exactly on the power
+    drawn and the gap is zero. Where it does not -- and at `max_iteration: 3` this scenario does
+    not -- the kept pass is still overloaded and the cap it was computed from is correspondingly
+    below what the agent drew. The gap is bounded by that residual.
+
+    Measuring it beats estimating it. The constant was derived from one run's residual (8 W across
+    the feeder, largest per-agent gap 3 W) and goes stale the moment the residual moves, which #242
+    made it do: bounding the §14a command at the power it guarantees stopped the loop taking
+    curtailment the regulation does not permit, so the kept pass now settles near 102 % rather than
+    100.05 % and the feeder keeps an overload it may not legally clear. Widening the constant to
+    suit is what its own comment warns against; deriving it keeps the assertion tight wherever the
+    sequence does converge, where this collapses to `POWER_FLOW_MARGIN_W`.
+
+    It stays discriminating for what the test is about. A backend that accepts the cap and ignores
+    it leaves the agent at its uncontrolled draw -- thousands of watts, which is what this file was
+    written to catch, `framework: poi` having done exactly that until the backend grew its own
+    `apply_grid_commands` -- and no residual bound absorbs that.
+
+    Read from `p_lv_mw` and `loading_percent` together, so no transformer rating is restated here
+    and this cannot drift from the scenario.
+    """
+    rows = trafo[trafo['timestamp'] == timestamp]
+    assert not rows.empty, f'no transformer result at {timestamp} to bound the command against'
+
+    loading = rows['loading_percent'].iloc[-1]
+    if loading <= 100:
+        return POWER_FLOW_MARGIN_W
+    return max(POWER_FLOW_MARGIN_W,
+               abs(rows['p_lv_mw'].iloc[-1]) * (1 - 100.0 / loading) * 1e6)
+
+
+
 @pytest.mark.e2e
 def test_the_curtailment_command_was_respected(grid_results):
     """The one that matters: the agent drew no more than the grid operator allowed.
@@ -329,11 +370,13 @@ def test_the_curtailment_command_was_respected(grid_results):
 
     The cap is recomputed from each pass's power flow, so **where the sequence converges it sits
     exactly on the power drawn and the margin is 0 W**. Where it does not -- and at
-    `max_iteration: 3` this one does not -- the last kept pass is still slightly overloaded, and
-    the cap it was computed from is correspondingly slightly below what the agent drew. The
-    residual is bounded by that overload: the last pass leaves the transformer at 100.053 % of
-    `sn_mva = 0.015`, which is 8 W across the whole feeder, and the largest per-agent margin
-    measured is 3 W. See `POWER_FLOW_MARGIN_W`.
+    `max_iteration: 3` this one does not -- the last kept pass is still overloaded, and the cap it
+    was computed from is correspondingly below what the agent drew. The margin is therefore the
+    overload the kept pass did not clear, measured per timestep by `unrelieved_overload_w` rather
+    than approximated by a constant: since #242 bounded the command at the power §14a guarantees,
+    the loop no longer takes curtailment the regulation forbids, so the feeder keeps a residual it
+    may not legally clear and that residual is no longer the few watts a fixed number could stand
+    in for.
 
     Under a backend that ignores the cap the sequence does not converge at all: the draw stays at
     its uncontrolled value while the cap keeps asking for less, and the gap is hundreds of watts.
@@ -349,6 +392,8 @@ def test_the_curtailment_command_was_respected(grid_results):
                  for type_dir in (grid_results / 'agents').iterdir() if type_dir.is_dir()
                  for path in type_dir.iterdir() if path.is_dir()}
 
+    trafo = read_csv(grid_results, 'res_trafo.csv')
+
     checked = 0
     for _, command in commands.iterrows():
         rows = bus[(bus[bus_column] == agent_bus[command['id_agent']])
@@ -359,9 +404,11 @@ def test_the_curtailment_command_was_respected(grid_results):
 
         drawn_w = rows['p_mw'].iloc[-1] * 1e6
         cap_w = command['control_result']
-        assert drawn_w <= cap_w + POWER_FLOW_MARGIN_W, (
+        margin_w = unrelieved_overload_w(trafo, command['timestamp'])
+        assert drawn_w <= cap_w + margin_w, (
             f'{command["id_agent"]} was capped at {cap_w:.0f} W at {command["timestamp"]} but drew '
-            f'{drawn_w:.0f} W, so the grid operator\'s command was accepted and then ignored')
+            f'{drawn_w:.0f} W, which is more than the {margin_w:.0f} W the feeder was still '
+            f'overloaded by, so the command was accepted and then ignored')
         checked += 1
 
     # A loop over an empty table asserts nothing. The previous test already fails on that, but
