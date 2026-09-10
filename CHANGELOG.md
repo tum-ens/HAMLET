@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Fixed
+- **A §14a command no longer outlives the timestep it was computed for (#247).**
+  `current_direct_power_control` is an instruction for one timestep, derived from that timestep's
+  power flow. `EnWG14a` clears it on the paths it controls, but `executor/setup.py` ends a timestep
+  itself once `num_iteration` passes `max_iteration`, and on that path the restriction is never
+  called again. The command survived, and because the next timestep's agents read
+  `restriction_commands` **before** the grid stage, they dispatched under a cap computed for an hour
+  they were never assessed for.
+
+  On design 6a that exit is taken by **36.8 %** of timesteps, and the run died at 666/744 with
+  `TerminationStatusCode.INFEASIBLE` after one agent's cap fell across successive hours —
+  8666 → 6977 → 4850 → 2290 → 886 → 452 W — through the guarantee and below its own
+  non-curtailable load.
+
+  This is the half #242 left behind: it keyed the *guarantee* on `self.timestamp` so that
+  self-heals on a new timestep, and gave the *command* no equivalent. Clearing inside the
+  restriction would not have been enough either — a stale command is normally discarded with its
+  pass, but when the next timestep has no overload the restriction never recomputes anything,
+  `grid_ok` stays true, and that first pass is the one kept. So `Database.end_timestep` is driven
+  from the executor's loop, where a timestep is known to be over however it ended.
+
+### Fixed
 - **§14a direct power control no longer curtails below the minimum power it guarantees (#242).**
   `EnWG14a.__control_via_ems` issues an absolute cap, `total_p_agent + reduced_p_agent`, and the
   executor's `while not grid_ok` loop calls it again for the same timestep. `total_p_agent` is
