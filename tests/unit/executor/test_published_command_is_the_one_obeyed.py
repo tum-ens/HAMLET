@@ -99,7 +99,8 @@ def test_the_restriction_stashes_the_frame_it_replaces():
     enwg = EnWG14a.__new__(EnWG14a)
     enwg.grid_db = grid_db
     enwg.timestamp = TS
-    # The overload/bus machinery is not under test: patch the driver to only run the frame write.
+    # An empty `res_trafo` means no transformer to walk, so the bus loop is skipped and only the
+    # frame-write block runs. Nothing is patched.
     enwg.grid = SimpleNamespace(res_trafo=pd.DataFrame({'p_lv_mw': [], 'loading_percent': []}))
 
     # Drive the frame-write block directly through its public entry with no transformers to walk.
@@ -111,10 +112,18 @@ def test_the_restriction_stashes_the_frame_it_replaces():
 
 
 class RecordingDatabase:
-    """Stands in for `Database` inside `__execute_grids`, recording what the executor asks of it."""
+    """Stands in for `Database` inside `__execute_grids`, recording what the executor asks of it.
+
+    `__deepcopy__` returns `self`: the not-ok path does `self.database = deepcopy(initial_db)`, and
+    a copied log would swallow every call made after the rollback. A review lens found the mid-loop
+    test asserting against an empty list because of exactly that.
+    """
 
     def __init__(self, log):
         self.log = log
+
+    def __deepcopy__(self, memo):
+        return self
 
     def get_grid_data(self):
         return {'electricity': SimpleNamespace()}
@@ -205,9 +214,36 @@ def test_a_pass_that_writes_no_command_leaves_no_stale_stash_to_restore():
     assert published(grid_db) == 7000, 'a pass that replaced nothing must leave nothing to restore'
 
 
+def test_the_cap_pass_itself_is_still_inside_the_loop(monkeypatch):
+    """`num_iteration == max_iteration` is the last pass allowed to re-run, not the forced exit.
+
+    `>` versus `>=` on `num_iteration > self.max_iteration` decides whether a scenario configured for
+    three passes gets three or two; every other case here uses 2 or 4 and cannot tell them apart.
+    """
+    grid_ok, log = execute_grids(monkeypatch, num_iteration=3, grid_reports_ok=False)
+
+    assert grid_ok is False, 'pass 3 of a 3-pass budget may still re-run'
+    assert log == ['post:electricity']
+
+
+def test_the_database_asks_every_grid_to_restore():
+    """`Database.restore_superseded_commands` had no test; only the e2e `ems` arm could see it fail."""
+    calls = []
+    grids = {'electricity': SimpleNamespace(restore_superseded_command_frame=lambda: calls.append('e')),
+             'heat': SimpleNamespace(restore_superseded_command_frame=lambda: calls.append('h'))}
+    database = Database.__new__(Database)
+    database._Database__grids = grids
+
+    database.restore_superseded_commands()
+
+    assert sorted(calls) == ['e', 'h']
+
+
 def test_the_executor_does_not_restore_mid_loop(monkeypatch):
     """A pass that is going to be re-run must not touch the frame; the next pass replaces it anyway."""
     grid_ok, log = execute_grids(monkeypatch, num_iteration=2, grid_reports_ok=False)
 
     assert grid_ok is False
-    assert 'restore' not in log
+    # The grid was posted (after the rollback) and nothing else happened. Asserting the whole log
+    # rather than `'restore' not in log` is what makes this see anything at all.
+    assert log == ['post:electricity']
