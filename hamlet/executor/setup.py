@@ -150,6 +150,12 @@ class Executor:
                 self.pbar.set_description('Executing timestamp ' + timestamp_str + ' for grid')
                 grid_ok = self.__execute_grids(tasklist=timestamp, initial_db=initial_db, num_iteration=num_iteration)
 
+            # The timestep is over, whether the loop converged or `__execute_grids` was told to stop
+            # on the iteration cap. A direct power control command belongs to the timestep it was
+            # computed for, and the next timestep's agents read `restriction_commands` before the
+            # grid stage -- so anything left here is imposed on an hour it was never assessed for.
+            self.database.end_timestep()
+
             self.pbar.update(1)
 
     def cleanup(self):

@@ -10,6 +10,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Fixed
+- **A §14a command no longer outlives the timestep it was computed for (#247).**
+  `current_direct_power_control` is an instruction for one timestep, derived from that timestep's
+  power flow. `EnWG14a` clears it on the paths it controls, but `executor/setup.py` ends a timestep
+  itself once `num_iteration` passes `max_iteration`, and on that path the restriction is never
+  called again. The command survived, and because the next timestep's agents read
+  `restriction_commands` **before** the grid stage, they dispatched under a cap computed for an hour
+  they were never assessed for.
+
+  On design 6a that exit is taken by **36.8 %** of timesteps, and the run died at 666/744 with
+  `TerminationStatusCode.INFEASIBLE` after one agent's cap fell across successive hours —
+  8666 → 6977 → 4850 → 2290 → 886 → 452 W — through the guarantee and below its own
+  non-curtailable load.
+
+  This is the half #242 left behind: it keyed the *guarantee* on `self.timestamp` so that
+  self-heals on a new timestep, and gave the *command* no equivalent. Clearing inside the
+  restriction would not have been enough either — a stale command is normally discarded with its
+  pass, but when the next timestep has no overload the restriction never recomputes anything,
+  `grid_ok` stays true, and that first pass is the one kept. So `Database.end_timestep` is driven
+  from the executor's loop, where a timestep is known to be over however it ended.
+
+  The golden reference and analyzer oracle are regenerated with the change. `grid_golden`'s
+  `res_direct_power_control` goes from 2 rows to 4: 05:00 previously had its overload suppressed by
+  04:00's leaked cap, so the restriction never assessed it and wrote no row. It now does, and ends
+  that hour at exactly 100.000 % instead of leaving it unexamined at 82 %.
+
+  **Read the reference diff with care.** Its grid sums count every power-flow pass, including
+  rolled-back ones, so `res_trafo.loading_percent` appears to rise 20 %. Over the passes actually
+  kept it *falls* 5.4 %, and imported energy with it — 05:00 simply now runs four passes where it ran
+  one. Ten tables change row count for that reason.
+
+  Applying `test_golden_master`'s own criterion honestly: structure **does** move, and the first
+  divergence is at 05:00 rather than at the first controlled timestep — 00:00 through 04:00 are
+  byte-identical, all four of 04:00's passes included. So this is neither of the docstring's two
+  signatures cleanly; the re-baseline is justified by the mechanism above, not by either premise.
+
+  `POWER_FLOW_MARGIN_W` goes from 10 W to 100 W, and stays a **constant**. Deriving it from the
+  measured residual was tried and reverted: when a cap is accepted and then ignored the kept pass
+  *is* the uncontrolled pass, so the residual balloons into the thousands and absorbs the violation
+  the assertion exists to catch — verified by restoring the pre-!209 no-op in
+  `POI.apply_grid_commands`, which left both cap-respected tests green. The 100 W covers a 0–22 W
+  power-flow residual plus a 92 W artefact: on a capped exit the published command comes from a pass
+  that was never applied, tracked as its own defect.
+
 - **§14a direct power control no longer curtails below the minimum power it guarantees (#242).**
   `EnWG14a.__control_via_ems` issues an absolute cap, `total_p_agent + reduced_p_agent`, and the
   executor's `while not grid_ok` loop calls it again for the same timestep. `total_p_agent` is

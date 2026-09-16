@@ -463,6 +463,16 @@ class Database:
 
     """save database"""
 
+    def end_timestep(self):
+        """Tell every grid its timestep is over, so per-timestep restriction state is dropped.
+
+        Called once per timestep by the executor, after the `while not grid_ok` loop, so it runs
+        whether the loop converged or was cut off by `max_iteration` -- the second of which is how a
+        command used to leak into the next timestep (#247).
+        """
+        for grid in self.__grids.values():
+            grid.clear_timestep_restriction_state()
+
     def save_database(self, path: str):
         """
         Save the database to the specified path.

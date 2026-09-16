@@ -54,6 +54,36 @@ class GridDB:
 
         self.relevant_plant_type = {}  # relevant plant type for the grid
 
+    #: Keys in `restriction_commands` that belong to one timestep and must not outlive it.
+    #:
+    #: `current_variable_grid_fees` is deliberately absent, and the reason is the opposite of this
+    #: one: it *has* to survive the boundary. The fee is computed in a timestep's grid stage and read
+    #: in the **next** timestep's agent stage (`agent_base.py`, before the grid runs), so
+    #: cross-timestep survival is the only way it ever reaches an agent. Dropping it here makes
+    #: variable grid fees a near-total no-op -- measured, a fee reached 16 of 112 agent executions
+    #: instead of 116 of 120.
+    TIMESTEP_RESTRICTION_KEYS = ('current_direct_power_control', 'direct_power_control_guarantee')
+
+    def clear_timestep_restriction_state(self):
+        """Drop what a restriction holds for the timestep that has just finished.
+
+        A direct power control command is an instruction for **one** timestep, computed from that
+        timestep's power flow. It used to survive whenever the timestep ended on the iteration cap
+        instead of by converging, because `EnWG14a` clears it only on the paths it controls and
+        `executor/setup.py` ends the timestep itself once `num_iteration` passes `max_iteration`.
+        The next timestep's agents read `restriction_commands` *before* the grid stage runs, so they
+        dispatched under a cap computed for an hour they were never assessed for (#247).
+
+        Clearing inside the restriction is not enough, and the reason is worth stating. A stale
+        command is normally discarded with the rest of its pass, because a command that changed
+        makes the loop re-run the timestep and roll the database back. But when the next timestep
+        has no overload the restriction never recomputes anything, `grid_ok` stays true, and that
+        first pass -- taken under the stale cap -- is the one that is kept. So this has to be driven
+        from where a timestep is known to be over, however it ended.
+        """
+        for key in self.TIMESTEP_RESTRICTION_KEYS:
+            self.restriction_commands.pop(key, None)
+
     def register_grid(self, regions: dict):
         """Assign class attribute from data in grids folder."""
         raise NotImplementedError('The register_grid function must be implemented for each grids type.')
