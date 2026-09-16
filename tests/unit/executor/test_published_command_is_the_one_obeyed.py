@@ -165,6 +165,46 @@ def test_the_executor_does_not_restore_when_the_timestep_converged(monkeypatch):
     assert 'restore' not in log
 
 
+def test_a_timestep_that_converges_exactly_on_the_cap_pass_is_not_restored(monkeypatch):
+    """Pass 4 with `max_iteration: 3`, but the grid reports ok: converged, not forced.
+
+    The cap and convergence are independent, and they can coincide. Here the last frame *is* the
+    obeyed one, and restoring would publish the pass before it. A test that only checks pass 4
+    with the grid still failing cannot see this cell; a review lens wrote it and it failed.
+    """
+    grid_ok, log = execute_grids(monkeypatch, num_iteration=4, grid_reports_ok=True)
+
+    assert grid_ok is True
+    assert 'restore' not in log, 'the grid converged on its own; the last frame is the obeyed one'
+
+
+def test_a_pass_that_writes_no_command_leaves_no_stale_stash_to_restore():
+    """The defect the fix could reproduce: a stash left over from an earlier pass.
+
+    Passes 1-3 issue 9000, 8000, 7000 W. Pass 4's agents obey 7000, the overload clears, and the
+    restriction writes nothing -- but the stash still holds 8000 from pass 3's supersession. A
+    forced exit restoring that publishes a command two passes old. Reproduced with real objects
+    before the per-pass clearing was added.
+    """
+    grid_db = ElectricityGridDB.__new__(ElectricityGridDB)
+    grid_db.results = {'res_direct_power_control': [frame(7000)]}
+    grid_db.restriction_commands = {STASH: frame(8000), 'current_direct_power_control': {}}
+
+    enwg = EnWG14a.__new__(EnWG14a)
+    enwg.grid_db = grid_db
+    enwg.timestamp = TS
+    enwg.restriction_config = {'variable_grid_fees': {'active': False},
+                               'direct_power_control': {'active': True}}
+    # No overload this pass, so `execute` takes the branch that writes no command.
+    enwg._EnWG14a__check_overloads = lambda: False
+    enwg.grid = SimpleNamespace(res_trafo=pd.DataFrame({'p_lv_mw': [], 'loading_percent': []}))
+
+    enwg.execute()
+    grid_db.restore_superseded_command_frame()
+
+    assert published(grid_db) == 7000, 'a pass that replaced nothing must leave nothing to restore'
+
+
 def test_the_executor_does_not_restore_mid_loop(monkeypatch):
     """A pass that is going to be re-run must not touch the frame; the next pass replaces it anyway."""
     grid_ok, log = execute_grids(monkeypatch, num_iteration=2, grid_reports_ok=False)

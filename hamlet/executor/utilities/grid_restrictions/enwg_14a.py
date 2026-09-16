@@ -24,6 +24,13 @@ class EnWG14a(GridRestrictionBase):
         # Boolean variable presents if grid status is ok (no overload)
         grid_ok = True
 
+        # The superseded-frame stash describes what *this* pass replaced, and nothing else. A pass
+        # that writes no command -- the overload cleared, or nothing to command -- must not leave a
+        # previous pass's stash behind, or a forced exit on that pass would restore a frame two
+        # passes old and publish a command nobody obeyed. That is the defect #248 fixes, and this
+        # line is what stops the fix reproducing it.
+        self.grid_db.restriction_commands.pop(self.grid_db.SUPERSEDED_COMMAND_FRAME_KEY, None)
+
         # calculate variable grid fees if active
         if self.restriction_config['variable_grid_fees']['active'] and self.__check_if_update_variable_grid_fees():
             self.__calculate_variable_grid_fees()

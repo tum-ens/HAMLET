@@ -250,8 +250,12 @@ class Executor:
 
         # if number of iteration exceed maximal number of iteration, set grid_ok to True so that this timestep won't be
         # simulated again
-        forced_exit = num_iteration > self.max_iteration
-        if forced_exit:
+        # `converged` is the grid's own verdict, before the cap overrides it. The two differ on the
+        # cap pass: a timestep can converge exactly there, and then the last frame is the obeyed one
+        # and must stand.
+        converged = grid_ok
+        forced_exit = num_iteration > self.max_iteration and not converged
+        if num_iteration > self.max_iteration:
             grid_ok = True
 
         # if grid status is not ok, delete all simulated data for this ts, this ts needs to be simulated again
@@ -264,7 +268,8 @@ class Executor:
                                      path_results=self.path_results)
 
         # On a forced exit the pass just computed a command no agent will run under: the loop is
-        # over and the dispatch being kept obeyed the pass before. Publish that one (#248).
+        # over and the dispatch being kept obeyed the pass before. Publish that one (#248). Not on
+        # a pass that converged on its own, cap or no cap -- there the last frame is right.
         if forced_exit:
             self.database.restore_superseded_commands()
 
