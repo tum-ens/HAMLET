@@ -463,6 +463,11 @@ class Database:
 
     """save database"""
 
+    def restore_superseded_commands(self):
+        """On a forced iteration exit, publish the command the kept dispatch obeyed (#248)."""
+        for grid in self.__grids.values():
+            grid.restore_superseded_command_frame()
+
     def end_timestep(self):
         """Tell every grid its timestep is over, so per-timestep restriction state is dropped.
 

@@ -182,19 +182,15 @@ EXERCISED_ADJACENCIES = {('battery', 'ev')}
 
 #: Slack, in watts, on a quantity a power flow produced.
 #:
-#: Two things live in here, and only the first is a power flow.
-#:
 #: A cap is recomputed from each pass, so where the sequence converges it sits exactly on the
 #: power drawn and the gap is 0 W. Where it does not -- at `max_iteration: 3` this fixture does
 #: not -- the kept pass is still overloaded and the cap is correspondingly below the draw.
 #: Measured: gaps of 0, 2, 4, 21 and 22 W.
 #:
-#: The second is an artefact and is the larger of the two. On a capped exit the command written
-#: to `res_direct_power_control` is the **last** pass's, but the dispatch that is kept obeyed the
-#: pass **before** it. At 04:00 the published command is 4586 W while the kept draw is 4678 W --
-#: a 92 W gap against a command nothing ever obeyed. That is not slack in this assertion, it is a
-#: defect in what the run publishes, tracked separately; this constant tolerates it only so that
-#: this test can still assert the thing it is for.
+#: Was 1 W until #234, then 10 W after correcting air-source heat pumps (132.0 % -> 149.6 % at
+#: the first pass). Briefly 100 W to tolerate a 92 W artefact: on a capped exit the published
+#: command came from the pass *after* the one the kept dispatch obeyed. #248 fixed the artefact
+#: at its source, so this is back to covering the residual alone.
 #:
 #: **It must stay a constant, and far below the signal it detects.** Deriving it from the
 #: measured residual was tried and reverted: when a cap is accepted and then ignored, the kept
@@ -203,9 +199,9 @@ EXERCISED_ADJACENCIES = {('battery', 'ev')}
 #: in `POI.apply_grid_commands` left both cap-respected tests green. A tolerance that scales with
 #: the violation is not a tolerance.
 #:
-#: 100 W against measured gaps of at most 92 W, and against ~2500-4400 W when a cap is ignored:
-#: roughly 30x headroom. If this needs raising again, ask what grew before touching it.
-POWER_FLOW_MARGIN_W = 100
+#: 50 W against measured gaps of at most 22 W, and against ~2500-4400 W when a cap is ignored.
+#: If this needs raising again, ask what grew before touching it.
+POWER_FLOW_MARGIN_W = 50
 
 #: Slack, in watts, on a quantity a §14a **command** carries. Deliberately an order of magnitude
 #: tighter than `POWER_FLOW_MARGIN_W`, because the two have nothing to do with each other and the

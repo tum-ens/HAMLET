@@ -353,6 +353,12 @@ class EnWG14a(GridRestrictionBase):
                 self.grid_db.results['res_direct_power_control'] = []
             elif (str(self.grid_db.results['res_direct_power_control'][-1][c.TC_TIMESTAMP].unique()[0]) == str(
                     self.timestamp)):
+                # Keep the frame this pass supersedes rather than discarding it. If the executor
+                # ends the timestep on the iteration cap, the command computed on that final pass
+                # was never applied -- the kept dispatch obeyed the pass *before* it -- and the
+                # executor restores this frame so the published command is the one in force (#248).
+                self.grid_db.restriction_commands[self.grid_db.SUPERSEDED_COMMAND_FRAME_KEY] = (
+                    self.grid_db.results['res_direct_power_control'][-1])
                 del self.grid_db.results['res_direct_power_control'][-1]
 
             results_df = pd.DataFrame(data_list, columns=[c.TC_TIMESTAMP, c.TC_ID_AGENT, c.TC_ID_PLANT,
