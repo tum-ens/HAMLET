@@ -64,8 +64,8 @@ class GridDB:
     #: instead of 116 of 120.
     #:
     #: Any state a restriction keeps *between passes* of one timestep belongs in this tuple: it is
-    #: what the timestep boundary clears and what a resume checkpoints (#249). State kept anywhere
-    #: else survives neither.
+    #: what the timestep boundary clears, and what #249's resume is expected to checkpoint. State
+    #: kept anywhere else would survive the boundary and would not survive a pause.
 
     #: The `res_direct_power_control` frame the latest pass replaced, kept so a forced exit can put
     #: it back. Per-timestep like the rest, and cleared with them.
@@ -74,7 +74,7 @@ class GridDB:
     #: The per-agent §14a floor anchored on the timestep's first controlling pass (#242).
     GUARANTEE_KEY = 'direct_power_control_guarantee'
 
-    #: Where `reduction: ramp` keeps each agent's uncurtailed draw and the step it is on (#245).
+    #: Where `reduction: ramp` keeps the pass count and each agent's ladder position (#245).
     RAMP_STATE_KEY = 'direct_power_control_ramp'
 
     TIMESTEP_RESTRICTION_KEYS = ('current_direct_power_control', GUARANTEE_KEY, RAMP_STATE_KEY,

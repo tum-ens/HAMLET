@@ -30,11 +30,12 @@ The other, `individual`, curtails named devices in a documented priority order -
 then EVs, then heat pumps -- and no shipped configuration reaches it: the three scenarios that
 switch the restriction on run no electricity grid, and the two that run a grid apply no
 restriction (#232). The `config_templates` default is `individual`, so the branch a new user
-gets is the one nothing ran. The second half of this file covers it, on a fixture derived from
+gets is the one nothing ran. The middle section of this file covers it, on a fixture derived from
 `grid_golden` by two config edits -- one selects the method, the other **lowers §14a's 4200 W
 floor to 1000 W**, without which the priority order is not observable at all. That departure is
 deliberate and is the price of the coverage; `INDIVIDUAL_EDITS` argues it, and the `ems` tests
-above are what keep the real 4200 W under test.
+above are what keep the real 4200 W under test. The last section runs the same fixture twice
+more, for the `ems` method's other two reduction strategies (#245).
 
 **What that still does not reach.** Stated in full, with counts, because a partial list reads as
 a complete one. Of the method's 63 statements, **this file reaches none of the over-generation
@@ -54,7 +55,7 @@ numbers as current.
   Nor would a threshold edit reach it, and *this* part does not depend on the instrumentation:
   every battery ships `b2g_0 = 0.0` and every EV `v2g_0 = 0`, so the branch's two device filters
   cannot match as this fixture is configured, whatever the dispatch count. #233.
-* The **heat-pump body**, in both methods -- and **the two fixtures miss it for different
+* The **heat-pump body**, in both methods -- and **the two method fixtures miss it for different
   reasons**, which is worth stating separately because one explanation does not cover both.
   * Under the `ems` fixture's 4200 W threshold, `load_df`'s filter dropped every pump before the
     arithmetic ran: instrumented over one run *before #234*, **zero** dispatches into
@@ -756,8 +757,8 @@ MINIMUM_EDITS = {'grids.yaml': [('reduction: required', 'reduction: minimum')]}
 #:
 #: **`max_iteration` is raised from 3 to 5 so that it differs from `ramp_steps`.** The issue
 #: forbids reading the rung count from the cap, and with the two equal a ramp that did so would
-#: produce this arm's exact numbers; a mutation checked it. It also puts the cap above the step
-#: count, which is what a ramp needs to be *able* to reach its floor -- here it never has to.
+#: produce this arm's exact numbers; a mutation checked it. It also keeps the cap at or above the
+#: step count, which is what a ramp needs to be *able* to reach its floor -- here it never has to.
 #: The rung count itself stays at the fixture's 3, asserted from the run's config receipt.
 RAMP_EDITS = {'grids.yaml': [('reduction: required', 'reduction: ramp'),
                              ('threshold: 4200', f'threshold: {LOWERED_THRESHOLD_W}'),
@@ -769,12 +770,19 @@ RAMP_STEPS = 3
 #: §14a's flat minimum in watts, as `grid_golden` ships it and the `minimum` arm keeps it.
 THRESHOLD_W = 4200
 
-#: Slack on a §14a floor or rung *recomputed here* from the grid tables, in watts. The command
+#: Slack on a §14a floor or rung *recomputed here* from the grid tables, in watts. The floor
 #: is built from two `int()` truncations -- `int(total * 1e6) - int(reducible * 1e6)` -- and a
-#: float recomputed from the CSVs sits within one watt of each, so the two can differ by two.
-#: Measured: floors of 8894 W against a recomputed 8895.0 W, rungs of 6061 W against 6062.
-#: Distinct from `COMMAND_MARGIN_W`, which covers one truncation and is not earned here.
+#: float recomputed from the CSVs sits within one watt of each, so the two can differ by two. A
+#: rung adds a third, `int(span * k / n)`, but on a span that is already the difference of the
+#: first two, so it stays inside the same bound. Measured: floors of 8894 W against a recomputed
+#: 8895.0 W, rungs of 6061 W against 6062. Distinct from `COMMAND_MARGIN_W`, which covers one
+#: truncation and is not earned here.
 RECOMPUTED_FLOOR_MARGIN_W = 2
+
+#: How far below `required`'s command `minimum`'s must land on at least one shared command, in
+#: watts, for the cross-check in `test_minimum_lands_every_command_on_the_floor` to have looked
+#: at anything. Measured 165 W; a `minimum` that had become `required` gives 0.
+MINIMUM_DEEPER_THAN_REQUIRED_W = 100
 
 
 @pytest.fixture(scope='module')
@@ -912,7 +920,7 @@ def test_minimum_lands_every_command_on_the_floor(minimum_results, grid_results)
                 f'to {required_w:.0f} W; a strategy that takes everything cannot be gentler')
             deeper_than_required.append(required_w - cap_w)
 
-    assert deeper_than_required and max(deeper_than_required) > 100, (
+    assert deeper_than_required and max(deeper_than_required) > MINIMUM_DEEPER_THAN_REQUIRED_W, (
         f'minimum was never more than {max(deeper_than_required, default=0):.0f} W below '
         f'required on a shared command; measured 165 W. Either the two arms no longer share a '
         f'controlled timestep or minimum has become required')
@@ -978,9 +986,14 @@ def test_the_ramp_descends_its_ladder_rung_by_rung(ramp_results):
     """Every pass after the first obeys rung p, and the kept command *is* rung k, by value.
 
     Rung p is `uncurtailed - int(p * (uncurtailed - floor) / RAMP_STEPS)`, both ends anchored on
-    the uncontrolled pass. The intermediate commands are superseded and never published, but the
-    dispatch that obeyed each one is in `res_bus`, one row per pass, so the ladder is read from
-    the draws; the last rung is also the published command and is held to the tighter margin.
+    the uncontrolled pass and never below the floor -- a ramp that reaches its floor takes one
+    more pass to find its command unchanged, and that pass obeys the floor, not a rung past it.
+    The intermediate commands are superseded and never published, but the dispatch that obeyed
+    each one is in `res_bus`, one row per pass, so the ladder is read from the draws -- as caps
+    respected, `draw <= rung`, because an EMS may dispatch below its cap and only the cap is the
+    strategy's. The last rung is also the published command and is held exactly, to the tighter
+    margin; that is the assertion that separates a ramp from a `minimum` (1313 W against rung 2's
+    3380 W) where the one-sided draws alone would not.
 
     The rung count `k` is the number of controlled passes, and **at least one agent must land on
     a rung strictly inside the ladder** -- that is the premise of this arm (`RAMP_EDITS`) and it
@@ -996,12 +1009,12 @@ def test_the_ramp_descends_its_ladder_rung_by_rung(ramp_results):
         uncurtailed_w, floor_w = uncurtailed_and_floor(ramp_results, LOWERED_THRESHOLD_W,
                                                        timestamp, agent)
         draws = draws_per_pass(ramp_results, timestamp, agent)
-        rungs = [uncurtailed_w - int(step * (uncurtailed_w - floor_w) / RAMP_STEPS)
+        rungs = [max(floor_w, uncurtailed_w - int(step * (uncurtailed_w - floor_w) / RAMP_STEPS))
                  for step in range(len(draws))]
         k = len(draws) - 1
 
         for step in range(1, len(draws)):
-            assert abs(draws[step] - rungs[step]) <= POWER_FLOW_MARGIN_W, (
+            assert draws[step] <= rungs[step] + POWER_FLOW_MARGIN_W, (
                 f'{agent} at {timestamp}, pass {step}: drew {draws[step]:.0f} W, rung {step} of '
                 f'{RAMP_STEPS} is {rungs[step]:.0f} W (ladder {uncurtailed_w:.0f} -> '
                 f'{floor_w:.0f} W; draws {[round(d) for d in draws]})')
@@ -1026,7 +1039,11 @@ def test_the_ramp_stops_one_rung_past_the_overload(ramp_results):
     That is what "over-curtails by at most one step" means, read off the transformer: at a
     timestep settled on rung k, pass k - 1 (obeying rung k - 1) is still above 100 % and pass k
     (obeying rung k) is not, unless k is the last rung, where only the first half has to hold.
+    Overloaded means `loading_percent > 100`, the restriction's own criterion (`__check_overloads`).
     Measured at 1000 W: 149.6 % -> 112.0 % -> 74.3 %, settled on rung 2 of 3.
+
+    `k` may reach `RAMP_STEPS + 1`: a ramp that reaches its floor and is still overloaded there
+    takes one more pass to find its command unchanged, and that pass obeys the floor.
     """
     commands = read_csv(ramp_results, 'res_direct_power_control.csv')
     checked = 0
@@ -1039,7 +1056,7 @@ def test_the_ramp_stops_one_rung_past_the_overload(ramp_results):
             f'{timestamp}: pass {k - 1} was at {loadings[k - 1]:.2f} %, so the overload had '
             f'already cleared and rung {k} should never have been commanded ({loadings})')
         if k < RAMP_STEPS:
-            assert loadings[k] <= 100 + 1e-6, (
+            assert loadings[k] <= 100, (
                 f'{timestamp}: settled on rung {k} of {RAMP_STEPS} at {loadings[k]:.2f} %, '
                 f'still overloaded with rungs left ({loadings})')
         checked += 1

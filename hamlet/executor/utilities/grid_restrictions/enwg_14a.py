@@ -26,8 +26,8 @@ class EnWG14a(GridRestrictionBase):
     #: `required` is the default and is what every scenario ran before the key existed. The
     #: executor's `while not grid_ok` loop re-simulates the timestep after each pass, so under
     #: `required` the sequence approaches 100 % asymptotically and **where it stops is decided by
-    #: `max_iteration`** -- measured on `grid_golden`, 149.6 % -> 104.3 % -> 102.9 % -> 102.0 %.
-    #: The other two strategies stop where the policy says, not where the cap falls.
+    #: `max_iteration`**, a simulation setting (#245 has the measured trajectory). The other two
+    #: stop where the policy says, not where the cap falls.
     REDUCTION_STRATEGIES = ('required', 'minimum', 'ramp')
     DEFAULT_REDUCTION = 'required'
 
@@ -37,7 +37,7 @@ class EnWG14a(GridRestrictionBase):
 
         # Refuse a bad strategy on the first timestep rather than on the first overload, which
         # in a scenario that rarely overloads can be hours of simulation in.
-        if self.restriction_config.get('direct_power_control', {}).get('active'):
+        if (self.restriction_config.get('direct_power_control') or {}).get('active'):
             self.__reduction_strategy()
 
     def __reduction_strategy(self) -> (str, int | None):
@@ -49,8 +49,8 @@ class EnWG14a(GridRestrictionBase):
         restriction and is a safety cap on the executor's iteration; if the ramp read it, raising
         the cap to stop a timestep truncating would silently make curtailment gentler -- a
         simulation setting changing the physics. The two are independent, and the one thing they
-        owe each other is that a ramp of *n* steps needs `max_iteration >= n` passes to reach its
-        floor, or the cap truncates it as it would any other non-converging timestep.
+        owe each other is that a ramp of *n* steps needs `max_iteration >= n` to be able to reach
+        its floor, or the cap truncates it as it would any other non-converging timestep.
 
         Only the `ems` method sizes a command this way. `individual` curtails named devices to
         their own floors in a priority order and has no notion of a strategy, so asking for one
@@ -373,6 +373,12 @@ class EnWG14a(GridRestrictionBase):
         # save previous results for the current timestep to check if this timestamp need to be updated
         previous_direct_power_control = deepcopy(self.grid_db.restriction_commands['current_direct_power_control'])
 
+        # One overload signal per pass, which is the ramp's clock. Counted here and not per
+        # command, because the bus loop below visits every bus of a zone once per transformer in
+        # it, so with two transformers an agent is commanded twice per pass.
+        if self.__reduction_strategy()[0] == 'ramp':
+            self.__begin_ramp_pass()
+
         # check overload for trafo
         for trafo_index in grid.res_trafo.index:
             # get trafo power, positive or negative is important
@@ -458,24 +464,31 @@ class EnWG14a(GridRestrictionBase):
         timestep needs. Deriving the reset from the timestamp makes every exit path safe without
         having to find them all.
         """
-        return self.__timestep_state(ElectricityGridDB.GUARANTEE_KEY)
+        return self.__timestep_state(ElectricityGridDB.GUARANTEE_KEY)['agents']
 
     def __timestep_ramp(self) -> dict:
-        """Per-agent `{'from': uncurtailed W, 'step': passes commanded}` for `reduction: ramp`.
+        """The `reduction: ramp` state for the timestep being simulated, empty on a new one.
 
-        Reset on the same timestamp rule as the guarantee, for the same reasons -- a step count
-        carried into the next timestep would start that timestep's ramp part-way down. Kept under
-        `GridDB.TIMESTEP_RESTRICTION_KEYS` so the boundary clears it and a resume restores it.
+        `{'timestamp', 'passes': overload signals seen, 'agents': {agent: {'from': uncurtailed W,
+        'step': rungs taken, 'pass': the pass of the last one}}}`. Reset on the same timestamp
+        rule as the guarantee, for the same reasons -- a step count carried into the next
+        timestep would start that timestep's ramp part-way down. Kept under
+        `GridDB.TIMESTEP_RESTRICTION_KEYS`, which is what the boundary clears and what #249 is
+        expected to checkpoint.
         """
         return self.__timestep_state(ElectricityGridDB.RAMP_STATE_KEY)
+
+    def __begin_ramp_pass(self):
+        self.__timestep_ramp()['passes'] += 1
 
     def __timestep_state(self, key) -> dict:
         store = self.grid_db.restriction_commands.setdefault(key, {})
         if store.get('timestamp') != self.timestamp:
             store.clear()
             store['timestamp'] = self.timestamp
+            store['passes'] = 0
             store['agents'] = {}
-        return store['agents']
+        return store
 
     def __individual_device_control(self, bus, trafo_power, combined_loading) -> dict:
         """
@@ -909,8 +922,15 @@ class EnWG14a(GridRestrictionBase):
                     # below the floor and the clamp below holds it there, so the command stops
                     # moving and the timestep converges; the step is not capped here because a
                     # cap would be a branch nothing could tell from the clamp.
-                    state = ramp.setdefault(agent, {'from': total_p_agent, 'step': 0})
-                    state['step'] += 1
+                    #
+                    # One rung per overload signal, not per command: a zone with two transformers
+                    # has every bus commanded twice per pass, and a step counted per command
+                    # would halve the ladder there.
+                    state = ramp['agents'].setdefault(agent, {'from': total_p_agent, 'step': 0,
+                                                              'pass': None})
+                    if state['pass'] != ramp['passes']:
+                        state['step'] += 1
+                        state['pass'] = ramp['passes']
                     span = state['from'] - anchored_guarantee[agent]
                     target = state['from'] - int(span * state['step'] / ramp_steps)
 

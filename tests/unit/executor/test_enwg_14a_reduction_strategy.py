@@ -30,8 +30,9 @@ from hamlet import constants as c
 from hamlet.executor.utilities.database.grid_db import ElectricityGridDB
 from hamlet.executor.utilities.grid_restrictions.enwg_14a import EnWG14a
 from tests.unit.executor.test_enwg_14a_cap_floor import (
-    AGENT, AGENT_TWO, GUARANTEE_W, SUB_BUDGET_COMMAND_W, THRESHOLD_W, UNCURTAILED_W, control,
-    grid_with, loads_at, restriction, two_agent_loads)
+    AGENT, AGENT_TWO, GUARANTEE_W, SUB_BUDGET_COMMAND_W, THRESHOLD_W, UNCURTAILED_W, grid_with,
+    loads_at, restriction, two_agent_loads)
+from tests.unit.executor.test_enwg_14a_cap_floor import control as command_bus
 
 #: A mild overload: `required` takes a third of the draw here, so it lands well above the floor
 #: and the other two strategies are visibly *not* it.
@@ -49,6 +50,18 @@ def configured(enwg, **keys):
     """The cap-floor fixture with extra `direct_power_control` keys, as `grids.yaml` would give them."""
     enwg.restriction_config['direct_power_control'].update(keys)
     return enwg
+
+
+def control(enwg, combined_loading):
+    """One pass: the overload signal `__calculate_direct_power_control` gives, then the command.
+
+    The cap-floor fixture's `control` calls `__control_via_ems` alone, which is one *command*. A
+    pass is one overload signal followed by a command per overloaded bus, and the ramp counts
+    rungs per signal -- see `test_a_ramp_takes_one_rung_per_pass_however_many_buses_command_it`.
+    """
+    if enwg.restriction_config['direct_power_control'].get('reduction') == 'ramp':
+        enwg._EnWG14a__begin_ramp_pass()
+    return command_bus(enwg, combined_loading)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -151,7 +164,7 @@ def test_a_ramp_step_is_measured_from_the_anchor():
     """The rung is a point on a ladder fixed at the first pass, not a decrement from the last draw.
 
     The agent was capped at 18467 W and dispatched 15000 W -- below the cap, as an EMS may. A step
-    taken from the current draw would command 10467 W, two rungs down; the ladder says 13934 W.
+    of the same 4533 W taken from that draw would command 10467 W; the ladder says 13934 W.
     """
     enwg = ramp(loads_at([11000, 11000]))
     control(enwg, 3.0)
@@ -162,6 +175,50 @@ def test_a_ramp_step_is_measured_from_the_anchor():
     assert second == RUNG_2_W, (
         f'the second rung landed at {second} W; 10467 W would mean the step was taken from the '
         f'15000 W the agent happened to draw rather than from the anchored 23000 W')
+
+
+def test_a_ramp_takes_one_rung_per_pass_however_many_buses_command_it():
+    """One rung per overload signal, not per command.
+
+    `__calculate_direct_power_control` visits every bus of a zone once per transformer in it, so
+    a zone with two transformers commands each agent twice per pass. A step counted per command
+    would take two rungs per pass there and halve the ladder. Here the second command of the
+    same pass must land on the same rung as the first.
+    """
+    enwg = ramp(loads_at([11000, 11000]))
+    enwg._EnWG14a__begin_ramp_pass()
+    first = command_bus(enwg, 3.0)[AGENT]['ems']
+    second = command_bus(enwg, 3.0)[AGENT]['ems']
+
+    assert first == second == RUNG_1_W, (
+        f'two commands in one pass landed on {first} W and {second} W; a rung per command would '
+        f'put the second on {RUNG_2_W} W')
+
+    enwg._EnWG14a__begin_ramp_pass()
+    assert command_bus(enwg, 3.0)[AGENT]['ems'] == RUNG_2_W
+
+
+def test_each_agent_descends_its_own_ladder():
+    """Two agents on one bus: each rung is that agent's anchor less its own span over its own step.
+
+    Every other ramp case here has one agent, so a step counter shared across the bus, a ladder
+    anchored on the bus draw, or a span taken from a neighbour's guarantee would all be invisible
+    in them. A review lens built those three mutants and every one survived until this test.
+    """
+    enwg = ramp(two_agent_loads(11000, 11000))
+
+    first = control(enwg, 3.0)
+    # agent_one: 12000 W down a 6800 W span (floor 5200); agent_two: 20000 W down 6801 W (floor
+    # 13199, the anchor's truncation -- see the cap-floor tests). One rung each.
+    assert first[AGENT]['ems'] == 9734
+    assert first[AGENT_TWO]['ems'] == 17733
+
+    enwg.grid = grid_with(two_agent_loads(8734, 8733))  # both obey exactly, on their EV
+    second = control(enwg, 3.0)
+    assert second[AGENT]['ems'] == 7467
+    assert second[AGENT_TWO]['ems'] == 15466, (
+        f"agent_two's second rung is {second[AGENT_TWO]['ems']} W; a span taken from agent_one's "
+        f"guarantee would give 13199 W, a bus-anchored ladder something else again")
 
 
 def test_a_one_step_ramp_is_the_floor():
@@ -184,15 +241,16 @@ def test_the_step_count_restarts_with_the_timestep():
 def test_the_ramp_state_is_per_timestep_state():
     """Where the counter lives is a contract, not a detail.
 
-    The executor clears `GridDB.TIMESTEP_RESTRICTION_KEYS` at the end of every timestep and a
-    resume checkpoints exactly those keys (#249). A counter kept under any other key would survive a
-    forced exit into the next timestep and would not survive a pause.
+    The executor clears `GridDB.TIMESTEP_RESTRICTION_KEYS` at the end of every timestep, and
+    #249's resume is expected to checkpoint exactly those keys. A counter kept under any other key
+    would survive a forced exit into the next timestep and would not survive a pause.
     """
     enwg = ramp(loads_at([11000, 11000]))
     control(enwg, 3.0)
 
     state = enwg.grid_db.restriction_commands[ElectricityGridDB.RAMP_STATE_KEY]
-    assert state['agents'] == {AGENT: {'from': UNCURTAILED_W, 'step': 1}}
+    assert state['passes'] == 1
+    assert state['agents'] == {AGENT: {'from': UNCURTAILED_W, 'step': 1, 'pass': 1}}
     assert ElectricityGridDB.RAMP_STATE_KEY in ElectricityGridDB.TIMESTEP_RESTRICTION_KEYS
 
 
@@ -203,6 +261,7 @@ def test_the_ramp_state_is_per_timestep_state():
 
 @pytest.mark.parametrize('keys, names', [
     ({'reduction': 'gentle'}, ('gentle', 'required', 'minimum', 'ramp')),
+    ({'reduction': None}, ('None', 'required', 'minimum', 'ramp')),
     ({'reduction': 'ramp'}, ('ramp_steps', 'None', 'max_iteration')),
     ({'reduction': 'ramp', 'ramp_steps': 0}, ('ramp_steps = 0',)),
     ({'reduction': 'ramp', 'ramp_steps': -2}, ('ramp_steps = -2',)),
@@ -211,9 +270,15 @@ def test_the_ramp_state_is_per_timestep_state():
     ({'reduction': 'ramp', 'ramp_steps': True}, ('ramp_steps = True',)),
     ({'reduction': 'minimum', 'method': 'individual'}, ('minimum', 'individual', 'method: ems')),
     ({'reduction': 'ramp', 'ramp_steps': 3, 'method': 'individual'}, ('ramp', 'individual')),
+    ({'reduction': 'minimum', 'method': 'emss'}, ('minimum', 'emss', 'method: ems')),
 ])
 def test_a_bad_strategy_is_refused_by_name(keys, names):
-    """The message has to name the key and the value, or the next person reads the source."""
+    """The message has to name the key and the value, or the next person reads the source.
+
+    `reduction: null` is refused rather than read as the default: a key that is present and empty
+    is a decision nobody made. The `emss` case is what keeps the method check a whitelist -- a
+    strategy is defined for `ems` and nothing else, not merely undefined for `individual`.
+    """
     enwg = configured(restriction(grid_with(loads_at([11000, 11000]))), **keys)
 
     with pytest.raises(ValueError) as refusal:

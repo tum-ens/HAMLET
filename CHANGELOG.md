@@ -160,9 +160,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   a timestep truncating silently make curtailment gentler. The one thing they owe each other is
   that an *n*-rung ramp needs `max_iteration >= n` to be able to reach its floor. Both rungs of the
   ladder are anchored on the timestep's first controlling pass, so a step is a point on the ladder
-  and not a decrement from whatever the agent last drew; the step count lives under
-  `GridDB.TIMESTEP_RESTRICTION_KEYS` with the anchored guarantee, so the timestep boundary clears
-  it and a resume (#249) restores it. A strategy other than `required` under `method: individual`
+  and not a decrement from whatever the agent last drew, and one rung is taken per overload
+  signal rather than per command (a zone with two transformers commands every bus twice per
+  pass). The step count lives under `GridDB.TIMESTEP_RESTRICTION_KEYS` with the anchored
+  guarantee, which the timestep boundary clears and #249's resume is expected to checkpoint. A
+  strategy other than `required` under `method: individual`
   is refused rather than ignored, and a bad value is refused when the restriction is built, not on
   the first overload.
 
