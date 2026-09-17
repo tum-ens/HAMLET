@@ -49,14 +49,20 @@ class RecordingDatabase:
 
 
 
+STATE_WRITES = []
+
+
 @pytest.fixture(autouse=True)
-def no_state_file(monkeypatch):
-    """The checkpoint also writes the run's state (#249 d); that is test_checkpoint_and_resume's.
+def recorded_state_write(monkeypatch):
+    """The checkpoint also writes the run's state (#249 d); the file is test_checkpoint_and_resume's.
 
     Left real, it would pickle the recording stub into `path_results`, which here is a relative
-    path under the working directory.
+    path under the working directory. Recorded rather than discarded, so the call's arguments are
+    pinned here beside the agent save they accompany.
     """
-    monkeypatch.setattr(executor_module.checkpoint, 'write', lambda *args, **kwargs: None)
+    STATE_WRITES.clear()
+    monkeypatch.setattr(executor_module.checkpoint, 'write',
+                        lambda *args, **kwargs: STATE_WRITES.append(args))
 
 
 def executor_over(timestamps, checkpoint_interval, max_iteration=1, converge=True):
@@ -88,6 +94,11 @@ def test_agents_are_checkpointed_every_interval_timesteps():
     assert [step for _, step, _ in checkpoints(log)] == [2, 4], (
         'five timesteps at an interval of two checkpoint after the second and the fourth; the '
         'fifth is left to the final save')
+    # The state write goes with every agent save: same run folder, the executor's database, the
+    # step just closed and its timestamp.
+    assert STATE_WRITES == [
+        (executor.path_results, executor.database, 2, TIMESTAMPS[1], 2),
+        (executor.path_results, executor.database, 4, TIMESTAMPS[3], 2)]
 
 
 def test_the_checkpoint_writes_to_the_results_root_the_final_save_uses():

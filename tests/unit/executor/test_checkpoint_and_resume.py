@@ -48,12 +48,14 @@ def test_write_then_read_returns_the_state_that_was_written(tmp_path):
     grid_csv(tmp_path, 'res_trafo', 5)
     grid_csv(tmp_path, 'res_bus', 3)
     database = FakeDatabase('as of step 8')
+    # What the executor hands over: a tz-aware datetime out of the timetable, not its text.
+    closed = pl.Series(['2023-01-28 07:00:00+00:00']).str.to_datetime(time_zone='UTC')[0]
 
-    checkpoint.write(str(tmp_path), database, step=8, last_timestamp='2023-01-28 07:00:00+00:00')
+    checkpoint.write(str(tmp_path), database, step=8, last_timestamp=closed)
     state = checkpoint.read(str(tmp_path))
 
     assert state['step'] == 8
-    assert state['last_timestamp'] == '2023-01-28 07:00:00+00:00'
+    assert state['last_timestamp'] == closed and type(state['last_timestamp']) is type(closed)
     assert state['database'].marker == 'as of step 8'
     assert state['database'].tables['meters'].equals(database.tables['meters'])
     assert state['grid_csv_lines'] == {'grids/electricity/res_bus.csv': 3, 'grids/electricity/res_trafo.csv': 5}
@@ -81,6 +83,33 @@ def test_a_checkpoint_of_another_format_is_refused_not_read(tmp_path):
         checkpoint.read(str(tmp_path))
 
 
+def test_the_stamp_is_checked_before_the_graph_is_unpickled(tmp_path):
+    """A checkpoint from another format may hold classes this HAMLET cannot even unpickle; the
+    refusal has to be the format's, not an AttributeError from inside the graph."""
+    checkpoint.write(str(tmp_path), FakeDatabase('x'), step=1, last_timestamp='t')
+    target = tmp_path / 'checkpoint' / 'state.pkl'
+    with open(target, 'rb') as handle:
+        header = pickle.load(handle)
+    header['checkpoint_format_version'] = c.CHECKPOINT_FORMAT_VERSION + 1
+    target.write_bytes(pickle.dumps(header) + b'\x80\x05not a graph at all')
+
+    with pytest.raises(checkpoint.CheckpointFormatError):
+        checkpoint.read(str(tmp_path))
+
+
+def test_a_checkpoint_with_no_stamp_at_all_is_refused(tmp_path):
+    checkpoint.write(str(tmp_path), FakeDatabase('x'), step=1, last_timestamp='t')
+    target = tmp_path / 'checkpoint' / 'state.pkl'
+    with open(target, 'rb') as handle:
+        header = pickle.load(handle)
+        graph = pickle.load(handle)
+    del header['checkpoint_format_version']
+    target.write_bytes(pickle.dumps(header) + pickle.dumps(graph))
+
+    with pytest.raises(checkpoint.CheckpointFormatError, match='None'):
+        checkpoint.read(str(tmp_path))
+
+
 def test_no_checkpoint_is_a_named_refusal(tmp_path):
     with pytest.raises(FileNotFoundError, match='checkpoint_interval'):
         checkpoint.read(str(tmp_path))
@@ -99,6 +128,8 @@ def test_a_crash_during_the_write_leaves_the_previous_checkpoint_readable(tmp_pa
 
     state = checkpoint.read(str(tmp_path))
     assert state['database'].marker == 'first' and state['step'] == 8
+    manifest = json.loads((tmp_path / 'checkpoint' / 'manifest.json').read_text(encoding='utf-8'))
+    assert manifest['step'] == 8, 'the manifest must describe the state file that exists, not the one that failed'
 
 
 def test_only_replace_may_touch_the_state_file(tmp_path, monkeypatch):
@@ -160,6 +191,32 @@ def test_a_csv_that_did_not_grow_is_left_alone_and_one_the_checkpoint_never_saw_
     assert removed == {'grids/electricity/res_bus.csv': 0}
 
 
+def test_only_csvs_are_recorded_so_only_csvs_are_cut(tmp_path):
+    """`grids/` also holds the network workbook. The line counts of the two rules (bytes with a
+    newline at write, `splitlines` at truncate) disagree on a binary file, so recording it would
+    cut it; and nothing under `grids/` but the CSVs is appended to."""
+    grid_csv(tmp_path, 'res_bus', 3)
+    binary = tmp_path / 'grids' / 'electricity' / 'electricity.xlsx'
+    binary.write_bytes(b'PK\x03\x04' + b'\r' * 7 + b'\n' + b'\r\n' * 3 + b'x')
+    checkpoint.write(str(tmp_path), FakeDatabase('x'), step=4, last_timestamp='t4')
+
+    state = checkpoint.read(str(tmp_path))
+    checkpoint.truncate_grid_csvs(str(tmp_path), state)
+
+    assert state['grid_csv_lines'] == {'grids/electricity/res_bus.csv': 3}
+    assert binary.read_bytes() == b'PK\x03\x04' + b'\r' * 7 + b'\n' + b'\r\n' * 3 + b'x'
+
+
+def test_a_recorded_csv_that_is_gone_means_the_folder_was_edited(tmp_path):
+    """Skipping it would let the resumed drain append headerless rows to a fresh file."""
+    path = grid_csv(tmp_path, 'res_trafo', 5)
+    checkpoint.write(str(tmp_path), FakeDatabase('x'), step=4, last_timestamp='t4')
+    path.unlink()
+
+    with pytest.raises(RuntimeError, match='edited after the checkpoint'):
+        checkpoint.truncate_grid_csvs(str(tmp_path), checkpoint.read(str(tmp_path)))
+
+
 def test_a_csv_shorter_than_recorded_means_the_folder_was_edited(tmp_path):
     path = grid_csv(tmp_path, 'res_trafo', 5)
     checkpoint.write(str(tmp_path), FakeDatabase('x'), step=4, last_timestamp='t4')
@@ -206,6 +263,19 @@ def test_a_resumed_run_starts_strictly_after_the_checkpointed_timestep():
 
     assert agents_run(log) == TIMESTAMPS[3:], (
         'the checkpointed timestep must not run again, and nothing after it may be skipped')
+
+
+def test_the_boundary_holds_for_a_real_datetime_timetable():
+    """The timetable column is a tz-aware Datetime and the checkpoint stores what it yields, a
+    python datetime; the strings above cannot see a checkpoint that stored `str(timestamp)`."""
+    stamps = pl.Series('t', TIMESTAMPS).str.to_datetime(time_zone='UTC')
+    executor, log = resumed_executor(TIMESTAMPS, last_timestamp=stamps[2], resumed_from_step=3,
+                                     checkpoint_interval=None)
+    executor.timetable = executor.timetable.with_columns(stamps.alias(c.TC_TIMESTAMP))
+
+    executor.execute()
+
+    assert agents_run(log) == [str(stamp) for stamp in stamps[3:]]
 
 
 def test_a_resumed_run_keeps_the_checkpoint_cadence_of_the_uninterrupted_run():
@@ -260,6 +330,39 @@ def test_pause_checkpoints_and_stops_after_the_timestep_in_progress():
     assert log[-2] == 'end', 'the timestep in progress is closed before the checkpoint'
 
 
+def test_a_pause_landing_between_the_checkpoint_and_the_stop_still_checkpoints():
+    """`pause` may run from a signal handler at any bytecode. Requested after the checkpoint
+    decision of step 1 but before its stop decision, it must take effect at step 2 -- with a
+    checkpoint -- rather than stop step 1 without one."""
+    executor, log = resumed_executor(TIMESTAMPS, last_timestamp=None, resumed_from_step=None,
+                                     checkpoint_interval=None)
+    updates = []
+
+    def update_then_pause(*args):
+        updates.append(1)
+        if len(updates) == 1:
+            executor.pause()
+
+    executor.pbar.update = update_then_pause
+
+    executor.execute()
+
+    assert executor.paused is True
+    assert agents_run(log) == TIMESTAMPS[:2]
+    assert checkpoints(log) == [(2, TIMESTAMPS[1])], 'stopped without a checkpoint, or checkpointed the wrong step'
+
+
+def test_a_pause_requested_before_execute_belongs_to_no_run():
+    executor, log = resumed_executor(TIMESTAMPS, last_timestamp=None, resumed_from_step=None,
+                                     checkpoint_interval=None)
+    executor.pause()
+
+    executor.execute()
+
+    assert executor.paused is False
+    assert agents_run(log) == TIMESTAMPS
+
+
 def test_a_paused_run_skips_cleanup_and_a_finished_one_does_not():
     calls = []
     for paused in (True, False):
@@ -289,8 +392,14 @@ def results_folder(tmp_path, name='a_run'):
 
 
 class CheckpointedDatabase:
+    def __init__(self, run_name='a_run'):
+        self.run_name = run_name
+
     def get_general_data(self):
-        return {c.K_GRID: {c.G_ELECTRICITY: {'restrictions': {'max_iteration': 7}}}}
+        return {c.K_GRID: {c.G_ELECTRICITY: {'restrictions': {'max_iteration': 7, 'apply': []}}}}
+
+    def get_grid_data(self):
+        return {}
 
 
 def test_resuming_reads_the_results_folder_in_place_and_copies_nothing(tmp_path, monkeypatch):
@@ -309,9 +418,22 @@ def test_resuming_reads_the_results_folder_in_place_and_copies_nothing(tmp_path,
     assert executor.path_results == str(folder)
     assert isinstance(executor.database, CheckpointedDatabase)
     assert executor.resumed_from_step == 8
+    assert executor._Executor__last_timestamp == TIMESTAMPS[3], 'without it the whole timetable runs again'
     assert executor.max_iteration == 7, 'derived from the checkpointed database, as a fresh run derives it'
     assert (folder / 'grids' / 'electricity' / 'res_trafo.csv').read_bytes() == b'0,row0\n1,row1\n'
     assert random.random() == continued, 'the RNG was not restored as part of setup'
+
+
+def test_resuming_a_renamed_results_folder_is_refused(tmp_path, monkeypatch):
+    """The pickled database writes under its own run name. Renamed, the resume would finish into a
+    re-created folder of the old name and leave the renamed one with the step-8 tables -- silently,
+    with both receipts of the acceptance test passing. Measured by the review panel."""
+    folder = results_folder(tmp_path, name='renamed_by_hand')
+    checkpoint.write(str(folder), CheckpointedDatabase(run_name='a_run'), step=8, last_timestamp=TIMESTAMPS[3])
+    monkeypatch.setattr(f, 'copy_folder', lambda *a, **k: pytest.fail('a resume must not copy or delete'))
+
+    with pytest.raises(RuntimeError, match="named 'a_run'; the folder is named 'renamed_by_hand'"):
+        Executor(str(folder), resume=True).setup()
 
 
 def test_resuming_a_folder_without_a_checkpoint_is_refused_before_anything_is_touched(tmp_path):
@@ -319,6 +441,49 @@ def test_resuming_a_folder_without_a_checkpoint_is_refused_before_anything_is_to
 
     with pytest.raises(FileNotFoundError, match='nothing to resume'):
         Executor(str(folder), resume=True).setup()
+
+
+class Unpicklable:
+    def __getstate__(self):
+        raise TypeError('a model without pickle support')
+
+    def get_general_data(self):
+        return {c.K_GRID: {c.G_ELECTRICITY: {'restrictions': {'max_iteration': 1, 'apply': []}}}}
+
+    def get_grid_data(self):
+        return {}
+
+    def setup_database(self, structure):
+        pass
+
+
+@pytest.mark.parametrize('interval, fails', [(24, True), (None, False)])
+def test_a_graph_that_cannot_be_pickled_fails_at_setup_only_when_checkpoints_are_on(interval, fails):
+    """Otherwise the run dies at its first checkpoint, 24 timesteps of work later."""
+    executor = bare_executor(database=Unpicklable(), structure={}, checkpoint_interval=interval)
+
+    if fails:
+        with pytest.raises(RuntimeError, match='does not pickle: TypeError: a model without pickle support'):
+            executor._Executor__setup_database()
+    else:
+        executor._Executor__setup_database()
+
+
+def test_a_finished_run_leaves_no_checkpoint_behind(tmp_path):
+    checkpoint.write(str(tmp_path), FakeDatabase('x'), step=24, last_timestamp='t24')
+
+    class Done:
+        def save_database(self, path):
+            pass
+
+        def concat_market_files(self):
+            pass
+
+    executor = bare_executor(database=Done(), path_results=str(tmp_path))
+
+    executor.cleanup()
+
+    assert not (tmp_path / 'checkpoint').exists()
 
 
 def test_a_fresh_run_still_copies_the_scenario(tmp_path, monkeypatch):

@@ -17,13 +17,16 @@ checkpoint records how long each file was, and resume truncates to that. Market 
 nothing: `MarketDB.save_and_drop_past_records` names each by its horizon threshold and a re-run
 step rewrites it with identical rows.
 
-The pickle is written to a sibling file and renamed into place, so a crash during the write leaves
-the previous checkpoint intact; the manifest beside it is for people and is never read back.
+The file holds two pickled objects: a small header with the format stamp, then the graph, so the
+stamp is checked before a single class of the graph is unpickled. It is written to a sibling file
+and renamed into place, so a crash during the write leaves the previous checkpoint intact; the
+manifest beside it is for people and is never read back.
 """
 import json
 import os
 import pickle
 import random
+import shutil
 import time
 from datetime import datetime, timezone
 
@@ -41,30 +44,56 @@ class CheckpointFormatError(RuntimeError):
     """The checkpoint was written by a HAMLET whose checkpoint format this one does not read."""
 
 
-def write(path_results: str, database, step: int, last_timestamp) -> str:
+class _Discard:
+    """A write target that keeps nothing, for measuring whether a graph pickles at all."""
+
+    def write(self, data):
+        return len(data)
+
+
+def check_picklable(database) -> None:
+    """Raise, naming the cause, if `database` cannot be pickled.
+
+    Called once at setup when checkpoints are on, so a graph that cannot be written -- a
+    forecaster holding a model without pickle support, say -- fails the run before its first
+    timestep rather than at its first checkpoint, 24 timesteps of work later.
+    """
+    try:
+        pickle.dump(database, _Discard(), protocol=pickle.HIGHEST_PROTOCOL)
+    except Exception as error:  # pickle raises PicklingError, TypeError or AttributeError
+        raise RuntimeError(
+            f'the run cannot be checkpointed for resume because its state does not pickle: '
+            f'{type(error).__name__}: {error}. Pass checkpoint_interval=None to run without '
+            f'checkpoints, or make the object named above picklable.') from error
+
+
+def write(path_results: str, database, step: int, last_timestamp, checkpoint_interval=None) -> str:
     """Write the run's state after `step` timesteps, the last of which was `last_timestamp`.
 
     Returns the checkpoint directory. Called by the executor after `end_timestep`, outside the
-    grid loop, so the graph is the one the next timestep starts from.
+    grid loop, so the graph is the one the next timestep starts from. `checkpoint_interval` is
+    recorded for the reader of the manifest; a resume keeps the cadence only if it is told the
+    same interval.
     """
     folder = os.path.join(path_results, DIRECTORY)
     os.makedirs(folder, exist_ok=True)
-    state = {
+    header = {
         'checkpoint_format_version': c.CHECKPOINT_FORMAT_VERSION,
         'step': step,
         'last_timestamp': last_timestamp,
         'written_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+        'checkpoint_interval': checkpoint_interval,
         'rng': {'random': random.getstate(), 'numpy': np.random.get_state()},
         'grid_csv_lines': _grid_csv_lines(path_results),
-        'database': database,
     }
     target = os.path.join(folder, STATE_FILE)
     staging = target + '.tmp'
     with open(staging, 'wb') as handle:
-        pickle.dump(state, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(header, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(database, handle, protocol=pickle.HIGHEST_PROTOCOL)
     _replace(staging, target)
 
-    manifest = {key: value for key, value in state.items() if key not in ('database', 'rng')}
+    manifest = {key: value for key, value in header.items() if key != 'rng'}
     manifest['last_timestamp'] = str(last_timestamp)
     with open(os.path.join(folder, MANIFEST_FILE), 'w', encoding='utf-8') as handle:
         json.dump(manifest, handle, indent=2)
@@ -80,11 +109,13 @@ def read(path_results: str) -> dict:
             f'`checkpoint_interval` timesteps; a run with checkpointing off cannot be resumed.')
     with open(target, 'rb') as handle:
         state = pickle.load(handle)
-    found = state.get('checkpoint_format_version')
-    if found != c.CHECKPOINT_FORMAT_VERSION:
-        raise CheckpointFormatError(
-            f'{target} carries checkpoint format {found!r}; this HAMLET reads '
-            f'{c.CHECKPOINT_FORMAT_VERSION}. Resume it with the HAMLET that wrote it, or restart the run.')
+        found = state.get('checkpoint_format_version') if isinstance(state, dict) else None
+        if found != c.CHECKPOINT_FORMAT_VERSION:
+            raise CheckpointFormatError(
+                f'{target} carries checkpoint format {found!r}; this HAMLET reads '
+                f'{c.CHECKPOINT_FORMAT_VERSION}. Resume it with the HAMLET that wrote it, or restart '
+                f'the run.')
+        state['database'] = pickle.load(handle)
     return state
 
 
@@ -107,6 +138,10 @@ def truncate_grid_csvs(path_results: str, state: dict) -> dict:
     removed = {}
     for relative, lines in state['grid_csv_lines'].items():
         file_path = os.path.join(path_results, relative)
+        if not os.path.exists(file_path):
+            raise RuntimeError(
+                f'{file_path} is gone but the checkpoint recorded it with {lines} lines; the results '
+                f'folder was edited after the checkpoint and cannot be resumed from.')
         with open(file_path, 'rb') as handle:
             content = handle.read().splitlines(keepends=True)
         if len(content) < lines:
@@ -118,6 +153,13 @@ def truncate_grid_csvs(path_results: str, state: dict) -> dict:
                 handle.writelines(content[:lines])
         removed[relative] = len(content) - lines
     return removed
+
+
+def remove(path_results: str) -> None:
+    """Delete the checkpoint of a run that finished; there is nothing left to resume."""
+    folder = os.path.join(path_results, DIRECTORY)
+    if os.path.isdir(folder):
+        shutil.rmtree(folder)
 
 
 def _grid_csv_lines(path_results: str) -> dict:

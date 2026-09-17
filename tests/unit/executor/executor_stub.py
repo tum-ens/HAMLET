@@ -1,8 +1,8 @@
 """An `Executor` built without `__init__`, carrying every attribute the timestep loop reads.
 
-Three test modules stub the loop this way, and each new loop attribute -- `checkpoint_interval`,
-`rollback_possible`, the resume and pause state -- has broken all of them at once. One place to
-add it to.
+Four test modules stub the loop this way, and each new loop attribute -- `checkpoint_interval`,
+`rollback_possible`, the resume and pause state -- broke every stub that existed at the time. One
+place to add the next one to.
 """
 from types import SimpleNamespace
 

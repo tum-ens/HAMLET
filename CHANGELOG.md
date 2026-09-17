@@ -170,7 +170,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   that died after the checkpoint has rows the resumed run writes again), the RNGs are put back,
   and the timetable resumes strictly after the checkpoint with the checkpoint cadence intact.
   `Executor.pause()` — a flag, safe from a signal handler — checkpoints and stops after the
-  timestep in progress and skips `cleanup`, so the folder it leaves is exactly one to resume.
+  timestep in progress and skips `cleanup`, so the folder it leaves is exactly one to resume. A
+  results folder can be moved but not renamed: the checkpoint carries the run name, as
+  `general.json` already did, and a resume under another name is refused rather than finishing
+  into a re-created folder of the old one. A finished run deletes its checkpoint; a graph that
+  cannot be pickled fails the run at setup, not 24 timesteps in.
 
   The state is the whole graph rather than a list of pieces because the acceptance criterion is
   not a list: `tests/e2e/test_resume_matches_golden.py` runs each golden scenario checkpointing
@@ -179,11 +183,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   the remainder, since a quiet restart would match the reference too. It passes for both
   scenarios, and it sees what it is for: dropping the §14a fee horizon, emptying a market's
   retained window, skipping the CSV truncation, or resuming one step early each move it.
-  Neither scenario draws from an RNG, so the RNG restore is pinned by unit test only. The format
-  stamp is coupled to the pickled classes; `hamlet/constants.py` says when to bump it. A
-  checkpoint written before this change (agent tables only) has no state file and cannot be
-  resumed. Forecasters holding a TensorFlow model (`cnn`, `rnn`, both behind the optional extra)
-  are not picklable and such a run cannot be checkpointed for resume.
+  No result in either scenario depends on an RNG draw, so the RNG restore is pinned by unit test
+  only. The format stamp is coupled to the pickled classes; `hamlet/constants.py` says when to
+  bump it. A checkpoint written before this change (agent tables only) has no state file and
+  cannot be resumed. Whether a forecaster holding a TensorFlow model (`cnn`, `rnn`, behind the
+  optional extra) pickles is untested; no shipped scenario uses one. The state file is 111 MB for
+  the 4-agent example, almost all of it the weather table every forecaster shares, and unmeasured
+  at design 6 scale; the `golden` CI job gains two crash-and-resume runs, about five minutes.
 
 - **The §14a reduction strategy is configurable: `required` | `minimum` | `ramp` (#245).** Under
   `method: ems` the executor's `while not grid_ok` loop re-simulates a timestep after each pass,
