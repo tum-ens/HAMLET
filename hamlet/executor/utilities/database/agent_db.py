@@ -146,10 +146,11 @@ class AgentDB:
         """`os.replace`, retried on the transient refusal Windows gives for a file someone has open.
 
         POSIX rename is atomic and does not care who holds the old file. Windows refuses with
-        `PermissionError` while any handle is open on either path -- an antivirus scan of the
-        freshly written staging file, a viewer on the target. Nothing in HAMLET holds one, but the
-        periodic checkpoint makes the window hundreds of times more frequent than the single save
-        at the end of a run used to, so a transient refusal is retried before it kills the run.
+        `PermissionError` while a handle without delete sharing is open on either path -- an
+        antivirus scan of the freshly written staging file, a viewer on the target. Nothing in
+        HAMLET holds one, but the periodic checkpoint multiplies the window by the number of
+        checkpoints (32 for a month at the default interval, 366 for a year) against the single
+        save at the end of a run, so a transient refusal is retried before it kills the run.
         """
         for attempt in range(1, cls.REPLACE_ATTEMPTS + 1):
             try:

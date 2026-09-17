@@ -153,8 +153,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   off; anything else that is not a non-negative integer (`numbers.Integral`, so numpy integers
   pass; `bool` does not) is refused rather than coerced. Each table is staged and renamed into
   place, so a crash *during* a checkpoint leaves the previous one intact instead of a truncated
-  feather; on Windows the rename is retried three times, because it fails while anything holds
-  either file open, and the checkpoint makes that window hundreds of times more frequent.
+  feather; on Windows the rename is retried three times, because it fails while something holds
+  either file open, and the checkpoint multiplies that window by the number of checkpoints (32 for
+  a month, 366 for a year).
 
   The checkpoint sits after `end_timestep`, outside the `while not grid_ok` loop, because a
   rolled-back pass restores `initial_db` and a checkpoint inside the loop would write the dispatch

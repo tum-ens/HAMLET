@@ -219,7 +219,7 @@ def test_a_checkpoint_writes_every_table_of_every_agent_with_its_current_content
 
 
 def test_a_checkpoint_lands_where_the_final_save_will_overwrite_it(tmp_path):
-    """Same paths, so the crashed run's folder reads like a run that ended at the checkpoint."""
+    """Same paths, so a crashed run's agent tables are those of its last checkpoint."""
     db = agent('sfh', 'agent_one', 1)
     database, _ = database_with(tmp_path, [db])
 
@@ -347,9 +347,16 @@ class RefusingReplace:
         return self.real_replace(staging, target)
 
 
+# Absolute, not derived from `AgentDB.REPLACE_ATTEMPTS`: a count taken from the constant under test
+# passes whatever the constant is, so `REPLACE_ATTEMPTS = 1` -- no retry at all -- stayed green
+# until a review panel tried it. Two refusals must be absorbed; three must not.
+ABSORBED_REFUSALS = 2
+FATAL_REFUSALS = 3
+
+
 def test_a_transient_windows_refusal_of_the_rename_is_retried(tmp_path, monkeypatch):
     db = agent('sfh', 'agent_one', 1)
-    refusing = RefusingReplace(refusals=AgentDB.REPLACE_ATTEMPTS - 1)
+    refusing = RefusingReplace(refusals=ABSORBED_REFUSALS)
     monkeypatch.setattr(agent_db_module.os, 'replace', refusing)
     monkeypatch.setattr(AgentDB, 'REPLACE_RETRY_SECONDS', 0)
 
@@ -364,14 +371,14 @@ def test_a_transient_windows_refusal_of_the_rename_is_retried(tmp_path, monkeypa
 def test_a_persistent_refusal_of_the_rename_still_fails_the_save(tmp_path, monkeypatch):
     """Retrying is for a scanner's lock, not for a file that is genuinely held open."""
     db = agent('sfh', 'agent_one', 1)
-    refusing = RefusingReplace(refusals=AgentDB.REPLACE_ATTEMPTS)
+    refusing = RefusingReplace(refusals=FATAL_REFUSALS)
     monkeypatch.setattr(agent_db_module.os, 'replace', refusing)
     monkeypatch.setattr(AgentDB, 'REPLACE_RETRY_SECONDS', 0)
 
     with pytest.raises(PermissionError):
         db.save_agent(str(tmp_path / 'agent_one'))
 
-    assert refusing.calls == AgentDB.REPLACE_ATTEMPTS, 'gave up earlier or later than the budget'
+    assert refusing.calls == FATAL_REFUSALS, 'gave up earlier or later than the budget'
 
 
 def test_a_completed_save_leaves_no_staging_file_behind(tmp_path):
