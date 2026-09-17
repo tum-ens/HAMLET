@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### Fixed
+- **On a forced iteration exit, the published §14a command is now the one the kept dispatch obeyed
+  (#248).** Within a timestep each pass replaces the same-timestamp `res_direct_power_control` frame
+  with its own, so only the last pass's command survived. On a converged exit that is right. On an
+  exit forced by `max_iteration` it was not: the executor stops the loop *after* a command is computed
+  but *before* any agent runs under it, so the surviving frame recorded a command that was never in
+  force — on `grid_golden`, 4586 W published against a 4678 W draw that had obeyed 4678 W.
+
+  Anything reading `res_direct_power_control` to report what the operator commanded read a number
+  that was never applied. The restriction now keeps the frame it supersedes, and the executor restores
+  it when it forces the exit. Two guards keep the fix from reproducing the defect, both found by a
+  review lens with real objects: the stash is dropped at the start of every pass, so it only ever
+  describes what *this* pass replaced — a pass that writes no command (the overload cleared) must not
+  leave an older pass's frame to be restored — and the restore is gated on the grid *not* having
+  converged, because the cap and convergence are independent and can coincide on the same pass.
+
+  The golden reference moves by two values (`control_result` min 4586 → 4678, sum +92 W); the
+  analyzer oracle reads power flows, not commands, and does not move. `POWER_FLOW_MARGIN_W` in
+  `tests/e2e/test_grid_restrictions.py` drops from 100 W back to 50 W: the 92 W it had been
+  tolerating was this artefact, not a power-flow residual, and the remaining gaps are 0–22 W.
+  Verified in both directions — the suite is green, and restoring the pre-!209 no-op in
+  `POI.apply_grid_commands` still fails both cap-respected tests.
+
 - **A §14a command no longer outlives the timestep it was computed for (#247).**
   `current_direct_power_control` is an instruction for one timestep, derived from that timestep's
   power flow. `EnWG14a` clears it on the paths it controls, but `executor/setup.py` ends a timestep

@@ -24,6 +24,13 @@ class EnWG14a(GridRestrictionBase):
         # Boolean variable presents if grid status is ok (no overload)
         grid_ok = True
 
+        # The superseded-frame stash describes what *this* pass replaced, and nothing else. A pass
+        # that writes no command -- the overload cleared, or nothing to command -- must not leave a
+        # previous pass's stash behind, or a forced exit on that pass would restore a frame two
+        # passes old and publish a command nobody obeyed. That is the defect #248 fixes, and this
+        # line is what stops the fix reproducing it.
+        self.grid_db.restriction_commands.pop(self.grid_db.SUPERSEDED_COMMAND_FRAME_KEY, None)
+
         # calculate variable grid fees if active
         if self.restriction_config['variable_grid_fees']['active'] and self.__check_if_update_variable_grid_fees():
             self.__calculate_variable_grid_fees()
@@ -353,6 +360,12 @@ class EnWG14a(GridRestrictionBase):
                 self.grid_db.results['res_direct_power_control'] = []
             elif (str(self.grid_db.results['res_direct_power_control'][-1][c.TC_TIMESTAMP].unique()[0]) == str(
                     self.timestamp)):
+                # Keep the frame this pass supersedes rather than discarding it. If the executor
+                # ends the timestep on the iteration cap, the command computed on that final pass
+                # was never applied -- the kept dispatch obeyed the pass *before* it -- and the
+                # executor restores this frame so the published command is the one in force (#248).
+                self.grid_db.restriction_commands[self.grid_db.SUPERSEDED_COMMAND_FRAME_KEY] = (
+                    self.grid_db.results['res_direct_power_control'][-1])
                 del self.grid_db.results['res_direct_power_control'][-1]
 
             results_df = pd.DataFrame(data_list, columns=[c.TC_TIMESTAMP, c.TC_ID_AGENT, c.TC_ID_PLANT,

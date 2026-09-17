@@ -62,7 +62,32 @@ class GridDB:
     #: cross-timestep survival is the only way it ever reaches an agent. Dropping it here makes
     #: variable grid fees a near-total no-op -- measured, a fee reached 16 of 112 agent executions
     #: instead of 116 of 120.
-    TIMESTEP_RESTRICTION_KEYS = ('current_direct_power_control', 'direct_power_control_guarantee')
+    #: The `res_direct_power_control` frame the latest pass replaced, kept so a forced exit can put
+    #: it back. Per-timestep like the rest, and cleared with them.
+    SUPERSEDED_COMMAND_FRAME_KEY = 'direct_power_control_superseded_frame'
+
+    TIMESTEP_RESTRICTION_KEYS = ('current_direct_power_control', 'direct_power_control_guarantee',
+                                 SUPERSEDED_COMMAND_FRAME_KEY)
+
+    def restore_superseded_command_frame(self):
+        """Publish the command the kept dispatch actually obeyed, not the one computed after it.
+
+        Within a timestep each pass replaces the same-timestamp `res_direct_power_control` frame
+        with its own. On a converged exit that is right: the last command equals the one before it.
+        On an exit forced by `max_iteration` it is not -- the executor stops the loop *after* a
+        command was computed but *before* any agent ran under it, so the last frame records a
+        command that was never in force while the kept dispatch obeyed the previous one. Measured on
+        `grid_golden`: 4586 W published against a 4678 W draw that obeyed 4678 W (#248).
+
+        Called by the executor on that exit only. A no-op when nothing was superseded, which covers
+        a final pass that issued no command and left the previous frame standing.
+        """
+        frame = self.restriction_commands.pop(self.SUPERSEDED_COMMAND_FRAME_KEY, None)
+        if frame is None:
+            return
+        frames = self.results.get('res_direct_power_control')
+        if frames:
+            frames[-1] = frame
 
     def clear_timestep_restriction_state(self):
         """Drop what a restriction holds for the timestep that has just finished.
