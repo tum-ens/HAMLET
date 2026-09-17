@@ -20,6 +20,7 @@ from copy import deepcopy
 # from numba import njit, jit
 from datetime import datetime
 from hamlet.executor.utilities.database.database import Database
+from hamlet.executor.utilities import checkpoint
 import hamlet.constants as c
 # pl.enable_string_cache(True)
 from hamlet.executor.agents.agent import Agent
@@ -49,7 +50,7 @@ class Executor:
 
     def __init__(self, path, name: str = None, num_workers: int = None, overwrite_sim: bool = True,
                  allow_incompatible_scenario: bool = False,
-                 checkpoint_interval: int | None = DEFAULT_CHECKPOINT_INTERVAL):
+                 checkpoint_interval: int | None = DEFAULT_CHECKPOINT_INTERVAL, resume: bool = False):
         # Kept as a parameter, and refused rather than ignored. Every caller in the tree passes 1
         # already; silently running serial for someone who asked for eight would be the same class
         # of quiet wrong answer this executor has been accumulating.
@@ -68,6 +69,21 @@ class Executor:
             raise ValueError(f"checkpoint_interval={checkpoint_interval!r}: pass a non-negative "
                              f"integer number of timesteps, or None to disable checkpointing")
         self.checkpoint_interval = int(checkpoint_interval) if checkpoint_interval else None
+
+        # With `resume`, `path` is the *results* folder of a checkpointed run rather than a
+        # scenario: it holds the scenario copy the run was made from and, under `checkpoint/`,
+        # the state to continue from. Nothing is copied and nothing is deleted; the run picks up
+        # at the timestep after the checkpoint and finishes into the same folder (#249).
+        self.resume = resume
+        #: After setup on a resumed run, how many timesteps the checkpoint had completed.
+        self.resumed_from_step = None
+        # The last timestep the checkpoint had completed; the timetable starts after it.
+        self.__last_timestamp = None
+
+        # `pause()` asks the loop to checkpoint and stop after the timestep in progress; `paused`
+        # then says it did, and `run` leaves the results folder as something to resume from.
+        self.__pause_requested = False
+        self.paused = False
 
         # Progress bar
         self.pbar = tqdm()
@@ -123,7 +139,10 @@ class Executor:
 
             self.execute()
 
-            self.cleanup()
+            # A paused run has been checkpointed and is meant to be resumed. `cleanup` would
+            # concatenate the market fragments and delete them, which a resumed run needs intact.
+            if not self.paused:
+                self.cleanup()
 
     def setup(self):
         """Sets up the scenario before execution"""
@@ -139,10 +158,19 @@ class Executor:
         #   timestamps. Therefore, the simulation is only executed for the market timestamps
         # Iterate over timetable by timestamp
         # Set the progress bar
-        self.pbar.reset(total=len(self.timetable.partition_by('timestamp')))
         self.pbar.set_description(desc='Start execution')
 
-        for step, timestamp in enumerate(self.timetable.partition_by('timestamp'), start=1):
+        # A resumed run starts after the checkpoint's last timestep, and counts its steps from the
+        # checkpoint's step so the checkpoint cadence is the one the uninterrupted run would have had.
+        timestamps = self.timetable.partition_by('timestamp')
+        first_step = 1
+        if self.__last_timestamp is not None:
+            timestamps = [frame for frame in timestamps
+                          if frame[c.TC_TIMESTAMP][0] > self.__last_timestamp]
+            first_step = self.resumed_from_step + 1
+        self.pbar.reset(total=len(timestamps))
+
+        for step, timestamp in enumerate(timestamps, start=first_step):
             # Wait for the timestamp to be reached if the simulation is to be carried out in real-time
             if self.type == 'rts':
                 self.__wait_for_ts(timestamp.iloc[0, 0])
@@ -191,11 +219,17 @@ class Executor:
             # After the timestep is closed, never inside the loop above: a pass that is rolled back
             # restores `initial_db`, and a checkpoint taken before that would have written the
             # dispatch the rollback discards.
-            if self.checkpoint_interval and step % self.checkpoint_interval == 0:
-                self.pbar.set_description('Checkpointing agents after timestamp ' + timestamp_str)
-                self.database.save_agents(os.path.dirname(self.path_results))
+            due = self.checkpoint_interval and step % self.checkpoint_interval == 0
+            if due or self.__pause_requested:
+                self.pbar.set_description('Checkpointing after timestamp ' + timestamp_str)
+                self.__checkpoint(step, timestamp[c.TC_TIMESTAMP][0])
 
             self.pbar.update(1)
+
+            if self.__pause_requested:
+                self.paused = True
+                self.pbar.set_description('Paused after timestamp ' + timestamp_str)
+                break
 
     def cleanup(self):
         """Cleans up the scenario after execution"""
@@ -206,12 +240,23 @@ class Executor:
         self.pbar.set_description('Simulation finished')
 
     def pause(self):
-        """Pauses the simulation"""
-        raise NotImplementedError("Pause functionality not implemented yet")
+        """Ask the run to checkpoint and stop once the timestep in progress is over.
 
-    def resume(self):
-        """Resumes the simulation"""
-        raise NotImplementedError("Resume functionality not implemented yet")
+        Safe to call from another thread or a signal handler: it only sets a flag the loop reads
+        at the timestep boundary. `run` then skips `cleanup`, so the results folder is exactly a
+        checkpointed run -- `Executor(<results folder>, resume=True).run()` finishes it.
+        """
+        self.__pause_requested = True
+
+    def __checkpoint(self, step: int, last_timestamp):
+        """Write the agent tables for the analyzer, then the state for a resume (#249).
+
+        The two are separate on purpose. The tables are results, at the paths the final save
+        overwrites, so a crashed run's agents are readable without resuming; the state is the
+        whole database graph, readable by nothing but `resume`.
+        """
+        self.database.save_agents(os.path.dirname(self.path_results))
+        checkpoint.write(self.path_results, self.database, step, last_timestamp)
 
     def __execute_agents(self, tasks: pl.DataFrame):
         """Run every agent of this region for this timestamp, and post what they produced.
@@ -344,6 +389,12 @@ class Executor:
         # Load scenario structure
         self.structure = self.general['structure']
 
+        if self.resume:
+            # The folder given *is* the results folder: the scenario copy inside it is what the
+            # run reads, and the copy that would normally be made here is what it would destroy.
+            self.path_results = self.path_scenario
+            return
+
         # Set the results path
         self.path_results = os.path.join(self.config['paths']['results'], self.name)
         # Check if the results folder exists and stop simulation if overwrite is set to False
@@ -355,9 +406,17 @@ class Executor:
         f.copy_folder(self.path_scenario, self.path_results)
 
     def __setup_database(self):
-        """Creates a database connector object"""
+        """Creates a database connector object, or restores the checkpointed one on a resume."""
 
-        self.database.setup_database(self.structure)
+        if self.resume:
+            state = checkpoint.read(self.path_results)
+            self.database = state['database']
+            self.resumed_from_step = state['step']
+            self.__last_timestamp = state['last_timestamp']
+            checkpoint.restore_rng(state)
+            checkpoint.truncate_grid_csvs(self.path_results, state)
+        else:
+            self.database.setup_database(self.structure)
 
         # assign maximal number of iterations from the database
         self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['restrictions']

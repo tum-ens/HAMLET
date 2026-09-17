@@ -10,7 +10,6 @@ plausible `agents/` tree in the results folder before the first timestep runs.
 """
 
 import os
-from types import SimpleNamespace
 
 import numpy as np
 import polars as pl
@@ -18,11 +17,13 @@ import pytest
 
 from hamlet import constants as c
 from hamlet import functions as f
+import hamlet.executor.setup as executor_module
 from hamlet.executor.setup import Executor
 from hamlet.executor.utilities.database import agent_db as agent_db_module
 from hamlet.executor.utilities.database.agent_db import AgentDB
 from hamlet.executor.utilities.database.database import Database
 from hamlet.executor.utilities.database.region_db import RegionDB
+from tests.unit.executor.executor_stub import bare_executor
 
 TIMESTAMPS = [f'2023-01-28 {hour:02d}:00:00+00:00' for hour in range(5)]
 TABLES = ('meters', 'timeseries', 'socs', 'setpoints', 'forecasts')
@@ -47,24 +48,23 @@ class RecordingDatabase:
         self.log.append(('save_agents', self.timesteps_ended, path))
 
 
-def timetable(timestamps):
-    return pl.DataFrame({c.TC_TIMESTAMP: list(timestamps),
-                         c.TC_REGION: ['a_region'] * len(timestamps)})
+
+@pytest.fixture(autouse=True)
+def no_state_file(monkeypatch):
+    """The checkpoint also writes the run's state (#249 d); that is test_checkpoint_and_resume's.
+
+    Left real, it would pickle the recording stub into `path_results`, which here is a relative
+    path under the working directory.
+    """
+    monkeypatch.setattr(executor_module.checkpoint, 'write', lambda *args, **kwargs: None)
 
 
 def executor_over(timestamps, checkpoint_interval, max_iteration=1, converge=True):
     """An `Executor` stubbed down to the timestep loop, as in test_timestep_restriction_state."""
     log = []
-    executor = Executor.__new__(Executor)
-    executor.timetable = timetable(timestamps)
-    executor.type = 'sim'
-    executor.max_iteration = max_iteration
-    executor.checkpoint_interval = checkpoint_interval
-    executor.rollback_possible = True  # the stub grid can refuse to converge
-    executor.path_results = os.path.join('some', 'results', 'run_name')
-    executor.database = RecordingDatabase(log)
-    executor.pbar = SimpleNamespace(reset=lambda **kw: None, set_description=lambda *a, **kw: None,
-                                    update=lambda *a: None)
+    executor = bare_executor(timestamps, database=RecordingDatabase(log), max_iteration=max_iteration,
+                             checkpoint_interval=checkpoint_interval,
+                             path_results=os.path.join('some', 'results', 'run_name'))
     executor._Executor__execute_agents = lambda tasks: log.append('agents')
     executor._Executor__execute_markets = lambda tasks: log.append('markets')
 
