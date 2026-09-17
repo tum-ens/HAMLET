@@ -138,6 +138,7 @@ def executor_over(timestamps, grid_ok_after_cap=True):
     executor.timetable = timetable(timestamps)
     executor.type = 'sim'
     executor.max_iteration = MAX_ITERATION
+    executor.checkpoint_interval = None  # the stub database has no agents to checkpoint
     executor.database = RecordingDatabase(log)
     executor.pbar = SimpleNamespace(reset=lambda **kw: None, set_description=lambda *a, **kw: None,
                                     update=lambda *a: None)

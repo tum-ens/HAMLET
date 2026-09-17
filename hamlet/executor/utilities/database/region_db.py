@@ -34,12 +34,22 @@ class RegionDB:
     def save_region(self, path):
         """Save this region."""
 
+        self.save_agents(path)
+
+        self.__save_all_markets()
+
+    def save_agents(self, path):
+        """Save only this region's agents, to where `save_region` would put them.
+
+        The agents' half of `save_region`, split out so the executor can write it every few
+        timesteps (#249). The markets are not repeated here: their past rows are already drained to
+        disk per timestep, and the retained window is written once, at the end, by `save_region`.
+        """
+
         # Update region path
         self.region_save = os.path.abspath(path)
 
         self.__save_all_agents()
-
-        self.__save_all_markets()
 
     def register_forecasters_for_agents(self, general: dict):
         """
