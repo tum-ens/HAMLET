@@ -208,8 +208,9 @@ def test_each_agent_descends_its_own_ladder():
     enwg = ramp(two_agent_loads(11000, 11000))
 
     first = control(enwg, 3.0)
-    # agent_one: 12000 W down a 6800 W span (floor 5200); agent_two: 20000 W down 6801 W (floor
-    # 13199, the anchor's truncation -- see the cap-floor tests). One rung each.
+    # agent_one: 12000 W down a 6800 W span (floor 5200); agent_two: 19999 W down 6800 W -- the
+    # 0.009 + 0.011 MW sum truncates, as its 13199 W floor does; see the cap-floor tests. One
+    # rung each.
     assert first[AGENT]['ems'] == 9734
     assert first[AGENT_TWO]['ems'] == 17733
 
@@ -219,6 +220,25 @@ def test_each_agent_descends_its_own_ladder():
     assert second[AGENT_TWO]['ems'] == 15466, (
         f"agent_two's second rung is {second[AGENT_TWO]['ems']} W; a span taken from agent_one's "
         f"guarantee would give 13199 W, a bus-anchored ladder something else again")
+
+
+def test_the_overload_signal_is_what_advances_the_pass():
+    """`__calculate_direct_power_control` advances the counter; no command does.
+
+    The `control` helper above advances it itself, so nothing else in this file can tell whether
+    the production method is wired to -- deleting that one call left every unit test green until
+    this one. Driven with no transformer to walk, as the #248 tests do, so only the signal runs.
+    """
+    import pandas as pd
+
+    enwg = ramp(loads_at([11000, 11000]))
+    enwg.grid_db.results = {}
+    enwg.grid = SimpleNamespace(res_trafo=pd.DataFrame({'p_lv_mw': [], 'loading_percent': []}))
+
+    enwg._EnWG14a__calculate_direct_power_control()
+    enwg._EnWG14a__calculate_direct_power_control()
+
+    assert enwg.grid_db.restriction_commands[ElectricityGridDB.RAMP_STATE_KEY]['passes'] == 2
 
 
 def test_a_one_step_ramp_is_the_floor():
