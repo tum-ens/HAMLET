@@ -731,3 +731,329 @@ def test_the_individual_commands_were_respected(individual_results):
         checked += 1
 
     assert checked > 0, 'no command was checked'
+
+
+# ----------------------------------------------------------------------------------------------
+# The reduction strategies (#245): where an `ems` command lands. Everything above this line runs
+# `required`, the default, whose stopping point is decided by `max_iteration`; the two below stop
+# where the policy says. One fixture each, because a strategy no scenario reaches is a branch
+# that accumulates defects unseen -- `individual` did (#209, #232), over-generation still does
+# (#244).
+# ----------------------------------------------------------------------------------------------
+
+#: `grid_golden` with every command taken straight to the §14a floor. One edit, at the shipped
+#: 4200 W: the floor's value is what this arm is about, so it keeps the real one.
+MINIMUM_EDITS = {'grids.yaml': [('reduction: required', 'reduction: minimum')]}
+
+#: `grid_golden` with the command stepped down a ladder of `RAMP_STEPS` rungs, one per pass.
+#:
+#: **At 4200 W the ladder reaches the floor before the overload clears** -- measured, 149.6 % ->
+#: 133.4 % -> 117.2 % -> 100.9 %, the last rung *being* the floor -- so the kept command is the
+#: same one `minimum` issues and the property the strategy exists for, stopping one rung past
+#: where the overload clears, is not observable. Lowering the floor to 1000 W makes it so, for
+#: the same reason `INDIVIDUAL_EDITS` lowers it: the floor decides how much ladder there is. At
+#: 1000 W rung 1 leaves 112.0 %, rung 2 clears to 74.3 %, and rung 3 is never commanded.
+#:
+#: **`max_iteration` is raised from 3 to 5 so that it differs from `ramp_steps`.** The issue
+#: forbids reading the rung count from the cap, and with the two equal a ramp that did so would
+#: produce this arm's exact numbers; a mutation checked it. It also puts the cap above the step
+#: count, which is what a ramp needs to be *able* to reach its floor -- here it never has to.
+#: The rung count itself stays at the fixture's 3, asserted from the run's config receipt.
+RAMP_EDITS = {'grids.yaml': [('reduction: required', 'reduction: ramp'),
+                             ('threshold: 4200', f'threshold: {LOWERED_THRESHOLD_W}'),
+                             ('max_iteration: 3', 'max_iteration: 5')]}
+
+#: Rungs from the uncurtailed draw to the floor, as `grid_golden/grids.yaml` ships `ramp_steps`.
+RAMP_STEPS = 3
+
+#: §14a's flat minimum in watts, as `grid_golden` ships it and the `minimum` arm keeps it.
+THRESHOLD_W = 4200
+
+#: Slack on a §14a floor or rung *recomputed here* from the grid tables, in watts. The command
+#: is built from two `int()` truncations -- `int(total * 1e6) - int(reducible * 1e6)` -- and a
+#: float recomputed from the CSVs sits within one watt of each, so the two can differ by two.
+#: Measured: floors of 8894 W against a recomputed 8895.0 W, rungs of 6061 W against 6062.
+#: Distinct from `COMMAND_MARGIN_W`, which covers one truncation and is not earned here.
+RECOMPUTED_FLOOR_MARGIN_W = 2
+
+
+@pytest.fixture(scope='module')
+def minimum_results(scenario_runs):
+    return scenario_runs.run(CONFIG_ROOT, SCENARIO, creator_method=CREATOR_METHOD,
+                             config_edits=MINIMUM_EDITS).results
+
+
+@pytest.fixture(scope='module')
+def ramp_results(scenario_runs):
+    return scenario_runs.run(CONFIG_ROOT, SCENARIO, creator_method=CREATOR_METHOD,
+                             config_edits=RAMP_EDITS).results
+
+
+def test_the_strategy_edits_are_unique():
+    """Same guard as `test_the_individual_edits_are_unique`, for the two strategy arms."""
+    text = (CONFIG_ROOT / SCENARIO / 'grids.yaml').read_text(encoding='utf-8')
+    for edits in (MINIMUM_EDITS, RAMP_EDITS):
+        counts = {old: text.count(old) for old, _ in edits['grids.yaml']}
+        assert all(count == 1 for count in counts.values()), (
+            f'{counts} -- every edit must match exactly once in {SCENARIO}/grids.yaml')
+
+
+def agent_bus_map(results):
+    return {path.name: json.loads((path / 'account.json').read_text(encoding='utf-8'))
+            ['general']['bus']
+            for type_dir in (results / 'agents').iterdir() if type_dir.is_dir()
+            for path in type_dir.iterdir() if path.is_dir()}
+
+
+def draws_per_pass(results, timestamp, agent):
+    """The agent's draw at each power-flow pass of one timestep, in watts, first pass first.
+
+    From `res_bus` at the agent's own bus -- each agent sits alone on its bus in this fixture,
+    which is what lets bus power stand in for agent power (see the `ems` tests above). Pass 0 is
+    the uncontrolled dispatch; pass p obeys the command computed on pass p - 1.
+    """
+    bus = read_csv(results, 'res_bus.csv')
+    rows = bus[(bus[bus.columns[0]] == agent_bus_map(results)[agent])
+               & (bus['timestamp'] == timestamp)]
+    assert not rows.empty, f'no power flow result for {agent} at {timestamp}'
+    return [p_mw * 1e6 for p_mw in rows['p_mw']]
+
+
+def loading_per_pass(results, timestamp):
+    trafo = read_csv(results, 'res_trafo.csv')
+    assert trafo[trafo.columns[0]].nunique() == 1, (
+        'more than one transformer, so a row per pass cannot be read off res_trafo')
+    return trafo[trafo['timestamp'] == timestamp]['loading_percent'].tolist()
+
+
+def uncurtailed_and_floor(results, threshold_w, timestamp, agent):
+    """`(uncurtailed W, §14a floor W)` for one agent at one timestep, recomputed from pass 0.
+
+    The floor is what `__control_via_ems` anchors on its first pass (#242): the uncurtailed draw
+    less everything §14a lets the operator take -- per EV or charging battery above `threshold`,
+    its draw less the threshold; for the heat pumps together, their draw above `hp_min_control`
+    floored at zero. Recomputed from the grid's own tables so that the assertion is against an
+    independent derivation and not against the code's own number. Joined the same way
+    `controllable_devices` joins, but keeping the inflexible load, because the floor is a total.
+    """
+    import pandas as pd
+
+    book = pd.ExcelFile(results / 'grids' / 'electricity' / 'topology.xlsx')
+    elements = []
+    for sheet, kind_column, table, sign in (('load', 'load_type', 'res_load', 1),
+                                            ('sgen', 'plant_type', 'res_sgen', -1)):
+        identity = book.parse(sheet).rename(columns={'Unnamed: 0': 'element'})
+        if 'hp_min_control' not in identity.columns:
+            identity['hp_min_control'] = 0.0
+        power = read_csv(results, f'{table}.csv').rename(columns={'Unnamed: 0': 'element'})
+        power = power[power['timestamp'] == timestamp]
+        power = power.groupby('element', as_index=False).nth(0)
+        frame = power.merge(identity[['element', kind_column, 'id_agent', 'hp_min_control']],
+                            on='element', how='left').rename(columns={kind_column: 'kind'})
+        assert not frame['kind'].isna().any(), f'{table} rows with no entry in topology.xlsx'
+        frame['draw_w'] = frame['p_mw'] * 1e6 * sign
+        elements.append(frame)
+    devices = pd.concat(elements, ignore_index=True)
+    devices = devices[devices['id_agent'] == agent]
+    assert not devices.empty, f'{agent} owns no grid element at {timestamp}'
+
+    uncurtailed_w = devices['draw_w'].sum()
+    above = devices[devices['draw_w'] > threshold_w]
+    reducible_w = (above[above['kind'].isin(('ev', 'battery'))]['draw_w'] - threshold_w).sum()
+    pumps = above[above['kind'] == 'hp']
+    reducible_w += max(0.0, pumps['draw_w'].sum() - (pumps['hp_min_control'] * 1e6).sum())
+    return uncurtailed_w, uncurtailed_w - reducible_w
+
+
+@pytest.mark.e2e
+def test_the_run_used_the_minimum_strategy(minimum_results):
+    """A receipt from the config the run wrote back, as for the `individual` arm."""
+    config = (minimum_results / 'config' / 'grids.yaml').read_text(encoding='utf-8')
+
+    assert 'reduction: minimum' in config
+    assert 'threshold: 4200' in config, 'this arm is meant to keep the real §14a floor'
+
+
+@pytest.mark.e2e
+def test_minimum_lands_every_command_on_the_floor(minimum_results, grid_results):
+    """The floor, by value, and nothing gentler -- checked two ways.
+
+    Against the floor recomputed from the uncontrolled power flow, which is the assertion; and
+    against what `required` commanded the same agent at the same timestep, which is what makes
+    the first one falsifiable: a floor derived wrongly in the same way as the code's would agree
+    with it, and `required` is an independent number that `minimum` must never sit above.
+    Measured: `required` leaves one agent 165 W above its floor at 04:00 and `minimum` does not.
+    """
+    commands = read_csv(minimum_results, 'res_direct_power_control.csv')
+    required = read_csv(grid_results, 'res_direct_power_control.csv')
+    assert not commands.empty, 'the minimum arm issued no command, so it curtailed nothing'
+
+    deeper_than_required = []
+    for _, command in commands.iterrows():
+        uncurtailed_w, floor_w = uncurtailed_and_floor(
+            minimum_results, THRESHOLD_W, command['timestamp'], command['id_agent'])
+        cap_w = command['control_result']
+        assert abs(cap_w - floor_w) <= RECOMPUTED_FLOOR_MARGIN_W, (
+            f'{command["id_agent"]} at {command["timestamp"]} was capped at {cap_w:.0f} W; the '
+            f'§14a floor recomputed from the uncontrolled dispatch ({uncurtailed_w:.0f} W) is '
+            f'{floor_w:.0f} W, and minimum lands on it exactly')
+        # Measured spans of 3000 W and 4300 W; an agent with (nearly) nothing to give would make
+        # the equality above vacuous, so the premise is asserted at a fixed 1000 W.
+        assert uncurtailed_w - floor_w >= 1000, (
+            f'{command["id_agent"]} had only {uncurtailed_w - floor_w:.0f} W to give, so landing '
+            f'on the floor is not distinguishable from doing nothing here')
+
+        same = required[(required['timestamp'] == command['timestamp'])
+                        & (required['id_agent'] == command['id_agent'])]
+        if not same.empty:
+            required_w = same['control_result'].iloc[-1]
+            assert cap_w <= required_w + COMMAND_MARGIN_W, (
+                f'minimum left {command["id_agent"]} at {cap_w:.0f} W where required took it '
+                f'to {required_w:.0f} W; a strategy that takes everything cannot be gentler')
+            deeper_than_required.append(required_w - cap_w)
+
+    assert deeper_than_required and max(deeper_than_required) > 100, (
+        f'minimum was never more than {max(deeper_than_required, default=0):.0f} W below '
+        f'required on a shared command; measured 165 W. Either the two arms no longer share a '
+        f'controlled timestep or minimum has become required')
+
+
+@pytest.mark.e2e
+def test_minimum_needs_one_overload_signal(minimum_results, grid_results):
+    """Two passes: the overload is seen, and the timestep re-runs at the floor. Not `max_iteration`.
+
+    `required` at the same timestep runs the cap out (four passes, the loading still falling). A
+    `minimum` that produced any third pass would be a command that moved, which means a command
+    that was not the floor.
+    """
+    commands = read_csv(minimum_results, 'res_direct_power_control.csv')
+    checked = 0
+    for timestamp in commands['timestamp'].unique():
+        loadings = loading_per_pass(minimum_results, timestamp)
+        assert len(loadings) == 2, (
+            f'{timestamp} ran {len(loadings)} power-flow passes ({loadings}); minimum commands '
+            f'the floor on the first and has nothing left to say on the second')
+        assert loadings[1] < loadings[0], (
+            f'{timestamp}: the pass at the floor ({loadings[1]:.2f} %) is no lower than the '
+            f'uncontrolled one ({loadings[0]:.2f} %)')
+        under_required = loading_per_pass(grid_results, timestamp)
+        assert len(under_required) > 2, (
+            f'required also settled {timestamp} in {len(under_required)} passes, so the pass '
+            f'count no longer separates the two strategies')
+        checked += 1
+    assert checked > 0, 'no controlled timestep was checked'
+
+
+@pytest.mark.e2e
+def test_the_minimum_commands_were_respected(minimum_results):
+    """Same assertion as for `required`; a cap only means something if the agent obeyed it."""
+    commands = read_csv(minimum_results, 'res_direct_power_control.csv')
+    checked = 0
+    for _, command in commands.iterrows():
+        drawn_w = draws_per_pass(minimum_results, command['timestamp'], command['id_agent'])[-1]
+        assert drawn_w <= command['control_result'] + POWER_FLOW_MARGIN_W, (
+            f'{command["id_agent"]} was capped at {command["control_result"]:.0f} W at '
+            f'{command["timestamp"]} but drew {drawn_w:.0f} W')
+        checked += 1
+    assert checked > 0, 'no command was checked'
+
+
+@pytest.mark.e2e
+def test_the_run_used_the_ramp_strategy(ramp_results):
+    config = (ramp_results / 'config' / 'grids.yaml').read_text(encoding='utf-8')
+
+    assert 'reduction: ramp' in config
+    assert f'ramp_steps: {RAMP_STEPS}' in config, (
+        f'the rung arithmetic below assumes {RAMP_STEPS} rungs')
+    assert f'threshold: {LOWERED_THRESHOLD_W}' in config, (
+        'at the shipped 4200 W the ladder reaches the floor before the overload clears -- see '
+        'RAMP_EDITS')
+    assert 'max_iteration: 5' in config, (
+        'with max_iteration equal to ramp_steps, a ramp reading the cap is indistinguishable '
+        'from one reading ramp_steps -- see RAMP_EDITS')
+
+
+@pytest.mark.e2e
+def test_the_ramp_descends_its_ladder_rung_by_rung(ramp_results):
+    """Every pass after the first obeys rung p, and the kept command *is* rung k, by value.
+
+    Rung p is `uncurtailed - int(p * (uncurtailed - floor) / RAMP_STEPS)`, both ends anchored on
+    the uncontrolled pass. The intermediate commands are superseded and never published, but the
+    dispatch that obeyed each one is in `res_bus`, one row per pass, so the ladder is read from
+    the draws; the last rung is also the published command and is held to the tighter margin.
+
+    The rung count `k` is the number of controlled passes, and **at least one agent must land on
+    a rung strictly inside the ladder** -- that is the premise of this arm (`RAMP_EDITS`) and it
+    is asserted rather than assumed: a fixture whose ramp always reaches the floor has turned
+    this into a slower `minimum`.
+    """
+    commands = read_csv(ramp_results, 'res_direct_power_control.csv')
+    assert not commands.empty, 'the ramp arm issued no command'
+
+    inside_the_ladder = 0
+    for _, command in commands.iterrows():
+        timestamp, agent = command['timestamp'], command['id_agent']
+        uncurtailed_w, floor_w = uncurtailed_and_floor(ramp_results, LOWERED_THRESHOLD_W,
+                                                       timestamp, agent)
+        draws = draws_per_pass(ramp_results, timestamp, agent)
+        rungs = [uncurtailed_w - int(step * (uncurtailed_w - floor_w) / RAMP_STEPS)
+                 for step in range(len(draws))]
+        k = len(draws) - 1
+
+        for step in range(1, len(draws)):
+            assert abs(draws[step] - rungs[step]) <= POWER_FLOW_MARGIN_W, (
+                f'{agent} at {timestamp}, pass {step}: drew {draws[step]:.0f} W, rung {step} of '
+                f'{RAMP_STEPS} is {rungs[step]:.0f} W (ladder {uncurtailed_w:.0f} -> '
+                f'{floor_w:.0f} W; draws {[round(d) for d in draws]})')
+        assert abs(command['control_result'] - rungs[k]) <= RECOMPUTED_FLOOR_MARGIN_W, (
+            f'{agent} at {timestamp}: the kept command is {command["control_result"]:.0f} W, '
+            f'rung {k} is {rungs[k]:.0f} W')
+        assert command['control_result'] >= floor_w - RECOMPUTED_FLOOR_MARGIN_W, (
+            f'{agent} at {timestamp}: {command["control_result"]:.0f} W is below the '
+            f'{floor_w:.0f} W §14a floor')
+        if 0 < k < RAMP_STEPS:
+            inside_the_ladder += 1
+
+    assert inside_the_ladder > 0, (
+        f'every ramp reached its floor (rung {RAMP_STEPS}), so the kept commands are the ones '
+        f'minimum would have issued and nothing here observes the ramp stopping short')
+
+
+@pytest.mark.e2e
+def test_the_ramp_stops_one_rung_past_the_overload(ramp_results):
+    """The rung before the kept one was not enough, and the kept one was -- or was the floor.
+
+    That is what "over-curtails by at most one step" means, read off the transformer: at a
+    timestep settled on rung k, pass k - 1 (obeying rung k - 1) is still above 100 % and pass k
+    (obeying rung k) is not, unless k is the last rung, where only the first half has to hold.
+    Measured at 1000 W: 149.6 % -> 112.0 % -> 74.3 %, settled on rung 2 of 3.
+    """
+    commands = read_csv(ramp_results, 'res_direct_power_control.csv')
+    checked = 0
+    for timestamp in commands['timestamp'].unique():
+        loadings = loading_per_pass(ramp_results, timestamp)
+        k = len(loadings) - 1
+        assert 1 <= k <= RAMP_STEPS + 1, (
+            f'{timestamp}: {k} controlled passes for a {RAMP_STEPS}-rung ramp')
+        assert loadings[k - 1] > 100, (
+            f'{timestamp}: pass {k - 1} was at {loadings[k - 1]:.2f} %, so the overload had '
+            f'already cleared and rung {k} should never have been commanded ({loadings})')
+        if k < RAMP_STEPS:
+            assert loadings[k] <= 100 + 1e-6, (
+                f'{timestamp}: settled on rung {k} of {RAMP_STEPS} at {loadings[k]:.2f} %, '
+                f'still overloaded with rungs left ({loadings})')
+        checked += 1
+    assert checked > 0, 'no controlled timestep was checked'
+
+
+@pytest.mark.e2e
+def test_the_ramp_commands_were_respected(ramp_results):
+    commands = read_csv(ramp_results, 'res_direct_power_control.csv')
+    checked = 0
+    for _, command in commands.iterrows():
+        drawn_w = draws_per_pass(ramp_results, command['timestamp'], command['id_agent'])[-1]
+        assert drawn_w <= command['control_result'] + POWER_FLOW_MARGIN_W, (
+            f'{command["id_agent"]} was capped at {command["control_result"]:.0f} W at '
+            f'{command["timestamp"]} but drew {drawn_w:.0f} W')
+        checked += 1
+    assert checked > 0, 'no command was checked'

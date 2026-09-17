@@ -75,7 +75,7 @@ selects both markers**, e.g. `pytest tests -m "e2e or golden"`. The `e2e` and `g
 separate processes, so nothing is shared between them.
 
 Not every duplicate of a scenario name is a missed saving: `test_grid_restrictions.py` asks for
-`grid_golden` twice on purpose, with different `config_edits`, and those are two different
+`grid_golden` four times on purpose, with different `config_edits`, and those are four different
 requests that must not share a run. The cache is what makes that safe to write.
 
 ## The solver x framework matrix
@@ -200,6 +200,11 @@ order (#232). That run is not pinned by the golden master and is not shared with
 See `INDIVIDUAL_EDITS` in that file for why the floor has to move, and its module docstring for
 what neither fixture reaches. The heat-pump arithmetic they cannot reach is covered in process by
 `tests/integration/executor/test_enwg_14a_heat_pump_reduction.py`.
+
+Two further runs of the same fixture cover the `ems` method's other two reduction strategies
+(#245): `MINIMUM_EDITS` at the real 4200 W floor, and `RAMP_EDITS` at 1000 W with `max_iteration`
+raised so it differs from `ramp_steps`. Each is asserted by value against a floor recomputed from
+the uncontrolled power flow; the constants say why each edit is there.
 
 **To pin another scenario**, append a `GoldenScenario(container, name)` and create its reference
 with `HAMLET_UPDATE_GOLDEN=<name>`. One earns its place by reaching code the others do not, and costs

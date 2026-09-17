@@ -15,9 +15,72 @@ import hamlet.constants as c
 
 class EnWG14a(GridRestrictionBase):
 
+    #: How far one pass of `__control_via_ems` curtails, `direct_power_control.reduction`.
+    #:
+    #: The axis is what the operator can observe, not how deep it cuts. `required` needs a
+    #: per-connection state estimate to size the cut to the overload; `ramp` needs only an
+    #: overload/no-overload signal, repeated, and over-curtails by at most one step; `minimum`
+    #: needs one overload signal and takes everything to the §14a floor -- the simplest thing an
+    #: FNN Steuerbox can be told and the hardest to call *erforderlich* under §14a.
+    #:
+    #: `required` is the default and is what every scenario ran before the key existed. The
+    #: executor's `while not grid_ok` loop re-simulates the timestep after each pass, so under
+    #: `required` the sequence approaches 100 % asymptotically and **where it stops is decided by
+    #: `max_iteration`** -- measured on `grid_golden`, 149.6 % -> 104.3 % -> 102.9 % -> 102.0 %.
+    #: The other two strategies stop where the policy says, not where the cap falls.
+    REDUCTION_STRATEGIES = ('required', 'minimum', 'ramp')
+    DEFAULT_REDUCTION = 'required'
+
     def __init__(self, grid_db: ElectricityGridDB, grid: pp.pandapowerNet, tasks: pl.DataFrame, database: Database, **kwargs):
 
         super().__init__(grid_db, grid, tasks, database, **kwargs)
+
+        # Refuse a bad strategy on the first timestep rather than on the first overload, which
+        # in a scenario that rarely overloads can be hours of simulation in.
+        if self.restriction_config.get('direct_power_control', {}).get('active'):
+            self.__reduction_strategy()
+
+    def __reduction_strategy(self) -> (str, int | None):
+        """`(reduction, ramp_steps)` from `direct_power_control`, defaulting to today's behaviour.
+
+        Both keys are additive: a scenario written before they existed has neither, reads as
+        `required`, and produces the same commands it always did. `ramp_steps` is read only under
+        `ramp`, and **not from `max_iteration`**. That one lives a level up, is shared by every
+        restriction and is a safety cap on the executor's iteration; if the ramp read it, raising
+        the cap to stop a timestep truncating would silently make curtailment gentler -- a
+        simulation setting changing the physics. The two are independent, and the one thing they
+        owe each other is that a ramp of *n* steps needs `max_iteration >= n` passes to reach its
+        floor, or the cap truncates it as it would any other non-converging timestep.
+
+        Only the `ems` method sizes a command this way. `individual` curtails named devices to
+        their own floors in a priority order and has no notion of a strategy, so asking for one
+        there is refused rather than ignored: a key that is accepted and does nothing is the shape
+        of defect this repository keeps finding.
+        """
+        config = self.restriction_config['direct_power_control']
+        reduction = config.get('reduction', self.DEFAULT_REDUCTION)
+        if reduction not in self.REDUCTION_STRATEGIES:
+            raise ValueError(
+                f'grids.yaml gives <energy>.restrictions.enwg_14a.direct_power_control.reduction = '
+                f'{reduction!r}; it must be one of {list(self.REDUCTION_STRATEGIES)}.')
+
+        if reduction != self.DEFAULT_REDUCTION and config.get('method') != 'ems':
+            raise ValueError(
+                f'direct_power_control.reduction = {reduction!r} is only defined for method: ems; '
+                f'method: {config.get("method")!r} curtails named devices to their own floors and '
+                f'takes no reduction strategy. Drop the key or select method: ems.')
+
+        if reduction != 'ramp':
+            return reduction, None
+
+        steps = config.get('ramp_steps')
+        if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+            raise ValueError(
+                f'direct_power_control.reduction = ramp needs ramp_steps, a positive integer '
+                f'number of steps from the uncurtailed draw to the §14a floor, but grids.yaml gives '
+                f'ramp_steps = {steps!r}. It is not read from max_iteration, which is a safety cap '
+                f'on the executor\'s iteration and not a property of the policy.')
+        return reduction, steps
 
     def execute(self) -> (ElectricityGridDB, bool):
         """Execute the §14a EnWG regulation."""
@@ -395,7 +458,19 @@ class EnWG14a(GridRestrictionBase):
         timestep needs. Deriving the reset from the timestamp makes every exit path safe without
         having to find them all.
         """
-        store = self.grid_db.restriction_commands.setdefault('direct_power_control_guarantee', {})
+        return self.__timestep_state(ElectricityGridDB.GUARANTEE_KEY)
+
+    def __timestep_ramp(self) -> dict:
+        """Per-agent `{'from': uncurtailed W, 'step': passes commanded}` for `reduction: ramp`.
+
+        Reset on the same timestamp rule as the guarantee, for the same reasons -- a step count
+        carried into the next timestep would start that timestep's ramp part-way down. Kept under
+        `GridDB.TIMESTEP_RESTRICTION_KEYS` so the boundary clears it and a resume restores it.
+        """
+        return self.__timestep_state(ElectricityGridDB.RAMP_STATE_KEY)
+
+    def __timestep_state(self, key) -> dict:
+        store = self.grid_db.restriction_commands.setdefault(key, {})
         if store.get('timestamp') != self.timestamp:
             store.clear()
             store['timestamp'] = self.timestamp
@@ -635,7 +710,9 @@ class EnWG14a(GridRestrictionBase):
         # deepcopy current direct power control results as target to write
         control_target = self.grid_db.restriction_commands['current_direct_power_control']
 
+        reduction, ramp_steps = self.__reduction_strategy()
         anchored_guarantee = self.__timestep_guarantees()
+        ramp = self.__timestep_ramp() if reduction == 'ramp' else None
 
         # get minimal power to be guaranteed
         threshold = self.restriction_config['direct_power_control']['threshold'] * c.WH_TO_MWH
@@ -815,7 +892,28 @@ class EnWG14a(GridRestrictionBase):
                 anchored_guarantee[agent] = total_p_agent - int(
                     direction * reducible_power_for_agent[agent] * c.MWH_TO_WH)
 
-            target = total_p_agent + reduced_p_agent
+            # The strategy decides where between the uncurtailed draw and the floor the command
+            # lands; see `REDUCTION_STRATEGIES`. All three share the anchor above and the clamp
+            # below, so none can go past the floor and `required` is byte-for-byte what it was.
+            match reduction:
+                case 'required':
+                    target = total_p_agent + reduced_p_agent
+                case 'minimum':
+                    target = anchored_guarantee[agent]
+                case 'ramp':
+                    # Both ends of the ladder are anchored on the agent's first commanded pass:
+                    # the draw it started from and the floor it may be taken to. Step k is the
+                    # k-th rung down, however much the agent actually drew in between -- a step
+                    # measured from the current draw would re-take what an EMS had already given
+                    # up by dispatching below its cap. Past the last rung the arithmetic goes
+                    # below the floor and the clamp below holds it there, so the command stops
+                    # moving and the timestep converges; the step is not capped here because a
+                    # cap would be a branch nothing could tell from the clamp.
+                    state = ramp.setdefault(agent, {'from': total_p_agent, 'step': 0})
+                    state['step'] += 1
+                    span = state['from'] - anchored_guarantee[agent]
+                    target = state['from'] - int(span * state['step'] / ramp_steps)
+
             control_target[agent]['ems'] = (max(target, anchored_guarantee[agent]) if direction > 0
                                             else min(target, anchored_guarantee[agent]))
 
