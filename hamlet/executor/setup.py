@@ -25,6 +25,7 @@ import hamlet.constants as c
 from hamlet.executor.agents.agent import Agent
 from hamlet.executor.markets.market import Market
 from hamlet.executor.grids.grid import Grid
+from hamlet.executor.utilities.grid_restrictions.grid_restriction import GridRestriction
 from hamlet.warning_policy import quiet_known_noise
 
 
@@ -104,6 +105,10 @@ class Executor:
         # Maximal number of iterations per timesteps (when direct power control is activated)
         self.max_iteration = 1
 
+        # Whether any applied grid restriction can reject a pass; decides per run whether the
+        # database is copied at the top of every timestep. Set in `__setup_database`.
+        self.rollback_possible = True
+
     def run(self):
         """Runs the simulation.
 
@@ -146,8 +151,13 @@ class Executor:
             grid_ok = False  # init variable, grid is not simulated yet
             num_iteration = 0  # init number of iteration, max. 10
 
-            # get initial database at timestamp, in case this ts need to be overwritten
-            initial_db = deepcopy(self.database)
+            # The copy a rejected pass rolls back to. Only taken when a restriction can reject one:
+            # it is the whole database, agent tables included, so it scales with scenario length
+            # rather than with anything the timestep does -- a full-year scenario holds a second
+            # ~575 MB of agent tables all step long, and a third for the instant the next copy is
+            # made before this name is rebound, for nothing on every design without direct power
+            # control (#249).
+            initial_db = deepcopy(self.database) if self.rollback_possible else None
 
             while not grid_ok:  # iterate until grid is working
                 num_iteration += 1
@@ -259,8 +269,13 @@ class Executor:
         self.database.post_markets_to_region(region=region_name, markets=results, timestamp=timestamp,
                                              path_results=self.path_results)
 
-    def __execute_grids(self, tasklist: pl.DataFrame, initial_db: Database, num_iteration: int) -> (bool, dict):
-        """Execute grids for the given tasklist."""
+    def __execute_grids(self, tasklist: pl.DataFrame, initial_db: Database | None,
+                        num_iteration: int) -> (bool, dict):
+        """Execute grids for the given tasklist.
+
+        `initial_db` is None when no restriction declared it could reject a pass; a rejection is
+        then an error, because continuing from the rejected state would be the silent kind.
+        """
         # Only electricity grids is implemented now
         grid_results = {}
 
@@ -289,6 +304,11 @@ class Executor:
 
         # if grid status is not ok, delete all simulated data for this ts, this ts needs to be simulated again
         if not grid_ok:
+            if initial_db is None:
+                raise RuntimeError(
+                    'a grid restriction rejected a pass, but every applied restriction declared '
+                    'through `can_reject_a_pass` that it could not, so no copy was taken to roll '
+                    'back to. Fix the declaration on the restriction class.')
             self.database = deepcopy(initial_db)
 
         # write grid results to database
@@ -342,6 +362,21 @@ class Executor:
         # assign maximal number of iterations from the database
         self.max_iteration = (self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['restrictions']
                               ['max_iteration'])
+
+        self.rollback_possible = self.__rollback_possible()
+
+    def __rollback_possible(self) -> bool:
+        """Whether any applied restriction of a registered grid can reject a pass in this run.
+
+        Mirrors `Electricity.execute`: the restrictions it runs are `restrictions.apply` of the
+        electricity grid's general config, each with its own sub-config, and `grid_ok` comes from
+        nowhere else -- the heat and hydrogen grids have no `execute`.
+        """
+        if c.G_ELECTRICITY not in self.database.get_grid_data():
+            return False
+        restrictions = self.database.get_general_data()[c.K_GRID][c.G_ELECTRICITY]['restrictions']
+        return any(GridRestriction.can_reject_a_pass(name, restrictions[name])
+                   for name in restrictions['apply'])
 
     @staticmethod
     def __wait_for_ts(timestamp):

@@ -139,6 +139,7 @@ def executor_over(timestamps, grid_ok_after_cap=True):
     executor.type = 'sim'
     executor.max_iteration = MAX_ITERATION
     executor.checkpoint_interval = None  # the stub database has no agents to checkpoint
+    executor.rollback_possible = True  # the stub grid refuses to converge, so a copy is taken
     executor.database = RecordingDatabase(log)
     executor.pbar = SimpleNamespace(reset=lambda **kw: None, set_description=lambda *a, **kw: None,
                                     update=lambda *a: None)

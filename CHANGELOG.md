@@ -140,6 +140,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   rows with no region in the path, so moving a region separates them from the `concat_past_data`
   that reads them back — so sub-regions still collide across runs, and no shipped scenario has any.
 
+### Changed
+- **The per-timestep database copy is taken only when a grid restriction can reject a pass (#249,
+  part c).** `Executor.execute` deep-copied the whole database at the top of every timestep so that
+  a pass `EnWG14a` rejects could be rolled back. The copy is every agent's full-length tables, so it
+  scales with scenario length rather than with anything the timestep does — a full-year scenario
+  holds a second ~575 MB of agent tables all step long, briefly a third — and only `EnWG14a` with
+  direct power control on can ever reject a pass. Every other run took the copy for nothing. Each restriction class now
+  declares `can_reject_a_pass(config)`; the executor asks every applied restriction of a registered
+  grid at setup and skips the copy when none can. A rejection that arrives with no copy is refused
+  with an error rather than continued from the rejected state, so a wrong declaration cannot fail
+  open. Measured on design 6 (2160 steps, 104 agents, direct control off): the copy was a flat
+  28 ms of a 3.9 s step, so this is a memory change more than a speed one; both shipped golden
+  scenarios are unaffected (no grid, and grid with direct control on), and the same run showed the
+  per-step rate rising with the season rather than the step count — the numbers are on #249. Pinned
+  by `tests/unit/executor/test_rollback_copy_is_conditional.py`, including that `EnWG14a.execute`
+  agrees with its own declaration.
+
 ### Added
 - **Agent results are checkpointed every 24 timesteps, so a crash loses at most that many (#249,
   part a).** `AgentDB` holds every result table in memory and wrote them once, at the end of the

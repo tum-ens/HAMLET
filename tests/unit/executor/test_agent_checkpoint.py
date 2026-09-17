@@ -60,6 +60,7 @@ def executor_over(timestamps, checkpoint_interval, max_iteration=1, converge=Tru
     executor.type = 'sim'
     executor.max_iteration = max_iteration
     executor.checkpoint_interval = checkpoint_interval
+    executor.rollback_possible = True  # the stub grid can refuse to converge
     executor.path_results = os.path.join('some', 'results', 'run_name')
     executor.database = RecordingDatabase(log)
     executor.pbar = SimpleNamespace(reset=lambda **kw: None, set_description=lambda *a, **kw: None,

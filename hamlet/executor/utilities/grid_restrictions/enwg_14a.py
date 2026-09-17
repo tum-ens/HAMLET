@@ -19,6 +19,12 @@ class EnWG14a(GridRestrictionBase):
 
         super().__init__(grid_db, grid, tasks, database, **kwargs)
 
+    @staticmethod
+    def can_reject_a_pass(config: dict) -> bool:
+        # `execute` sets `grid_ok` only inside the direct power control branch; variable grid fees
+        # never reject a pass.
+        return bool(config['direct_power_control']['active'])
+
     def execute(self) -> (ElectricityGridDB, bool):
         """Execute the §14a EnWG regulation."""
         # Boolean variable presents if grid status is ok (no overload)
