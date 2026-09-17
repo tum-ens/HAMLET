@@ -140,6 +140,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   rows with no region in the path, so moving a region separates them from the `concat_past_data`
   that reads them back — so sub-regions still collide across runs, and no shipped scenario has any.
 
+### Changed
+- **The per-timestep database copy is taken only when a grid restriction can reject a pass (#249,
+  part c).** `Executor.execute` deep-copied the whole database at the top of every timestep so that
+  a pass `EnWG14a` rejects could be rolled back. The copy is every agent's full-length tables, so it
+  scales with scenario length rather than with anything the timestep does — a full-year scenario
+  holds a second ~575 MB of agent tables all step long, briefly a third — and only `EnWG14a` with
+  direct power control on can ever reject a pass. Every other run took the copy for nothing. Each restriction class now
+  declares `can_reject_a_pass(config)`; the executor asks every applied restriction of a registered
+  grid at setup and skips the copy when none can. A rejection that arrives with no copy is refused
+  with an error rather than continued from the rejected state, so a wrong declaration cannot fail
+  open. Measured on design 6 (2160 steps, 104 agents, direct control off): the copy was a flat
+  28 ms of a 3.9 s step, so this is a memory change more than a speed one; both shipped golden
+  scenarios are unaffected (no grid, and grid with direct control on), and the same run showed the
+  per-step rate rising with the season rather than the step count — the numbers are on #249. Pinned
+  by `tests/unit/executor/test_rollback_copy_is_conditional.py`, including that `EnWG14a.execute`
+  agrees with its own declaration.
+
 ### Added
 - **The §14a reduction strategy is configurable: `required` | `minimum` | `ramp` (#245).** Under
   `method: ems` the executor's `while not grid_ok` loop re-simulates a timestep after each pass,
@@ -185,6 +202,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   anchoring, the reset, the state key and every refusal; 17 mutations, one site at a time, each
   caught by the test named for it. `config_templates/grids.yaml`, the examples and the docs carry
   the keys with the default value.
+
+- **Agent results are checkpointed every 24 timesteps, so a crash loses at most that many (#249,
+  part a).** `AgentDB` holds every result table in memory and wrote them once, at the end of the
+  run — grids and markets drain per timestep, agents did not — so design 6a's January run, which
+  died at step 666 of 744, kept none of them. `Executor(checkpoint_interval=N)` now writes every
+  agent's five tables to the results folder every N timesteps, to the same paths the final save
+  overwrites, so a crashed run's *agent* tables are those of its last checkpoint. Only the agents:
+  the market's retained window (the last clearing horizon) still lives in memory until the end of
+  the run, and its top-level tables are only assembled by `concat_market_files`, so a crashed run's
+  market folder holds drained `past_data/` fragments and nothing assembled. `None` or `0` turns it
+  off; anything else that is not a non-negative integer (`numbers.Integral`, so numpy integers
+  pass; `bool` does not) is refused rather than coerced. Each table is staged and renamed into
+  place, so a crash *during* a checkpoint leaves the previous one intact instead of a truncated
+  feather; on Windows the rename is retried three times, because it fails while something holds
+  either file open, and the checkpoint multiplies that window by the number of checkpoints (32 for
+  a month, 366 for a year).
+
+  The checkpoint sits after `end_timestep`, outside the `while not grid_ok` loop, because a
+  rolled-back pass restores `initial_db` and a checkpoint inside the loop would write the dispatch
+  the rollback discards. Cost, measured on the Mac mini with design 6's 104 agents: 0.06 s per
+  checkpoint for a month's tables (48 MB in memory), 0.42 s for a full year's (575 MB).
+
+  Pinned by `tests/unit/executor/test_agent_checkpoint.py` (schedule, destination, contents, the
+  staged write) and end to end by `tests/e2e/test_agent_checkpoint_survives_crash.py`, which
+  kills a run of the shipped example inside timestep 10 with an interval of 8 and asserts, per
+  agent and by value against a complete run, that exactly the first 8 timesteps survived — the
+  rows after them are what pins the interval, since saving every timestep would pass the rest.
+  Every assertion was mutated at its own site; the boundary ones in both directions.
 
 - **The accounting invariants are asserted by value (L4, ROADMAP §2).** Net energy is the sum of
   a timestep's transactions, fees and levies are charged on **net** and to the right column, and
