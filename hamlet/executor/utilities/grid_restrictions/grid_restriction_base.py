@@ -36,3 +36,14 @@ class GridRestrictionBase:
 
     def execute(self):
         raise NotImplementedError('This restriction type is not implemented yet but the structure is already in place.')
+
+    @staticmethod
+    def can_reject_a_pass(config: dict) -> bool:
+        """Whether `execute` can ever return `grid_ok=False` under this restriction's config.
+
+        The executor deep-copies the whole database at the top of every timestep so that a rejected
+        pass can be rolled back, and skips the copy when no applied restriction can reject one
+        (#249). A restriction that answers False here and then rejects a pass is refused by the
+        executor rather than continued from the wrong state, so an override cannot fail open.
+        """
+        return False

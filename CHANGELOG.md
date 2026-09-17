@@ -140,6 +140,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   rows with no region in the path, so moving a region separates them from the `concat_past_data`
   that reads them back — so sub-regions still collide across runs, and no shipped scenario has any.
 
+### Changed
+- **The per-timestep database copy is taken only when a grid restriction can reject a pass (#249,
+  part c).** `Executor.execute` deep-copied the whole database at the top of every timestep so that
+  a pass `EnWG14a` rejects could be rolled back. The copy is every agent's full-length tables, so it
+  scales with scenario length rather than with anything the timestep does — a full-year scenario
+  holds a second ~575 MB of agent tables per step — and only `EnWG14a` with direct power control on
+  can ever reject a pass. Every other run took the copy for nothing. Each restriction class now
+  declares `can_reject_a_pass(config)`; the executor asks every applied restriction of a registered
+  grid at setup and skips the copy when none can. A rejection that arrives with no copy is refused
+  with an error rather than continued from the rejected state, so a wrong declaration cannot fail
+  open. Measured on design 6 (2160 steps, 104 agents, direct control off): the copy was a flat
+  28 ms of a 3.9 s step, so this is a memory change more than a speed one; both shipped golden
+  scenarios are unaffected (no grid, and grid with direct control on). Pinned by
+  `tests/unit/executor/test_rollback_copy_is_conditional.py`.
+
+  The same profiled run settled what the issue attributed to accumulation: the per-step rate rises
+  with the season, not the step count — the MPC solve alone grows (1.15 → 3.1 s/step) and tracks
+  daily irradiance (R² 0.70), every other phase is flat to three decimals over 2160 steps, and the
+  cold-start January chunk ran at the same 3.29 s/step as the same steps inside the continuous
+  run. The numbers are on the issue.
+
 ### Added
 - **Agent results are checkpointed every 24 timesteps, so a crash loses at most that many (#249,
   part a).** `AgentDB` holds every result table in memory and wrote them once, at the end of the
