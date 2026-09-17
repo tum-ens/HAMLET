@@ -7,19 +7,23 @@ scales with scenario length and not with anything the timestep does; measured on
 copies ~575 MB per step. Only `EnWG14a` can reject a pass, and only with direct power control on,
 so every other run took the copy for nothing (#249, part c).
 
-Three things are pinned. The copy is skipped exactly when `rollback_possible` is False. The flag is
-derived from the same config the grid stage reads. And a rejection with no copy to roll back to is
-an error -- a restriction whose declaration is wrong must not continue from the rejected state.
+Four things are pinned. The copy is skipped exactly when `rollback_possible` is False, and taken
+once per timestep rather than once per pass. The flag is derived from the same config the grid
+stage reads. `EnWG14a.execute` agrees with its own declaration -- the declaration is a claim about
+`execute`, and a claim about a method is worth nothing unless the method is run against it. And a
+rejection with no copy to roll back to is an error, per `Executor.__execute_grids`.
 """
 
 from types import SimpleNamespace
 
+import pandas as pd
 import polars as pl
 import pytest
 
 import hamlet.executor.setup as executor_module
 from hamlet import constants as c
 from hamlet.executor.setup import Executor
+from hamlet.executor.utilities.database.grid_db import ElectricityGridDB
 from hamlet.executor.utilities.grid_restrictions.enwg_14a import EnWG14a
 from hamlet.executor.utilities.grid_restrictions.grid_restriction import GridRestriction
 from hamlet.executor.utilities.grid_restrictions.grid_restriction_base import GridRestrictionBase
@@ -85,13 +89,19 @@ def test_the_database_is_not_copied_when_no_pass_can_be_rejected():
     assert seen == [None] * len(TIMESTAMPS), 'the grid stage must be told there is nothing to roll back to'
 
 
-def test_a_rejected_pass_still_rolls_back_when_the_copy_was_taken():
-    """The existing behaviour, kept: with a copy, a refusing grid is retried up to the cap."""
+def test_a_rejected_pass_is_retried_and_the_copy_is_taken_once_not_once_per_pass():
+    """With a copy, a refusing grid is retried up to the cap; the copy is still one per timestep.
+
+    Moving the copy inside the `while not grid_ok` loop keeps every other test here green, because
+    a converging step has one pass; it is the cost this change is about, so it is pinned where the
+    passes are several.
+    """
     executor, seen = executor_over(TIMESTAMPS[:1], rollback_possible=True, converge=False, max_iteration=2)
 
     executor.execute()
 
     assert len(seen) == 3, 'cap 2 means passes 1, 2 and the forced third'
+    assert executor.database.copies == 1
 
 
 # --- the fail-closed path -------------------------------------------------------------------
@@ -138,12 +148,41 @@ def executor_for_grids(monkeypatch, grid_class):
     return executor
 
 
-def test_a_rejection_with_no_copy_is_an_error_not_a_continuation(monkeypatch):
-    """A restriction that said it could not reject, then did, must stop the run.
+class Snapshot:
+    """A database whose deep copy is distinguishable from itself."""
 
-    The alternative -- carrying on from the rejected dispatch -- is exactly the silent wrong
-    answer the copy existed to prevent, and would never surface in the results.
-    """
+    def __init__(self, tag):
+        self.tag = tag
+
+    def __deepcopy__(self, memo):
+        return Snapshot(self.tag + '-copy')
+
+    def get_grid_data(self):
+        return {c.G_ELECTRICITY: object()}
+
+    def post_grids(self, grid_type, grid, path_results=None):
+        pass
+
+    def restore_superseded_commands(self):
+        pass
+
+
+def test_a_rejected_pass_replaces_the_database_with_a_copy_of_the_snapshot(monkeypatch):
+    """The rollback the copy exists for. Aliasing the snapshot instead of copying it would let
+    the second pass mutate what the third rolls back to; not rolling back at all keeps the
+    rejected dispatch. Neither was pinned before this file."""
+    executor = executor_for_grids(monkeypatch, RejectingGrid)
+    executor.database = Snapshot('live')
+    snapshot = Snapshot('initial')
+
+    executor._Executor__execute_grids(tasklist=pl.DataFrame(), initial_db=snapshot, num_iteration=1)
+
+    assert executor.database is not snapshot, 'the snapshot must survive for the next pass'
+    assert executor.database.tag == 'initial-copy', 'the rejected pass must be discarded'
+
+
+def test_a_rejection_with_no_copy_is_an_error_not_a_continuation(monkeypatch):
+    """A restriction that said it could not reject, then did, must stop the run."""
     executor = executor_for_grids(monkeypatch, RejectingGrid)
 
     with pytest.raises(RuntimeError, match='can_reject_a_pass'):
@@ -192,7 +231,8 @@ class ConfigDatabase:
 
 
 @pytest.mark.parametrize('grids, apply, dpc_active, expected', [
-    ({}, ['enwg_14a'], True, False),                       # no electricity grid registered at all
+    ({}, ['enwg_14a'], True, False),                       # no grid registered at all
+    ({c.G_HEAT: object()}, ['enwg_14a'], True, False),     # a grid, but not the one that runs restrictions
     ({c.G_ELECTRICITY: object()}, [], True, False),        # grid, no restriction applied
     ({c.G_ELECTRICITY: object()}, ['enwg_14a'], False, False),  # §14a with fees only
     ({c.G_ELECTRICITY: object()}, ['enwg_14a'], True, True),    # §14a with direct power control
@@ -204,10 +244,48 @@ def test_rollback_is_possible_exactly_when_an_applied_restriction_can_reject(gri
     assert executor._Executor__rollback_possible() is expected
 
 
-def test_the_declaration_matches_what_enwg_14a_execute_does():
-    """`execute` sets `grid_ok` only under direct power control; the declaration must say the same."""
-    assert EnWG14a.can_reject_a_pass({'direct_power_control': {'active': True}}) is True
-    assert EnWG14a.can_reject_a_pass({'direct_power_control': {'active': False}}) is False
+def enwg_14a_with(dpc_active, overloaded):
+    """An `EnWG14a` stubbed down to the branch structure of `execute`, as test_published_command does.
+
+    `__calculate_direct_power_control` answers "rejected" whenever it is reached, so the only
+    question left is whether `execute` reaches it.
+    """
+    grid_db = ElectricityGridDB.__new__(ElectricityGridDB)
+    grid_db.results = {}
+    grid_db.restriction_commands = {}
+    enwg = EnWG14a.__new__(EnWG14a)
+    enwg.grid_db = grid_db
+    enwg.timestamp = pd.Timestamp('2023-01-28 00:00:00+00:00')
+    enwg.restriction_config = {'variable_grid_fees': {'active': False},
+                               'direct_power_control': {'active': dpc_active}}
+    enwg._EnWG14a__check_overloads = lambda: overloaded
+    enwg._EnWG14a__calculate_direct_power_control = lambda: False
+    enwg.grid = SimpleNamespace(res_trafo=pd.DataFrame({'p_lv_mw': [], 'loading_percent': []}))
+    return enwg
+
+
+@pytest.mark.parametrize('overloaded', [False, True])
+def test_enwg_14a_never_rejects_when_its_declaration_says_it_cannot(overloaded):
+    """With direct power control off, an overloaded grid is reported, not sent back.
+
+    A `grid_ok = False` on that branch would make every grid + fees-only run raise at timestep 1,
+    and neither golden scenario has that shape -- one has no grid, the other has control on.
+    """
+    enwg = enwg_14a_with(dpc_active=False, overloaded=overloaded)
+    assert EnWG14a.can_reject_a_pass(enwg.restriction_config) is False
+
+    _, grid_ok = enwg.execute()
+
+    assert grid_ok is True
+
+
+def test_enwg_14a_rejects_exactly_when_its_declaration_says_it_can():
+    enwg = enwg_14a_with(dpc_active=True, overloaded=True)
+    assert EnWG14a.can_reject_a_pass(enwg.restriction_config) is True
+
+    _, grid_ok = enwg.execute()
+
+    assert grid_ok is False
 
 
 def test_a_restriction_that_does_not_declare_cannot_reject():
@@ -223,8 +301,26 @@ def test_the_registry_delegates_to_the_restriction_class(dpc_active):
 
 
 def test_an_unknown_restriction_type_is_refused_by_name():
-    with pytest.raises(KeyError):
-        GridRestriction.can_reject_a_pass('not_a_restriction', {})
+    # A complete config, so a fallback to a known type could answer it -- the refusal has to be
+    # about the name.
+    with pytest.raises(KeyError, match='not_a_restriction'):
+        GridRestriction.can_reject_a_pass('not_a_restriction', restrictions(['enwg_14a'], True)['enwg_14a'])
+
+
+def test_each_applied_restriction_is_asked_with_its_own_sub_config(monkeypatch):
+    """With one type in the registry, reading `restrictions['enwg_14a']` for every name would pass."""
+    class Other:
+        @staticmethod
+        def can_reject_a_pass(config):
+            return config['flag']
+
+    monkeypatch.setitem(GridRestriction.TYPES, 'other', Other)
+    executor = Executor.__new__(Executor)
+    config = restrictions(['other'], False)
+    config['other'] = {'flag': True}
+    executor.database = ConfigDatabase({c.G_ELECTRICITY: object()}, config)
+
+    assert executor._Executor__rollback_possible() is True
 
 
 class SetupDatabase(ConfigDatabase):

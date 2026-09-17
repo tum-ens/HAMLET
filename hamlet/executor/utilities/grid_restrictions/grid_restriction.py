@@ -18,10 +18,8 @@ class GridRestriction:
 
     def __init__(self, grid_db, tasks: pl.DataFrame, restriction_type: str, database: Database, **kwargs):
 
-        self.types = self.TYPES
-
         # Instance of the grid regulator class.
-        self.regulator = self.types[restriction_type](grid_db=grid_db, tasks=tasks, database=database, **kwargs)
+        self.regulator = self.TYPES[restriction_type](grid_db=grid_db, tasks=tasks, database=database, **kwargs)
 
     @classmethod
     def can_reject_a_pass(cls, restriction_type: str, config: dict) -> bool:

@@ -153,8 +153,10 @@ class Executor:
 
             # The copy a rejected pass rolls back to. Only taken when a restriction can reject one:
             # it is the whole database, agent tables included, so it scales with scenario length
-            # rather than with anything the timestep does -- a full-year scenario copies ~575 MB
-            # per step for nothing on every design without direct power control (#249).
+            # rather than with anything the timestep does -- a full-year scenario holds a second
+            # ~575 MB of agent tables all step long, and a third for the instant the next copy is
+            # made before this name is rebound, for nothing on every design without direct power
+            # control (#249).
             initial_db = deepcopy(self.database) if self.rollback_possible else None
 
             while not grid_ok:  # iterate until grid is working
