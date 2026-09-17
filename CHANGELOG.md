@@ -188,8 +188,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   bump it. A checkpoint written before this change (agent tables only) has no state file and
   cannot be resumed. Whether a forecaster holding a TensorFlow model (`cnn`, `rnn`, behind the
   optional extra) pickles is untested; no shipped scenario uses one. The state file is 111 MB for
-  the 4-agent example, almost all of it the weather table every forecaster shares, and unmeasured
-  at design 6 scale; the `golden` CI job gains two crash-and-resume runs, about five minutes.
+  the 4-agent example, almost all of it the weather table every forecaster shares, and 154 MB for
+  design 6's 104 agents over a quarter — 0.10 s to write and 0.15 s to read back on the Mac mini,
+  against 3.7 s per timestep; the `golden` CI job gains two crash-and-resume runs, about five
+  minutes.
 
 - **The §14a reduction strategy is configurable: `required` | `minimum` | `ramp` (#245).** Under
   `method: ems` the executor's `while not grid_ok` loop re-simulates a timestep after each pass,

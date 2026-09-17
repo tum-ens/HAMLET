@@ -46,8 +46,9 @@ class Executor:
     #: much a crash loses: at this value a crash costs at most a day of an hourly scenario. The
     #: agent tables are cheap -- measured on the Mac mini with design 6's 104 agents: 0.06 s for a
     #: month's tables (48 MB in memory), 0.42 s for a full year's (575 MB). The state pickle is the
-    #: larger part: 0.4 s and 111 MB for the 4-agent example, almost all of it the weather table
-    #: every forecaster shares (`checkpoint.py`); unmeasured at design 6 scale.
+    #: larger part: 111 MB for the 4-agent example, almost all of it the weather table every
+    #: forecaster shares (`checkpoint.py`); 154 MB and 0.10 s to write on the Mac mini for design
+    #: 6's 104 agents over a quarter, against 3.7 s per timestep there.
     DEFAULT_CHECKPOINT_INTERVAL = 24
 
     def __init__(self, path, name: str = None, num_workers: int = None, overwrite_sim: bool = True,
