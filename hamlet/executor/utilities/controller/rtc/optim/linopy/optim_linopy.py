@@ -302,7 +302,7 @@ class Linopy(OptimBase):
                 plant_power = control_target[plant_id]
 
                 # get plant type
-                if plant_id == 'ems' and 'direct_power_control_ems' not in self.model.variables.labels:  # EMS control
+                if plant_id == c.DPC_METHOD_EMS and 'direct_power_control_ems' not in self.model.variables.labels:
                     # add a new constraint to limit total load / generation
                     if plant_power > 0:
                         balance_equations = self.model.add_variables(name='direct_power_control_ems', lower=-inf,
@@ -345,7 +345,7 @@ class Linopy(OptimBase):
 
                     self.model.add_constraints(balance_equations == 0, name='direct_power_control_ems')
 
-                elif plant_id == 'ems' and 'direct_power_control_ems' in self.model.variables.labels:
+                elif plant_id == c.DPC_METHOD_EMS and 'direct_power_control_ems' in self.model.variables.labels:
                     # check if ems power is positive (load) or negative (generation) and set boundary
                     if plant_power > 0:
                         self.model.variables['direct_power_control_ems'].upper = plant_power

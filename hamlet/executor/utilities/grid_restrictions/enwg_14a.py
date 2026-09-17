@@ -933,8 +933,8 @@ class EnWG14a(GridRestrictionBase):
                     span = state['from'] - anchored_guarantee[agent]
                     target = state['from'] - int(span * state['step'] / ramp_steps)
 
-            control_target[agent]['ems'] = (max(target, anchored_guarantee[agent]) if direction > 0
-                                            else min(target, anchored_guarantee[agent]))
+            control_target[agent][c.DPC_METHOD_EMS] = (max(target, anchored_guarantee[agent]) if direction > 0
+                                                       else min(target, anchored_guarantee[agent]))
 
         return control_target
 
