@@ -15,21 +15,20 @@ import hamlet.constants as c
 
 class EnWG14a(GridRestrictionBase):
 
-    #: How far one pass of `__control_via_ems` curtails, `direct_power_control.reduction`.
-    #:
-    #: The axis is what the operator can observe, not how deep it cuts. `required` needs a
+    # How far one pass of `__control_via_ems` curtails, `direct_power_control.reduction`; the
+    # option names are `c.DPC_REDUCTIONS`.
+    #
+    # The axis is what the operator can observe, not how deep it cuts. `required` needs a
     #: per-connection state estimate to size the cut to the overload; `ramp` needs only an
     #: overload/no-overload signal, repeated, and over-curtails by at most one step; `minimum`
     #: needs one overload signal and takes everything to the §14a floor -- the simplest thing an
-    #: FNN Steuerbox can be told and the hardest to call *erforderlich* under §14a.
-    #:
-    #: `required` is the default and is what every scenario ran before the key existed. The
-    #: executor's `while not grid_ok` loop re-simulates the timestep after each pass, so under
-    #: `required` the sequence approaches 100 % asymptotically and **where it stops is decided by
-    #: `max_iteration`**, a simulation setting (#245 has the measured trajectory). The other two
-    #: stop where the policy says, not where the cap falls.
-    REDUCTION_STRATEGIES = ('required', 'minimum', 'ramp')
-    DEFAULT_REDUCTION = 'required'
+    # FNN Steuerbox can be told and the hardest to call *erforderlich* under §14a.
+    #
+    # `required` is the default and is what every scenario ran before the key existed. The
+    # executor's `while not grid_ok` loop re-simulates the timestep after each pass, so under
+    # `required` the sequence approaches 100 % asymptotically and **where it stops is decided by
+    # `max_iteration`**, a simulation setting (#245 has the measured trajectory). The other two
+    # stop where the policy says, not where the cap falls.
 
     def __init__(self, grid_db: ElectricityGridDB, grid: pp.pandapowerNet, tasks: pl.DataFrame, database: Database, **kwargs):
 
@@ -58,19 +57,19 @@ class EnWG14a(GridRestrictionBase):
         of defect this repository keeps finding.
         """
         config = self.restriction_config['direct_power_control']
-        reduction = config.get('reduction', self.DEFAULT_REDUCTION)
-        if reduction not in self.REDUCTION_STRATEGIES:
+        reduction = config.get('reduction', c.DPC_REDUCTION_REQUIRED)
+        if reduction not in c.DPC_REDUCTIONS:
             raise ValueError(
                 f'grids.yaml gives <energy>.restrictions.enwg_14a.direct_power_control.reduction = '
-                f'{reduction!r}; it must be one of {list(self.REDUCTION_STRATEGIES)}.')
+                f'{reduction!r}; it must be one of {list(c.DPC_REDUCTIONS)}.')
 
-        if reduction != self.DEFAULT_REDUCTION and config.get('method') != 'ems':
+        if reduction != c.DPC_REDUCTION_REQUIRED and config.get('method') != c.DPC_METHOD_EMS:
             raise ValueError(
                 f'direct_power_control.reduction = {reduction!r} is only defined for method: ems; '
                 f'method: {config.get("method")!r} curtails named devices to their own floors and '
                 f'takes no reduction strategy. Drop the key or select method: ems.')
 
-        if reduction != 'ramp':
+        if reduction != c.DPC_REDUCTION_RAMP:
             return reduction, None
 
         steps = config.get('ramp_steps')
@@ -376,7 +375,7 @@ class EnWG14a(GridRestrictionBase):
         # One overload signal per pass, which is the ramp's clock. Counted here and not per
         # command, because the bus loop below visits every bus of a zone once per transformer in
         # it, so with two transformers an agent is commanded twice per pass.
-        if self.__reduction_strategy()[0] == 'ramp':
+        if self.__reduction_strategy()[0] == c.DPC_REDUCTION_RAMP:
             self.__begin_ramp_pass()
 
         # check overload for trafo
@@ -403,11 +402,11 @@ class EnWG14a(GridRestrictionBase):
                 # perform direct power control when combined loading percentage presents an overload
                 if combined_loading > 1:
                     match self.restriction_config['direct_power_control']['method']:
-                        case 'individual':
+                        case c.DPC_METHOD_INDIVIDUAL:
                             self.grid_db.restriction_commands['current_direct_power_control'] = (
                                 self.__individual_device_control(bus=bus, trafo_power=trafo_power,
                                                                  combined_loading=combined_loading))
-                        case 'ems':
+                        case c.DPC_METHOD_EMS:
                             self.grid_db.restriction_commands['current_direct_power_control'] = (
                                 self.__control_via_ems(bus=bus, trafo_power=trafo_power,
                                                        combined_loading=combined_loading))
@@ -725,7 +724,7 @@ class EnWG14a(GridRestrictionBase):
 
         reduction, ramp_steps = self.__reduction_strategy()
         anchored_guarantee = self.__timestep_guarantees()
-        ramp = self.__timestep_ramp() if reduction == 'ramp' else None
+        ramp = self.__timestep_ramp() if reduction == c.DPC_REDUCTION_RAMP else None
 
         # get minimal power to be guaranteed
         threshold = self.restriction_config['direct_power_control']['threshold'] * c.WH_TO_MWH
@@ -906,14 +905,14 @@ class EnWG14a(GridRestrictionBase):
                     direction * reducible_power_for_agent[agent] * c.MWH_TO_WH)
 
             # The strategy decides where between the uncurtailed draw and the floor the command
-            # lands; see `REDUCTION_STRATEGIES`. All three share the anchor above and the clamp
+            # lands; see the class comment. All three share the anchor above and the clamp
             # below, so none can go past the floor and `required` is byte-for-byte what it was.
             match reduction:
-                case 'required':
+                case c.DPC_REDUCTION_REQUIRED:
                     target = total_p_agent + reduced_p_agent
-                case 'minimum':
+                case c.DPC_REDUCTION_MINIMUM:
                     target = anchored_guarantee[agent]
-                case 'ramp':
+                case c.DPC_REDUCTION_RAMP:
                     # Both ends of the ladder are anchored on the agent's first commanded pass:
                     # the draw it started from and the floor it may be taken to. Step k is the
                     # k-th rung down, however much the agent actually drew in between -- a step

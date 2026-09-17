@@ -122,6 +122,17 @@ G_H2 = ET_H2
 # import. `pandapowerNet` is a dict, so the key rides along through `deepcopy`.
 GRID_HORIZON_PROFILES = 'hamlet_horizon_profiles'
 
+# GRID RESTRICTIONS: §14a DIRECT POWER CONTROL
+# `direct_power_control.method` -- how a command is addressed
+DPC_METHOD_INDIVIDUAL = 'individual'  # named devices, in a priority order
+DPC_METHOD_EMS = 'ems'  # the agent's net connection, for its EMS to distribute
+# `direct_power_control.reduction` -- how far one `ems` pass curtails; see `EnWG14a` for what
+# each one models
+DPC_REDUCTION_REQUIRED = 'required'  # the overload, re-measured every pass (the default)
+DPC_REDUCTION_MINIMUM = 'minimum'  # straight to the §14a floor
+DPC_REDUCTION_RAMP = 'ramp'  # one of `ramp_steps` equal steps toward the floor per pass
+DPC_REDUCTIONS = (DPC_REDUCTION_REQUIRED, DPC_REDUCTION_MINIMUM, DPC_REDUCTION_RAMP)
+
 # SYMBOLS (symbols used for the units in the tables)
 S_POWER = 'P'
 S_ENERGY = 'E'
