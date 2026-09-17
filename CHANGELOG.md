@@ -141,6 +141,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   that reads them back — so sub-regions still collide across runs, and no shipped scenario has any.
 
 ### Added
+- **Agent results are checkpointed every 24 timesteps, so a crash loses at most that many (#249,
+  part a).** `AgentDB` holds every result table in memory and wrote them once, at the end of the
+  run — grids and markets drain per timestep, agents did not — so design 6a's January run, which
+  died at step 666 of 744, kept none of them. `Executor(checkpoint_interval=N)` now writes every
+  agent's five tables to the results folder every N timesteps, to the same paths the final save
+  overwrites, so a crashed run's *agent* tables are those of its last checkpoint. Only the agents:
+  the market's retained window (the last clearing horizon) still lives in memory until the end of
+  the run, and its top-level tables are only assembled by `concat_market_files`, so a crashed run's
+  market folder holds drained `past_data/` fragments and nothing assembled. `None` or `0` turns it
+  off; anything else that is not a non-negative integer (`numbers.Integral`, so numpy integers
+  pass; `bool` does not) is refused rather than coerced. Each table is staged and renamed into
+  place, so a crash *during* a checkpoint leaves the previous one intact instead of a truncated
+  feather; on Windows the rename is retried three times, because it fails while something holds
+  either file open, and the checkpoint multiplies that window by the number of checkpoints (32 for
+  a month, 366 for a year).
+
+  The checkpoint sits after `end_timestep`, outside the `while not grid_ok` loop, because a
+  rolled-back pass restores `initial_db` and a checkpoint inside the loop would write the dispatch
+  the rollback discards. Cost, measured on the Mac mini with design 6's 104 agents: 0.06 s per
+  checkpoint for a month's tables (48 MB in memory), 0.42 s for a full year's (575 MB).
+
+  Pinned by `tests/unit/executor/test_agent_checkpoint.py` (schedule, destination, contents, the
+  staged write) and end to end by `tests/e2e/test_agent_checkpoint_survives_crash.py`, which
+  kills a run of the shipped example inside timestep 10 with an interval of 8 and asserts, per
+  agent and by value against a complete run, that exactly the first 8 timesteps survived — the
+  rows after them are what pins the interval, since saving every timestep would pass the rest.
+  Every assertion was mutated at its own site; the boundary ones in both directions.
+
 - **The accounting invariants are asserted by value (L4, ROADMAP §2).** Net energy is the sum of
   a timestep's transactions, fees and levies are charged on **net** and to the right column, and
   the money balance closes with no unexplained euro. The layer exists because two real defects on
