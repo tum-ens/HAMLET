@@ -2,8 +2,7 @@
 
 The unit tests in `tests/unit/executor/test_agent_checkpoint.py` pin the schedule and the files;
 this is the promise itself, on the real chain -- Creator, Executor, a crash -- because the promise
-is what #249 was filed for: design 6a's January run died at step 666 of 744 and lost every agent
-result, and no test in this tree would have noticed that it did.
+is what #249 was filed for, and no test in this tree would have noticed a run losing them.
 
 Two Executors run on one created scenario. The first completes and is the oracle. The second is
 told to checkpoint every 8 timesteps and is killed inside the 10th, by raising from
@@ -99,12 +98,24 @@ def split_at_checkpoint(frame):
 
     A timestep at time t writes the meter row for t + dt (`rtc_base.update_meters`), so after
     INTERVAL timesteps the rows up to start + INTERVAL * dt are written and the rest are untouched.
+    That equates an executor step with a meters row, which holds while the market `frequency` and
+    `setup.time.timestep` agree -- both 3600 s in the shipped example. `assert_one_row_per_step`
+    checks it against the run's timetable rather than assuming it.
     """
     start = frame[c.TC_TIMESTAMP][0]
     step = frame[c.TC_TIMESTAMP][1] - start
     boundary = start + INTERVAL * step
     return (frame.filter(pl.col(c.TC_TIMESTAMP) <= boundary),
             frame.filter(pl.col(c.TC_TIMESTAMP) > boundary))
+
+
+def assert_one_row_per_step(scenario, frame):
+    """The executor's steps and the meters' rows have to be the same grid, or the boundary is wrong."""
+    timetable = pl.read_ipc(scenario / 'general' / 'timetable.ft', memory_map=False)
+    steps = timetable[c.TC_TIMESTAMP].unique(maintain_order=True).sort()
+    assert steps[0] == frame[c.TC_TIMESTAMP][0], 'the run does not start where the meters start'
+    assert steps[1] - steps[0] == frame[c.TC_TIMESTAMP][1] - frame[c.TC_TIMESTAMP][0], (
+        'an executor step is not one meters row, so INTERVAL steps is not INTERVAL rows')
 
 
 @pytest.mark.e2e
@@ -117,6 +128,7 @@ def test_the_crashed_run_kept_exactly_the_checkpointed_timesteps(runs):
 
     for agent_dir in agents:
         initial = meters(runs / 'scenarios', SCENARIO_NAME, agent_dir)
+        assert_one_row_per_step(scenario, initial)
         complete = meters(results, COMPLETE, agent_dir)
         crashed = meters(results, CRASHED, agent_dir)
         assert len(initial) == len(complete) == len(crashed) > CRASH_AT_STEP + 1, agent_dir
@@ -144,8 +156,11 @@ def test_the_crashed_run_kept_exactly_the_checkpointed_timesteps(runs):
 
 
 @pytest.mark.e2e
-def test_the_checkpoint_wrote_every_agent_table(runs):
-    """All five tables, each the checkpointed version rather than the scenario's copy.
+def test_every_agent_table_was_rewritten_by_the_checkpoint(runs):
+    """All five tables were rewritten, not left as the scenario's copy.
+
+    Change, not value: the contents are pinned against memory by the unit tests, and against a
+    real run only for `meters`, above.
 
     Asserted on the files' contents differing from the shipped ones, not on their existing: the
     executor copies the scenario into the results folder before the first timestep, so every file
@@ -162,8 +177,8 @@ def test_the_checkpoint_wrote_every_agent_table(runs):
             assert written.columns == complete.columns, (agent_dir, name)
             if not written.equals(shipped):
                 changed[name] += 1
-    # `timeseries` is an input the run never rewrites, so it is expected to match the scenario and
-    # is asserted only through its columns above. The other four must have moved for at least one
+    # `timeseries` is an input the run never rewrites (`register_agent` may rename its time
+    # column, so it is not asserted either way). The other four must have moved for at least one
     # agent each, or the checkpoint did not write them.
     for name in ('meters', 'socs', 'setpoints', 'forecasts'):
         assert changed[name] > 0, f'no agent has a checkpointed {name} table'

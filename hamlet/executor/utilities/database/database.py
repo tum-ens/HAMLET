@@ -508,15 +508,16 @@ class Database:
     def save_agents(self, path: str):
         """Write every region's agent tables to where `save_database` will write them.
 
-        The agents' half of `save_database`, for the executor to call every few timesteps (#249).
-        `AgentDB` holds its results in full-size tables written only at the end of the run, so
-        until this existed a crash lost every agent result of the run -- design 6a's January
-        attempt died at step 666 of 744 and kept none of them. Markets and grids need nothing
-        here: both already drain past rows to disk per timestep.
+        The agents' half of `save_database`, for the executor to call every few timesteps (#249):
+        `AgentDB` holds its results in full-size tables that were written only at the end of the
+        run, so a crash used to lose all of them. Same `path` as `save_database`, the results
+        root, so the files land where the final save overwrites them.
 
-        Same `path` as `save_database`, the results root, so the files land where the final save
-        overwrites them and a crashed run's results folder reads like a run that ended at the
-        last checkpoint.
+        Only the agents. Markets and grids drain past rows to disk per timestep already, but the
+        market's retained window -- the last clearing horizon -- stays in memory until the end of
+        the run, and its top-level tables are only assembled by `concat_market_files`. A crashed
+        run's folder therefore holds the agent tables as of the last checkpoint; its market folder
+        holds drained fragments under `past_data/` and no assembled table.
         """
         for region, region_path in self.__region_save_paths(path):
             region.save_agents(path=region_path)

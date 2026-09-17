@@ -1,22 +1,18 @@
 """Agent results are written to the results folder every few timesteps, not only at the end.
 
-`AgentDB` holds every result table -- meters, socs, timeseries, setpoints, forecasts -- in memory
-and `save_database` writes them once, when the run is over. Grids and markets drain past rows per
-timestep; agents did not, so a crash lost every agent result of the run: design 6a's January
-attempt died at step 666 of 744 and kept none of them (#249).
-
-Two things are pinned here and each has a way of being quietly wrong. **When** the checkpoint
-runs: it has to sit after the timestep is closed, outside the `while not grid_ok` loop, because a
-rolled-back pass restores `initial_db` and a checkpoint taken inside the loop writes the dispatch
-the rollback discards. And **what** it writes: the same files, at the same paths, with the same
-contents, that the final save would write -- asserted on values read back from disk, not on the
-files existing, because the scenario copy already puts a plausible `agents/` tree in the results
-folder before the first timestep runs.
+`AgentDB` holds every result table in memory and `save_database` wrote them once, when the run
+was over, so a crash lost all of them (#249). Two things are pinned here and each has a way of
+being quietly wrong. **When** the checkpoint runs: after the timestep is closed, outside the
+`while not grid_ok` loop -- `Executor.execute` says why. And **what** it writes: the same files,
+at the same paths, with the same contents, that the final save would write -- asserted on values
+read back from disk, not on the files existing, because the scenario copy already puts a
+plausible `agents/` tree in the results folder before the first timestep runs.
 """
 
 import os
 from types import SimpleNamespace
 
+import numpy as np
 import polars as pl
 import pytest
 
@@ -107,6 +103,7 @@ def test_a_checkpoint_comes_after_the_timestep_is_ended():
 
     executor.execute()
 
+    assert checkpoints(log), 'no checkpoint happened, so there is no ordering to check'
     for index, entry in enumerate(log):
         if isinstance(entry, tuple):
             assert log[index - 1] == 'end_timestep', (
@@ -156,9 +153,12 @@ def test_the_constructor_refuses_an_interval_that_would_silently_mean_never(bad,
         Executor(str(tmp_path / 'scenario'), checkpoint_interval=bad)
 
 
-@pytest.mark.parametrize('given, stored', [(None, None), (0, None), (7, 7)])
+@pytest.mark.parametrize('given, stored', [(None, None), (0, None), (7, 7), (np.int64(7), 7)])
 def test_the_constructor_stores_the_interval(given, stored, tmp_path):
-    assert Executor(str(tmp_path / 'scenario'), checkpoint_interval=given).checkpoint_interval == stored
+    """A numpy integer -- what a value read out of a config table arrives as -- is an interval too."""
+    stored_value = Executor(str(tmp_path / 'scenario'), checkpoint_interval=given).checkpoint_interval
+    assert stored_value == stored
+    assert type(stored_value) is type(stored)
 
 
 def test_the_default_is_on(tmp_path):
@@ -286,7 +286,9 @@ def test_a_crash_mid_write_leaves_the_previous_checkpoint_of_that_table_intact(t
     real_save_file = agent_db_module.f.save_file
 
     def crash_while_writing_socs(path, data, **kwargs):
-        if os.path.basename(path).startswith('socs'):
+        # Keyed on the table being written, not on the file name, so a change to the staging
+        # convention cannot quietly turn this into a test that never crashes.
+        if data is db.socs:
             # Half a file: what the process leaves behind when it dies mid-write.
             with open(path, 'wb') as handle:
                 handle.write(b'ARROW1\x00\x00garbage')
@@ -305,6 +307,71 @@ def test_a_crash_mid_write_leaves_the_previous_checkpoint_of_that_table_intact(t
     assert read(str(target / 'timeseries.ft')).equals(db.timeseries)
     assert read(str(target / 'setpoints.ft')).equals(first['setpoints'])
     assert read(str(target / 'forecasts.ft')).equals(first['forecasts'])
+
+
+def test_the_swap_is_a_single_rename_and_never_removes_the_target_first(tmp_path, monkeypatch):
+    """A `remove` then `rename` is not atomic: a crash between the two leaves no file at all.
+
+    Only `os.replace` may touch the target. With every other way of moving or deleting a file
+    made to raise, the save has to still complete and land the new contents.
+    """
+    db = agent('sfh', 'agent_one', 1)
+    db.save_agent(str(tmp_path / 'agent_one'))
+    for offset, name in enumerate(TABLES):
+        setattr(db, name, table(500 + 10 * offset))
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError(f'the save tried to move or delete a file with {args}')
+
+    for function in ('remove', 'unlink', 'rename', 'renames'):
+        monkeypatch.setattr(agent_db_module.os, function, forbidden)
+
+    db.save_agent(str(tmp_path / 'agent_one'))
+
+    for name in TABLES:
+        assert read(str(tmp_path / 'agent_one' / f'{name}.ft')).equals(getattr(db, name))
+
+
+class RefusingReplace:
+    """`os.replace` as Windows behaves while a scanner holds the file: refuses N times, then works."""
+
+    def __init__(self, refusals):
+        self.refusals = refusals
+        self.calls = 0
+        self.real_replace = os.replace  # bound before the monkeypatch swaps it out
+
+    def __call__(self, staging, target):
+        self.calls += 1
+        if self.calls <= self.refusals:
+            raise PermissionError(5, 'Access is denied', staging)
+        return self.real_replace(staging, target)
+
+
+def test_a_transient_windows_refusal_of_the_rename_is_retried(tmp_path, monkeypatch):
+    db = agent('sfh', 'agent_one', 1)
+    refusing = RefusingReplace(refusals=AgentDB.REPLACE_ATTEMPTS - 1)
+    monkeypatch.setattr(agent_db_module.os, 'replace', refusing)
+    monkeypatch.setattr(AgentDB, 'REPLACE_RETRY_SECONDS', 0)
+
+    db.save_agent(str(tmp_path / 'agent_one'))
+
+    # Every table's rename went through, after the refusals were absorbed on the first one.
+    assert refusing.calls == len(TABLES) + refusing.refusals
+    for name in TABLES:
+        assert read(str(tmp_path / 'agent_one' / f'{name}.ft')).equals(getattr(db, name))
+
+
+def test_a_persistent_refusal_of_the_rename_still_fails_the_save(tmp_path, monkeypatch):
+    """Retrying is for a scanner's lock, not for a file that is genuinely held open."""
+    db = agent('sfh', 'agent_one', 1)
+    refusing = RefusingReplace(refusals=AgentDB.REPLACE_ATTEMPTS)
+    monkeypatch.setattr(agent_db_module.os, 'replace', refusing)
+    monkeypatch.setattr(AgentDB, 'REPLACE_RETRY_SECONDS', 0)
+
+    with pytest.raises(PermissionError):
+        db.save_agent(str(tmp_path / 'agent_one'))
+
+    assert refusing.calls == AgentDB.REPLACE_ATTEMPTS, 'gave up earlier or later than the budget'
 
 
 def test_a_completed_save_leaves_no_staging_file_behind(tmp_path):

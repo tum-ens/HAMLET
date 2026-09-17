@@ -4,6 +4,7 @@ __license__ = ""
 __maintainer__ = "MarkusDoepfert"
 __email__ = "markus.doepfert@tum.de"
 
+import numbers
 import os
 import time
 # Still used by `__wait_for_ts`. The blanket filter this module used to install made that
@@ -57,12 +58,15 @@ class Executor:
         # Every `checkpoint_interval` timesteps the agents' result tables are written to the results
         # folder, so a crash loses at most that many timesteps of them (#249). None or 0 turns it
         # off. Refused rather than coerced: a float or a negative would silently mean "never".
+        # `Integral` rather than `int` so a numpy integer read out of a config is accepted; `bool`
+        # is an `Integral` too and is not.
         if checkpoint_interval is not None and (
-                isinstance(checkpoint_interval, bool) or not isinstance(checkpoint_interval, int)
+                isinstance(checkpoint_interval, bool)
+                or not isinstance(checkpoint_interval, numbers.Integral)
                 or checkpoint_interval < 0):
             raise ValueError(f"checkpoint_interval={checkpoint_interval!r}: pass a non-negative "
-                             f"number of timesteps, or None to disable checkpointing")
-        self.checkpoint_interval = checkpoint_interval or None
+                             f"integer number of timesteps, or None to disable checkpointing")
+        self.checkpoint_interval = int(checkpoint_interval) if checkpoint_interval else None
 
         # Progress bar
         self.pbar = tqdm()

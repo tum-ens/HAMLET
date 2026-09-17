@@ -5,6 +5,7 @@ __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
 import os.path
+import time
 import polars as pl
 from polars.type_aliases import SizeUnit
 from hamlet import constants as c
@@ -134,7 +135,30 @@ class AgentDB:
             target = os.path.join(self.agent_save, f'{name}.{dtype}')
             staging = os.path.join(self.agent_save, f'{name}.tmp.{dtype}')
             f.save_file(path=staging, data=table, df='polars')
-            os.replace(staging, target)
+            self._replace(staging, target)
+
+    #: How often `_replace` retries a rename Windows refused, and how long it waits between tries.
+    REPLACE_ATTEMPTS = 3
+    REPLACE_RETRY_SECONDS = 0.1
+
+    @classmethod
+    def _replace(cls, staging: str, target: str) -> None:
+        """`os.replace`, retried on the transient refusal Windows gives for a file someone has open.
+
+        POSIX rename is atomic and does not care who holds the old file. Windows refuses with
+        `PermissionError` while any handle is open on either path -- an antivirus scan of the
+        freshly written staging file, a viewer on the target. Nothing in HAMLET holds one, but the
+        periodic checkpoint makes the window hundreds of times more frequent than the single save
+        at the end of a run used to, so a transient refusal is retried before it kills the run.
+        """
+        for attempt in range(1, cls.REPLACE_ATTEMPTS + 1):
+            try:
+                os.replace(staging, target)
+                return
+            except PermissionError:
+                if attempt == cls.REPLACE_ATTEMPTS:
+                    raise
+                time.sleep(cls.REPLACE_RETRY_SECONDS)
 
     def estimated_size(self, unit:SizeUnit = "kb") -> float:
         ret = 0

@@ -146,10 +146,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   run — grids and markets drain per timestep, agents did not — so design 6a's January run, which
   died at step 666 of 744, kept none of them. `Executor(checkpoint_interval=N)` now writes every
   agent's five tables to the results folder every N timesteps, to the same paths the final save
-  overwrites, so a crashed run's folder reads like a run that ended at its last checkpoint. `None`
-  or `0` turns it off; anything else that is not a non-negative integer is refused rather than
-  coerced. Each table is staged and renamed into place, so a crash *during* a checkpoint leaves the
-  previous one intact instead of a truncated feather.
+  overwrites, so a crashed run's *agent* tables are those of its last checkpoint. Only the agents:
+  the market's retained window (the last clearing horizon) still lives in memory until the end of
+  the run, and its top-level tables are only assembled by `concat_market_files`, so a crashed run's
+  market folder holds drained `past_data/` fragments and nothing assembled. `None` or `0` turns it
+  off; anything else that is not a non-negative integer (`numbers.Integral`, so numpy integers
+  pass; `bool` does not) is refused rather than coerced. Each table is staged and renamed into
+  place, so a crash *during* a checkpoint leaves the previous one intact instead of a truncated
+  feather; on Windows the rename is retried three times, because it fails while anything holds
+  either file open, and the checkpoint makes that window hundreds of times more frequent.
 
   The checkpoint sits after `end_timestep`, outside the `while not grid_ok` loop, because a
   rolled-back pass restores `initial_db` and a checkpoint inside the loop would write the dispatch
@@ -161,7 +166,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   kills a run of the shipped example inside timestep 10 with an interval of 8 and asserts, per
   agent and by value against a complete run, that exactly the first 8 timesteps survived — the
   rows after them are what pins the interval, since saving every timestep would pass the rest.
-  Every assertion was mutation-tested one site at a time, in both directions.
+  Every assertion was mutated at its own site; the boundary ones in both directions.
 
 - **The accounting invariants are asserted by value (L4, ROADMAP §2).** Net energy is the sum of
   a timestep's transactions, fees and levies are charged on **net** and to the right column, and
