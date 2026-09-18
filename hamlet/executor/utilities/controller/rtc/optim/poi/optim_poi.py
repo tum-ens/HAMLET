@@ -66,7 +66,7 @@ class POI(OptimBase):
             return
 
         for plant_id, plant_power in commands.items():
-            if plant_id == 'ems':
+            if plant_id == c.DPC_METHOD_EMS:
                 self.__apply_ems_control(plant_power)
             else:
                 self.__apply_individual_control(plant_id, plant_power)

@@ -158,6 +158,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   agrees with its own declaration.
 
 ### Added
+- **The §14a reduction strategy is configurable: `required` | `minimum` | `ramp` (#245).** Under
+  `method: ems` the executor's `while not grid_ok` loop re-simulates a timestep after each pass,
+  and the command approached the overload asymptotically -- on `grid_golden`, 149.6 % → 104.3 % →
+  102.9 % → 102.0 % -- so where it *stopped* was decided by `max_iteration`, a simulation setting,
+  rather than by the policy being modelled. Two keys under `direct_power_control` make the policy
+  explicit; both are additive, so a scenario without them reads as `required` and there is no
+  scenario-format bump.
+
+  | `reduction` | what the operator needs to observe | lands |
+  |---|---|---|
+  | `required` (default) | a per-connection state estimate | where the overload clears, or on the cap |
+  | `ramp` | an overload/no-overload signal, repeatedly | one rung of `ramp_steps` further down per pass |
+  | `minimum` | one overload signal | on the §14a floor, in one pass |
+
+  `ramp_steps` is read only under `ramp` and **not from `max_iteration`**: that is a safety cap on
+  the iteration, shared by every restriction, and a ramp reading it would let a cap raised to stop
+  a timestep truncating silently make curtailment gentler. The one thing they owe each other is
+  that an *n*-rung ramp needs `max_iteration >= n` to be able to reach its floor. Both rungs of the
+  ladder are anchored on the timestep's first controlling pass, so a step is a point on the ladder
+  and not a decrement from whatever the agent last drew, and one rung is taken per overload
+  signal rather than per command (a zone with two transformers commands every bus twice per
+  pass). The step count lives under `GridDB.TIMESTEP_RESTRICTION_KEYS` with the anchored
+  guarantee, which the timestep boundary clears and #249's resume is expected to checkpoint. A
+  strategy other than `required` under `method: individual`
+  is refused rather than ignored, and a bad value is refused when the restriction is built, not on
+  the first overload.
+
+  **`required` is byte-identical to before**: the golden reference does not move. **Each strategy
+  ships with a scenario that reaches it** -- the condition, not a nice-to-have, since the two
+  §14a branches no scenario reached each turned out to carry a defect (#209, #244). Both are
+  `grid_golden` runs under config edits in `tests/e2e/test_grid_restrictions.py`, asserted by
+  value: `minimum` at the real 4200 W lands every command on the floor recomputed from the
+  uncontrolled power flow (4513 W and 8894 W where `required` had left one agent at 4678 W), in
+  two passes rather than four; `ramp` at a lowered 1000 W floor -- at 4200 W the ladder reaches
+  the floor before the overload clears, so it would be a slower `minimum` -- descends its ladder
+  rung for rung in `res_bus` (7513 → 5447 → 3380 W against rungs recomputed from the same
+  tables), settles on rung 2 of 3 with rung 1 leaving 112.0 % and rung 2 clearing to 74.3 %, and
+  never commands the floor. That arm also raises `max_iteration` to 5 so it differs from
+  `ramp_steps`; with the two equal a ramp reading the cap produces the same numbers.
+  `tests/unit/executor/test_enwg_14a_reduction_strategy.py` pins the arithmetic on one input
+  (loading 1.5: `required` 15334 W, `minimum` 9400 W, `ramp` 18467 → 13934 → 9400 W), the
+  anchoring, the reset, the state key and every refusal; 17 mutations, one site at a time, each
+  caught by the test named for it. `config_templates/grids.yaml`, the examples and the docs carry
+  the keys with the default value.
+
 - **Agent results are checkpointed every 24 timesteps, so a crash loses at most that many (#249,
   part a).** `AgentDB` holds every result table in memory and wrote them once, at the end of the
   run — grids and markets drain per timestep, agents did not — so design 6a's January run, which

@@ -62,11 +62,22 @@ class GridDB:
     #: cross-timestep survival is the only way it ever reaches an agent. Dropping it here makes
     #: variable grid fees a near-total no-op -- measured, a fee reached 16 of 112 agent executions
     #: instead of 116 of 120.
+    #:
+    #: Any state a restriction keeps *between passes* of one timestep belongs in this tuple: it is
+    #: what the timestep boundary clears, and what #249's resume is expected to checkpoint. State
+    #: kept anywhere else would survive the boundary and would not survive a pause.
+
     #: The `res_direct_power_control` frame the latest pass replaced, kept so a forced exit can put
     #: it back. Per-timestep like the rest, and cleared with them.
     SUPERSEDED_COMMAND_FRAME_KEY = 'direct_power_control_superseded_frame'
 
-    TIMESTEP_RESTRICTION_KEYS = ('current_direct_power_control', 'direct_power_control_guarantee',
+    #: The per-agent §14a floor anchored on the timestep's first controlling pass (#242).
+    GUARANTEE_KEY = 'direct_power_control_guarantee'
+
+    #: Where `reduction: ramp` keeps the pass count and each agent's ladder position (#245).
+    RAMP_STATE_KEY = 'direct_power_control_ramp'
+
+    TIMESTEP_RESTRICTION_KEYS = ('current_direct_power_control', GUARANTEE_KEY, RAMP_STATE_KEY,
                                  SUPERSEDED_COMMAND_FRAME_KEY)
 
     def restore_superseded_command_frame(self):

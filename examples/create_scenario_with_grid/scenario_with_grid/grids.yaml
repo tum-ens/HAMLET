@@ -67,6 +67,16 @@ electricity:                          # type of grid (needs to match available g
         threshold: 4200               # minimum guaranteed power (according to §14a: 4200 W)
                                       # unit: W
 
+        reduction: required           # reduction strategy: how far one pass of the ems method curtails
+                                      # options:
+                                      #   - required: exactly the overload, re-measured every pass
+                                      #   - minimum:  straight to the §14a floor
+                                      #   - ramp:     one of ramp_steps equal steps toward the floor per pass
+                                      # note: only read by the ems method
+
+        ramp_steps: 3                 # steps from the uncurtailed draw to the §14a floor
+                                      # note: only read by the ramp strategy
+
 heat:
   active: False
 

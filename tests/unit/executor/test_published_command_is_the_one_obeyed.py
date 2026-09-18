@@ -99,6 +99,8 @@ def test_the_restriction_stashes_the_frame_it_replaces():
     enwg = EnWG14a.__new__(EnWG14a)
     enwg.grid_db = grid_db
     enwg.timestamp = TS
+    # The method reads the reduction strategy before walking the transformers (#245).
+    enwg.restriction_config = {'direct_power_control': {'method': 'ems', 'threshold': 4200}}
     # An empty `res_trafo` means no transformer to walk, so the bus loop is skipped and only the
     # frame-write block runs. Nothing is patched.
     enwg.grid = SimpleNamespace(res_trafo=pd.DataFrame({'p_lv_mw': [], 'loading_percent': []}))

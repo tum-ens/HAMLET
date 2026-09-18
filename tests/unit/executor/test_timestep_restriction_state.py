@@ -28,6 +28,7 @@ MAX_ITERATION = 3
 #: What a restriction leaves behind for one timestep, and what must survive it.
 COMMAND_KEY = 'current_direct_power_control'
 GUARANTEE_KEY = 'direct_power_control_guarantee'
+RAMP_KEY = 'direct_power_control_ramp'
 FEE_KEY = 'current_variable_grid_fees'
 
 
@@ -37,18 +38,22 @@ def grid_db_with_state():
     grid_db.restriction_commands = {
         COMMAND_KEY: {'agent_one': {'ems': 4586}},
         GUARANTEE_KEY: {'timestamp': '2023-01-28 15:00:00+00:00', 'agents': {'agent_one': 4586}},
+        RAMP_KEY: {'timestamp': '2023-01-28 15:00:00+00:00',
+                   'agents': {'agent_one': {'from': 9000, 'step': 2}}},
         FEE_KEY: {'agent_one': 0.31},
     }
     return grid_db
 
 
-def test_clearing_drops_the_command_and_the_guarantee():
+def test_clearing_drops_the_command_the_guarantee_and_the_ramp_step():
+    """A ramp step carried across the boundary would start the next timestep part-way down (#245)."""
     grid_db = grid_db_with_state()
 
     grid_db.clear_timestep_restriction_state()
 
     assert COMMAND_KEY not in grid_db.restriction_commands
     assert GUARANTEE_KEY not in grid_db.restriction_commands
+    assert RAMP_KEY not in grid_db.restriction_commands
 
 
 def test_clearing_leaves_the_variable_grid_fee_alone():
