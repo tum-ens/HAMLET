@@ -27,6 +27,7 @@ from hamlet.executor.utilities.database.grid_db import ElectricityGridDB
 from hamlet.executor.utilities.grid_restrictions.enwg_14a import EnWG14a
 from hamlet.executor.utilities.grid_restrictions.grid_restriction import GridRestriction
 from hamlet.executor.utilities.grid_restrictions.grid_restriction_base import GridRestrictionBase
+from tests.unit.executor.executor_stub import bare_executor
 
 TIMESTAMPS = [f'2023-01-28 {hour:02d}:00:00+00:00' for hour in range(3)]
 
@@ -48,17 +49,8 @@ class CountingDatabase:
 
 
 def executor_over(timestamps, rollback_possible, converge=True, max_iteration=1):
-    executor = Executor.__new__(Executor)
-    executor.timetable = pl.DataFrame({c.TC_TIMESTAMP: list(timestamps),
-                                       c.TC_REGION: ['a_region'] * len(timestamps)})
-    executor.type = 'sim'
-    executor.max_iteration = max_iteration
-    executor.checkpoint_interval = None
-    executor.rollback_possible = rollback_possible
-    executor.path_results = 'unused'
-    executor.database = CountingDatabase()
-    executor.pbar = SimpleNamespace(reset=lambda **kw: None, set_description=lambda *a, **kw: None,
-                                    update=lambda *a: None)
+    executor = bare_executor(timestamps, database=CountingDatabase(), max_iteration=max_iteration,
+                             rollback_possible=rollback_possible)
     executor._Executor__execute_agents = lambda tasks: None
     executor._Executor__execute_markets = lambda tasks: None
     seen = []
@@ -332,10 +324,7 @@ class SetupDatabase(ConfigDatabase):
 
 def test_setup_derives_the_flag_rather_than_leaving_the_constructor_default():
     """`__init__` defaults to True (copy, the safe side); setup must replace it with the answer."""
-    executor = Executor.__new__(Executor)
-    executor.structure = {}
-    executor.rollback_possible = True
-    executor.database = SetupDatabase({}, restrictions(['enwg_14a'], True))
+    executor = bare_executor(database=SetupDatabase({}, restrictions(['enwg_14a'], True)), structure={})
 
     executor._Executor__setup_database()
 

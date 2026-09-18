@@ -41,6 +41,19 @@ import polars as pl
 #      through the current Executor silently applies grid fees and levies to feed-in.
 SCENARIO_FORMAT_VERSION = 1
 
+# CHECKPOINT FORMAT
+# The layout of what `executor/utilities/checkpoint.py` writes under `results/<run>/checkpoint/`
+# so that a run can be resumed. Independent of both the scenario format and the release number
+# for the same reason as above. The state is a pickle of the live object graph, so it is coupled
+# to the classes it contains: bump this when a change to `Database`, `RegionDB`, `AgentDB`,
+# `MarketDB`, `GridDB` or the forecasters would make a pickle written before the change resume
+# into a different run than the one it was taken from -- a renamed attribute, a cache with new
+# semantics, a table that moved. A checkpoint carrying another number is refused, not read.
+#
+# HISTORY
+#   1  Current. Database graph + both RNG states + grid CSV lengths + the last timestep.
+CHECKPOINT_FORMAT_VERSION = 1
+
 # KEYS
 K_SCENARIO_FORMAT_VERSION = 'scenario_format_version'  # key holding the stamp in general.json
 K_GENERAL = 'general'

@@ -5,7 +5,8 @@
 #
 #   fast    unit + integration, no simulation                ~2 min
 #   e2e     every shipped example, end to end               ~20 min
-#   golden  two scenarios against committed numbers          ~6 min
+#   golden  two scenarios against committed numbers, each also
+#           crashed and resumed (test_resume_matches_golden)    ~11 min
 #
 # Measured on this runner, pipeline 3233720, against a 40-minute per-job timeout. These numbers are
 # not stable and are not meant to be — the point of stating them is that `e2e` is the job with the

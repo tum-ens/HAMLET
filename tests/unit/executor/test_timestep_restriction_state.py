@@ -13,13 +13,12 @@ On design 6a that path is taken by **36.8 %** of timesteps, and the run died at 
 there. Every case below drives a timestep that ends on the cap.
 """
 
-from types import SimpleNamespace
 
 import polars as pl
 import pytest
 
 from hamlet import constants as c
-from hamlet.executor.setup import Executor
+from tests.unit.executor.executor_stub import bare_executor
 from hamlet.executor.utilities.database.database import Database
 from hamlet.executor.utilities.database.grid_db import ElectricityGridDB, HeatGridDB
 
@@ -112,13 +111,6 @@ def test_ending_a_timestep_reaches_every_grid():
         assert COMMAND_KEY not in grid.restriction_commands
 
 
-def timetable(timestamps):
-    """One row per (timestamp, region), which is what `execute` partitions on."""
-    return pl.DataFrame({
-        c.TC_TIMESTAMP: list(timestamps),
-        c.TC_REGION: ['a_region'] * len(timestamps),
-    })
-
 
 class RecordingDatabase:
     """Records the order of `end_timestep` calls against the passes that preceded them."""
@@ -139,15 +131,7 @@ def executor_over(timestamps, grid_ok_after_cap=True):
     the path `EnWG14a` already handles.
     """
     log = []
-    executor = Executor.__new__(Executor)
-    executor.timetable = timetable(timestamps)
-    executor.type = 'sim'
-    executor.max_iteration = MAX_ITERATION
-    executor.checkpoint_interval = None  # the stub database has no agents to checkpoint
-    executor.rollback_possible = True  # the stub grid refuses to converge, so a copy is taken
-    executor.database = RecordingDatabase(log)
-    executor.pbar = SimpleNamespace(reset=lambda **kw: None, set_description=lambda *a, **kw: None,
-                                    update=lambda *a: None)
+    executor = bare_executor(timestamps, database=RecordingDatabase(log), max_iteration=MAX_ITERATION)
 
     executor._Executor__execute_agents = lambda tasks: log.append('agents')
     executor._Executor__execute_markets = lambda tasks: log.append('markets')

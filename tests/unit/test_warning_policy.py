@@ -332,7 +332,7 @@ class TestTheEntryPointsUseIt:
 
         class Probe(executor_setup.Executor):
             def __init__(self):  # noqa: D107 -- deliberately skips the real constructor
-                pass
+                self.paused = False  # `run` reads it after `execute`
 
             def setup(self):
                 events.append('setup')

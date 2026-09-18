@@ -158,6 +158,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   agrees with its own declaration.
 
 ### Added
+- **A run can be stopped at any checkpoint and resumed, and the resumed run is indistinguishable
+  from one that never stopped (#249, part d).** The checkpoint the executor writes every
+  `checkpoint_interval` timesteps now carries the run's *state* as well as its results:
+  `results/<run>/checkpoint/state.pkl` is the live `Database` graph pickled whole — agent tables,
+  every market's retained window and caches, every grid's restriction commands and unsettled
+  results, every forecaster's history and fitted model — plus both RNG states, the length of every
+  grid CSV, the last completed timestep and a format stamp (`c.CHECKPOINT_FORMAT_VERSION`).
+  `Executor(<results folder>, resume=True).run()` continues from it: nothing is copied or deleted,
+  the grid CSVs are cut back to the checkpoint's length (the drain appends per timestep, so a run
+  that died after the checkpoint has rows the resumed run writes again), the RNGs are put back,
+  and the timetable resumes strictly after the checkpoint with the checkpoint cadence intact.
+  `Executor.pause()` — a flag, safe from a signal handler — checkpoints and stops after the
+  timestep in progress and skips `cleanup`, so the folder it leaves is exactly one to resume. A
+  results folder can be moved but not renamed: the checkpoint carries the run name, as
+  `general.json` already did, and a resume under another name is refused rather than finishing
+  into a re-created folder of the old one. A finished run deletes its checkpoint; a graph that
+  cannot be pickled fails the run at setup, not 24 timesteps in.
+
+  The state is the whole graph rather than a list of pieces because the acceptance criterion is
+  not a list: `tests/e2e/test_resume_matches_golden.py` runs each golden scenario checkpointing
+  every 8 timesteps, kills it inside timestep 10, resumes it, and requires the **committed golden
+  fingerprint** — with two receipts that the resumed run started at step 8 and executed exactly
+  the remainder, since a quiet restart would match the reference too. It passes for both
+  scenarios, and it sees what it is for: dropping the §14a fee horizon, emptying a market's
+  retained window, skipping the CSV truncation, or resuming one step early each move it.
+  No result in either scenario depends on an RNG draw, so the RNG restore is pinned by unit test
+  only. The format stamp is coupled to the pickled classes; `hamlet/constants.py` says when to
+  bump it. A checkpoint written before this change (agent tables only) has no state file and
+  cannot be resumed. Whether a forecaster holding a TensorFlow model (`cnn`, `rnn`, behind the
+  optional extra) pickles is untested; no shipped scenario uses one. The state file is 111 MB for
+  the 4-agent example, almost all of it the weather table every forecaster shares, and 154 MB for
+  design 6's 104 agents over a quarter — 0.10 s to write and 0.15 s to read back on the Mac mini,
+  against 3.7 s per timestep; the `golden` CI job gains two crash-and-resume runs, about five
+  minutes.
+
 - **The §14a reduction strategy is configurable: `required` | `minimum` | `ramp` (#245).** Under
   `method: ems` the executor's `while not grid_ok` loop re-simulates a timestep after each pass,
   and the command approached the overload asymptotically -- on `grid_golden`, 149.6 % → 104.3 % →

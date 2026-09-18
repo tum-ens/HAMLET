@@ -47,6 +47,11 @@ class Database:
 
     ########################################## PUBLIC METHODS ##########################################
 
+    @property
+    def run_name(self) -> str:
+        """The run this database writes results for -- the folder name under the results root."""
+        return self.__run_name
+
     """initialize database"""
 
     def setup_database(self, structure):
