@@ -11,8 +11,8 @@ by exactly one watt (design 6, threshold 0, 2023-01-09 04:00, agent 3bz0WGoo6cnw
 
 The EV model already clamps in both backends: `self.soc = max(0, ...)`. This pins the same guard on
 the storage in both backends -- the two RTC component files are meant to mirror each other, and a
-clamp in one only is a backend divergence (#251). The fractional -1.2 and -0.4 cases cannot arrive
-at runtime; they pin that the clamp is a floor at zero and not a rounding.
+clamp in one only is a backend divergence (#251). The fractional -1.2 cannot arrive at runtime; it
+pins that the clamp is a floor at zero and not a rounding, which -1 alone could not (round(-1) is -1).
 """
 
 from datetime import timedelta
@@ -45,7 +45,7 @@ def battery(battery_cls, soc_wh, target_w=0):
 
 
 @BACKENDS
-@pytest.mark.parametrize('soc_wh', [-1.2, -1, -0.4, 0])
+@pytest.mark.parametrize('soc_wh', [-1.2, -1, 0])
 def test_an_empty_or_overdrawn_storage_may_idle(battery_cls, soc_wh):
     """The discharge bound of an empty storage is 0 -- never negative, which would force a charge."""
     b = battery(battery_cls, soc_wh)
@@ -74,8 +74,11 @@ def test_a_target_below_an_overdrawn_bound_is_lifted_to_it(battery_cls):
 
 
 def test_the_heat_storage_inherits_the_clamp():
-    """`HeatStorage` is a `SimpleStorage` too and reads the same SoC; a subclass that re-read it
-    unclamped would revive the defect for heat while the battery test stayed green."""
+    """`HeatStorage` is a `SimpleStorage` too and takes its bounds from the same clamped SoC.
+
+    `upper` is computed in `SimpleStorage.__init__`, so a subclass that merely re-read `self.soc`
+    afterwards would change the attribute but not the bound; the `soc` assertion is what would see
+    that, the `upper` assertion is what would see a subclass recomputing its bounds unclamped."""
     hs = poi_components.HeatStorage(
         NAME,
         timeseries=pl.DataFrame(),
@@ -85,4 +88,5 @@ def test_the_heat_storage_inherits_the_clamp():
         sizing={'power': 6400, 'capacity': 12800, 'efficiency': 0.95, 'soc': 0.5},
     )
 
+    assert hs.soc == 0
     assert hs.upper == 0

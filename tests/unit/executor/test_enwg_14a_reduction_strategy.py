@@ -376,11 +376,12 @@ def test_an_inactive_block_is_not_validated():
 # sign flipped survived the whole file; and the export branch of the floor was reached by one
 # conformance test that asserts an inequality with kilowatts of slack. Under `minimum` the floor
 # *is* the command and `power_reduction_at_bus` -- the quantity #244 describes as wrong on the
-# over-generation side -- is never read, so both can be pinned to a correct value here without
+# over-generation side -- never reaches it, so both can be pinned to a correct value here without
 # asserting anything #244 owns.
 
 def grid_with_sgen(loads, sgens):
-    """Like `grid_with`, with generation on the bus; `res_bus` is net, as pandapower reports it."""
+    """Like `grid_with`, with generation on the bus. `res_bus` is net, as pandapower reports it;
+    under `minimum` only its *sign* is load-bearing (it selects the import/export branch)."""
     load = pd.DataFrame(loads)
     sgen = pd.DataFrame(sgens)
     return SimpleNamespace(
