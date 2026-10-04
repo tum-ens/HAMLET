@@ -487,7 +487,9 @@ class SimpleStorage(LinopyComps):
 
         # Kwargs variables
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
-        self.soc = kwargs['socs'][f'{self.name}'][0]  # state of charge at timestep (energy)
+        # Clamped at zero, as the EV's is and as the POI backend's is (#251): a state of charge
+        # that drifted to -1 Wh would otherwise make the discharge bound -1 W, a forced charge.
+        self.soc = max(0, kwargs['socs'][f'{self.name}'][0])  # state of charge at timestep (energy)
         self.energy_to_full = self.capacity - self.soc  # energy needed to charge to full
 
         # Define the charging and discharging power variables (depend on capacity, soc, efficiency and dt)

@@ -913,7 +913,7 @@ class EnWG14a(GridRestrictionBase):
                 # and the guarantee used to be the difference of two truncated terms; when the
                 # agent's MW sum did not survive the round trip to W that left it 1 W *below* the
                 # inflexible load it exists to protect -- and the RTC, whose inflexible load is a
-                # fixed variable, was infeasible by that watt (design 6b, 2023-01-09 05:00, agent
+                # fixed variable, was infeasible by that watt (#250: design 6 at threshold 0, 2023-01-09 05:00, agent
                 # e2W83ae1O1eyEW2: cap 1206 W, firm draw 1207 W). 28 % of integer-watt values lose
                 # a watt on `w * WH_TO_MWH * MWH_TO_WH`. At the legal threshold the floor sits far
                 # above the firm draw and the watt is invisible; at threshold 0 the floor *is* the

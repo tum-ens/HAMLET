@@ -23,6 +23,7 @@ distribute a setpoint does. The over-generation side is not covered, for the rea
 
 from types import SimpleNamespace
 
+import pandas as pd
 import polars as pl
 import pytest
 
@@ -126,7 +127,7 @@ def test_minimum_rounds_a_fractional_floor_up_never_down():
     """Pins the floor's rounding direction (#250), which integer-watt cases cannot.
 
     For those `round(firm_w, 3)` alone repairs the float noise and `ceil`/`floor` agree; under
-    `required` the command's own arithmetic also lands above the floor, so the clamp never
+    `required` the command's own arithmetic lands on or above the floor, so the clamp never
     engages. Under `minimum` the floor *is* the command. A heat pump's `hp_min_control` comes from
     a formula and can be fractional, making the floor fractional: 1000 + 5000 - (5000 - 1500.5) =
     2500.5 W. It is a bound the agent must be able to meet, so it rounds up; `floor` gives 2500
@@ -365,3 +366,65 @@ def test_an_inactive_block_is_not_validated():
     """Switching direct power control off must not start refusing whatever was left beside it."""
     constructed({'active': False, 'method': 'individual', 'threshold': THRESHOLD_W,
                  'reduction': 'ramp'})
+
+
+# ----------------------------------------------------------------------------------------------
+# the floor's two unpinned terms (#250, found by mutation): the sgen sign, and the export branch
+# ----------------------------------------------------------------------------------------------
+#
+# Every `grid_with` fixture above builds `sgen` empty, so `agent_load_mw - agent_sgen_mw` with the
+# sign flipped survived the whole file; and the export branch of the floor was reached by one
+# conformance test that asserts an inequality with kilowatts of slack. Under `minimum` the floor
+# *is* the command and `power_reduction_at_bus` -- the quantity #244 describes as wrong on the
+# over-generation side -- is never read, so both can be pinned to a correct value here without
+# asserting anything #244 owns.
+
+def grid_with_sgen(loads, sgens):
+    """Like `grid_with`, with generation on the bus; `res_bus` is net, as pandapower reports it."""
+    load = pd.DataFrame(loads)
+    sgen = pd.DataFrame(sgens)
+    return SimpleNamespace(
+        load=load, sgen=sgen,
+        res_bus=pd.DataFrame({'p_mw': [load['p_mw'].sum() - sgen['p_mw'].sum()]}, index=[BUS]))
+
+
+def test_minimum_subtracts_the_agents_own_generation_from_its_floor():
+    """1000 W inflexible, 300 W of PV, an 11000 W EV at threshold 0: the firm draw is 700 W.
+
+    Reading the generation with the wrong sign puts the floor at 1300 W and blocks 600 W of
+    curtailment the agent can give.
+    """
+    grid = grid_with_sgen(
+        loads_at([11000], inflexible_w=1000),
+        [{'bus': BUS, 'plant_type': c.P_PV, 'p_mw': 300 * c.WH_TO_MWH, c.TC_ID_AGENT: AGENT}])
+    enwg = configured(restriction(grid), reduction='minimum', threshold=0)
+
+    cap = control(enwg, 1.5)[AGENT]['ems']
+
+    assert cap == 700, f'minimum cap {cap} W; expected inflexible 1000 - pv 300 = 700 W'
+
+
+@pytest.mark.parametrize('inflexible_w, expected', [(0, -8400), (0.4, -8400)],
+                         ids=['integer', 'fractional-rounds-down'])
+def test_minimum_pins_the_export_floor_and_rounds_it_down(inflexible_w, expected):
+    """Over-generation: an EV feeding in 7000 W and a battery discharging 10000 W, 4200 W each
+    guaranteed, so 8600 W is reducible of a 17000 W export and the floor is -8400 W.
+
+    With 0.4 W of inflexible load the firm export is -8399.6 W. An export cap is a lower bound on
+    the agent's net power, so it rounds *down* to -8400: `ceil` would give -8399 and forbid 0.6 W
+    the agent cannot stop generating. Dropping `direction` from the floor gives -25600.
+    """
+    loads = [
+        {'bus': BUS, 'load_type': c.P_INFLEXIBLE_LOAD, 'p_mw': inflexible_w * c.WH_TO_MWH,
+         c.TC_ID_AGENT: AGENT, 'hp_min_control': 0.0},
+        {'bus': BUS, 'load_type': c.P_EV, 'p_mw': -7000 * c.WH_TO_MWH,
+         c.TC_ID_AGENT: AGENT, 'hp_min_control': 0.0},
+    ]
+    sgens = [{'bus': BUS, 'plant_type': c.P_BATTERY, 'p_mw': 10000 * c.WH_TO_MWH,
+              c.TC_ID_AGENT: AGENT}]
+    enwg = configured(restriction(grid_with_sgen(loads, sgens)), reduction='minimum')
+
+    # The bus exports, so the transformer flow is positive and `direction` is -1.
+    cap = enwg._EnWG14a__control_via_ems(bus=BUS, trafo_power=1.0, combined_loading=1.5)[AGENT]['ems']
+
+    assert cap == expected, f'export floor {cap} W; expected floor({-8400 + inflexible_w}) = {expected}'

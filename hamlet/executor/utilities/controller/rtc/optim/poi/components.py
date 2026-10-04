@@ -437,12 +437,13 @@ class SimpleStorage(POIComps):
 
         # Kwargs variables
         self.dt = kwargs['delta'].total_seconds()  # time delta in seconds
-        # Clamped at zero, as the EV's is. The SoC is carried between timesteps in integer Wh
-        # and drifts by rounding; a plain Design 6 January leaves 27 of 104 batteries below zero
-        # at some hour. Left unclamped, a -1.2 Wh SoC makes the discharge bound below -1 W --
-        # the storage may not idle, it *must* charge -- which is a firm draw the grid stage
-        # cannot see, and under a tight §14a cap it is infeasible by that watt (design 6b,
-        # 2023-01-09 04:00, agent 3bz0WGoo6cnwd51).
+        # Clamped at zero, as the EV's is (#251). The SoC is carried between timesteps in integer
+        # Wh and drifts by rounding; a plain Design 6 January leaves 27 of 104 agents' batteries
+        # below zero at some hour. Left unclamped, a -1 Wh SoC makes the hourly discharge bound
+        # -1 W -- the storage may not idle, it *must* charge -- which is a firm draw the grid
+        # stage cannot see, and under a tight §14a cap it is infeasible by that watt (design 6,
+        # threshold 0, 2023-01-09 04:00, agent 3bz0WGoo6cnwd51). Every SimpleStorage subclass
+        # inherits this: Battery, HeatStorage, Psh, Hydrogen. The linopy backend mirrors it.
         self.soc = max(0, kwargs['socs'][f'{self.name}'][0])  # state of charge at timestep (energy)
         self.energy_to_full = self.capacity - self.soc  # energy needed to charge to full
 
