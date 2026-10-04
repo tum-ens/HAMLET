@@ -1,3 +1,4 @@
+import math
 import pytz
 from copy import deepcopy
 import pandas as pd
@@ -38,6 +39,40 @@ class EnWG14a(GridRestrictionBase):
         # in a scenario that rarely overloads can be hours of simulation in.
         if (self.restriction_config.get('direct_power_control') or {}).get('active'):
             self.__reduction_strategy()
+            self.__secured_elements()
+
+    def __secured_elements(self) -> str:
+        """`secure` from `direct_power_control`: which elements the control must keep in rating.
+
+        Additive, and `trafo_and_lines` is what every scenario did before the key existed: the
+        command was sized from `max(line loading on the path to the transformer, transformer
+        loading)`, so a line was relieved whenever it was the worse of the two.
+
+        The choice is not cosmetic where the lines bind first, as they do on the Forchheim feeder
+        -- a 599 % line against a 353 % transformer in an uncontrolled January. `trafo_and_lines`
+        then drives the worst *line* to 100 % and leaves the transformer well under it (median
+        68 %); `trafo` relieves the transformer to 100 % and leaves the lines wherever they fall.
+        Neither is more correct -- they answer different questions -- and a transformer-only
+        loading KPI cannot tell them apart, which is the trap this key exists to make visible.
+        """
+        secure = self.restriction_config['direct_power_control'].get(
+            'secure', c.DPC_SECURE_TRAFO_AND_LINES)
+        if secure not in c.DPC_SECURES:
+            raise ValueError(
+                f'grids.yaml gives <energy>.restrictions.enwg_14a.direct_power_control.secure = '
+                f'{secure!r}; it must be one of {list(c.DPC_SECURES)}.')
+        return secure
+
+    def __binding_loading(self, grid, lines, trafo_overload: float) -> float:
+        """The loading one pass sizes a bus's reduction from, in percent.
+
+        Under `trafo_and_lines` that is the worst of the transformer and the lines between this
+        bus and it, so the element actually closest to its rating is the one relieved. Under
+        `trafo` it is the transformer alone, and line loadings are reported but never acted on.
+        """
+        if self.__secured_elements() == c.DPC_SECURE_TRAFO:
+            return trafo_overload
+        return max(grid.res_line.loc[lines, 'loading_percent'].max(), trafo_overload)
 
     def __reduction_strategy(self) -> (str, int | None):
         """`(reduction, ramp_steps)` from `direct_power_control`, defaulting to today's behaviour.
@@ -347,11 +382,16 @@ class EnWG14a(GridRestrictionBase):
         # check trafo overload
         trafo_overloaded = self.grid.res_trafo['loading_percent'].max() > 100
 
-        # check line overload
-        line_overloaded = self.grid.res_line['loading_percent'].max() > 100
+        # check line overload -- only where the lines are something this control answers for. A
+        # line-only overload under `secure: trafo` would otherwise open a pass that
+        # `__binding_loading` then sizes at the transformer's (in-rating) loading, so the pass
+        # would command nothing and the timestep would iterate to its cap without converging.
+        line_overloaded = (self.__secured_elements() == c.DPC_SECURE_TRAFO_AND_LINES
+                           and self.grid.res_line['loading_percent'].max() > 100)
 
-        # check voltage pu
-        # to be implemented
+        # Voltage is not checked, and under DC power flow it could not be: `rundcpp` leaves
+        # `res_bus.vm_pu` at 1.0 on every bus. Sizing a reduction for a voltage band would also
+        # need a dV/dP sensitivity rather than the flow-to-rating ratio `__control_via_ems` uses.
 
         return trafo_overloaded or line_overloaded
 
@@ -397,13 +437,11 @@ class EnWG14a(GridRestrictionBase):
                                                                     trafo_lv_bus_index=grid.trafo.loc[trafo_index,
                                                                     'lv_bus'])
 
-            # get line loading for upper lines into a dataframe for each bus
+            # size each bus's reduction from the element closest to its rating; which elements
+            # count is `direct_power_control.secure`
             for bus in shortest_path.keys():
-                line_df = grid.res_line.loc[shortest_path[bus]]
-                line_overload = line_df['loading_percent'].max()
-
-                # compare trafo overload and line overload, take the bigger one
-                combined_loading = max(line_overload, trafo_overload) / 100
+                combined_loading = self.__binding_loading(grid, shortest_path[bus],
+                                                          trafo_overload) / 100
 
                 # perform direct power control when combined loading percentage presents an overload
                 if combined_loading > 1:
@@ -859,8 +897,9 @@ class EnWG14a(GridRestrictionBase):
         # calculate percent of each agent
         for agent in reducible_power_for_agent.keys():
             # calculate total power for the agent
-            total_p_agent = int((grid.load[grid.load[c.TC_ID_AGENT] == agent]['p_mw'].sum() -
-                                 grid.sgen[grid.sgen[c.TC_ID_AGENT] == agent]['p_mw'].sum()) * c.MWH_TO_WH)
+            agent_load_mw = grid.load[grid.load[c.TC_ID_AGENT] == agent]['p_mw'].sum()
+            agent_sgen_mw = grid.sgen[grid.sgen[c.TC_ID_AGENT] == agent]['p_mw'].sum()
+            total_p_agent = int((agent_load_mw - agent_sgen_mw) * c.MWH_TO_WH)
 
             # write control result to target dict
             if agent not in control_target.keys():
@@ -907,8 +946,22 @@ class EnWG14a(GridRestrictionBase):
             # `__calculate_direct_power_control` finds it equal to the previous pass's and settles
             # the timestep. Every controlled timestep used to exhaust `max_iteration`.
             if agent not in anchored_guarantee:
-                anchored_guarantee[agent] = total_p_agent - int(
-                    direction * reducible_power_for_agent[agent] * c.MWH_TO_WH)
+                # One rounding, toward what the agent can meet. `int()` truncates toward zero,
+                # and the guarantee used to be the difference of two truncated terms; when the
+                # agent's MW sum did not survive the round trip to W that left it 1 W *below* the
+                # inflexible load it exists to protect -- and the RTC, whose inflexible load is a
+                # fixed variable, was infeasible by that watt (#250: design 6 at threshold 0, 2023-01-09 05:00, agent
+                # e2W83ae1O1eyEW2: cap 1206 W, firm draw 1207 W). 28 % of integer-watt values lose
+                # a watt on `w * WH_TO_MWH * MWH_TO_WH`. At the legal threshold the floor sits far
+                # above the firm draw and the watt is invisible; at threshold 0 the floor *is* the
+                # firm draw. The rounding is therefore taken once, on the unrounded MW difference,
+                # and upward for an import cap (downward for an export cap), after rounding away
+                # float noise below a milliwatt so an exact value is not pushed up a whole watt.
+                firm_w = (agent_load_mw - agent_sgen_mw
+                          - direction * reducible_power_for_agent[agent]) * c.MWH_TO_WH
+                firm_w = round(firm_w, 3)
+                anchored_guarantee[agent] = (math.ceil(firm_w) if direction > 0
+                                             else math.floor(firm_w))
 
             # The strategy decides where between the uncurtailed draw and the floor the command
             # lands; see the class comment. All three share the anchor above and the clamp

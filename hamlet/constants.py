@@ -144,6 +144,11 @@ DPC_METHOD_EMS = 'ems'                # the agent's net connection, for its EMS 
 DPC_REDUCTION_REQUIRED = 'required'   # the overload, re-measured every pass (the default)
 DPC_REDUCTION_MINIMUM = 'minimum'     # straight to the §14a floor
 DPC_REDUCTION_RAMP = 'ramp'           # one of `ramp_steps` equal steps toward the floor per pass
+# `secure` -- which elements the control is responsible for keeping inside their rating.
+# `EnWG14a.__binding_loading` says why the choice changes the result.
+DPC_SECURE_TRAFO = 'trafo'                      # the transformer only
+DPC_SECURE_TRAFO_AND_LINES = 'trafo_and_lines'  # the worst of it and the feeding lines (default)
+DPC_SECURES = (DPC_SECURE_TRAFO, DPC_SECURE_TRAFO_AND_LINES)
 DPC_REDUCTIONS = (DPC_REDUCTION_REQUIRED, DPC_REDUCTION_MINIMUM, DPC_REDUCTION_RAMP)
 
 # SYMBOLS (symbols used for the units in the tables)
