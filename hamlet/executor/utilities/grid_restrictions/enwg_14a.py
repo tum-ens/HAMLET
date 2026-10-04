@@ -39,6 +39,40 @@ class EnWG14a(GridRestrictionBase):
         # in a scenario that rarely overloads can be hours of simulation in.
         if (self.restriction_config.get('direct_power_control') or {}).get('active'):
             self.__reduction_strategy()
+            self.__secured_elements()
+
+    def __secured_elements(self) -> str:
+        """`secure` from `direct_power_control`: which elements the control must keep in rating.
+
+        Additive, and `trafo_and_lines` is what every scenario did before the key existed: the
+        command was sized from `max(line loading on the path to the transformer, transformer
+        loading)`, so a line was relieved whenever it was the worse of the two.
+
+        The choice is not cosmetic where the lines bind first, as they do on the Forchheim feeder
+        -- a 599 % line against a 353 % transformer in an uncontrolled January. `trafo_and_lines`
+        then drives the worst *line* to 100 % and leaves the transformer well under it (median
+        68 %); `trafo` relieves the transformer to 100 % and leaves the lines wherever they fall.
+        Neither is more correct -- they answer different questions -- and a transformer-only
+        loading KPI cannot tell them apart, which is the trap this key exists to make visible.
+        """
+        secure = self.restriction_config['direct_power_control'].get(
+            'secure', c.DPC_SECURE_TRAFO_AND_LINES)
+        if secure not in c.DPC_SECURES:
+            raise ValueError(
+                f'grids.yaml gives <energy>.restrictions.enwg_14a.direct_power_control.secure = '
+                f'{secure!r}; it must be one of {list(c.DPC_SECURES)}.')
+        return secure
+
+    def __binding_loading(self, grid, lines, trafo_overload: float) -> float:
+        """The loading one pass sizes a bus's reduction from, in percent.
+
+        Under `trafo_and_lines` that is the worst of the transformer and the lines between this
+        bus and it, so the element actually closest to its rating is the one relieved. Under
+        `trafo` it is the transformer alone, and line loadings are reported but never acted on.
+        """
+        if self.__secured_elements() == c.DPC_SECURE_TRAFO:
+            return trafo_overload
+        return max(grid.res_line.loc[lines, 'loading_percent'].max(), trafo_overload)
 
     def __reduction_strategy(self) -> (str, int | None):
         """`(reduction, ramp_steps)` from `direct_power_control`, defaulting to today's behaviour.
@@ -348,11 +382,16 @@ class EnWG14a(GridRestrictionBase):
         # check trafo overload
         trafo_overloaded = self.grid.res_trafo['loading_percent'].max() > 100
 
-        # check line overload
-        line_overloaded = self.grid.res_line['loading_percent'].max() > 100
+        # check line overload -- only where the lines are something this control answers for. A
+        # line-only overload under `secure: trafo` would otherwise open a pass that
+        # `__binding_loading` then sizes at the transformer's (in-rating) loading, so the pass
+        # would command nothing and the timestep would iterate to its cap without converging.
+        line_overloaded = (self.__secured_elements() == c.DPC_SECURE_TRAFO_AND_LINES
+                           and self.grid.res_line['loading_percent'].max() > 100)
 
-        # check voltage pu
-        # to be implemented
+        # Voltage is not checked, and under DC power flow it could not be: `rundcpp` leaves
+        # `res_bus.vm_pu` at 1.0 on every bus. Sizing a reduction for a voltage band would also
+        # need a dV/dP sensitivity rather than the flow-to-rating ratio `__control_via_ems` uses.
 
         return trafo_overloaded or line_overloaded
 
@@ -398,13 +437,11 @@ class EnWG14a(GridRestrictionBase):
                                                                     trafo_lv_bus_index=grid.trafo.loc[trafo_index,
                                                                     'lv_bus'])
 
-            # get line loading for upper lines into a dataframe for each bus
+            # size each bus's reduction from the element closest to its rating; which elements
+            # count is `direct_power_control.secure`
             for bus in shortest_path.keys():
-                line_df = grid.res_line.loc[shortest_path[bus]]
-                line_overload = line_df['loading_percent'].max()
-
-                # compare trafo overload and line overload, take the bigger one
-                combined_loading = max(line_overload, trafo_overload) / 100
+                combined_loading = self.__binding_loading(grid, shortest_path[bus],
+                                                          trafo_overload) / 100
 
                 # perform direct power control when combined loading percentage presents an overload
                 if combined_loading > 1:

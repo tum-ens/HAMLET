@@ -429,3 +429,66 @@ def test_minimum_pins_the_export_floor_and_rounds_it_down(inflexible_w, expected
     cap = enwg._EnWG14a__control_via_ems(bus=BUS, trafo_power=1.0, combined_loading=1.5)[AGENT]['ems']
 
     assert cap == expected, f'export floor {cap} W; expected floor({-8400 + inflexible_w}) = {expected}'
+
+
+# ----------------------------------------------------------------------------------------------
+# `secure`: which elements the control answers for
+# ----------------------------------------------------------------------------------------------
+#
+# `combined_loading` is the loading a pass sizes its reduction from. Under `trafo_and_lines` it is
+# the worse of the transformer and the lines feeding the bus, so where a line binds first the
+# transformer is left well inside its rating -- on the Forchheim feeder, a line at exactly 100 %
+# and the transformer at a 68 % median. Under `trafo` the transformer is relieved to 100 % and the
+# lines are not touched. The fixtures below put the two in opposition: a line at 200 % behind a
+# transformer at 120 %.
+
+def grid_with_line(loads, line_loading_pct, trafo_pct):
+    """`grid_with` plus a `res_line` the restriction can read for this bus's feeding line."""
+    grid = grid_with(loads)
+    grid.res_line = pd.DataFrame({'loading_percent': [line_loading_pct]}, index=[LINE])
+    grid.res_trafo = pd.DataFrame({'loading_percent': [trafo_pct],
+                                   'p_lv_mw': [-grid.res_bus.loc[BUS, 'p_mw']]}, index=[0])
+    return grid
+
+
+LINE = 0
+
+
+def binding(enwg, trafo_pct):
+    """The percentage one pass would size the bus's reduction from."""
+    return enwg._EnWG14a__binding_loading(enwg.grid, [LINE], trafo_pct)
+
+
+@pytest.mark.parametrize('secure, expected', [
+    (None, 200.0),                 # key absent: today's behaviour
+    ('trafo_and_lines', 200.0),    # the line is the worse element
+    ('trafo', 120.0),              # the line is ignored
+])
+def test_secure_decides_which_loading_sizes_the_reduction(secure, expected):
+    keys = {} if secure is None else {'secure': secure}
+    enwg = configured(restriction(grid_with_line(loads_at([11000]), 200.0, 120.0)), **keys)
+
+    assert binding(enwg, trafo_pct=120.0) == expected
+
+
+def test_securing_the_transformer_only_curtails_less_than_securing_the_lines_too():
+    """The whole point of the key: the same overload yields a smaller command under `trafo`."""
+    loads = loads_at([11000], inflexible_w=1000)
+    both = configured(restriction(grid_with_line(loads, 200.0, 120.0)),
+                      secure='trafo_and_lines', reduction='required')
+    trafo_only = configured(restriction(grid_with_line(loads, 200.0, 120.0)),
+                            secure='trafo', reduction='required')
+
+    cap_both = command_bus(both, binding(both, 120.0) / 100)[AGENT]['ems']
+    cap_trafo = command_bus(trafo_only, binding(trafo_only, 120.0) / 100)[AGENT]['ems']
+
+    assert cap_both < cap_trafo, (
+        f'securing the lines too commanded {cap_both} W and the transformer alone {cap_trafo} W; '
+        f'relieving a 200 % line must cut deeper than relieving a 120 % transformer')
+
+
+def test_an_unknown_secure_value_is_refused_at_construction():
+    enwg = configured(restriction(grid_with(loads_at([11000]))), secure='lines')
+
+    with pytest.raises(ValueError, match="secure = 'lines'"):
+        enwg._EnWG14a__secured_elements()
