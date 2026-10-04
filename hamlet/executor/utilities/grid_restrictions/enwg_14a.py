@@ -1,3 +1,4 @@
+import math
 import pytz
 from copy import deepcopy
 import pandas as pd
@@ -859,8 +860,9 @@ class EnWG14a(GridRestrictionBase):
         # calculate percent of each agent
         for agent in reducible_power_for_agent.keys():
             # calculate total power for the agent
-            total_p_agent = int((grid.load[grid.load[c.TC_ID_AGENT] == agent]['p_mw'].sum() -
-                                 grid.sgen[grid.sgen[c.TC_ID_AGENT] == agent]['p_mw'].sum()) * c.MWH_TO_WH)
+            agent_load_mw = grid.load[grid.load[c.TC_ID_AGENT] == agent]['p_mw'].sum()
+            agent_sgen_mw = grid.sgen[grid.sgen[c.TC_ID_AGENT] == agent]['p_mw'].sum()
+            total_p_agent = int((agent_load_mw - agent_sgen_mw) * c.MWH_TO_WH)
 
             # write control result to target dict
             if agent not in control_target.keys():
@@ -907,8 +909,22 @@ class EnWG14a(GridRestrictionBase):
             # `__calculate_direct_power_control` finds it equal to the previous pass's and settles
             # the timestep. Every controlled timestep used to exhaust `max_iteration`.
             if agent not in anchored_guarantee:
-                anchored_guarantee[agent] = total_p_agent - int(
-                    direction * reducible_power_for_agent[agent] * c.MWH_TO_WH)
+                # One rounding, toward what the agent can meet. `int()` truncates toward zero,
+                # and the guarantee used to be the difference of two truncated terms; when the
+                # agent's MW sum did not survive the round trip to W that left it 1 W *below* the
+                # inflexible load it exists to protect -- and the RTC, whose inflexible load is a
+                # fixed variable, was infeasible by that watt (design 6b, 2023-01-09 05:00, agent
+                # e2W83ae1O1eyEW2: cap 1206 W, firm draw 1207 W). 28 % of integer-watt values lose
+                # a watt on `w * WH_TO_MWH * MWH_TO_WH`. At the legal threshold the floor sits far
+                # above the firm draw and the watt is invisible; at threshold 0 the floor *is* the
+                # firm draw. The rounding is therefore taken once, on the unrounded MW difference,
+                # and upward for an import cap (downward for an export cap), after rounding away
+                # float noise below a milliwatt so an exact value is not pushed up a whole watt.
+                firm_w = (agent_load_mw - agent_sgen_mw
+                          - direction * reducible_power_for_agent[agent]) * c.MWH_TO_WH
+                firm_w = round(firm_w, 3)
+                anchored_guarantee[agent] = (math.ceil(firm_w) if direction > 0
+                                             else math.floor(firm_w))
 
             # The strategy decides where between the uncurtailed draw and the floor the command
             # lands; see the class comment. All three share the anchor above and the clamp

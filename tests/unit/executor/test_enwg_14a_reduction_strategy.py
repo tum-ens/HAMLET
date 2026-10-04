@@ -30,7 +30,7 @@ from hamlet import constants as c
 from hamlet.executor.utilities.database.grid_db import ElectricityGridDB
 from hamlet.executor.utilities.grid_restrictions.enwg_14a import EnWG14a
 from tests.unit.executor.test_enwg_14a_cap_floor import (
-    AGENT, AGENT_TWO, GUARANTEE_W, SUB_BUDGET_COMMAND_W, THRESHOLD_W, UNCURTAILED_W, grid_with,
+    AGENT, AGENT_TWO, BUS, GUARANTEE_W, SUB_BUDGET_COMMAND_W, THRESHOLD_W, UNCURTAILED_W, grid_with,
     loads_at, restriction, two_agent_loads)
 from tests.unit.executor.test_enwg_14a_cap_floor import control as command_bus
 
@@ -116,10 +116,33 @@ def test_minimum_takes_each_agent_to_its_own_floor():
 
     result = control(enwg, MILD_LOADING)
 
-    # 1000 W + one EV at 4200 W; 9000 W + one EV at 4200 W (13199, the anchor's truncation --
-    # see the cap-floor tests).
+    # 1000 W + one EV at 4200 W; 9000 W + one EV at 4200 W. The floor is rounded once and
+    # upward since #250, so it is 13200 exactly, not the 13199 the truncated anchor produced.
     assert result[AGENT]['ems'] == 5200
-    assert result[AGENT_TWO]['ems'] == 13199
+    assert result[AGENT_TWO]['ems'] == 13200
+
+
+def test_minimum_rounds_a_fractional_floor_up_never_down():
+    """Pins the floor's rounding direction (#250), which integer-watt cases cannot.
+
+    For those `round(firm_w, 3)` alone repairs the float noise and `ceil`/`floor` agree; under
+    `required` the command's own arithmetic also lands above the floor, so the clamp never
+    engages. Under `minimum` the floor *is* the command. A heat pump's `hp_min_control` comes from
+    a formula and can be fractional, making the floor fractional: 1000 + 5000 - (5000 - 1500.5) =
+    2500.5 W. It is a bound the agent must be able to meet, so it rounds up; `floor` gives 2500
+    and authorises 0.5 W the agent does not have.
+    """
+    loads = [
+        {'bus': BUS, 'load_type': c.P_INFLEXIBLE_LOAD, 'p_mw': 1000 * c.WH_TO_MWH,
+         c.TC_ID_AGENT: AGENT, 'hp_min_control': 0.0},
+        {'bus': BUS, 'load_type': c.P_HP, 'p_mw': 5000 * c.WH_TO_MWH,
+         c.TC_ID_AGENT: AGENT, 'hp_min_control': 1500.5 * c.WH_TO_MWH},
+    ]
+    enwg = configured(restriction(grid_with(loads)), reduction='minimum', threshold=0)
+
+    cap = control(enwg, 3.0)[AGENT]['ems']
+
+    assert cap == 2501, f'a 2500.5 W floor became {cap} W; a floor rounds up'
 
 
 # ----------------------------------------------------------------------------------------------
@@ -208,18 +231,18 @@ def test_each_agent_descends_its_own_ladder():
     enwg = ramp(two_agent_loads(11000, 11000))
 
     first = control(enwg, 3.0)
-    # agent_one: 12000 W down a 6800 W span (floor 5200); agent_two: 19999 W down 6800 W -- the
-    # 0.009 + 0.011 MW sum truncates, as its 13199 W floor does; see the cap-floor tests. One
-    # rung each.
+    # agent_one: 12000 W down a 6800 W span (floor 5200); agent_two: 19999 W down a 6799 W span
+    # -- its 0.009 + 0.011 MW sum truncates to 19999, but since #250 its floor is 13200 exactly,
+    # so the ladder is one watt shorter than the command it starts from. One rung each.
     assert first[AGENT]['ems'] == 9734
     assert first[AGENT_TWO]['ems'] == 17733
 
     enwg.grid = grid_with(two_agent_loads(8734, 8733))  # both obey exactly, on their EV
     second = control(enwg, 3.0)
     assert second[AGENT]['ems'] == 7467
-    assert second[AGENT_TWO]['ems'] == 15466, (
+    assert second[AGENT_TWO]['ems'] == 15467, (
         f"agent_two's second rung is {second[AGENT_TWO]['ems']} W; a span taken from agent_one's "
-        f"guarantee would give 13199 W, a bus-anchored ladder something else again")
+        f"guarantee would give 13200 W, a bus-anchored ladder something else again")
 
 
 def test_the_overload_signal_is_what_advances_the_pass():

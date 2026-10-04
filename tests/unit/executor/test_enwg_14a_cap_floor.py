@@ -181,12 +181,12 @@ def test_a_settled_timestep_does_not_bound_the_next_one():
     enwg.grid = grid_with(loads_at([8400, 0], inflexible_w=20000))
     second = control(enwg, combined_loading=3.0)[AGENT]['ems']
 
-    # 20000 W inflexible + both EVs at their 4200 W floors. 28399 rather than 28400 because the
-    # bound is built from the same two truncations as the command it bounds -- `int(total * 1e6)`
-    # less `int(reducible * 1e6)` -- which is what makes it exactly the deepest command a correct
-    # first pass can produce, rather than a separately rounded quantity that could sit above it.
-    assert first == 28399
-    assert second == 28399, (
+    # 20000 W inflexible + both EVs at their 4200 W floors. Until #250 this read 28399: the bound
+    # was the difference of two truncated terms, chosen to equal the deepest command pass 1's own
+    # arithmetic produces. That is exactly how it came to sit 1 W under an agent's inflexible load.
+    # The floor is now rounded once and upward, and lifts a truncated command to the true floor.
+    assert first == 28400
+    assert second == 28400, (
         f'the second pass of the new timestep reached {second} W; a guarantee anchored in the '
         f'previous timestep would have allowed about 24200 W')
 
@@ -237,7 +237,7 @@ def two_agent_loads(first_ev_w, second_ev_w):
     """Two agents on one bus with different non-controllable draws, so their floors differ."""
     return [
         # `agent_two` first, deliberately: it has the higher floor, so a per-bus anchor would be
-        # written from it and would then hold `agent_one` up at 13199 W instead of its own 5200 W.
+        # written from it and would then hold `agent_one` up at 13200 W instead of its own 5200 W.
         # In the other order the stale anchor is lower, `max` ignores it, and the mix-up is
         # invisible.
         {'bus': BUS, 'load_type': c.P_INFLEXIBLE_LOAD, 'p_mw': 9000 * c.WH_TO_MWH,
@@ -255,26 +255,63 @@ def test_each_agent_is_bounded_by_its_own_floor_not_a_neighbour_s():
     """Two agents on one bus have different guarantees, and the anchor is per agent.
 
     Keyed by bus instead, the first agent computed would bound the second: here that would hold
-    `agent_two` to 5200 W when its own §14a floor is 13199 W, an 8000 W breach caused entirely by a
+    `agent_two` to 5200 W when its own §14a floor is 13200 W, an 8000 W breach caused entirely by a
     neighbour. Every other case in this file has a single agent, so the key is unobservable in them
     -- the anchor is written and read inside one call and never has to be looked up for anyone else.
     """
     enwg = restriction(grid_with(two_agent_loads(11000, 11000)))
 
     first = control(enwg, combined_loading=3.0)
-    # 13199 rather than 13200 for the same reason as elsewhere here: the bound is built from the
-    # same two truncations as the command it bounds, which is what keeps it exactly equal to the
-    # deepest command a correct first pass can produce.
+    # 13200 exactly: 9000 W inflexible + one EV at its 4200 W floor. Until #250 this read 13199,
+    # the floor having inherited the command's truncation (see the 28400 case above).
     assert first[AGENT]['ems'] == 5200        # 1000 W inflexible + one EV at its 4200 W floor
-    assert first[AGENT_TWO]['ems'] == 13199   # 9000 W inflexible + one EV at its floor
+    assert first[AGENT_TWO]['ems'] == 13200   # 9000 W inflexible + one EV at its floor
 
     # Both obey, each keeping its EV above `threshold` so the devices stay in the filter.
     enwg.grid = grid_with(two_agent_loads(4300, 4300))
     second = control(enwg, combined_loading=3.0)
 
-    # 13200, not the anchor: pass 2's own computation is already above its floor, so the clamp
-    # correctly leaves it alone. The bound is a floor, not a setpoint.
+    # Pass 2's own computation lands on the floor and the clamp leaves it there. The bound is a
+    # floor, not a setpoint.
     assert second[AGENT]['ems'] == 5200
     assert second[AGENT_TWO]['ems'] == 13200, (
         f"agent_two was held to {second[AGENT_TWO]['ems']} W; 5200 W would mean it inherited "
         f"agent_one's floor")
+
+
+# --- The floor must never sit below the agent's firm draw (#250) ---------------------------------
+#
+# `int()` truncates toward zero, and the guarantee was the *difference of two truncated terms*:
+# `int(total_mw * 1e6) - int(reducible_mw * 1e6)`. 28 % of integer-watt values do not survive
+# `w * WH_TO_MWH * MWH_TO_WH`, and once the agent's loads are summed in MW first the total can lose
+# a watt that the reducible term keeps -- leaving the guarantee 1 W below the inflexible load it is
+# supposed to protect. With `threshold: 4200` the guarantee sits far above that load and the watt is
+# invisible; with `threshold: 0` the guarantee *is* the inflexible load, and the RTC -- whose
+# inflexible load is a fixed variable -- is infeasible by exactly that watt. Design 6b crashed at
+# 2023-01-09 05:00 on agent e2W83ae1O1eyEW2: cap 1206 W, firm draw 1207 W.
+
+def restriction_at(grid, threshold_w):
+    enwg = restriction(grid)
+    enwg.restriction_config['direct_power_control']['threshold'] = threshold_w
+    return enwg
+
+
+# 100, 107 and 112 lose the watt with an 11000 W EV; 1207 does not, and is the control.
+@pytest.mark.parametrize('inflexible_w', [100, 107, 112, 1207])
+def test_the_floor_is_never_below_the_inflexible_load(inflexible_w):
+    """At threshold 0 the whole EV is reducible, so the guarantee is the inflexible draw exactly.
+
+    Three of the values lose a watt when summed with the EV in MW and converted back -- the bug's
+    precondition -- so a truncated guarantee lands at `inflexible_w - 1`. The fourth survives the
+    round trip and pins that the fix does not over-guarantee either.
+    """
+    enwg = restriction_at(grid_with(loads_at([11000], inflexible_w=inflexible_w)), threshold_w=0)
+
+    # An overload far beyond the reducible budget, so `required` spends all of it and the
+    # command lands on the guarantee itself -- the situation at 2023-01-09 05:00.
+    cap = control(enwg, combined_loading=1e9)[AGENT]['ems']
+
+    assert cap >= inflexible_w, (
+        f'cap {cap} W is below the {inflexible_w} W inflexible load the agent cannot shed; '
+        f'the RTC is infeasible by {inflexible_w - cap} W')
+    assert cap == inflexible_w
