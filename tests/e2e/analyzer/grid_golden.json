@@ -6,19 +6,19 @@
           "dtype": "f",
           "kind": "numeric",
           "max": 0.0,
-          "min": -7.171,
+          "min": -6.448,
           "nulls": 0,
-          "ordered": -140.77100000000002,
-          "sum": -11.094999999999999
+          "ordered": -143.164,
+          "sum": -11.51
         },
         "battery_electricity_discharging": {
           "dtype": "f",
           "kind": "numeric",
-          "max": 3.697,
+          "max": 4.475,
           "min": 0.0,
           "nulls": 0,
-          "ordered": 135.221,
-          "sum": 7.588
+          "ordered": 185.18300000000002,
+          "sum": 10.008999999999999
         },
         "ev_electricity": {
           "dtype": "f",
@@ -26,17 +26,17 @@
           "max": 0.0,
           "min": -14.4,
           "nulls": 0,
-          "ordered": -1228.083,
-          "sum": -115.75999999999999
+          "ordered": -1119.233,
+          "sum": -110.37200000000001
         },
         "hp_electricity": {
           "dtype": "f",
           "kind": "numeric",
           "max": 0.0,
-          "min": -3.593,
+          "min": -3.558,
           "nulls": 0,
-          "ordered": -200.876,
-          "sum": -13.004999999999999
+          "ordered": -194.73,
+          "sum": -12.674000000000001
         },
         "inflexible-load_electricity": {
           "dtype": "f",
@@ -60,10 +60,10 @@
           "dtype": "f",
           "kind": "numeric",
           "max": 2.204,
-          "min": -15.008,
+          "min": -15.305,
           "nulls": 0,
-          "ordered": -1365.3519999999999,
-          "sum": -128.843
+          "ordered": -1202.7869999999998,
+          "sum": -121.11800000000002
         }
       },
       "index": {
@@ -81,10 +81,10 @@
           "dtype": "f",
           "kind": "numeric",
           "max": 0.0,
-          "min": -14.392,
+          "min": -14.354,
           "nulls": 0,
-          "ordered": -467.5,
-          "sum": -29.741
+          "ordered": -438.21,
+          "sum": -28.633
         },
         "heat-storage_heat_discharging": {
           "dtype": "f",
@@ -92,8 +92,8 @@
           "max": 3.072,
           "min": 0.0,
           "nulls": 0,
-          "ordered": 361.129,
-          "sum": 31.726999999999997
+          "ordered": 361.87100000000004,
+          "sum": 32.231
         },
         "heat_heat": {
           "dtype": "f",
@@ -107,11 +107,11 @@
         "hp_heat": {
           "dtype": "f",
           "kind": "numeric",
-          "max": 16.637,
+          "max": 16.449,
           "min": 0.0,
           "nulls": 0,
-          "ordered": 901.7300000000001,
-          "sum": 58.157000000000004
+          "ordered": 871.6719999999997,
+          "sum": 56.544000000000004
         },
         "total": {
           "dtype": "f",
@@ -119,8 +119,8 @@
           "max": 0.0,
           "min": -0.002,
           "nulls": 0,
-          "ordered": -0.10900000000000001,
-          "sum": -0.011
+          "ordered": -0.135,
+          "sum": -0.012
         }
       },
       "index": {
@@ -228,11 +228,11 @@
         "power_description": {
           "dtype": "O",
           "kind": "numeric",
-          "max": 60.86799999999899,
+          "max": 60.8429999999991,
           "min": 0.0,
           "nulls": 0,
-          "ordered": 1458.3399999999695,
-          "sum": 157.32499999999698,
+          "ordered": 1344.5179999999737,
+          "sum": 149.59799999999743,
           "value_types": [
             "float64",
             "int"
@@ -1187,11 +1187,11 @@
         "grid_golden": {
           "dtype": "f",
           "kind": "numeric",
-          "max": 100.05333333353438,
+          "max": 102.0333333335384,
           "min": -14.693333333362906,
           "nulls": 0,
-          "ordered": 8243.393333349892,
-          "sum": 858.9533333350587
+          "ordered": 7211.126666681149,
+          "sum": 807.4533333349551
         }
       },
       "index": {
@@ -1210,20 +1210,20 @@
         "price_in": {
           "dtype": "f",
           "kind": "numeric",
-          "max": 1005843000.0,
-          "min": 523200.0,
+          "max": 1009710000.0,
+          "min": 131200.0,
           "nulls": 0,
-          "ordered": 31698620334.0,
-          "sum": 3189475735.0
+          "ordered": 31377359708.0,
+          "sum": 3167902204.0
         },
         "price_out": {
           "dtype": "f",
           "kind": "numeric",
-          "max": 303187500.0,
+          "max": 304471500.0,
           "min": 0.0,
           "nulls": 0,
-          "ordered": 7876427200.0,
-          "sum": 825787500.0
+          "ordered": 7803315200.0,
+          "sum": 822987800.0
         }
       },
       "index": {
@@ -1243,10 +1243,10 @@
           "dtype": "f",
           "kind": "numeric",
           "max": 0.01874,
-          "min": 0.00361,
+          "min": 0.00519,
           "nulls": 6,
-          "ordered": 79.78580000000002,
-          "sum": 1.4544199999999998
+          "ordered": 80.27267000000002,
+          "sum": 1.46718
         }
       },
       "index": {
@@ -1265,11 +1265,11 @@
         "cost": {
           "dtype": "O",
           "kind": "numeric",
-          "max": -0.68656,
-          "min": -279.48975,
+          "max": -0.64752,
+          "min": -278.57715,
           "nulls": 0,
-          "ordered": -1221.944107,
-          "sum": -318.94757350000003,
+          "ordered": -1214.4531008000001,
+          "sum": -316.7902204,
           "value_types": [
             "float"
           ]
@@ -1277,11 +1277,11 @@
         "revenue": {
           "dtype": "O",
           "kind": "numeric",
-          "max": 81.79135,
+          "max": 81.6623,
           "min": 0.0,
           "nulls": 0,
-          "ordered": 327.95279999999997,
-          "sum": 82.57875,
+          "ordered": 327.28568,
+          "sum": 82.29878000000001,
           "value_types": [
             "float"
           ]

@@ -9,7 +9,433 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ---
 
 ## [Unreleased]
+### Fixed
+- **On a forced iteration exit, the published §14a command is now the one the kept dispatch obeyed
+  (#248).** Within a timestep each pass replaces the same-timestamp `res_direct_power_control` frame
+  with its own, so only the last pass's command survived. On a converged exit that is right. On an
+  exit forced by `max_iteration` it was not: the executor stops the loop *after* a command is computed
+  but *before* any agent runs under it, so the surviving frame recorded a command that was never in
+  force — on `grid_golden`, 4586 W published against a 4678 W draw that had obeyed 4678 W.
+
+  Anything reading `res_direct_power_control` to report what the operator commanded read a number
+  that was never applied. The restriction now keeps the frame it supersedes, and the executor restores
+  it when it forces the exit. Two guards keep the fix from reproducing the defect, both found by a
+  review lens with real objects: the stash is dropped at the start of every pass, so it only ever
+  describes what *this* pass replaced — a pass that writes no command (the overload cleared) must not
+  leave an older pass's frame to be restored — and the restore is gated on the grid *not* having
+  converged, because the cap and convergence are independent and can coincide on the same pass.
+
+  The golden reference moves by two values (`control_result` min 4586 → 4678, sum +92 W); the
+  analyzer oracle reads power flows, not commands, and does not move. `POWER_FLOW_MARGIN_W` in
+  `tests/e2e/test_grid_restrictions.py` drops from 100 W back to 50 W: the 92 W it had been
+  tolerating was this artefact, not a power-flow residual, and the remaining gaps are 0–22 W.
+  Verified in both directions — the suite is green, and restoring the pre-!209 no-op in
+  `POI.apply_grid_commands` still fails both cap-respected tests.
+
+- **A §14a command no longer outlives the timestep it was computed for (#247).**
+  `current_direct_power_control` is an instruction for one timestep, derived from that timestep's
+  power flow. `EnWG14a` clears it on the paths it controls, but `executor/setup.py` ends a timestep
+  itself once `num_iteration` passes `max_iteration`, and on that path the restriction is never
+  called again. The command survived, and because the next timestep's agents read
+  `restriction_commands` **before** the grid stage, they dispatched under a cap computed for an hour
+  they were never assessed for.
+
+  On design 6a that exit is taken by **36.8 %** of timesteps, and the run died at 666/744 with
+  `TerminationStatusCode.INFEASIBLE` after one agent's cap fell across successive hours —
+  8666 → 6977 → 4850 → 2290 → 886 → 452 W — through the guarantee and below its own
+  non-curtailable load.
+
+  This is the half #242 left behind: it keyed the *guarantee* on `self.timestamp` so that
+  self-heals on a new timestep, and gave the *command* no equivalent. Clearing inside the
+  restriction would not have been enough either — a stale command is normally discarded with its
+  pass, but when the next timestep has no overload the restriction never recomputes anything,
+  `grid_ok` stays true, and that first pass is the one kept. So `Database.end_timestep` is driven
+  from the executor's loop, where a timestep is known to be over however it ended.
+
+  The golden reference and analyzer oracle are regenerated with the change. `grid_golden`'s
+  `res_direct_power_control` goes from 2 rows to 4: 05:00 previously had its overload suppressed by
+  04:00's leaked cap, so the restriction never assessed it and wrote no row. It now does, and ends
+  that hour at exactly 100.000 % instead of leaving it unexamined at 82 %.
+
+  **Read the reference diff with care.** Its grid sums count every power-flow pass, including
+  rolled-back ones, so `res_trafo.loading_percent` appears to rise 20 %. Over the passes actually
+  kept it *falls* 5.4 %, and imported energy with it — 05:00 simply now runs four passes where it ran
+  one. Ten tables change row count for that reason.
+
+  Applying `test_golden_master`'s own criterion honestly: structure **does** move, and the first
+  divergence is at 05:00 rather than at the first controlled timestep — 00:00 through 04:00 are
+  byte-identical, all four of 04:00's passes included. So this is neither of the docstring's two
+  signatures cleanly; the re-baseline is justified by the mechanism above, not by either premise.
+
+  `POWER_FLOW_MARGIN_W` goes from 10 W to 100 W, and stays a **constant**. Deriving it from the
+  measured residual was tried and reverted: when a cap is accepted and then ignored the kept pass
+  *is* the uncontrolled pass, so the residual balloons into the thousands and absorbs the violation
+  the assertion exists to catch — verified by restoring the pre-!209 no-op in
+  `POI.apply_grid_commands`, which left both cap-respected tests green. The 100 W covers a 0–22 W
+  power-flow residual plus a 92 W artefact: on a capped exit the published command comes from a pass
+  that was never applied, tracked as its own defect.
+
+- **§14a direct power control no longer curtails below the minimum power it guarantees (#242).**
+  `EnWG14a.__control_via_ems` issues an absolute cap, `total_p_agent + reduced_p_agent`, and the
+  executor's `while not grid_ok` loop calls it again for the same timestep. `total_p_agent` is
+  re-read from the grid each pass, so by the second pass it already carries the first pass's
+  curtailment and a share is subtracted from it again. `threshold` bounds what each *device* may
+  give up; nothing bounded what the connection as a whole was left with.
+
+  Measured on design 6a: the loop took **53 % more than §14a permits** (3259 kW against 2127 kW) on
+  **68.8 %** of the agent-timesteps it controlled, and drove one connection to **339 W** — below
+  that agent's own inflexible load of 349 W, so its optimisation had no feasible point and the run
+  died with `TerminationStatusCode.INFEASIBLE` at 8 % of the window.
+
+  The command is now bounded by `total_p_agent` less everything §14a lets the operator take,
+  remembered from the first pass of the timestep that controlled the agent. Anchoring is what makes
+  it bind: recomputing the bound each pass is inert, because `power_reduction_at_bus` is capped at
+  `sum(reducible)` and each share divides by that same sum, so every pass already satisfies it and
+  both sides shrink together. The bound is keyed on the timestamp rather than cleared on the way
+  out, because several paths end a timestep — `execute`'s no-overload branch, and the executor
+  forcing `grid_ok` once `num_iteration` passes `max_iteration` — and only one of them ever cleared
+  anything.
+
+  **This changes §14a results, and leaves the feeder more overloaded.** On `grid_golden`, the only
+  shipped scenario reaching this code, the transformer settles at 102.03 % rather than 100.05 % —
+  a residual overload of roughly 304 W instead of 8 W. That is the intended consequence: §14a caps
+  what the operator may take, so an overload it cannot legally clear is meant to remain. The golden
+  fingerprint and the analyzer reference move accordingly and have to be regenerated.
+
+  The golden reference and the analyzer oracle for `grid_golden` are regenerated in this change, so
+  the review sees the numbers move: the direct-control command's sum goes 13269 → 13480 W and the
+  transformer's summed loading 1263.91 → 1266.63 %, i.e. the restriction now relieves less because
+  the relief it used to provide came from curtailment §14a does not permit.
+
+  `test_the_curtailment_command_was_respected` bounds an agent's draw by the overload the kept pass
+  did not clear, measured per timestep, instead of by a constant estimated from one run's residual.
+  The constant's own comment warned against widening it; the residual it approximated is now
+  measured directly, which keeps the assertion tight wherever the sequence converges and is still
+  thousands of watts away from a cap that was accepted and ignored.
+
+  The over-generation branch is bounded from the other side but is reached by no shipped scenario
+  and carries a sign error of its own, tracked as #244; it is documented as uncovered rather than
+  pinned.
+
+- **Two runs of one scenario no longer overwrite each other's results (#243).** `Database` keyed a
+  run's results directory on a **region** rather than on the name `Executor` was given: the grid
+  half on the first region, the region half on each region's own name. For every shipped scenario
+  the root region is named after the scenario folder, which is also the default run name, so the
+  two keys were the same string and the bug could not appear until an experiment ran one scenario
+  twice under two names. Both runs then resolved to a single directory and the second overwrote the
+  first.
+
+  It failed **silently**, which is what made it expensive. `copy_folder` puts the scenario under the
+  run's own name and the market drain writes there too, so a collided run still had a populated,
+  plausible-looking results folder — just one missing the two things it was for. Its `agents/` and
+  `grids/` held the scenario's *copied inputs*, while the simulated results sat in a third directory
+  shared with the other run. This cost a completed 2 h 22 m baseline arm of a two-arm §14a
+  experiment, whose transformer loading was replaced by the other arm's crashed 8 % run, with
+  nothing reporting a problem.
+
+  The run directory is now keyed on the run name, through one construction shared by the region and
+  grid halves so they cannot drift apart. Nothing moves: the root region's output is the run's
+  output, which is where it already went, and regions after the first keep exactly the location they
+  had. Relocating those would need the market drain to become region-aware first — it writes dropped
+  rows with no region in the path, so moving a region separates them from the `concat_past_data`
+  that reads them back — so sub-regions still collide across runs, and no shipped scenario has any.
+
+### Changed
+- **The per-timestep database copy is taken only when a grid restriction can reject a pass (#249,
+  part c).** `Executor.execute` deep-copied the whole database at the top of every timestep so that
+  a pass `EnWG14a` rejects could be rolled back. The copy is every agent's full-length tables, so it
+  scales with scenario length rather than with anything the timestep does — a full-year scenario
+  holds a second ~575 MB of agent tables all step long, briefly a third — and only `EnWG14a` with
+  direct power control on can ever reject a pass. Every other run took the copy for nothing. Each restriction class now
+  declares `can_reject_a_pass(config)`; the executor asks every applied restriction of a registered
+  grid at setup and skips the copy when none can. A rejection that arrives with no copy is refused
+  with an error rather than continued from the rejected state, so a wrong declaration cannot fail
+  open. Measured on design 6 (2160 steps, 104 agents, direct control off): the copy was a flat
+  28 ms of a 3.9 s step, so this is a memory change more than a speed one; both shipped golden
+  scenarios are unaffected (no grid, and grid with direct control on), and the same run showed the
+  per-step rate rising with the season rather than the step count — the numbers are on #249. Pinned
+  by `tests/unit/executor/test_rollback_copy_is_conditional.py`, including that `EnWG14a.execute`
+  agrees with its own declaration.
+
 ### Added
+- **A run can be stopped at any checkpoint and resumed, and the resumed run is indistinguishable
+  from one that never stopped (#249, part d).** The checkpoint the executor writes every
+  `checkpoint_interval` timesteps now carries the run's *state* as well as its results:
+  `results/<run>/checkpoint/state.pkl` is the live `Database` graph pickled whole — agent tables,
+  every market's retained window and caches, every grid's restriction commands and unsettled
+  results, every forecaster's history and fitted model — plus both RNG states, the length of every
+  grid CSV, the last completed timestep and a format stamp (`c.CHECKPOINT_FORMAT_VERSION`).
+  `Executor(<results folder>, resume=True).run()` continues from it: nothing is copied or deleted,
+  the grid CSVs are cut back to the checkpoint's length (the drain appends per timestep, so a run
+  that died after the checkpoint has rows the resumed run writes again), the RNGs are put back,
+  and the timetable resumes strictly after the checkpoint with the checkpoint cadence intact.
+  `Executor.pause()` — a flag, safe from a signal handler — checkpoints and stops after the
+  timestep in progress and skips `cleanup`, so the folder it leaves is exactly one to resume. A
+  results folder can be moved but not renamed: the checkpoint carries the run name, as
+  `general.json` already did, and a resume under another name is refused rather than finishing
+  into a re-created folder of the old one. A finished run deletes its checkpoint; a graph that
+  cannot be pickled fails the run at setup, not 24 timesteps in.
+
+  The state is the whole graph rather than a list of pieces because the acceptance criterion is
+  not a list: `tests/e2e/test_resume_matches_golden.py` runs each golden scenario checkpointing
+  every 8 timesteps, kills it inside timestep 10, resumes it, and requires the **committed golden
+  fingerprint** — with two receipts that the resumed run started at step 8 and executed exactly
+  the remainder, since a quiet restart would match the reference too. It passes for both
+  scenarios, and it sees what it is for: dropping the §14a fee horizon, emptying a market's
+  retained window, skipping the CSV truncation, or resuming one step early each move it.
+  No result in either scenario depends on an RNG draw, so the RNG restore is pinned by unit test
+  only. The format stamp is coupled to the pickled classes; `hamlet/constants.py` says when to
+  bump it. A checkpoint written before this change (agent tables only) has no state file and
+  cannot be resumed. Whether a forecaster holding a TensorFlow model (`cnn`, `rnn`, behind the
+  optional extra) pickles is untested; no shipped scenario uses one. The state file is 111 MB for
+  the 4-agent example, almost all of it the weather table every forecaster shares, and 154 MB for
+  design 6's 104 agents over a quarter — 0.10 s to write and 0.15 s to read back on the Mac mini,
+  against 3.7 s per timestep; the `golden` CI job gains two crash-and-resume runs, about five
+  minutes.
+
+- **The §14a reduction strategy is configurable: `required` | `minimum` | `ramp` (#245).** Under
+  `method: ems` the executor's `while not grid_ok` loop re-simulates a timestep after each pass,
+  and the command approached the overload asymptotically -- on `grid_golden`, 149.6 % → 104.3 % →
+  102.9 % → 102.0 % -- so where it *stopped* was decided by `max_iteration`, a simulation setting,
+  rather than by the policy being modelled. Two keys under `direct_power_control` make the policy
+  explicit; both are additive, so a scenario without them reads as `required` and there is no
+  scenario-format bump.
+
+  | `reduction` | what the operator needs to observe | lands |
+  |---|---|---|
+  | `required` (default) | a per-connection state estimate | where the overload clears, or on the cap |
+  | `ramp` | an overload/no-overload signal, repeatedly | one rung of `ramp_steps` further down per pass |
+  | `minimum` | one overload signal | on the §14a floor, in one pass |
+
+  `ramp_steps` is read only under `ramp` and **not from `max_iteration`**: that is a safety cap on
+  the iteration, shared by every restriction, and a ramp reading it would let a cap raised to stop
+  a timestep truncating silently make curtailment gentler. The one thing they owe each other is
+  that an *n*-rung ramp needs `max_iteration >= n` to be able to reach its floor. Both rungs of the
+  ladder are anchored on the timestep's first controlling pass, so a step is a point on the ladder
+  and not a decrement from whatever the agent last drew, and one rung is taken per overload
+  signal rather than per command (a zone with two transformers commands every bus twice per
+  pass). The step count lives under `GridDB.TIMESTEP_RESTRICTION_KEYS` with the anchored
+  guarantee, which the timestep boundary clears and #249's resume is expected to checkpoint. A
+  strategy other than `required` under `method: individual`
+  is refused rather than ignored, and a bad value is refused when the restriction is built, not on
+  the first overload.
+
+  **`required` is byte-identical to before**: the golden reference does not move. **Each strategy
+  ships with a scenario that reaches it** -- the condition, not a nice-to-have, since the two
+  §14a branches no scenario reached each turned out to carry a defect (#209, #244). Both are
+  `grid_golden` runs under config edits in `tests/e2e/test_grid_restrictions.py`, asserted by
+  value: `minimum` at the real 4200 W lands every command on the floor recomputed from the
+  uncontrolled power flow (4513 W and 8894 W where `required` had left one agent at 4678 W), in
+  two passes rather than four; `ramp` at a lowered 1000 W floor -- at 4200 W the ladder reaches
+  the floor before the overload clears, so it would be a slower `minimum` -- descends its ladder
+  rung for rung in `res_bus` (7513 → 5447 → 3380 W against rungs recomputed from the same
+  tables), settles on rung 2 of 3 with rung 1 leaving 112.0 % and rung 2 clearing to 74.3 %, and
+  never commands the floor. That arm also raises `max_iteration` to 5 so it differs from
+  `ramp_steps`; with the two equal a ramp reading the cap produces the same numbers.
+  `tests/unit/executor/test_enwg_14a_reduction_strategy.py` pins the arithmetic on one input
+  (loading 1.5: `required` 15334 W, `minimum` 9400 W, `ramp` 18467 → 13934 → 9400 W), the
+  anchoring, the reset, the state key and every refusal; 17 mutations, one site at a time, each
+  caught by the test named for it. `config_templates/grids.yaml`, the examples and the docs carry
+  the keys with the default value.
+
+- **Agent results are checkpointed every 24 timesteps, so a crash loses at most that many (#249,
+  part a).** `AgentDB` holds every result table in memory and wrote them once, at the end of the
+  run — grids and markets drain per timestep, agents did not — so design 6a's January run, which
+  died at step 666 of 744, kept none of them. `Executor(checkpoint_interval=N)` now writes every
+  agent's five tables to the results folder every N timesteps, to the same paths the final save
+  overwrites, so a crashed run's *agent* tables are those of its last checkpoint. Only the agents:
+  the market's retained window (the last clearing horizon) still lives in memory until the end of
+  the run, and its top-level tables are only assembled by `concat_market_files`, so a crashed run's
+  market folder holds drained `past_data/` fragments and nothing assembled. `None` or `0` turns it
+  off; anything else that is not a non-negative integer (`numbers.Integral`, so numpy integers
+  pass; `bool` does not) is refused rather than coerced. Each table is staged and renamed into
+  place, so a crash *during* a checkpoint leaves the previous one intact instead of a truncated
+  feather; on Windows the rename is retried three times, because it fails while something holds
+  either file open, and the checkpoint multiplies that window by the number of checkpoints (32 for
+  a month, 366 for a year).
+
+  The checkpoint sits after `end_timestep`, outside the `while not grid_ok` loop, because a
+  rolled-back pass restores `initial_db` and a checkpoint inside the loop would write the dispatch
+  the rollback discards. Cost, measured on the Mac mini with design 6's 104 agents: 0.06 s per
+  checkpoint for a month's tables (48 MB in memory), 0.42 s for a full year's (575 MB).
+
+  Pinned by `tests/unit/executor/test_agent_checkpoint.py` (schedule, destination, contents, the
+  staged write) and end to end by `tests/e2e/test_agent_checkpoint_survives_crash.py`, which
+  kills a run of the shipped example inside timestep 10 with an interval of 8 and asserts, per
+  agent and by value against a complete run, that exactly the first 8 timesteps survived — the
+  rows after them are what pins the interval, since saving every timestep would pass the rest.
+  Every assertion was mutated at its own site; the boundary ones in both directions.
+
+- **The accounting invariants are asserted by value (L4, ROADMAP §2).** Net energy is the sum of
+  a timestep's transactions, fees and levies are charged on **net** and to the right column, and
+  the money balance closes with no unexplained euro. The layer exists because two real defects on
+  the paper branch — `eec60f0` (fees on gross, and the grid and levy columns swapped) and
+  `a860ca6` (the current clearing left out of the netting) — were found by hand rather than by a
+  test, and both now have one.
+
+  **Every invariant carries an absolute anchor rather than only a symmetric one**, because #241
+  showed that is not optional: a market that sold energy nobody had offered — 7.1 % of all
+  locally cleared energy — satisfied `sum(cleared in) == sum(cleared out)` throughout, and under
+  one mutation a clearing of 1.8e19 Wh satisfied it too. So each total is also compared against
+  something outside the pair: the submitted book, the retailer's named rate columns, the
+  transactions file itself, or a quantity multiplied out by hand.
+
+  - `tests/settlement_fixtures.py` and `tests/unit/executor/markets/test_settlement_by_hand.py`
+    drive the real `execute()` over three task shapes and assert every figure per agent by name.
+    The fixture gives the delivery timestep a history running the *other way* from the clearing,
+    without which gross and net coincide and `eec60f0` is unfalsifiable, and it prices all six
+    charge directions distinctly and non-zero, which the shipped tariff does not.
+  - `tests/e2e/test_market_clearing.py` reconciles the written tables against each other over a
+    real run: fee rows against the trades they are charged on, money against rate times quantity,
+    local trades against their counterparties.
+  - `tests/unit/executor/utilities/database/test_net_energy_cache.py` records which of its
+    assertions actually carry the anchor. Measured: admitting `grid` and `levies` into
+    `NET_TRANSACTION_TYPES` fails three tests there and the cached-equals-uncached comparison is
+    **not** among them — both routes call `_net_energy_from`, so a widened filter is applied to
+    both and they agree at the wrong number.
+
+  Measured against **23 mutations**, applied one at a time and each confirmed landed by byte
+  count: **22 caught**. Eighteen are mutations of the accounting itself; five are the behaviour
+  changes a review panel constructed that got past the first version of this layer — an
+  uncleared offer priced from the wrong retailer column, uncleared offers dropped from balancing
+  energy altogether, a fee row stamped with the clearing step, a fee row written into another
+  market, and a blended grid rate truncated rather than rounded. Each is closed by a degree of
+  freedom the fixture book now carries, named in `test_settlement_by_hand.py`'s own docstring.
+
+  The single survivor is an equivalent mutant: the four `pl.lit(retailer[grid_*])` lines in
+  `__apply_grid_levies` are a dead placeholder, overwritten for every agent by that agent's own
+  variable-fee forecast, so crossing or un-crossing them is unobservable in any scenario.
+  Measured at both scales — replacing all four with garbage leaves 564 unit and integration
+  tests and the 28 e2e assertions green.
+
+  **`a860ca6` cannot be observed on any shipped scenario**, measured by instrumenting
+  `_transactions_for_netting` through a real run: `scenario_with_market`'s timetable holds 552
+  `clear` tasks and 24 `settle` tasks and not one carrying both, and on all 24 calls
+  `self.transactions` was empty. It is unreachable rather than absent — with
+  `settling: continuous`, `_create_timetable_ex_ante` appends `,settle` to the rows whose
+  timestep has arrived and then overwrites exactly those rows with `settle`, because
+  `timestep - timestamp <= 0` is below any positive `closing`, and every shipped config sets
+  `closing` to the market duration. The fix is still right; the unit test is the only thing that
+  holds it.
+
+- **Market clearing is now executed and asserted by value (#223).** Every `markets.yaml` any test
+  ran set `method: None`, so the clearing branch of `executor/markets/electricity.py` had never
+  run in the suite, and neither had two of the three trading strategies: `Linear` and `Zi` reached
+  only their `class` and `def` lines. The one shipped example that clears,
+  `examples/create_scenario_with_market`, was executed by nothing -- the two tests that name it
+  read its config *files*.
+
+  Three files close that:
+
+  - `tests/unit/executor/markets/test_clearing_by_hand.py` drives the real `ElectricityMarket`
+    over books written out by hand and asserts the cleared quantities, the clearing price and
+    **who traded with whom**, per agent by name. Every expected number was derived from the
+    algorithm on paper before the code was run, and the derivations are in the file. It covers
+    `pda` and `None`, uniform pricing, partial clearing, the retailer's place in the merit order,
+    tied bids, and the three refusals (`discriminatory`, `community`, `ex-post`).
+  - `tests/unit/executor/utilities/trading/test_strategies.py` prices all three strategies by
+    hand, so `Linear` and `Zi` execute for the first time.
+  - `tests/e2e/test_market_clearing.py` runs `scenario_with_market` end to end (~95 s on HiGHS),
+    which is what settles the questions no unit fixture can: that the executor reaches the clearing at all,
+    that agents trade **with each other** rather than only with the retailer, that every clearing
+    settles at a single price, and that the configured `linear` strategy is the one that quotes.
+
+  Measured against **64 mutations**, applied one at a time and each confirmed landed: 39 written
+  by the author and 25 more that a three-lens review panel used to defeat the first version of
+  these tests. **56 are caught** -- 39 of 39 and 17 of 25. The eight survivors are statements
+  whose deletion is unobservable through any book (two concatenations with a table that is always
+  empty, a forward fill over a table with no nulls, a defensive `fill_null(0)`, two joins whose
+  narrowing cannot lose a row, a de-duplicating join key, and the trade id, which
+  `__create_market_tables` discards before anything can store it).
+
+  The panel's contribution was the larger one, and three of its findings changed the fixtures
+  rather than adding assertions:
+
+  - the hand-written books wrote **0 into the price column an agent was not trading on**, where
+    every real strategy writes a genuine price on both. That zero -- not the code -- was what made
+    widening `__split_bids_offers`' `energy_in > 0` filter to `>= 0` look like an equivalent
+    mutant, which the first version of this changelog claimed it was. With real prices the widened
+    filter puts every seller onto the bid ladder and moves the clearing price.
+  - the strategy fixture used an **hourly** timestep, where the power-to-energy conversion factor
+    is 1.0 and deleting the conversion changes nothing. The shipped default is 900 s, where the
+    same deletion is a fourfold over-bid by every agent at every timestep. It now runs at 15
+    minutes.
+  - the strategy fixture gave the agent **no trading history**, so the subtraction that turns a
+    setpoint into a net position was a subtraction of zero. Reversing its sign survived the entire
+    suite. Measured on a real run, 161 of 192 constructions of a trading strategy see a non-empty
+    history, so the case being tested was the rare one.
+
+  **The example shipped `solver: gurobi`, so as shipped it could not run without a commercial
+  licence** -- which is why it had never run in CI, and which the first pipeline for this branch
+  discovered after the arm passed on a development machine that has one. It is on HiGHS now, along
+  with every other shipped scenario and the template; see the Changed entry below. The test runs
+  the config as shipped and reads back what actually solved.
+
+  Four gaps are recorded rather than closed, each pinned by a test that says so:
+
+  - `__method_pda` has no self-trade filter where `__method_none` does (unreachable through the
+    shipped strategies, which net an agent into one direction per timestep);
+  - `__method_pda` **can clear more energy than was offered** when the two cumulative ladders do
+    not share their breakpoints, because it takes `min(energy_in, energy_out)` per joined row
+    rather than the difference of successive cumulative sums. The conservation invariant cannot
+    see it -- the duplication is symmetric, so cleared-in still equals cleared-out at an inflated
+    total. **Fixed since, in #241** -- see the Fixed entry above, including the measurement that
+    settled how often it fires;
+  - `TradingBase` builds an agent's book from the **whole** timetable rather than the rows for its
+    own market, so an agent in a two-market region quotes a different ladder from the same agent
+    in a one-market region. No shipped scenario declares two markets in one region;
+  - `Zi` draws from Python's unseeded global generator, so a `zi` scenario would not be
+    reproducible across processes -- the same shape as the market half of #216. No shipped
+    scenario selects `zi`.
+
+- **The POI slack report is now exercised, and its threshold and suffix filter are pinned
+  (#231).** `_warn_on_slack` runs in all four controllers, but its `LOGGER.warning` had never
+  executed under the default `poi` backend — in any test or any scenario. Instrumented over two
+  full scenarios the scan iterated 864 slack variables and computed 864 values, and
+  `peak > SLACK_REPORTING_THRESHOLD` was never once true, so nothing would have noticed if the
+  report were broken or deleted. The behavioural test
+  `TestSlackIsReported::test_the_report_actually_comes_out_of_the_controller` was parametrised
+  over the two linopy controllers only; in `test_slack_wiring.py` POI appeared solely in
+  `inspect.getsource` substring assertions, which a comment satisfies. (`test_poi_slack.py` does
+  test POI behaviourally, but against a hand-built model — it never touches `_warn_on_slack`.)
+
+  POI is now in that parametrisation. It needed its own probe: linopy reads
+  `model.variables[name].solution.values`, while POI iterates `self.variables` — an attribute on
+  the *controller* — and reads each opaque handle through `self.model.get_value`, as a sequence in
+  the FBC controller and as a bare scalar in the RTC one. The probe covers both shapes.
+
+  **The probe's shape carries the test, and every part of it was put there by a mutation that
+  survived without it.** The review panel defeated the first draft eight ways; the entries are
+  documented one by one in the test's own docstring, and the substantive ones are:
+
+  - the ordinary decoy now comes **first**, because with it last, turning the filter's `continue`
+    into a `break` stopped the scan before any slack and still produced the single message the
+    draft asserted — in the real controllers the non-slack variables come first, so that mutation
+    silenced essentially every report in production;
+  - **two** slacks are above the threshold, in different energy types, because with one a `break`
+    after `LOGGER.warning` reported the first and stayed green;
+  - a decoy that **contains** `_slack` without ending in it pins `endswith` against a widening to
+    `in` — the same mistake the docstring already warned about, from the other side;
+  - the peaks are **absolute watts, not offsets from the threshold**. Deriving them from
+    `SLACK_REPORTING_THRESHOLD` made the constant unfalsifiable: the inputs scaled with it, so
+    raising it to 1e6 W silenced a megawatt of shed energy with the suite green. The values now
+    bracket it, and a new `test_the_threshold_is_a_solver_tolerance` pins the order of magnitude;
+  - the message is matched as an ordered pattern, not three `in` checks. Swapping the agent and
+    the variable in the format arguments — which reports the shed energy against an energy type
+    and names the agent as a variable — passed all three substring assertions. The unit is
+    matched with the number, so `W` → `kW` is caught;
+  - `record.name` and `record.levelno` are asserted, because `caplog.at_level(..., logger=...)`
+    sets a level and does **not** restrict capture: a report moved to another logger, or dropped
+    to a level nobody watches, was invisible.
+
+  Eighteen mutations, applied separately to each of the two POI controllers, give 34 kills out of
+  36, each by that controller's own parametrisation and by no other. The two survivors are known
+  and are not gaps in this change: `np.max` → `np.min` on the RTC controller is an equivalent
+  mutant, since it genuinely holds one handle per variable and the probe is faithful in modelling
+  that; and deleting `self._warn_on_slack()` from `run()` is unasserted in every backend, because
+  the only test of the call site is one of this file's `inspect.getsource` substring checks, which
+  a comment satisfies. Filed separately — replacing those four tests was out of scope here.
+
 - **§14a's `individual` device control is covered, and its priority order is asserted as an
   order (#232).** `EnWG14a` has two direct-power-control methods. `grid_golden` selects `ems`, and
   the other — `__individual_device_control`, 66 statements — was reachable by **no scenario in the
@@ -226,6 +652,260 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ms building a model that HiGHS then solves in 52.86 ms
 
 ### Fixed
+- **The golden fingerprint records datetime bounds.** `scenario_run.fingerprint` recorded row
+  counts and, for every *numeric* column, the sum, minimum and maximum. Datetimes were skipped,
+  and in a receding-horizon simulation that is not a small omission: `timestamp` and `timestep`
+  are what say when a row is *for*, and every other statistic it records is order-invariant, so a
+  row filed at the wrong time moved nothing the reference held.
+
+  Not hypothetical — it is why the stamp fix below could report "golden references untouched"
+  without that meaning anything. Under the defect, 266 of 616 rows of `simple_scenario`'s pinned
+  `bids_cleared` and 350 of 616 of its `offers_cleared` carried a wrong timestamp and
+  `-m golden` was green.
+
+  Datetime columns now contribute `min` and `max`, as ISO-8601 strings matched exactly by both
+  comparison paths. No sum — a total of timestamps means nothing — and not as epoch numbers,
+  because those would fall under `RELATIVE_TOLERANCE`: 1e-6 of 1.6e18 ns is about half an hour,
+  enough to tolerate a row filed a whole timestep away in a 15-minute scenario.
+
+  **The re-baseline is purely additive**, which is what made it safe to commit: 24 columns gained
+  bounds in each scenario, **zero existing values changed** and none were dropped, checked key by
+  key against the committed references rather than by reading the test's green.
+
+  Both comparison paths needed changing, and the second is the cautionary half.
+  `scenario_run.compare` serves the backend-equivalence tests;
+  `test_golden_master.test_column_statistics_match` carries its own loop. Patching only the first
+  left the golden master raising `TypeError: unsupported operand type(s) for -: 'str' and 'str'`
+  — two scenarios red, which looked exactly like a detection and was not one. Both now treat a
+  *missing* counterpart as a difference too, so a reference predating this statistic cannot
+  compare as agreeing.
+
+  Datetimes inside CSV results remain uncovered: `pl.read_csv` does not infer them, so the grid
+  stage's temporal columns arrive as `Utf8` and are skipped. Left alone deliberately — enabling
+  inference would change how every other CSV column is read.
+
+- **The retailer's ladder row is stamped with the clearing, not with the delivery step.**
+  `self.retailer` is filtered on `timestamp == the delivery step`, the retailer table being
+  indexed by delivery time under that name, and `__create_bids_offers` aliased that one column
+  into both — so the retailer's row was the only row in each cleared table whose
+  `(timestamp, timestep)` pair was not a clearing. That pair is the clearing key: it groups a
+  clearing and namespaces the trade id. `forecaster.py` already does the same two-step correctly,
+  so this brings the market into line with existing practice.
+
+  Measured on `scenario_with_market`: 93 `(timestamp, timestep)` pairs in `bids_cleared` against
+  89 in `offers_cleared`, of which 88 were clearings; 25 rows of 257 in `bids_cleared` and 95 of
+  257 in `offers_cleared` carried the bad stamp. With the fix both sides agree at 88 and nothing
+  else in the run moves — the two result trees are identical as multisets once row order is
+  ignored, and only the retailer's `timestamp` differs.
+
+  **The golden master could not see this, and that is worth saying rather than citing its green
+  as evidence.** `scenario_run.fingerprint` records `rows` plus per-column `sum`/`min`/`max` for
+  *numeric* columns only, so datetimes are excluded and the statistics are order-invariant. On
+  `simple_scenario`, 266 of 616 rows of the pinned `bids_cleared` and 350 of 616 of
+  `offers_cleared` carried a wrong timestamp and `-m golden` reported green. Recording `min`/`max`
+  for datetime columns would close that; it is a reference re-baseline and is left for the change
+  that wants it.
+
+- **`trades_uncleared` is removed.** Both clearing methods computed it, `__clear_bids_offers`
+  returned it and `__create_market_tables` took it as a parameter its body never mentioned.
+  Removed rather than consumed: the uncleared quantity `__create_market_tables` computes is the
+  submitted position less what cleared, per agent, which is a different — and the correct —
+  number. Verified dead across the whole repository, and the arity guard that
+  `test_community_clearing_is_refused_by_a_signature_mismatch` relies on is unaffected.
+
+- **`pda` cleared more energy than was submitted whenever the two ladders misaligned (#241).**
+  `__method_pda` joins the bid and offer ladders on their *cumulative* energy, back-fills the
+  gaps, and then traded `min(energy_in, energy_out)` of the two **positions** in every joined row.
+  Where the ladders do not share a breakpoint the back-fill spreads one position across several
+  rows, and its whole quantity was traded in each of them. It now trades the difference between
+  successive cumulative sums, which is the width of the ladder segment that row represents.
+
+  **Misalignment is the normal path, not an edge case, and that had never been measured.**
+  Instrumented over a `scenario_with_market` run: `__method_pda` is called **530** times, **89**
+  of which clear anything, and **all 89 have misaligned ladders — not one has matching ones**. The
+  region every other hand-written book in `test_clearing_by_hand.py` covers is a region a real run
+  never visits. The volume moves in **31** of the 89. Misaligned ladders are necessary for the
+  defect but not sufficient, and the reason is worth stating because a first draft of this entry
+  got it wrong: of the 58 unmoved clearings only **28** clear a single segment (where the segment
+  width and the per-row minimum are the same number by construction). The other **30** clear two
+  to eight segments and are unmoved anyway, because on every cleared row one ladder's position
+  spans the other's, so the minimum happens to equal the width. **7.1%** of all cleared energy was
+  duplicated
+  (139_876 -> 130_005 Wh on identical books), **21** clearings credited a seller with more energy
+  than it had offered and **19** credited a buyer with more than it had bid — worst case 4004 Wh
+  against a 2818 Wh offer.
+
+  Re-run end to end the numbers move further, because less cleared energy changes what every agent
+  does next: 139_876 -> **126_762 Wh** cleared, 267 -> 257 cleared bids, and 62_410 -> **53_278 Wh**
+  of agent-to-agent trading. All still well clear of the floors in
+  `tests/e2e/test_market_clearing.py`.
+
+  **The three instruments that should have caught it could not, by construction.** The
+  conservation invariant is blind because the duplication is symmetric — cleared-in still equals
+  cleared-out, at an inflated total. The over-sold residual is negative — `offers_uncleared`
+  reaches the subtraction as `Int64`, because the `fill_null(0)` two lines above it supertypes
+  every `UInt64` column against a bare Python `0` — and `offers_uncleared.filter(energy_out > 0)`
+  drops it, so nothing reported it. Measured in situ on the pre-fix code with the misaligned book:
+  `residual dtype Int64 values [-500]`. And the e2e assertions are floors, which are one-sided. What catches it is
+  `test_uncleared_is_submitted_minus_cleared` **by value** on a misaligned book (`0 == 1500 - 2000`
+  pre-fix) together with the hand-written entry in `CLEARED_TOTALS`.
+
+  **Prices did not move for a given book, and the reason is worth stating**: the fix changes
+  quantities only. `__pricing_uniform` takes the marginal pair from the *last cleared row*, and
+  the filter that decides which rows clear (`price_pu_in >= price_pu_out`) is untouched, so the
+  cleared row set is identical. Measured on all 89 clearings of the pre-fix run: the marginal pair
+  moves in **none** of them. Clearing prices in an end-to-end run do differ, but only through the
+  changed trajectory, and the band (500-1500 EURe-7/Wh) is unchanged.
+
+  Three misaligned books were added to `test_clearing_by_hand.py`, each derived on paper, and all
+  three are in the `BOOKS` fixture so the conservation invariants run over them:
+  `misaligned_ladders` (a seller spanning two buyers — the book #241 was filed on, and the rewrite
+  of the characterisation test that stated the defect), `mirrored_ladders` (the same shape with
+  the *bid* spanning, which the over-sale assertion alone cannot see) and `staircase_ladders`
+  (five cleared segments of three different widths, which is what separates *successive*
+  differences from `cumsum - first cumsum` or a constant segment size — on a two-row book all
+  three agree). `test_the_misaligned_books_really_do_misalign` asserts both halves of the
+  precondition: disjoint breakpoints **and** more than one cleared segment. Neither implies the
+  other, which is why `partial_pda` and `two_sellers_one_buyer` are misaligned and were
+  nonetheless unmoved by the fix.
+
+  No golden reference moved. Both golden scenarios set `method: None`, so none of them covers a
+  clearing market at all — the guard here is the by-hand books, and the golden master staying put
+  is the containment check that the change did not reach beyond clearing.
+
+  Measured against **46 mutations**, applied one at a time, each binary-confirmed to have landed
+  and each run against the whole default suite: **41 caught, 5 survivors**, and all five were then
+  shown output-equivalent by dumping every result table for all nine books and finding them
+  byte-identical. Reverting `electricity.py` to its pre-fix state byte-for-byte is caught by **9
+  tests, every one of them a new-book test** — and by nothing else in the repository. `STAIRCASE`
+  earns its place concretely: the "cumulative sum minus the *first* one" rule is killed by exactly
+  three tests, all of them staircase, and survives everything else.
+
+  The segment width is taken in `Int64` and cast back, rather than subtracting two `UInt64`
+  cumulative sums directly, and `test_an_unsorted_ladder_fails_loudly_instead_of_wrapping` pins
+  what that buys. A negative difference in `UInt64` does not go negative — it wraps to 1.8e19 Wh,
+  and a clearing that quietly traded eighteen quintillion Wh satisfies every conservation
+  invariant in the file, because the duplication would be symmetric. The precondition cannot be
+  violated through the public surface (the sort is unconditional, and a cumulative sum of positive
+  quantities ascends), so the test neutralises the ladder sort to reach it. Dropping either cast
+  is an equivalent mutant — both still raise, because `fill_null(0)` demotes the operand to
+  `Int64` anyway — but dropping them *and* writing the fill literal as `pl.lit(0, pl.UInt64)`, the
+  tidy-up the dtype comment invites, is silent. Measured: under that edit this is the **only**
+  failing test in the repository; the other 108 pass.
+
+  Two adjacent pieces of dead work turned up while measuring that, and both were recorded rather
+  than removed. `trades_uncleared` was computed, returned, threaded through two call sites and
+  **never read** — `__create_market_tables` took it as a parameter its body did not mention — so
+  no fixture could ever kill a mutation on the line that built it. **It is gone now**, removed by
+  the L4 entry below. And the `_right` coalescing loop
+  is redundant while it stays above the `fill_null(strategy='backward')` two lines below, which
+  refills exactly the nulls it coalesces; deleting it passes the whole suite. Neither is a defect;
+  the second is a latent coupling and now carries a comment saying so.
+
+  Incidentally removes one of the three remaining `polars` `axis=1` calls (`min(axis=1)`), which
+  polars 1.x has dropped; `__method_none` and `__pricing_uniform` still carry one each.
+
+- **A stated gap, pinned rather than closed: `__method_none` carries #241's shape for the
+  retailer.** It concatenates the two ladders, back-fills to find each agent's counterparty and
+  takes `min(energy_in, energy_out)` per row, so the retailer's capacity is back-filled onto every
+  agent row it spans and taken whole in each. With a cheaper seller ahead of it in the offer
+  ladder the retailer sells 2000 Wh having offered 1000. **Agents cannot over-trade this way** —
+  each agent row carries its own quantity, so the minimum is bounded by the agent's own position,
+  and only the retailer's side can exceed. **What makes it latent is the size of the book, not the
+  size of the capacity**: the credit is the demand behind the retailer and does not vary with
+  capacity once capacity exceeds it (2000 Wh at 1000, at 100_000 and at 1e9 alike), so the
+  violation is exactly `demand > capacity`, and at the shipped 1e5 Wh it takes 101 buyers of 1 kWh
+  to cross — against the four to eight agents a shipped scenario runs. Not fixed here: a different
+  algorithm, a different blast radius, and it is what every shipped scenario except
+  `create_scenario_with_market` selects.
+  `test_method_none_can_credit_the_retailer_with_more_than_its_capacity` states all of it.
+
+- **A region with more than one market processed them in a random order (#223).**
+  `AgentBase.create_bids_offers` builds its market list with `timetable.unique(...)`, which does
+  not preserve order unless asked. Each iteration overwrites `agent.bids_offers`, so **which
+  market's book survived was decided at random on every call.** No shipped scenario declares two
+  markets in one region, so it was latent — it was found because the new test for that loop caught
+  its own mutation only 9 times in 13 runs.
+
+- **`method: null` in a `markets.yaml` no longer crashes the run (#223).** The check read
+  `m_method.capitalize() == 'None' or m_method is None`, whose second operand can never run: the
+  attribute lookup on `None` raises first. It was latent only because PyYAML parses the shipped
+  spelling `method: None` into the *string* `'None'`; written as `null`, or left blank, it raised
+  an `AttributeError` instead of selecting the retailer.
+
+  **Fixed at both stages, because fixing only the first moved the crash rather than removing it** —
+  and then twice more, because the first two attempts each left a spelling behind. `AgentBase`
+  accepted four spellings (`None`, `'None'`, `'none'`, `'NONE'`) while the market's registry
+  accepted two, so `method: none` was honoured by one stage and refused by the other with
+  `Clearing method "none" not available`. There is now **one rule**,
+  `hamlet.functions.clears_a_market`, which both consult; the market normalises before its
+  registry lookup. Each round was found by a review lens checking the previous round's claim.
+
+  The rule deliberately has **no separate `is None` arm**: `str(None).capitalize()` is already
+  `'None'`, so one would be a dead operand — which is exactly the defect being fixed here.
+
+- **A failing slack read in the POI controllers no longer reports silence (#231).**
+  `_warn_on_slack` wrapped `self.model.get_value` in `except Exception: continue`. It has never
+  fired — 864 of 864 iterations computed a value — but the decision it encodes is wrong whichever
+  exception reaches it: skipping the variable reports nothing, which makes an agent that shed
+  energy indistinguishable from a healthy one, the single outcome the method exists to prevent.
+  Narrowing the exception type would have changed which failures reach that decision without
+  touching the decision.
+
+  The read in the two POI controllers is now unguarded and a failure propagates; why that is safe
+  is argued in the source comment on `_warn_on_slack`, which is that fact's one home. The linopy
+  controllers are unchanged and keep their narrow `except (AttributeError, ValueError)`. Pinned by
+  `test_a_failing_read_is_not_swallowed`, which runs on all four so that no backend can grow a
+  *broad* handler — it raises a `RuntimeError`, so it is deliberately blind to linopy's narrow one.
+  Whether those two types are the right ones is a separate question and is not answered here.
+
+  The two `_warn_on_slack` bodies in `mpc_poi.py` and `optim_poi.py` remain byte-identical
+  duplicates. Both were changed together; deduplicating them is deliberately out of scope.
+
+- **§14a handed pandas two constructs it has said it will reject (#210, #211).** Neither is wrong
+  today. Both break on a dependency bump rather than on a code change, and because today's
+  behaviour is correct no test would have failed first — the run would simply have started
+  raising. Found by lifting the blanket warning filter (#199).
+
+  **Chained boolean masks (#210).** `frame[mask_a][mask_b]`, with `mask_b` computed against the
+  *unfiltered* frame and handed to the *filtered* one, appears **twelve times** across
+  `__individual_device_control` and `__control_via_ems` — ten statements, both directions, both
+  methods. pandas reindexes the second mask by label, so the surviving rows are those where both
+  are true; each is now `frame[mask_a & mask_b]`, exactly equivalent because the outer frame's
+  index is always a subset of the mask's.
+
+  **The golden master could not have carried that claim on its own.** `grid_golden` runs
+  `method: ems`, so six of the twelve rewrites — the whole of `__individual_device_control` — are
+  unexercised by it (#232), and the fingerprint is permutation-blind anyway (#208): the same
+  commands going to *different* agents would not move it. What carries the identity claim is
+  `test_grid_restrictions.py`'s per-agent joins on bus + timestamp and plant + timestamp + bus,
+  plus the new unit tests, which parametrise both methods.
+
+  **A non-integer `periods` on the fee horizon (#211).** `horizon / resolution` is a float by
+  construction and pandas truncated it. `EnWG14a.__fee_horizon_steps` now refuses a horizon the
+  fee calculation cannot use, rather than casting the truncation in — its docstring says why, and
+  why divisibility alone would not have been the fix. All seven tracked configs pass it, at 24 or
+  96 steps, so this could not move a number; a test asserts that against the guard itself rather
+  than against a copy of its arithmetic.
+
+  Both fixes are pinned by mutation: re-chaining any one of the six rewritten mask families, or
+  weakening the guard in any of nine ways, turns a test red.
+
+  **The masks needed pinning by *value*, not by shape.** A first version of the unit test asserted
+  which agents were commanded; a mutation panel defeated it fourteen ways. A filter that names the
+  wrong device class — `c.P_EV` where `c.P_HP` belongs, `plant_type` where `load_type` does — keeps
+  the same agents in the result and changes only what they are told, so one surviving mutation
+  removed heat pumps from §14a individual control altogether while the file stayed green. It now
+  asserts the exact command, device by device and watt by watt.
+
+  Two things that panel found are *not* fixed here, because measurement says they are not defects.
+  Removing the `deepcopy` from either method is behaviour-preserving — every `.loc[...]` on the
+  filtered frames is a read, so nothing is ever written back; eight removal mutations are green,
+  and a test asserting the net is unchanged would pin nothing. And no assertion over
+  `__individual_device_control`'s over-generation branch can constrain its filters: the branch
+  commands nothing for any input, so `&` swapped for `|` there is invisible. Three mutations
+  confirm it, isolated to that method rather than mutated in both at once. Both are recorded
+  where the next reader will look for them rather than papered over with a green test.
 
 - **Every air-source heat pump was simulated on soil inlet temperature (#234).**
   `agents.py:858` read the air/brine discriminator from `specs['type']`, which is the *plant*
@@ -443,6 +1123,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   instead of quietly green.
 
 ### Changed
+- **Every shipped scenario and the config template now select `solver: highs` (#223).**
+  `examples/create_scenario_with_market` and `config_templates/agents.yaml` were the last two
+  holding `gurobi`; the other three examples and both e2e fixtures were already on HiGHS.
+
+  The market example's choice had been read as deliberate (#214 recorded it as "a real choice, not
+  a defect"), and it was never tested, so nobody had met the consequence: **the only shipped
+  scenario that clears a market could not run without a commercial licence.** The first CI
+  pipeline that ran it died with "The Gurobi shared library could not be loaded". The template
+  mattered for the same reason one layer out — it is what a new user copies.
+
+  Gurobi remains fully supported and entirely opt-in: set `solver: gurobi` under `optimization`,
+  per `README.md`. Nothing about the solver machinery changed.
+
+  **No golden reference moved**, because neither golden scenario was on Gurobi. What did move is
+  `scenario_with_market`, which nothing pinned: 245 cleared bids over 79 clearings and 53_482 Wh
+  of local trading on Gurobi, against 267 / 94 / 62_410 on HiGHS. `tests/e2e/test_market_clearing.py`
+  now runs it **as shipped** and reads back what actually solved, rather than switching the solver
+  itself -- a switch matches the *key* and would go on passing if the config were flipped back.
+
+- **A market with no clearing now reports that it is discarding the agent's configured trading
+  strategy (#223).** The substitution itself is correct and documented -- with `method: None` the
+  retailer is the only counterparty there is, and `agents.yaml` already names `retailer` as "the
+  default strategy when there is no clearing" -- but nothing said it was happening.
+  `tests/e2e/scenarios/ctsp_industry` declared `strategy: linear` in both its config and its
+  workbook and had only ever run `retailer`, which is how a fixture came to imply coverage of a
+  strategy that had never executed anywhere. That fixture now declares `retailer`; the numbers are
+  unchanged, and the golden master confirms it. The report has its own warning category,
+  `hamlet.executor.agents.agent_base.ConfiguredStrategyUnused`, so it can be silenced on its own.
+
 
 - **Two test modules asking for the identical end-to-end run now share one, through
   `tests/scenario_cache.py`.** Every e2e fixture is module-scoped, so each file paid for its own
@@ -903,7 +1612,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   example's config pair.
 
   Both workbooks now say what their own YAML says — each taking its own YAML's solver, so
-  `scenario_with_grid` lands on `poi`/`highs` and `scenario_with_market` on `poi`/`gurobi`. The
+  `scenario_with_grid` landed on `poi`/`highs` and `scenario_with_market` on `poi`/`gurobi`.
+  (#223 later moved that second one to `highs` as well, once running it showed it needed a
+  licence.) The
   workbook moved rather than the YAML because `poi` is the documented default *framework* and the
   YAML is the file a reader opens; neither example's solver choice is changed by this.
   `tests/integration/test_shipped_configs_agree_with_their_workbooks.py` keeps them that way, in
@@ -917,8 +1628,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   **`agents.xlsx`**, which nothing regenerates and which the YAML has no part in. So the request
   was accepted, the switch's own `assert switched` was satisfied by the file it edited, and the
   workbook's own backend ran anyway. Three shipped scenarios were exposed — `grid_golden` and
-  `scenario_with_topology` pin `poi`/`highs`, `scenario_with_market` pins `linopy`/`gurobi`, so
-  asking that one for HiGHS would have run Gurobi. Nothing called it that way yet, so no test was
+  `scenario_with_topology` pinned `poi`/`highs`, `scenario_with_market` pinned `linopy`/`gurobi`,
+  so asking that one for HiGHS would have run Gurobi. (Both of that last one's files say
+  `poi`/`highs` since #223.) Nothing called it that way yet, so no test was
   vacuous; the trap was armed rather than sprung.
 
   Two changes, because they close different things. The switch now reaches **every config file
@@ -1301,8 +2013,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Gurobi, and its results change as a result.** HAMLET's own example should not require a
   commercial licence to run: HiGHS is installed with HAMLET, Gurobi is not, and the example is
   what the README names as the installation test. Gurobi remains fully supported — set
-  `solver: gurobi` under `optimization` in `agents.yaml`, as the other examples and the config
-  templates still do.
+  `solver: gurobi` under `optimization` in `agents.yaml`. (At the time this was written the other
+  examples and the config templates still specified Gurobi; #223 moved the last of them to HiGHS.)
 
   The two solvers do not return the same dispatch. The model is degenerate enough that they pick
   different, equally optimal solutions: 84 more bids and offers clear (499 → 583), 168 more

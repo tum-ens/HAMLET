@@ -41,6 +41,19 @@ import polars as pl
 #      through the current Executor silently applies grid fees and levies to feed-in.
 SCENARIO_FORMAT_VERSION = 1
 
+# CHECKPOINT FORMAT
+# The layout of what `executor/utilities/checkpoint.py` writes under `results/<run>/checkpoint/`
+# so that a run can be resumed. Independent of both the scenario format and the release number
+# for the same reason as above. The state is a pickle of the live object graph, so it is coupled
+# to the classes it contains: bump this when a change to `Database`, `RegionDB`, `AgentDB`,
+# `MarketDB`, `GridDB` or the forecasters would make a pickle written before the change resume
+# into a different run than the one it was taken from -- a renamed attribute, a cache with new
+# semantics, a table that moved. A checkpoint carrying another number is refused, not read.
+#
+# HISTORY
+#   1  Current. Database graph + both RNG states + grid CSV lengths + the last timestep.
+CHECKPOINT_FORMAT_VERSION = 1
+
 # KEYS
 K_SCENARIO_FORMAT_VERSION = 'scenario_format_version'  # key holding the stamp in general.json
 K_GENERAL = 'general'
@@ -121,6 +134,22 @@ G_H2 = ET_H2
 # already import each other through `grid_restriction.py` -- naming it on either side is a circular
 # import. `pandapowerNet` is a dict, so the key rides along through `deepcopy`.
 GRID_HORIZON_PROFILES = 'hamlet_horizon_profiles'
+
+# GRID RESTRICTIONS: §14a DIRECT POWER CONTROL (`grids.yaml`, `direct_power_control`)
+# `method` -- how a command is addressed. `DPC_METHOD_EMS` is also the plant id an `ems` command
+# is delivered under: written by `EnWG14a`, read by both RTC backends.
+DPC_METHOD_INDIVIDUAL = 'individual'  # named devices, in a priority order
+DPC_METHOD_EMS = 'ems'                # the agent's net connection, for its EMS to distribute
+# `reduction` -- how far one `ems` pass curtails; `EnWG14a` says what each one models
+DPC_REDUCTION_REQUIRED = 'required'   # the overload, re-measured every pass (the default)
+DPC_REDUCTION_MINIMUM = 'minimum'     # straight to the §14a floor
+DPC_REDUCTION_RAMP = 'ramp'           # one of `ramp_steps` equal steps toward the floor per pass
+# `secure` -- which elements the control is responsible for keeping inside their rating.
+# `EnWG14a.__binding_loading` says why the choice changes the result.
+DPC_SECURE_TRAFO = 'trafo'                      # the transformer only
+DPC_SECURE_TRAFO_AND_LINES = 'trafo_and_lines'  # the worst of it and the feeding lines (default)
+DPC_SECURES = (DPC_SECURE_TRAFO, DPC_SECURE_TRAFO_AND_LINES)
+DPC_REDUCTIONS = (DPC_REDUCTION_REQUIRED, DPC_REDUCTION_MINIMUM, DPC_REDUCTION_RAMP)
 
 # SYMBOLS (symbols used for the units in the tables)
 S_POWER = 'P'

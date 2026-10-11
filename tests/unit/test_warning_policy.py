@@ -145,9 +145,9 @@ class TestThePolicyIsNarrow:
 
     @pytest.mark.parametrize('category', [UserWarning, RuntimeWarning, FutureWarning])
     def test_an_unlisted_category_still_reaches_the_user(self, category):
-        """The `UserWarning` case is live, not hypothetical: `enwg_14a` raises 64 per run of
-        pandas' 'Boolean Series key will be reindexed' (#210), and the blanket filter is why
-        nobody had seen them."""
+        """The `UserWarning` case was not hypothetical: `enwg_14a` raised 64 per run of pandas'
+        'Boolean Series key will be reindexed' until #210, and the blanket filter is why nobody
+        had seen them."""
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always')
             with quiet_known_noise():
@@ -332,7 +332,7 @@ class TestTheEntryPointsUseIt:
 
         class Probe(executor_setup.Executor):
             def __init__(self):  # noqa: D107 -- deliberately skips the real constructor
-                pass
+                self.paused = False  # `run` reads it after `execute`
 
             def setup(self):
                 events.append('setup')

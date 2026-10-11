@@ -73,6 +73,10 @@ class ElectricityMarket(MarketBase):
         }
 
         # Available clearing methods (see market config)
+        # Note: every spelling of "no clearing" is normalised to `c.MCM_NONE` before the lookup
+        #  (see `__clear_bids_offers`), so this registry needs one entry for it rather than one
+        #  per spelling. `f.clears_a_market` is the single rule, shared with the agent stage --
+        #  they disagreed, and `method: none` was accepted there and refused here. #223.
         self.methods = {
             c.MCM_NONE: self.__method_none,  # no local clearing, all energy traded with retailer
             c.MCM_PDA: self.__method_pda,  # periodic double auction
@@ -200,12 +204,12 @@ class ElectricityMarket(MarketBase):
         bids, offers = self.__split_bids_offers(bids_offers)
 
         # Clear the bids and offers
-        trades_cleared, trades_uncleared = self.__clear_bids_offers(bids, offers, clearing_method, pricing_method,
-                                                                    retailer)
+        trades_cleared = self.__clear_bids_offers(bids, offers, clearing_method, pricing_method,
+                                                  retailer)
 
         # Create the tables about the market results
         bids_cleared, offers_cleared, bids_uncleared, offers_uncleared, transactions = (
-            self.__create_market_tables(bids, offers, trades_cleared, trades_uncleared, retailer))
+            self.__create_market_tables(bids, offers, trades_cleared, retailer))
 
         # Update the tables and market database
         self.__update_database(bids_cleared=bids_cleared, offers_cleared=offers_cleared,
@@ -297,12 +301,7 @@ class ElectricityMarket(MarketBase):
             (pl.col(c.TC_PRICE_PU) * pl.col(c.TC_ENERGY)).alias(c.TC_PRICE).cast(pl.Int64),
         )
 
-        # Create new dataframe with the uncleared bids and offers
-        bids_uncleared = bids.filter(pl.col(c.TC_PRICE_PU_IN) < pl.col(c.TC_PRICE_PU_OUT))
-        offers_uncleared = offers.filter(pl.col(c.TC_PRICE_PU_IN) < pl.col(c.TC_PRICE_PU_OUT))
-        trades_uncleared = pl.concat([bids_uncleared, offers_uncleared], how='vertical')
-
-        return trades_cleared, trades_uncleared
+        return trades_cleared
 
     def __method_community(self):
         """Clears the market with the community-based clearing method"""
@@ -323,10 +322,20 @@ class ElectricityMarket(MarketBase):
                                             pl.col(c.TC_ID_AGENT),
                                             pl.col(c.TC_TYPE_ENERGY),
                                             *[pl.col(col) for col in energy_cols])
-            # Add timestep column
+            # Stamp the retailer's ladder row with this clearing, the way an agent's position
+            # is stamped: `timestamp` is when the clearing happens, `timestep` the delivery step
+            # it is for. `self.retailer` is filtered on `timestamp == the delivery step`, the
+            # retailer table being indexed by delivery time, so both columns used to end up
+            # holding the delivery step. Every agent row carries `(clearing time, delivery step)`
+            # -- `TradingBase` takes the pair straight off the timetable -- so the retailer's was
+            # the one row in each table whose pair was not a clearing at all. That pair is the
+            # key a clearing is grouped by, so the retailer's rows formed groups of their own.
+            # `tests/e2e/test_market_clearing.py` carries the measurement and is the only place
+            # it is written down.
             retailer = retailer.with_columns(
                 [
-                    pl.col(c.TC_TIMESTAMP).alias(c.TC_TIMESTEP),
+                    pl.lit(self.tasks[c.TC_TIMESTAMP]).alias(c.TC_TIMESTAMP),
+                    pl.lit(self.tasks[c.TC_TIMESTEP]).alias(c.TC_TIMESTEP),
                 ]
             )
             # Remove starting 'energy' from all columns
@@ -425,11 +434,23 @@ class ElectricityMarket(MarketBase):
         return bids, offers
 
     def __clear_bids_offers(self, bids: pl.DataFrame, offers: pl.DataFrame, clearing_method: str, pricing_method: str,
-                            retailer: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
-        """Clears the bids and offers"""
+                            retailer: pl.DataFrame) -> pl.DataFrame:
+        """Clears the bids and offers
+
+        Note: a clearing method returns only the cleared trades. It used to return the uncleared
+         ones beside them, and nothing ever read them: `__create_market_tables` takes the
+         uncleared quantity to be the submitted position less what cleared, per agent, which is
+         a different -- and the correct -- quantity. The unread return value made both filters
+         permanently unmutatable, so it is gone rather than consumed.
+        """
+
+        # Normalise before the lookup: `None`, `'None'`, `'none'` and `'NONE'` all mean no local
+        # clearing, and the registry carries the canonical spelling once. #223.
+        if not f.clears_a_market(clearing_method):
+            clearing_method = c.MCM_NONE
 
         if clearing_method in self.methods:
-            trades_cleared, trades_uncleared = self.methods[clearing_method](bids, offers, pricing_method)
+            trades_cleared = self.methods[clearing_method](bids, offers, pricing_method)
         else:
             raise ValueError(f'Clearing method "{clearing_method}" not available (for given market type). '
                              f'Available methods are: {self.methods.keys()}')
@@ -437,10 +458,10 @@ class ElectricityMarket(MarketBase):
         # Post-process the trades
         trades_cleared = self.__postprocess_trades(trades_cleared, retailer)
 
-        return trades_cleared, trades_uncleared
+        return trades_cleared
 
     @staticmethod
-    def __create_market_tables(bids, offers, trades_cleared, trades_uncleared, retailer):
+    def __create_market_tables(bids, offers, trades_cleared, retailer):
         """Creates the tables about the market results"""
 
         # Create the cleared tables
@@ -963,6 +984,10 @@ class ElectricityMarket(MarketBase):
         bids_offers = bids_offers.sort(C_ENERGY_CUMSUM, descending=False)  # .fill_null(strategy='backward')
 
         # Remove all columns that end on _right
+        # Note: redundant while it stays above the backward fill, which refills exactly the nulls
+        #  it coalesces -- deleting the loop passes the whole suite. Moving the fill (or the
+        #  segment-width `with_columns` below it) above this loop makes it load-bearing again and
+        #  nothing would notice.
         double_cols = [col for col in bids_offers.columns if col.endswith('_right')]
         for col in double_cols:
             orig_col = col.rsplit('_', 1)[0]
@@ -970,7 +995,30 @@ class ElectricityMarket(MarketBase):
         bids_offers = bids_offers.drop(double_cols)
 
         # Fill the NaN values with the last value
+        # Note: backward, so a breakpoint the other ladder does not share takes the position whose
+        #  cumulative sum first reaches it -- the marginal bid and offer at that quantity.
         bids_offers = bids_offers.fill_null(strategy='backward')
+
+        # The energy a segment of the merged ladder trades: the difference between successive
+        # cumulative sums.
+        # Note: NOT min(energy_in, energy_out) of the two positions spanning the segment. Where the
+        #  two ladders do not share a breakpoint the backward fill spreads one position over
+        #  several segments, and its whole quantity would then be traded in each of them -- so an
+        #  agent could sell more than it offered. Measured on `scenario_with_market`: every
+        #  clearing that clears has misaligned ladders and 7% of all cleared energy was duplicated.
+        #  #241.
+        # Note: the subtraction is done in Int64 and only then cast back to the dtype of a
+        #  *position* (UInt64, which is what `min(axis=1)` returned here before and what every
+        #  consumer reads this column back as -- `c.SCHEMA[c.TC_ENERGY]` says Int64 and nothing
+        #  enforces it on this path). The explicit signed step is load-bearing: `energy_cumsum` is
+        #  UInt64 and `UInt64 - UInt64` **wraps**, so a frame that reached here out of order would
+        #  otherwise produce a segment of 1.8e19 Wh silently. In Int64 it goes negative and the
+        #  strict cast raises `ComputeError` naming the value instead.
+        bids_offers = bids_offers.with_columns(
+            (pl.col(C_ENERGY_CUMSUM).cast(pl.Int64)
+             - pl.col(C_ENERGY_CUMSUM).cast(pl.Int64).shift(1).fill_null(0))
+            .cast(c.SCHEMA[c.TC_ENERGY_IN]).alias(c.TC_ENERGY),
+        )
 
         # Create new dataframe with the cleared bids and offers
         trades_cleared = bids_offers.filter(pl.col(c.TC_PRICE_PU_IN) >= pl.col(c.TC_PRICE_PU_OUT))
@@ -978,19 +1026,12 @@ class ElectricityMarket(MarketBase):
         # Calculate the pu price of the trades
         trades_cleared = self.pricing[pricing_method](trades_cleared)
 
-        # Calculate the price and energy of the trades
-        trades_cleared = trades_cleared.with_columns(
-            (trades_cleared.select([c.TC_ENERGY_IN, c.TC_ENERGY_OUT]).min(axis=1).alias(c.TC_ENERGY)),
-        )
+        # Calculate the price of the trades
         trades_cleared = trades_cleared.with_columns(
             (pl.col(c.TC_PRICE_PU) * pl.col(c.TC_ENERGY)).alias(c.TC_PRICE).cast(pl.Int64),
         )
 
-        # Create new dataframe with the uncleared bids and offers
-        # Note: this tables includes the trades that were not cleared and the ones that were only partially cleared
-        trades_uncleared = bids_offers.filter(pl.col(c.TC_PRICE_PU_IN) < pl.col(c.TC_PRICE_PU_OUT))
-
-        return trades_cleared, trades_uncleared
+        return trades_cleared
 
     @staticmethod
     def __pricing_uniform(trades):

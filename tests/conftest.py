@@ -19,8 +19,24 @@ import hamlet  # noqa: F401  -- must precede pandas on Windows; see the module d
 import datetime
 from pathlib import Path
 
+import matplotlib
 import pandas as pd
 import pytest
+
+# Force the headless backend for the whole suite, and note that the environment variable cannot
+# do this job. `MPLBACKEND` is exported by the CI job and passed to every subprocess run by
+# `tests/scenario_run.py`, but the *in-process* analyzer tests get neither: the
+# `os.environ.setdefault('MPLBACKEND', 'Agg')` in `tests/analyzer_outputs.py` and
+# `tests/e2e/test_analyzer_processors.py` is a no-op once anything has already imported
+# matplotlib, and importing the analyzer pulls in `pandapower.plotting.plotly` and therefore
+# `matplotlib.pyplot`. What that produced was real figure windows blocking the run until a human
+# closed them -- measured at 43 minutes blocked against 8 clean. `use(..., force=True)` switches
+# the backend even after that import; setting the variable at that point does nothing.
+#
+# CI never saw it, because the job sets the variable before Python starts. The only party paying
+# was whoever ran the suite locally, which is why it survived this long. The two `setdefault`
+# calls are left as belt-and-braces for anything importing those helpers outside pytest.
+matplotlib.use('Agg', force=True)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

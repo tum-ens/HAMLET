@@ -5,6 +5,7 @@ __maintainer__ = "jiahechu"
 __email__ = "jiahe.chu@tum.de"
 
 import os.path
+import time
 import polars as pl
 from polars.type_aliases import SizeUnit
 from hamlet import constants as c
@@ -124,12 +125,41 @@ class AgentDB:
         # Update agent path
         self.agent_save = os.path.abspath(path)
 
-        # Save data
-        f.save_file(path=os.path.join(self.agent_save, f'meters.{dtype}'), data=self.meters, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, f'timeseries.{dtype}'), data=self.timeseries, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, f'socs.{dtype}'), data=self.socs, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, f'setpoints.{dtype}'), data=self.setpoints, df='polars')
-        f.save_file(path=os.path.join(self.agent_save, f'forecasts.{dtype}'), data=self.forecasts, df='polars')
+        # Save data. Each table goes to a sibling file first and is renamed over the real one, so
+        # a crash in the middle of a write leaves the previous save intact rather than a truncated
+        # feather. This is what lets the executor call it periodically (#249): without it a crash
+        # *during* a checkpoint would also destroy the checkpoint before it.
+        for name, table in (('meters', self.meters), ('timeseries', self.timeseries),
+                            ('socs', self.socs), ('setpoints', self.setpoints),
+                            ('forecasts', self.forecasts)):
+            target = os.path.join(self.agent_save, f'{name}.{dtype}')
+            staging = os.path.join(self.agent_save, f'{name}.tmp.{dtype}')
+            f.save_file(path=staging, data=table, df='polars')
+            self._replace(staging, target)
+
+    #: How often `_replace` retries a rename Windows refused, and how long it waits between tries.
+    REPLACE_ATTEMPTS = 3
+    REPLACE_RETRY_SECONDS = 0.1
+
+    @classmethod
+    def _replace(cls, staging: str, target: str) -> None:
+        """`os.replace`, retried on the transient refusal Windows gives for a file someone has open.
+
+        POSIX rename is atomic and does not care who holds the old file. Windows refuses with
+        `PermissionError` while a handle without delete sharing is open on either path -- an
+        antivirus scan of the freshly written staging file, a viewer on the target. Nothing in
+        HAMLET holds one, but the periodic checkpoint multiplies the window by the number of
+        checkpoints (32 for a month at the default interval, 366 for a year) against the single
+        save at the end of a run, so a transient refusal is retried before it kills the run.
+        """
+        for attempt in range(1, cls.REPLACE_ATTEMPTS + 1):
+            try:
+                os.replace(staging, target)
+                return
+            except PermissionError:
+                if attempt == cls.REPLACE_ATTEMPTS:
+                    raise
+                time.sleep(cls.REPLACE_RETRY_SECONDS)
 
     def estimated_size(self, unit:SizeUnit = "kb") -> float:
         ret = 0

@@ -8,6 +8,7 @@ the golden reference exactly.
 Reproducibility rests on seeding `random` and `numpy.random` and pinning `PYTHONHASHSEED`: the
 Creator draws agent ids, plant ownership and sizings from all three.
 """
+import datetime as dt
 import json
 import os
 import re
@@ -75,6 +76,61 @@ linopy.Model.solve = _solve
 
 atexit.register(lambda: open(r"{record}", "w", encoding="utf-8").write(json.dumps(sorted(_used))))
 '''
+
+
+# Records every trading-strategy class the run actually instantiated, so a caller can assert which
+# strategy an agent traded with instead of inferring it from prices.
+#
+# **Inference from prices does not work, and that is why this exists.** `Retailer` and `Linear`
+# quote the same pair wherever `Linear`'s ladder is held at its initial value, and the price a
+# *cleared* position carries is the uniform clearing price rather than the submitted one. Measured
+# on `scenario_with_market`: switching the workbook to `strategy: retailer` still produced 50
+# cleared bids priced strictly inside the retail band, so "a price strictly between the two
+# retailer prices proves Linear ran" is false. This is the receipt instead. #223, same shape as
+# the backend receipt above (#206).
+#
+# `Trading.create_instance` is patched on the class, so it catches every construction wherever it
+# is called from. `num_workers=1` is what makes it work: every agent runs in this process.
+STRATEGY_PROBE = '''
+import atexit, json
+from hamlet.executor.utilities.trading.trading import Trading
+
+_strategies = set()
+_original_create_instance = Trading.create_instance
+
+
+def _create_instance(self):
+    instance = _original_create_instance(self)
+    _strategies.add(type(instance).__name__)
+    return instance
+
+
+Trading.create_instance = _create_instance
+
+atexit.register(
+    lambda: open(r"{record}", "w", encoding="utf-8").write(json.dumps(sorted(_strategies))))
+'''
+
+
+def assert_strategies_honoured(record, expected):
+    """Read the receipt a run wrote and check which trading strategies it really used.
+
+    `expected` is the set of class names (`{'Linear'}`, say). Compared as a set and not as a
+    superset: a run that used the configured strategy *and* the retailer default has taken the
+    substitution branch somewhere, which is exactly the thing worth knowing.
+    """
+    record = Path(record)
+    assert record.exists(), (
+        'the run completed but wrote no strategy record, so what quoted into the market is '
+        'unknown')
+    used = set(json.loads(record.read_text(encoding='utf-8')))
+
+    assert used, (
+        'the run completed without constructing a single trading strategy, so no agent submitted '
+        'anything and the receipt cannot speak for the clearing')
+    assert used == set(expected), (
+        f'asked for trading strategies {sorted(expected)}, but the run actually used '
+        f'{sorted(used)}')
 
 
 def switch_in_yaml(text, key, value):
@@ -184,6 +240,24 @@ def fingerprint(results_root):
     silently pinned nothing the grid produces -- which for a scenario added specifically to cover
     the grid stage would have been a golden master that passed while every number in it moved.
     Scenarios with `electricity.active: False` write no CSV at all and are unaffected.
+
+    **Datetime columns are recorded too, as their earliest and latest value.** They were skipped
+    for as long as this function tested `dtype.is_numeric()`, and that is not a small omission in
+    a receding-horizon simulation: `timestamp` and `timestep` are what say *when* a row is for,
+    and every other statistic here is order-invariant, so a row filed at the wrong time moves
+    nothing the reference records. Measured on `simple_scenario` when the retailer's ladder row
+    was stamped with its delivery step instead of the clearing: **266 of 616 rows** of
+    `bids_cleared` and **350 of 616** of `offers_cleared` carried a wrong timestamp and
+    `-m golden` reported green.
+
+    Min and max only -- a sum of timestamps means nothing -- and as ISO-8601 strings rather than
+    epoch numbers, so the reference is readable and `compare` matches them exactly. A numeric
+    encoding would be compared under `RELATIVE_TOLERANCE`, which at epoch scale is about half an
+    hour of slack: enough to miss a shift of one timestep in a 15-minute scenario.
+
+    **Datetimes inside a CSV are still not covered**: `pl.read_csv` does not infer them, so the
+    grid stage's columns arrive as `Utf8` and are skipped. Left alone deliberately -- turning
+    inference on would change how every other CSV column is read.
     """
     import polars as pl
 
@@ -196,14 +270,32 @@ def fingerprint(results_root):
         entry['files'] += 1
         entry['rows'] += len(frame)
         for column, dtype in zip(frame.columns, frame.dtypes):
-            if not dtype.is_numeric() or frame[column].null_count() == len(frame):
+            if frame[column].null_count() == len(frame):
                 continue
-            stats = entry['columns'].setdefault(column, {'sum': 0.0, 'min': None, 'max': None})
-            stats['sum'] += float(frame[column].sum() or 0)
-            low, high = frame[column].min(), frame[column].max()
-            if low is not None:
-                stats['min'] = float(low) if stats['min'] is None else min(stats['min'], float(low))
-                stats['max'] = float(high) if stats['max'] is None else max(stats['max'], float(high))
+            if dtype.is_numeric():
+                stats = entry['columns'].setdefault(column, {'sum': 0.0, 'min': None, 'max': None})
+                stats['sum'] += float(frame[column].sum() or 0)
+                low, high = frame[column].min(), frame[column].max()
+                if low is not None:
+                    stats['min'] = (float(low) if stats['min'] is None
+                                    else min(stats['min'], float(low)))
+                    stats['max'] = (float(high) if stats['max'] is None
+                                    else max(stats['max'], float(high)))
+            elif dtype in (pl.Date, pl.Datetime) or isinstance(dtype, pl.Datetime):
+                stats = entry['columns'].setdefault(column, {'min': None, 'max': None})
+                low, high = frame[column].min(), frame[column].max()
+                if low is not None:
+                    # Compared as datetimes, stored as text: `min()` on two ISO strings would be
+                    # lexicographic, which only coincides with chronological while every value
+                    # shares one format and one offset. Comparing the objects does not care.
+                    stats['min'] = low if stats['min'] is None else min(stats['min'], low)
+                    stats['max'] = high if stats['max'] is None else max(stats['max'], high)
+
+    for entry in grouped.values():
+        for stats in entry['columns'].values():
+            for statistic, value in stats.items():
+                if isinstance(value, (dt.datetime, dt.date)):
+                    stats[statistic] = value.isoformat()
 
     return {kind: entry for kind, entry in sorted(grouped.items())}
 
@@ -280,7 +372,7 @@ def prepare_config(base, example_dir, scenario_name, framework=None, solver=None
 
 
 def run_example(base, example_dir, scenario_name, framework=None, solver=None, edits=(),
-                config_edits=None, record_backends=None,
+                config_edits=None, record_backends=None, record_strategies=None,
                 creator_method='new_scenario_from_configs'):
     """Run one example end to end under `base`, and return the fingerprint of its results.
 
@@ -308,6 +400,10 @@ def run_example(base, example_dir, scenario_name, framework=None, solver=None, e
     a renamed config key then fails the test loudly, instead of the test quietly running an
     unmodified scenario and passing for the wrong reason.
 
+    `record_strategies` is a path to write the JSON list of trading-strategy class names the run
+    actually constructed. See `assert_strategies_honoured`, and `STRATEGY_PROBE` for why the
+    prices in the results cannot answer that question.
+
     `record_backends` is a path to write the JSON list of (framework, solver) pairs the run
     actually used. **Whenever `framework` or `solver` is passed the record is written and checked
     here regardless**; passing `record_backends` additionally hands it to the caller. See
@@ -324,6 +420,8 @@ def run_example(base, example_dir, scenario_name, framework=None, solver=None, e
     record = Path(record_backends) if record_backends is not None else base / 'backends_used.json'
     wanted = requested or record_backends is not None
     probe = BACKEND_PROBE.format(record=record.as_posix()) if wanted else ''
+    if record_strategies is not None:
+        probe += STRATEGY_PROBE.format(record=Path(record_strategies).as_posix())
 
     script = RUNNER.format(config_dir=config.as_posix(), seed=SEED, scenarios=scenarios,
                            name=scenario_name, probe=probe, creator_method=creator_method)
@@ -366,6 +464,15 @@ def compare(a, b, label_a, label_b, tolerance):
                 continue
             for statistic, value in stats.items():
                 other = reference.get(statistic)
+                if isinstance(value, str) or isinstance(other, str):
+                    # A datetime bound, recorded as text. Matched exactly, and a missing
+                    # counterpart is a difference rather than something to skip past: a reference
+                    # predating this statistic would otherwise compare as agreeing.
+                    if value != other:
+                        differences.append(
+                            f'{kind}:{column}.{statistic}  {value} ({label_a}) '
+                            f'vs {other} ({label_b})')
+                    continue
                 if value is None or other is None:
                     continue
                 scale = max(abs(value), abs(other))

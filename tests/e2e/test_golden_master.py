@@ -230,10 +230,16 @@ def test_row_counts_match(scenario, actual, expected):
 
 @pytest.mark.golden
 def test_column_statistics_match(scenario, actual, expected):
-    """The substance: every numeric column's total, minimum and maximum.
+    """The substance: every numeric column's total, minimum and maximum, and every datetime
+    column's earliest and latest value.
 
     Reported all at once rather than failing on the first, because when the model changes it is
     the shape of the difference across tables that tells you whether it was intended.
+
+    **Datetime bounds are ISO-8601 strings and are matched exactly.** `RELATIVE_TOLERANCE` is a
+    proportion, and a proportion of an epoch is enormous -- 1e-6 of 1.6e18 ns is about half an
+    hour, which would tolerate a row filed a whole timestep away in a 15-minute scenario. There
+    is also nothing to tolerate: a timestamp is either the one the timetable says or it is not.
     """
     differences = []
     for kind, entry in actual.items():
@@ -246,6 +252,11 @@ def test_column_statistics_match(scenario, actual, expected):
                 continue
             for statistic, value in stats.items():
                 other = reference.get(statistic)
+                if isinstance(value, str) or isinstance(other, str):
+                    if value != other:
+                        differences.append(
+                            f'{kind}:{column}.{statistic} {value} != {other}')
+                    continue
                 if value is None or other is None:
                     if value != other:
                         differences.append(f'{kind}:{column}.{statistic} {value} != {other}')

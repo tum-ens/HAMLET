@@ -30,9 +30,14 @@ class Database:
 
     """
 
-    def __init__(self, scenario_path):
+    def __init__(self, scenario_path, name=None):
 
         self.__scenario_path = scenario_path
+
+        #: The name of this run, which is what its results directory is called. Defaults to the
+        #: scenario folder name -- the same default `Executor` applies -- so a Database built
+        #: without one writes exactly where it always did.
+        self.__run_name = name or os.path.basename(os.path.normpath(scenario_path))
 
         self.__general = {}  # dict
 
@@ -41,6 +46,11 @@ class Database:
         self.__grids = {}
 
     ########################################## PUBLIC METHODS ##########################################
+
+    @property
+    def run_name(self) -> str:
+        """The run this database writes results for -- the folder name under the results root."""
+        return self.__run_name
 
     """initialize database"""
 
@@ -357,13 +367,30 @@ class Database:
             grid.save_and_drop_past_results(
                 self.__grid_results_path(os.path.dirname(path_results)))
 
+    def __run_results_path(self, base: str) -> str:
+        """This run's results directory under `base`, the results root.
+
+        Keyed on the **run name**, not on the first region. The two used to be the same string --
+        `Executor` names a run after the scenario folder, and the shipped scenarios name their one
+        region after it too -- so keying on the region was indistinguishable from keying on the run
+        until something passed `Executor(name=...)`. Then two runs of one scenario resolved to one
+        directory and the second overwrote the first (#243).
+
+        It failed silently, which is what made it expensive. `f.copy_folder` puts the scenario under
+        the run's own name, and the market drain writes there too, so a collided run still had a
+        populated, plausible-looking results folder -- just one missing the two things it was for:
+        `agents/` and `grids/` held the *scenario's* copied inputs, and the simulated ones were in
+        a third directory shared with the other run.
+        """
+        return os.path.join(base, self.__run_name)
+
     def __grid_results_path(self, base: str) -> str:
         """Where `save_grid` writes, from the same `base` that `save_database` is given.
 
         Duplicating the construction would let the two drift apart and split one run's results
         across two folders, so both go through here.
         """
-        return os.path.join(base, list(self.__regions.keys())[0], 'grids')
+        return os.path.join(self.__run_results_path(base), 'grids')
 
     """static methods"""
 
@@ -441,6 +468,21 @@ class Database:
 
     """save database"""
 
+    def restore_superseded_commands(self):
+        """On a forced iteration exit, publish the command the kept dispatch obeyed (#248)."""
+        for grid in self.__grids.values():
+            grid.restore_superseded_command_frame()
+
+    def end_timestep(self):
+        """Tell every grid its timestep is over, so per-timestep restriction state is dropped.
+
+        Called once per timestep by the executor, after the `while not grid_ok` loop, so it runs
+        whether the loop converged or was cut off by `max_iteration` -- the second of which is how a
+        command used to leak into the next timestep (#247).
+        """
+        for grid in self.__grids.values():
+            grid.clear_timestep_restriction_state()
+
     def save_database(self, path: str):
         """
         Save the database to the specified path.
@@ -459,14 +501,54 @@ class Database:
             os.makedirs(path)
 
         # save region data
-        for region in self.__regions.keys():
-            self.__regions[region].save_region(path=os.path.join(path, region))
+        for region, region_path in self.__region_save_paths(path):
+            region.save_region(path=region_path)
 
         # save grid data
         grid_path = self.__grid_results_path(path)
 
         for grid_type, grid in self.__grids.items():
             grid.save_grid(grid_path)
+
+    def save_agents(self, path: str):
+        """Write every region's agent tables to where `save_database` will write them.
+
+        The agents' half of `save_database`, for the executor to call every few timesteps (#249):
+        `AgentDB` holds its results in full-size tables that were written only at the end of the
+        run, so a crash used to lose all of them. Same `path` as `save_database`, the results
+        root, so the files land where the final save overwrites them.
+
+        Only the agents. Markets and grids drain past rows to disk per timestep already, but the
+        market's retained window -- the last clearing horizon -- stays in memory until the end of
+        the run, and its top-level tables are only assembled by `concat_market_files`. A crashed
+        run's folder therefore holds the agent tables as of the last checkpoint; its market folder
+        holds drained fragments under `past_data/` and no assembled table.
+        """
+        for region, region_path in self.__region_save_paths(path):
+            region.save_agents(path=region_path)
+
+    def __region_save_paths(self, path: str):
+        """Each region paired with the directory its results go in, for a results root `path`.
+
+        The first region is the scenario root -- `Creator.flatten_dict` emits the root key before
+        recursing -- and its output *is* the run's output, so it goes in the run directory. That
+        is where it already went: the root region is named after the scenario folder, which is
+        also the default run name, so `<results>/<region>` and `<results>/<run>` were the same
+        string until something passed `Executor(name=...)`.
+
+        Every later region keeps exactly the location it had, a sibling of the run directory.
+        Nesting them under the run reads better and was tried, but it breaks a run outright: the
+        market drain writes dropped rows to `<path_results>/markets/...` per timestep
+        (`post_markets_to_region`, which carries no region), while `concat_past_data` reads them
+        back from `<region_save>/markets/...`. Move the region and those two stop meeting, and
+        `concat_past_data` silently takes its "still in memory" branch and writes a market table
+        holding only the in-flight tail. Relocating regions therefore needs the market drain to
+        become region-aware first, which is a separate change; sub-regions consequently still
+        collide across runs the way #243 describes, and no shipped scenario has any.
+        """
+        results_path = self.__run_results_path(path)
+        for index, region in enumerate(self.__regions.keys()):
+            yield self.__regions[region], results_path if index == 0 else os.path.join(path, region)
 
     ########################################## PRIVATE METHODS ##########################################
 

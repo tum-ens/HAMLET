@@ -54,6 +54,72 @@ class GridDB:
 
         self.relevant_plant_type = {}  # relevant plant type for the grid
 
+    #: Keys in `restriction_commands` that belong to one timestep and must not outlive it.
+    #:
+    #: `current_variable_grid_fees` is deliberately absent, and the reason is the opposite of this
+    #: one: it *has* to survive the boundary. The fee is computed in a timestep's grid stage and read
+    #: in the **next** timestep's agent stage (`agent_base.py`, before the grid runs), so
+    #: cross-timestep survival is the only way it ever reaches an agent. Dropping it here makes
+    #: variable grid fees a near-total no-op -- measured, a fee reached 16 of 112 agent executions
+    #: instead of 116 of 120.
+    #:
+    #: Any state a restriction keeps *between passes* of one timestep belongs in this tuple: it is
+    #: what the timestep boundary clears, and what #249's resume is expected to checkpoint. State
+    #: kept anywhere else would survive the boundary and would not survive a pause.
+
+    #: The `res_direct_power_control` frame the latest pass replaced, kept so a forced exit can put
+    #: it back. Per-timestep like the rest, and cleared with them.
+    SUPERSEDED_COMMAND_FRAME_KEY = 'direct_power_control_superseded_frame'
+
+    #: The per-agent §14a floor anchored on the timestep's first controlling pass (#242).
+    GUARANTEE_KEY = 'direct_power_control_guarantee'
+
+    #: Where `reduction: ramp` keeps the pass count and each agent's ladder position (#245).
+    RAMP_STATE_KEY = 'direct_power_control_ramp'
+
+    TIMESTEP_RESTRICTION_KEYS = ('current_direct_power_control', GUARANTEE_KEY, RAMP_STATE_KEY,
+                                 SUPERSEDED_COMMAND_FRAME_KEY)
+
+    def restore_superseded_command_frame(self):
+        """Publish the command the kept dispatch actually obeyed, not the one computed after it.
+
+        Within a timestep each pass replaces the same-timestamp `res_direct_power_control` frame
+        with its own. On a converged exit that is right: the last command equals the one before it.
+        On an exit forced by `max_iteration` it is not -- the executor stops the loop *after* a
+        command was computed but *before* any agent ran under it, so the last frame records a
+        command that was never in force while the kept dispatch obeyed the previous one. Measured on
+        `grid_golden`: 4586 W published against a 4678 W draw that obeyed 4678 W (#248).
+
+        Called by the executor on that exit only. A no-op when nothing was superseded, which covers
+        a final pass that issued no command and left the previous frame standing.
+        """
+        frame = self.restriction_commands.pop(self.SUPERSEDED_COMMAND_FRAME_KEY, None)
+        if frame is None:
+            return
+        frames = self.results.get('res_direct_power_control')
+        if frames:
+            frames[-1] = frame
+
+    def clear_timestep_restriction_state(self):
+        """Drop what a restriction holds for the timestep that has just finished.
+
+        A direct power control command is an instruction for **one** timestep, computed from that
+        timestep's power flow. It used to survive whenever the timestep ended on the iteration cap
+        instead of by converging, because `EnWG14a` clears it only on the paths it controls and
+        `executor/setup.py` ends the timestep itself once `num_iteration` passes `max_iteration`.
+        The next timestep's agents read `restriction_commands` *before* the grid stage runs, so they
+        dispatched under a cap computed for an hour they were never assessed for (#247).
+
+        Clearing inside the restriction is not enough, and the reason is worth stating. A stale
+        command is normally discarded with the rest of its pass, because a command that changed
+        makes the loop re-run the timestep and roll the database back. But when the next timestep
+        has no overload the restriction never recomputes anything, `grid_ok` stays true, and that
+        first pass -- taken under the stale cap -- is the one that is kept. So this has to be driven
+        from where a timestep is known to be over, however it ended.
+        """
+        for key in self.TIMESTEP_RESTRICTION_KEYS:
+            self.restriction_commands.pop(key, None)
+
     def register_grid(self, regions: dict):
         """Assign class attribute from data in grids folder."""
         raise NotImplementedError('The register_grid function must be implemented for each grids type.')

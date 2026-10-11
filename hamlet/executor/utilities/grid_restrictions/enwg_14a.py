@@ -1,3 +1,4 @@
+import math
 import pytz
 from copy import deepcopy
 import pandas as pd
@@ -15,14 +16,123 @@ import hamlet.constants as c
 
 class EnWG14a(GridRestrictionBase):
 
+    # How far one pass of `__control_via_ems` curtails, `direct_power_control.reduction`; the
+    # option names are `c.DPC_REDUCTIONS`.
+    #
+    # The axis is what the operator can observe, not how deep it cuts. `required` needs a
+    #: per-connection state estimate to size the cut to the overload; `ramp` needs only an
+    #: overload/no-overload signal, repeated, and over-curtails by at most one step; `minimum`
+    #: needs one overload signal and takes everything to the §14a floor -- the simplest thing an
+    # FNN Steuerbox can be told and the hardest to call *erforderlich* under §14a.
+    #
+    # `required` is the default and is what every scenario ran before the key existed. The
+    # executor's `while not grid_ok` loop re-simulates the timestep after each pass, so under
+    # `required` the sequence approaches 100 % asymptotically and **where it stops is decided by
+    # `max_iteration`**, a simulation setting (#245 has the measured trajectory). The other two
+    # stop where the policy says, not where the cap falls.
+
     def __init__(self, grid_db: ElectricityGridDB, grid: pp.pandapowerNet, tasks: pl.DataFrame, database: Database, **kwargs):
 
         super().__init__(grid_db, grid, tasks, database, **kwargs)
+
+        # Refuse a bad strategy on the first timestep rather than on the first overload, which
+        # in a scenario that rarely overloads can be hours of simulation in.
+        if (self.restriction_config.get('direct_power_control') or {}).get('active'):
+            self.__reduction_strategy()
+            self.__secured_elements()
+
+    def __secured_elements(self) -> str:
+        """`secure` from `direct_power_control`: which elements the control must keep in rating.
+
+        Additive, and `trafo_and_lines` is what every scenario did before the key existed: the
+        command was sized from `max(line loading on the path to the transformer, transformer
+        loading)`, so a line was relieved whenever it was the worse of the two.
+
+        The choice is not cosmetic where the lines bind first, as they do on the Forchheim feeder
+        -- a 599 % line against a 353 % transformer in an uncontrolled January. `trafo_and_lines`
+        then drives the worst *line* to 100 % and leaves the transformer well under it (median
+        68 %); `trafo` relieves the transformer to 100 % and leaves the lines wherever they fall.
+        Neither is more correct -- they answer different questions -- and a transformer-only
+        loading KPI cannot tell them apart, which is the trap this key exists to make visible.
+        """
+        secure = self.restriction_config['direct_power_control'].get(
+            'secure', c.DPC_SECURE_TRAFO_AND_LINES)
+        if secure not in c.DPC_SECURES:
+            raise ValueError(
+                f'grids.yaml gives <energy>.restrictions.enwg_14a.direct_power_control.secure = '
+                f'{secure!r}; it must be one of {list(c.DPC_SECURES)}.')
+        return secure
+
+    def __binding_loading(self, grid, lines, trafo_overload: float) -> float:
+        """The loading one pass sizes a bus's reduction from, in percent.
+
+        Under `trafo_and_lines` that is the worst of the transformer and the lines between this
+        bus and it, so the element actually closest to its rating is the one relieved. Under
+        `trafo` it is the transformer alone, and line loadings are reported but never acted on.
+        """
+        if self.__secured_elements() == c.DPC_SECURE_TRAFO:
+            return trafo_overload
+        return max(grid.res_line.loc[lines, 'loading_percent'].max(), trafo_overload)
+
+    def __reduction_strategy(self) -> (str, int | None):
+        """`(reduction, ramp_steps)` from `direct_power_control`, defaulting to today's behaviour.
+
+        Both keys are additive: a scenario written before they existed has neither, reads as
+        `required`, and produces the same commands it always did. `ramp_steps` is read only under
+        `ramp`, and **not from `max_iteration`**. That one lives a level up, is shared by every
+        restriction and is a safety cap on the executor's iteration; if the ramp read it, raising
+        the cap to stop a timestep truncating would silently make curtailment gentler -- a
+        simulation setting changing the physics. The two are independent, and the one thing they
+        owe each other is that a ramp of *n* steps needs `max_iteration >= n` to be able to reach
+        its floor, or the cap truncates it as it would any other non-converging timestep.
+
+        Only the `ems` method sizes a command this way. `individual` curtails named devices to
+        their own floors in a priority order and has no notion of a strategy, so asking for one
+        there is refused rather than ignored: a key that is accepted and does nothing is the shape
+        of defect this repository keeps finding.
+        """
+        config = self.restriction_config['direct_power_control']
+        reduction = config.get('reduction', c.DPC_REDUCTION_REQUIRED)
+        if reduction not in c.DPC_REDUCTIONS:
+            raise ValueError(
+                f'grids.yaml gives <energy>.restrictions.enwg_14a.direct_power_control.reduction = '
+                f'{reduction!r}; it must be one of {list(c.DPC_REDUCTIONS)}.')
+
+        if reduction != c.DPC_REDUCTION_REQUIRED and config.get('method') != c.DPC_METHOD_EMS:
+            raise ValueError(
+                f'direct_power_control.reduction = {reduction!r} is only defined for method: ems; '
+                f'method: {config.get("method")!r} curtails named devices to their own floors and '
+                f'takes no reduction strategy. Drop the key or select method: ems.')
+
+        if reduction != c.DPC_REDUCTION_RAMP:
+            return reduction, None
+
+        steps = config.get('ramp_steps')
+        if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+            raise ValueError(
+                f'direct_power_control.reduction = ramp needs ramp_steps, a positive integer '
+                f'number of steps from the uncurtailed draw to the §14a floor, but grids.yaml gives '
+                f'ramp_steps = {steps!r}. It is not read from max_iteration, which is a safety cap '
+                f'on the executor\'s iteration and not a property of the policy.')
+        return reduction, steps
+
+    @staticmethod
+    def can_reject_a_pass(config: dict) -> bool:
+        # `execute` sets `grid_ok` only inside the direct power control branch; variable grid fees
+        # never reject a pass.
+        return bool(config['direct_power_control']['active'])
 
     def execute(self) -> (ElectricityGridDB, bool):
         """Execute the §14a EnWG regulation."""
         # Boolean variable presents if grid status is ok (no overload)
         grid_ok = True
+
+        # The superseded-frame stash describes what *this* pass replaced, and nothing else. A pass
+        # that writes no command -- the overload cleared, or nothing to command -- must not leave a
+        # previous pass's stash behind, or a forced exit on that pass would restore a frame two
+        # passes old and publish a command nobody obeyed. That is the defect #248 fixes, and this
+        # line is what stops the fix reproducing it.
+        self.grid_db.restriction_commands.pop(self.grid_db.SUPERSEDED_COMMAND_FRAME_KEY, None)
 
         # calculate variable grid fees if active
         if self.restriction_config['variable_grid_fees']['active'] and self.__check_if_update_variable_grid_fees():
@@ -55,6 +165,80 @@ class EnWG14a(GridRestrictionBase):
 
         return update_grid_fees
 
+    #: Leading timesteps of the fee horizon no agent can respond to, so the fee series starts
+    #: this far out and the loading series is sliced by the same amount.
+    #:
+    #: Two, for two separate reasons. The fees are written to `restriction_commands` in the grid
+    #: stage and not read until `agent_base.__update_variable_grid_fees` runs, which is the next
+    #: timestep -- that is one. And `markets.yaml` sets `closing: 3600`, so at any timestep the
+    #: delivery period being traded is already the next one; by the time an agent has the fee,
+    #: the first period it can still bid on is the one after that -- that is the second.
+    #:
+    #: **So this is tied to the market's closing lead and does not know it.** A market that closed
+    #: at delivery, or two periods ahead, would want a different number here, and nothing would
+    #: say so. That is a modelling question about how §14a fees reach the agents and is not
+    #: settled here; it is named rather than repeated so there is one place to change.
+    FEE_HORIZON_LEAD_STEPS = 2
+
+    #: Steps the fee horizon must have before it describes anything: the lead is dropped, so a
+    #: horizon of `FEE_HORIZON_LEAD_STEPS` or fewer leaves an empty fee series and one more than
+    #: that leaves a single timestep. Derived rather than written out, because a hardcoded
+    #: minimum would go on passing a lead that had changed underneath it.
+    MIN_FEE_HORIZON_STEPS = FEE_HORIZON_LEAD_STEPS + 1
+
+    @classmethod
+    def __fee_horizon_steps(cls, horizon_seconds, resolution):
+        """The §14a fee horizon as a count of timesteps, or a refusal.
+
+        Every downstream use of the horizon is a count: `periods` on the fee timestamp index, the
+        number of power flows to run, and the length the profiles are sliced to. A horizon that is
+        not a whole number of timesteps has no such count -- pandas used to truncate the fraction
+        away silently, giving a horizon shorter than the config asked for (#211).
+
+        Casting would only pin that truncation for every future config. Whether §14a's fee horizon
+        should round down, round up or be forbidden is a modelling question about the Festlegung,
+        and until it is answered the honest answer is to refuse the config rather than quietly
+        shorten it. Every shipped config divides evenly, so this cannot fire on one of them.
+
+        **Divisibility on its own is not the decision.** A whole number can still be a number the
+        calculation cannot use, and each of those fails silently rather than loudly: a negative
+        horizon divides evenly (`-3600 % 3600 == 0`) and then slices profiles from the wrong end;
+        `pd.date_range` accepts a zero or negative `periods` and returns an empty index, so a
+        horizon of one or two steps writes empty fees for every bus for the whole run; and a
+        `timestep` of zero divides by zero before any of it. Checking only the fraction would have
+        left a guard that reads as thorough and admits every one of them.
+
+        Tested with `%` on the configured seconds rather than `!=` on the quotient: `%` is exact on
+        the integers YAML gives us, matches what the message tells the user to fix, and is the
+        idiom `__check_if_update_variable_grid_fees` already uses. It is also total -- `inf` and
+        `nan` reach the refusal instead of raising out of an `int()` call inside the condition.
+        """
+        if not resolution or resolution <= 0:
+            raise ValueError(
+                f'The simulation timestep must be a positive number of seconds for §14a to '
+                f'measure its variable grid fee horizon against, but setup.yaml gives '
+                f'time.timestep = {resolution}.')
+
+        if horizon_seconds % resolution != 0:
+            raise ValueError(
+                f'The §14a variable grid fee horizon must be a whole number of timesteps, but '
+                f'grids.yaml gives <energy>.restrictions.enwg_14a.variable_grid_fees.horizon = '
+                f'{horizon_seconds} s against setup.yaml time.timestep = {resolution} s, which '
+                f'is {horizon_seconds / resolution} steps. Adjust either so that '
+                f'horizon % timestep == 0 -- §14a will not shorten the horizon for you.')
+
+        steps = int(horizon_seconds // resolution)
+        if steps < cls.MIN_FEE_HORIZON_STEPS:
+            raise ValueError(
+                f'The §14a variable grid fee horizon must span at least '
+                f'{cls.MIN_FEE_HORIZON_STEPS} timesteps, because the first '
+                f'{cls.FEE_HORIZON_LEAD_STEPS} are dropped as unreachable by the agents, but '
+                f'grids.yaml gives '
+                f'<energy>.restrictions.enwg_14a.variable_grid_fees.horizon = {horizon_seconds} s '
+                f'against setup.yaml time.timestep = {resolution} s, which is {steps} steps.')
+
+        return steps
+
     def __calculate_variable_grid_fees(self):
         """
         Calculate variable grid fees for each node.
@@ -80,16 +264,20 @@ class EnWG14a(GridRestrictionBase):
         # get data resolution and variable grid fees horizon and base grid fee
         general_config = self.database.get_general_data()[c.K_GENERAL]
         resolution = general_config['time']['timestep']
-        horizon = self.restriction_config['variable_grid_fees']['horizon'] / resolution
+
+        horizon_seconds = self.restriction_config['variable_grid_fees']['horizon']
+        horizon = self.__fee_horizon_steps(horizon_seconds, resolution)
         grid_fee_base = self.restriction_config['variable_grid_fees']['grid_fee_base'] * c.EUR_KWH_TO_EURe7_WH
 
-        # generate a timestep column as index for variable grid fees, from second next timestep to calculation horizon
-        timestep_column = pd.date_range(start=self.timestamp + pd.DateOffset(seconds=2 * resolution),
-                                        periods=horizon - 2, freq=pd.DateOffset(seconds=resolution))
+        # the fee series covers the horizon minus its unreachable lead; see FEE_HORIZON_LEAD_STEPS
+        lead = self.FEE_HORIZON_LEAD_STEPS
+        timestep_column = pd.date_range(
+            start=self.timestamp + pd.DateOffset(seconds=lead * resolution),
+            periods=horizon - lead, freq=pd.DateOffset(seconds=resolution))
 
         # run the horizon's power flows
         try:
-            results = self.__run_horizon_power_flows(grid, int(horizon))
+            results = self.__run_horizon_power_flows(grid, horizon)
         except pp.powerflow.LoadflowNotConverged:  # avoid stopping the simulation when load flow not converged
             print('Load flow not converged for timestamp: ', str(self.timestamp))
             return 0
@@ -119,11 +307,12 @@ class EnWG14a(GridRestrictionBase):
                 # concat bus and line loading and take the max value per index
                 combined_loading = pd.concat([trafo_loading, line_loading], axis=1).max(axis=1) / 100
 
-                # delete the first two timesteps since they won't be considered in agents' controllers
-                combined_loading = combined_loading.iloc[2:]
+                # drop the same unreachable lead, so this lines up with `timestep_column`
+                combined_loading = combined_loading.iloc[lead:]
 
                 # for over-generation, take the minimal value among the whole horizon to maximize incentive
-                combined_loading[(combined_loading > 1) & (trafo_lv_power.iloc[2:][trafo] > 0)] = combined_loading.min()
+                combined_loading[(combined_loading > 1) &
+                                 (trafo_lv_power.iloc[lead:][trafo] > 0)] = combined_loading.min()
 
                 # assign index
                 combined_loading.index = timestep_column
@@ -193,11 +382,16 @@ class EnWG14a(GridRestrictionBase):
         # check trafo overload
         trafo_overloaded = self.grid.res_trafo['loading_percent'].max() > 100
 
-        # check line overload
-        line_overloaded = self.grid.res_line['loading_percent'].max() > 100
+        # check line overload -- only where the lines are something this control answers for. A
+        # line-only overload under `secure: trafo` would otherwise open a pass that
+        # `__binding_loading` then sizes at the transformer's (in-rating) loading, so the pass
+        # would command nothing and the timestep would iterate to its cap without converging.
+        line_overloaded = (self.__secured_elements() == c.DPC_SECURE_TRAFO_AND_LINES
+                           and self.grid.res_line['loading_percent'].max() > 100)
 
-        # check voltage pu
-        # to be implemented
+        # Voltage is not checked, and under DC power flow it could not be: `rundcpp` leaves
+        # `res_bus.vm_pu` at 1.0 on every bus. Sizing a reduction for a voltage band would also
+        # need a dV/dP sensitivity rather than the flow-to-rating ratio `__control_via_ems` uses.
 
         return trafo_overloaded or line_overloaded
 
@@ -224,6 +418,12 @@ class EnWG14a(GridRestrictionBase):
         # save previous results for the current timestep to check if this timestamp need to be updated
         previous_direct_power_control = deepcopy(self.grid_db.restriction_commands['current_direct_power_control'])
 
+        # One overload signal per pass, which is the ramp's clock. Counted here and not per
+        # command, because the bus loop below visits every bus of a zone once per transformer in
+        # it, so with two transformers an agent is commanded twice per pass.
+        if self.__reduction_strategy()[0] == c.DPC_REDUCTION_RAMP:
+            self.__begin_ramp_pass()
+
         # check overload for trafo
         for trafo_index in grid.res_trafo.index:
             # get trafo power, positive or negative is important
@@ -237,22 +437,20 @@ class EnWG14a(GridRestrictionBase):
                                                                     trafo_lv_bus_index=grid.trafo.loc[trafo_index,
                                                                     'lv_bus'])
 
-            # get line loading for upper lines into a dataframe for each bus
+            # size each bus's reduction from the element closest to its rating; which elements
+            # count is `direct_power_control.secure`
             for bus in shortest_path.keys():
-                line_df = grid.res_line.loc[shortest_path[bus]]
-                line_overload = line_df['loading_percent'].max()
-
-                # compare trafo overload and line overload, take the bigger one
-                combined_loading = max(line_overload, trafo_overload) / 100
+                combined_loading = self.__binding_loading(grid, shortest_path[bus],
+                                                          trafo_overload) / 100
 
                 # perform direct power control when combined loading percentage presents an overload
                 if combined_loading > 1:
                     match self.restriction_config['direct_power_control']['method']:
-                        case 'individual':
+                        case c.DPC_METHOD_INDIVIDUAL:
                             self.grid_db.restriction_commands['current_direct_power_control'] = (
                                 self.__individual_device_control(bus=bus, trafo_power=trafo_power,
                                                                  combined_loading=combined_loading))
-                        case 'ems':
+                        case c.DPC_METHOD_EMS:
                             self.grid_db.restriction_commands['current_direct_power_control'] = (
                                 self.__control_via_ems(bus=bus, trafo_power=trafo_power,
                                                        combined_loading=combined_loading))
@@ -274,6 +472,12 @@ class EnWG14a(GridRestrictionBase):
                 self.grid_db.results['res_direct_power_control'] = []
             elif (str(self.grid_db.results['res_direct_power_control'][-1][c.TC_TIMESTAMP].unique()[0]) == str(
                     self.timestamp)):
+                # Keep the frame this pass supersedes rather than discarding it. If the executor
+                # ends the timestep on the iteration cap, the command computed on that final pass
+                # was never applied -- the kept dispatch obeyed the pass *before* it -- and the
+                # executor restores this frame so the published command is the one in force (#248).
+                self.grid_db.restriction_commands[self.grid_db.SUPERSEDED_COMMAND_FRAME_KEY] = (
+                    self.grid_db.results['res_direct_power_control'][-1])
                 del self.grid_db.results['res_direct_power_control'][-1]
 
             results_df = pd.DataFrame(data_list, columns=[c.TC_TIMESTAMP, c.TC_ID_AGENT, c.TC_ID_PLANT,
@@ -288,6 +492,46 @@ class EnWG14a(GridRestrictionBase):
             self.grid_db.restriction_commands['current_direct_power_control'] = {}
 
         return grid_ok
+
+    def __timestep_guarantees(self) -> dict:
+        """The per-agent §14a bound for the timestep being simulated, empty on a new one.
+
+        Keyed on the timestamp rather than cleared by whoever finishes a timestep, because several
+        paths finish one and only a single one of them used to clear anything. `execute` empties the
+        commands when a later pass finds no overload left -- the *success* case, which is exactly
+        when an anchor would otherwise survive -- and `executor/setup.py` forces `grid_ok` once
+        `num_iteration` passes `max_iteration`, which the restriction never learns about at all.
+
+        A stale anchor is worse than none: it is a bound taken against a different dispatch, so it
+        both authorises curtailment below the next timestep's real floor and blocks curtailment that
+        timestep needs. Deriving the reset from the timestamp makes every exit path safe without
+        having to find them all.
+        """
+        return self.__timestep_state(ElectricityGridDB.GUARANTEE_KEY)['agents']
+
+    def __timestep_ramp(self) -> dict:
+        """The `reduction: ramp` state for the timestep being simulated, empty on a new one.
+
+        `{'timestamp', 'passes': overload signals seen, 'agents': {agent: {'from': uncurtailed W,
+        'step': rungs taken, 'pass': the pass of the last one}}}`. Reset on the same timestamp
+        rule as the guarantee, for the same reasons -- a step count carried into the next
+        timestep would start that timestep's ramp part-way down. Kept under
+        `GridDB.TIMESTEP_RESTRICTION_KEYS`, which is what the boundary clears and what #249 is
+        expected to checkpoint.
+        """
+        return self.__timestep_state(ElectricityGridDB.RAMP_STATE_KEY)
+
+    def __begin_ramp_pass(self):
+        self.__timestep_ramp()['passes'] += 1
+
+    def __timestep_state(self, key) -> dict:
+        store = self.grid_db.restriction_commands.setdefault(key, {})
+        if store.get('timestamp') != self.timestamp:
+            store.clear()
+            store['timestamp'] = self.timestamp
+            store['passes'] = 0
+            store['agents'] = {}
+        return store
 
     def __individual_device_control(self, bus, trafo_power, combined_loading) -> dict:
         """
@@ -343,8 +587,9 @@ class EnWG14a(GridRestrictionBase):
         # check if sgen or load need to be adjusted
         if trafo_power < 0 < total_p_at_bus:  # too much load, load needs to be reduced
             # count number of relevant 14a devices at bus
-            load_df = deepcopy(grid.load[grid.load['bus'] == bus][(grid.load['load_type'] == c.P_EV) |
-                                                                  (grid.load['load_type'] == c.P_HP)])
+            load_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                         ((grid.load['load_type'] == c.P_EV) |
+                                          (grid.load['load_type'] == c.P_HP))])
 
             # A device is a candidate only if it draws above **its own** Mindestleistung, which is
             # what it is guaranteed and therefore all it can give (Ziffer 4.5). For an EV that is
@@ -362,7 +607,8 @@ class EnWG14a(GridRestrictionBase):
             load_df = load_df[load_df['p_mw'] > load_df['hp_min_control'].clip(lower=threshold)]
 
             # check if battery is charging
-            battery_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][grid.sgen['plant_type'] == c.P_BATTERY])
+            battery_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                            (grid.sgen['plant_type'] == c.P_BATTERY)])
             battery_df = battery_df[battery_df['p_mw'] < - threshold]  # take only batteries which are charging
 
             # perform individual device control
@@ -440,11 +686,13 @@ class EnWG14a(GridRestrictionBase):
         elif trafo_power > 0 > total_p_at_bus:  # too much generation, generation needs to be reduced
             # count number of 14a devices at bus
             # take feed in ev
-            ev_df = deepcopy(grid.load[grid.load['bus'] == bus][grid.load['load_type'] == c.P_EV])
+            ev_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                       (grid.load['load_type'] == c.P_EV)])
             ev_df = ev_df[ev_df['p_mw'] < - threshold]  # check if ev is feeding in to the grid
 
             # take discharging battery
-            sgen_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][(grid.sgen['plant_type'] == c.P_BATTERY)])
+            sgen_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                         (grid.sgen['plant_type'] == c.P_BATTERY)])
             sgen_df = sgen_df[sgen_df['p_mw'] > threshold]  # take only batteries which are discharging
 
             # perform individual device control
@@ -518,6 +766,10 @@ class EnWG14a(GridRestrictionBase):
         # deepcopy current direct power control results as target to write
         control_target = self.grid_db.restriction_commands['current_direct_power_control']
 
+        reduction, ramp_steps = self.__reduction_strategy()
+        anchored_guarantee = self.__timestep_guarantees()
+        ramp = self.__timestep_ramp() if reduction == c.DPC_REDUCTION_RAMP else None
+
         # get minimal power to be guaranteed
         threshold = self.restriction_config['direct_power_control']['threshold'] * c.WH_TO_MWH
 
@@ -531,14 +783,22 @@ class EnWG14a(GridRestrictionBase):
         p_mw_to_be_reduced = total_p_at_bus * (1 - 1 / combined_loading)
 
         # check if sgen or load need to be adjusted
+        # +1 where curtailing means consuming less, -1 where it means generating less: the
+        # guarantee binds from opposite sides in the two cases.
+        direction = 0
+
         if trafo_power < 0 < total_p_at_bus:  # too much load, load needs to be reduced
+            direction = 1
+
             # count number of 14a devices at bus
-            load_df = deepcopy(grid.load[grid.load['bus'] == bus][(grid.load['load_type'] == c.P_EV) |
-                                                                  (grid.load['load_type'] == c.P_HP)])
+            load_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                         ((grid.load['load_type'] == c.P_EV) |
+                                          (grid.load['load_type'] == c.P_HP))])
             load_df = load_df[load_df['p_mw'] > threshold]
 
             # check if battery is charging
-            battery_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][grid.sgen['plant_type'] == c.P_BATTERY])
+            battery_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                            (grid.sgen['plant_type'] == c.P_BATTERY)])
             battery_df = battery_df[battery_df['p_mw'] < - threshold]  # take only batteries which are charging
 
             # get all agent who has 14a relevant plants at bus
@@ -550,9 +810,8 @@ class EnWG14a(GridRestrictionBase):
                                      len(battery_df[battery_df[c.TC_ID_AGENT] == agent]) * threshold)
 
                 # total reducible ev power
-                ev_reduction = (load_df[load_df[c.TC_ID_AGENT] == agent][load_df['load_type'] == c.P_EV]['p_mw'].sum() -
-                                len(load_df[load_df[c.TC_ID_AGENT] == agent][load_df['load_type'] == c.P_EV]) *
-                                threshold)
+                agent_evs = load_df[(load_df[c.TC_ID_AGENT] == agent) & (load_df['load_type'] == c.P_EV)]
+                ev_reduction = agent_evs['p_mw'].sum() - len(agent_evs) * threshold
 
                 # total reducible hp power: everything the agent's heat pumps hold above their
                 # §14a Mindestleistung. `hp_min_control` carries that floor per device, from
@@ -600,13 +859,17 @@ class EnWG14a(GridRestrictionBase):
             power_reduction_at_bus = - min(sum(reducible_power_for_agent.values()), p_mw_to_be_reduced)
 
         elif trafo_power > 0 > total_p_at_bus:  # too much generation, generation needs to be reduced
+            direction = -1
+
             # count number of 14a devices and pv at bus
             # take feed in ev
-            ev_df = deepcopy(grid.load[grid.load['bus'] == bus][grid.load['load_type'] == c.P_EV])
+            ev_df = deepcopy(grid.load[(grid.load['bus'] == bus) &
+                                       (grid.load['load_type'] == c.P_EV)])
             ev_df = ev_df[ev_df['p_mw'] < - threshold]  # check if ev is feeding in to the grid
 
             # take discharging battery and pv
-            sgen_df = deepcopy(grid.sgen[grid.sgen['bus'] == bus][(grid.sgen['plant_type'] == c.P_BATTERY)])
+            sgen_df = deepcopy(grid.sgen[(grid.sgen['bus'] == bus) &
+                                         (grid.sgen['plant_type'] == c.P_BATTERY)])
             sgen_df = sgen_df[sgen_df['p_mw'] > threshold]  # take only batteries which are discharging
 
             # get all agent who has 14a plants at bus
@@ -614,10 +877,9 @@ class EnWG14a(GridRestrictionBase):
 
             for agent in all_agents:  # get reducible power for each agent
                 # total reducible battery power
-                battery_reduction = (
-                        sgen_df[sgen_df[c.TC_ID_AGENT] == agent][sgen_df['plant_type'] == c.P_BATTERY]['p_mw']
-                        .sum() - len(sgen_df[sgen_df[c.TC_ID_AGENT] == agent][sgen_df['plant_type']
-                                                                              == c.P_BATTERY]) * threshold)
+                agent_batteries = sgen_df[(sgen_df[c.TC_ID_AGENT] == agent) &
+                                          (sgen_df['plant_type'] == c.P_BATTERY)]
+                battery_reduction = agent_batteries['p_mw'].sum() - len(agent_batteries) * threshold
 
                 # total reducible ev power
                 ev_reduction = (abs(ev_df[ev_df[c.TC_ID_AGENT] == agent]['p_mw'].sum()) -
@@ -635,8 +897,9 @@ class EnWG14a(GridRestrictionBase):
         # calculate percent of each agent
         for agent in reducible_power_for_agent.keys():
             # calculate total power for the agent
-            total_p_agent = int((grid.load[grid.load[c.TC_ID_AGENT] == agent]['p_mw'].sum() -
-                                 grid.sgen[grid.sgen[c.TC_ID_AGENT] == agent]['p_mw'].sum()) * c.MWH_TO_WH)
+            agent_load_mw = grid.load[grid.load[c.TC_ID_AGENT] == agent]['p_mw'].sum()
+            agent_sgen_mw = grid.sgen[grid.sgen[c.TC_ID_AGENT] == agent]['p_mw'].sum()
+            total_p_agent = int((agent_load_mw - agent_sgen_mw) * c.MWH_TO_WH)
 
             # write control result to target dict
             if agent not in control_target.keys():
@@ -655,7 +918,82 @@ class EnWG14a(GridRestrictionBase):
             reduced_p_agent = int(reducible_power_for_agent[agent] / total_reducible *
                                   power_reduction_at_bus * c.MWH_TO_WH) if total_reducible > 0 else 0
 
-            control_target[agent]['ems'] = total_p_agent + reduced_p_agent
+            # **The command may not take the agent below what §14a leaves it**, and that bound has
+            # to be anchored to this timestep's first controlling pass to mean anything.
+            #
+            # `total_p_agent` is re-read from the grid every pass, so on the second pass it already
+            # carries the first pass's curtailment and `reduced_p_agent` comes off it again. Nothing
+            # stopped that compounding: `threshold` bounds what each *device* may give up, never
+            # what the connection as a whole is left with. Measured on design 6a, the loop took 53 %
+            # more than §14a permits on 68.8 % of the agent-timesteps it controlled and drove one
+            # connection to 339 W -- below its own inflexible load, so the agent's optimisation had
+            # no feasible point and the run died.
+            #
+            # The bound is the deepest command a correct pass can produce, `total_p_agent` less
+            # everything §14a lets the operator take. Recomputing it each pass is inert, and looks
+            # like a fix: `power_reduction_at_bus` is capped at `sum(reducible)` and each share
+            # divides by that same sum, so every pass already satisfies it and both sides shrink
+            # together. Only the remembered value binds.
+            #
+            # Taking it from `reducible_power_for_agent` rather than re-deriving it from device
+            # floors keeps it identical to what pass 1 computed. A floors-based version disagrees
+            # wherever `hp_reduction`'s `max(0.0, ...)` clamps -- it would bound the agent above its
+            # own pass-1 command and block curtailment §14a allows -- and it would have to be capped
+            # at the agent's own draw to stay a floor rather than an instruction to consume more.
+            # `reducible` is non-negative, so this form needs neither.
+            #
+            # Termination follows: once the command stops moving,
+            # `__calculate_direct_power_control` finds it equal to the previous pass's and settles
+            # the timestep. Every controlled timestep used to exhaust `max_iteration`.
+            if agent not in anchored_guarantee:
+                # One rounding, toward what the agent can meet. `int()` truncates toward zero,
+                # and the guarantee used to be the difference of two truncated terms; when the
+                # agent's MW sum did not survive the round trip to W that left it 1 W *below* the
+                # inflexible load it exists to protect -- and the RTC, whose inflexible load is a
+                # fixed variable, was infeasible by that watt (#250: design 6 at threshold 0, 2023-01-09 05:00, agent
+                # e2W83ae1O1eyEW2: cap 1206 W, firm draw 1207 W). 28 % of integer-watt values lose
+                # a watt on `w * WH_TO_MWH * MWH_TO_WH`. At the legal threshold the floor sits far
+                # above the firm draw and the watt is invisible; at threshold 0 the floor *is* the
+                # firm draw. The rounding is therefore taken once, on the unrounded MW difference,
+                # and upward for an import cap (downward for an export cap), after rounding away
+                # float noise below a milliwatt so an exact value is not pushed up a whole watt.
+                firm_w = (agent_load_mw - agent_sgen_mw
+                          - direction * reducible_power_for_agent[agent]) * c.MWH_TO_WH
+                firm_w = round(firm_w, 3)
+                anchored_guarantee[agent] = (math.ceil(firm_w) if direction > 0
+                                             else math.floor(firm_w))
+
+            # The strategy decides where between the uncurtailed draw and the floor the command
+            # lands; see the class comment. All three share the anchor above and the clamp
+            # below, so none can go past the floor and `required` is byte-for-byte what it was.
+            match reduction:
+                case c.DPC_REDUCTION_REQUIRED:
+                    target = total_p_agent + reduced_p_agent
+                case c.DPC_REDUCTION_MINIMUM:
+                    target = anchored_guarantee[agent]
+                case c.DPC_REDUCTION_RAMP:
+                    # Both ends of the ladder are anchored on the agent's first commanded pass:
+                    # the draw it started from and the floor it may be taken to. Step k is the
+                    # k-th rung down, however much the agent actually drew in between -- a step
+                    # measured from the current draw would re-take what an EMS had already given
+                    # up by dispatching below its cap. Past the last rung the arithmetic goes
+                    # below the floor and the clamp below holds it there, so the command stops
+                    # moving and the timestep converges; the step is not capped here because a
+                    # cap would be a branch nothing could tell from the clamp.
+                    #
+                    # One rung per overload signal, not per command: a zone with two transformers
+                    # has every bus commanded twice per pass, and a step counted per command
+                    # would halve the ladder there.
+                    state = ramp['agents'].setdefault(agent, {'from': total_p_agent, 'step': 0,
+                                                              'pass': None})
+                    if state['pass'] != ramp['passes']:
+                        state['step'] += 1
+                        state['pass'] = ramp['passes']
+                    span = state['from'] - anchored_guarantee[agent]
+                    target = state['from'] - int(span * state['step'] / ramp_steps)
+
+            control_target[agent][c.DPC_METHOD_EMS] = (max(target, anchored_guarantee[agent]) if direction > 0
+                                                       else min(target, anchored_guarantee[agent]))
 
         return control_target
 

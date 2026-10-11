@@ -36,3 +36,12 @@ class GridRestrictionBase:
 
     def execute(self):
         raise NotImplementedError('This restriction type is not implemented yet but the structure is already in place.')
+
+    @staticmethod
+    def can_reject_a_pass(config: dict) -> bool:
+        """Whether `execute` can ever return `grid_ok=False` under this restriction's config.
+
+        Decides whether the executor takes the per-timestep copy a rollback needs (#249); see
+        `Executor.__execute_grids` for what happens to a rejection that answered False here.
+        """
+        return False

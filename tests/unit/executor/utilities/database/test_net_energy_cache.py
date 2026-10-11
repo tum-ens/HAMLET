@@ -16,6 +16,22 @@ cached and uncached agree.
 
 So every test below compares the cache against the same definition computed from scratch, and
 `test_fees_are_not_counted_as_traded_energy` is the one that fails if the filter is dropped.
+
+**The comparison is not the evidence, and it is worth being explicit about which half is.** Both
+routes call `_net_energy_from`, so a widened *filter* is applied identically to both and they go
+on agreeing -- at the wrong number. Measured: admitting `grid` and `levies` into
+`NET_TRANSACTION_TYPES` fails exactly three tests in this file, and not one of them is in
+`TestCachedEqualsUncached`. They are `test_fees_are_not_counted_as_traded_energy`,
+`test_the_uncached_path_filters_identically` and
+`test_fee_rows_are_excluded_here_as_they_are_everywhere_else` -- the three that state an absolute
+figure on this constant, the last of them reaching it through `_rtc_energy_from`. The
+differential tests cover the one thing those cannot: a fold that has gone wrong only on the
+incremental path.
+
+This is L4's first invariant -- *net energy is the sum of the transactions* -- at the database
+layer. The settlement layer's half of it is
+`tests/unit/executor/markets/test_settlement_by_hand.py`, which anchors on the transactions of one
+delivery timestep rather than on the running cache.
 """
 import datetime
 
@@ -163,14 +179,42 @@ class TestTheTypeFilterIsTheWholePoint:
                [(START + datetime.timedelta(hours=1), 1000, 0)]
 
     def test_another_market_in_the_same_table_is_excluded(self, market):
-        other = transactions([(1, 'a', c.TT_MARKET, 500, 0)]).with_columns(
-            pl.lit('other').cast(c.TS_MARKET_TRANSACTIONS[c.TC_NAME]).alias(c.TC_NAME))
-        feed(market, [pl.concat([transactions([(1, 'a', c.TT_MARKET, 1000, 0)]), other],
-                                how='vertical')])
+        feed(market, [self.two_markets()])
         window = (START, START + datetime.timedelta(hours=5))
 
         assert market.get_net_energy('a', *window).rows() == \
                [(START + datetime.timedelta(hours=1), 1000, 0)]
+
+    def test_the_uncached_path_excludes_it_too(self, market):
+        """The market filter is the one place the two netting definitions differ, so it is the
+        one place the uncached fallback can answer with something the cache would not.
+
+        `get_net_energy` falls back to `_net_energy_from` when there is no cache;
+        `_rtc_energy_from` is the same expression **without** the market and name filter, on
+        purpose. Nothing else in this file runs a multi-market table through the uncached route
+        -- the test above feeds the cache, and `test_the_uncached_path_filters_identically` has
+        one market only -- so swapping the two functions in that fallback was silent across the
+        whole default suite. Measured: 1097 passed under it.
+
+        The cache is an optimisation, never a second source of truth. This is the assertion that
+        makes that true of the filter as well as of the arithmetic.
+        """
+        market.set_market_transactions(self.two_markets())
+        window = (START, START + datetime.timedelta(hours=5))
+
+        assert market.net_cache is None, 'this arm has a cache, so it is not the fallback'
+        assert sorted_rows(uncached(market, 'a', *window)) == \
+               [(START + datetime.timedelta(hours=1), 1000, 0)]
+        assert market.get_net_energy('a', *window).rows() == \
+               [(START + datetime.timedelta(hours=1), 1000, 0)]
+
+    @staticmethod
+    def two_markets():
+        """1000 Wh on this market and 500 on another, at the same timestep, for the same agent."""
+        other = transactions([(1, 'a', c.TT_MARKET, 500, 0)]).with_columns(
+            pl.lit('other').cast(c.TS_MARKET_TRANSACTIONS[c.TC_NAME]).alias(c.TC_NAME))
+        return pl.concat([transactions([(1, 'a', c.TT_MARKET, 1000, 0)]), other],
+                         how='vertical')
 
 
 class TestTheWindow:

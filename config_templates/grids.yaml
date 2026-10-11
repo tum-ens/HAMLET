@@ -47,6 +47,9 @@ electricity:                          # type of grid (needs to match available g
 
         horizon: 86400                # calculation horizon
                                       # unit: s
+                                      # note: must be a whole number of timesteps and at least
+                                      #   three of them, else the run is refused (see
+                                      #   setup.yaml time.timestep)
 
         update: 3600                  # update frequency
                                       # unit: s
@@ -66,6 +69,26 @@ electricity:                          # type of grid (needs to match available g
 
         threshold: 4200               # minimum guaranteed power (according to §14a: 4200 W)
                                       # unit: W
+
+        secure: trafo_and_lines       # which elements the control keeps inside their rating
+                                      # options:
+                                      #   - trafo_and_lines: the worse of the transformer and the
+                                      #     lines feeding each bus (default, and what every
+                                      #     scenario did before this key existed)
+                                      #   - trafo: the transformer only
+                                      # note: where lines bind first the two differ sharply, and a
+                                      #   transformer-only KPI cannot tell them apart. See
+                                      #   `EnWG14a.__secured_elements`.
+
+        reduction: required           # reduction strategy: how far one pass of the ems method curtails
+                                      # options:
+                                      #   - required: exactly the overload, re-measured every pass
+                                      #   - minimum:  straight to the §14a floor
+                                      #   - ramp:     one of ramp_steps equal steps toward the floor per pass
+                                      # note: only read by the ems method
+
+        ramp_steps: 3                 # steps from the uncurtailed draw to the §14a floor
+                                      # note: only read by the ramp strategy
 
 heat:
   active: False

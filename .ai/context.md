@@ -83,10 +83,16 @@ A `venv/` directory in your working tree is not this project's environment — `
 
 ## Solver
 
-HiGHS is installed with HAMLET and is what `examples/create_simple_scenario` uses
-(`simple_scenario/agents.yaml:904,930`). No licence is needed for the example, the test suite, or
-CI. Gurobi is optional and fully supported — set `solver: gurobi` under `optimization`; the other
-three examples and `config_templates/` still specify it.
+HiGHS is installed with HAMLET and is what **every shipped scenario and `config_templates/`**
+select (`simple_scenario/agents.yaml:905,932` and the same two keys in each of the others). No
+licence is needed for any example, the test suite, or CI. Gurobi is optional and fully supported —
+set `solver: gurobi` under `optimization`.
+
+`examples/create_scenario_with_market` and `config_templates/` specified Gurobi until #223. That
+example is the only shipped scenario that clears a market, nothing ran it, and so nobody had met
+the consequence: it could not run in CI or on any unlicensed machine. `test_market_clearing.py`
+and `test_grid_examples.py` now read the backend receipt back, so a revert fails on a *licensed*
+machine too rather than passing quietly.
 
 **`framework` and `solver` are independent, so there are four supported combinations, and all four
 are tested.** The matrix and its rules are documented once, in `tests/README.md`. The one thing
@@ -255,6 +261,18 @@ floor, both go to it whatever the order, and reversing both documented orders le
 byte-identical. The second fixture therefore also lowers the floor to 1000 W, and costs the `e2e`
 job one extra run (~185 s). Its over-generation half is reachable by nothing (#233).
 
+**Under `ems` the reduction strategy is configuration too, and two of its three values are reached
+only by test fixtures (#245).** `direct_power_control.reduction` is `required` (the default: the
+overload, re-measured each pass, so the stopping point is `max_iteration`'s), `minimum` (the §14a
+floor in one pass) or `ramp` (one of `ramp_steps` rungs per pass). `ramp_steps` is deliberately
+**not** `max_iteration`, which is a cap on iteration and not a policy; a ramp needs the cap at or
+above its rung count to be able to reach its floor. `test_grid_restrictions.py` runs `minimum` on
+`grid_golden` at the real 4200 W and `ramp` at 1000 W with the cap raised to 5 -- at 4200 W the
+ladder reaches the floor before the overload clears and the ramp is a slower `minimum`, and with
+the cap equal to the rung count a ramp reading the wrong key is indistinguishable. Two more `e2e`
+runs. Every shipped `grids.yaml` names `reduction: required`; a file that names nothing reads the
+same.
+
 **The grid stage itself is covered since #205, and it was not before.** Both grid-enabled examples
 run again and `tests/e2e/test_grid_examples.py` runs them, asserting that a power flow was solved
 and that every load and sgen belongs to an agent. Nothing else here would notice the stage
@@ -353,7 +371,7 @@ suite and the runtime agree by construction rather than by two people rememberin
 records what the blanket filter was hiding, measured, and why enumerating beat deleting.
 
 **Do not add a category to `SUPPRESSED` to quieten a run.** If a warning is worth hiding it is
-worth an issue: lifting the filter is what surfaced #210 and #211, two live §14a defects that had
+worth an issue: lifting the filter is what surfaced #210 and #211, two §14a defects that had
 been invisible for as long as the filter existed.
 
 ## Branches and propagation

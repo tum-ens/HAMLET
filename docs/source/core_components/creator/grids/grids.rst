@@ -95,6 +95,11 @@ Allows grid operators to **control devices** to ensure system stability.
       active: True
       method: individual  # Options: individual (device-level), ems (EMS-based)
       threshold: 4200     # Guaranteed minimum power (W)
+      reduction: required # ems only. Options: required (exactly the overload, re-measured each
+                          # pass; the default), minimum (straight to the floor), ramp (one of
+                          # ramp_steps equal steps toward the floor per pass)
+      ramp_steps: 3       # Read for reduction: ramp only. Not max_iteration, which is a cap on
+                          # the iteration and not a property of the policy
 
 Next Steps
 ----------
